@@ -151,6 +151,43 @@ async function checkForUpdate() {
   }
 }
 
+// ───────────── Уведомление о новой версии программы (exe) через GitHub Releases ─────────────
+let appUpdateShown = null;
+async function checkForAppUpdate() {
+  try {
+    const res = await net.fetch(
+      "https://api.github.com/repos/Kofemanchik/Senko-Assistant/releases/latest",
+      {
+        headers: { "User-Agent": "Senko-Assistant", Accept: "application/vnd.github+json" },
+        signal: AbortSignal.timeout(15000)
+      }
+    );
+    if (!res.ok) return;
+    const rel = await res.json();
+    const latest = String(rel.tag_name || "").replace(/^v/i, "");
+    if (!latest || cmpVer(latest, app.getVersion()) <= 0) return;
+    if (appUpdateShown === latest) return; // не показываем одно и то же повторно
+    appUpdateShown = latest;
+
+    if (win && !win.isDestroyed()) {
+      const r = await dialog.showMessageBox(win, {
+        type: "info",
+        title: "Обновление программы",
+        message: `Вышла новая версия Senko Assistant (${latest}).`,
+        detail: (rel.body ? rel.body + "\n\n" : "") + "Скачайте и запустите новый установщик.",
+        buttons: ["Скачать", "Позже"],
+        defaultId: 0,
+        cancelId: 1
+      });
+      if (r.response === 0 && /^https:\/\/github\.com\//i.test(rel.html_url || "")) {
+        shell.openExternal(rel.html_url);
+      }
+    }
+  } catch (e) {
+    // нет сети / GitHub недоступен — ничего не делаем
+  }
+}
+
 // ───────────── Окно ─────────────
 function createWindow() {
   Menu.setApplicationMenu(null);
@@ -197,6 +234,8 @@ app.on("second-instance", () => {
 app.whenReady().then(() => {
   createWindow();
   setTimeout(checkForUpdate, 4000);
+  setTimeout(checkForAppUpdate, 6000);
   setInterval(checkForUpdate, UPDATE_EVERY_MS);
+  setInterval(checkForAppUpdate, UPDATE_EVERY_MS);
 });
 app.on("window-all-closed", () => app.quit());
