@@ -108,7 +108,7 @@ function currentVersion() {
 }
 
 async function checkForUpdate() {
-  if (UPDATE_BASE.includes("Kofemanchik/Senko-Assistant")) return; // ещё не настроено
+  if (UPDATE_BASE.includes("OWNER/REPO")) return; // заглушка не заменена — обновления выключены
   try {
     const t = Date.now();
     const res = await net.fetch(UPDATE_BASE + "version.json?t=" + t, { signal: AbortSignal.timeout(15000) });

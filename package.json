@@ -36,7 +36,7 @@
       ]
     },
     "nsis": {
-      "artifactName": "Senko Assistant Setup.${ext}",
+      "artifactName": "Senko Assistant Setup ${version}.${ext}",
       "oneClick": true,
       "perMachine": false,
       "runAfterFinish": true,
@@ -50,7 +50,7 @@
       "deleteAppDataOnUninstall": false
     },
     "portable": {
-      "artifactName": "Senko Assistant.${ext}"
+      "artifactName": "Senko Assistant ${version}.${ext}"
     }
   }
 }
