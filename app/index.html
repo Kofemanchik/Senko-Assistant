@@ -68,7 +68,7 @@ window.SA_apply();
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);padding-block:0 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:20;background:var(--bg)}
-.wrap{max-width:860px;margin:0 auto}
+.wrap{max-width:1200px;margin:0 auto}
 button{font:inherit;color:inherit;cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
@@ -430,8 +430,8 @@ html[data-sticky="on"] header.top{position:sticky}
 html[data-sticky="off"] header.top{position:static}
 
 /* Узкое окно */
-html.narrow .wrap{max-width:440px}
-html.narrow body{padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px));font-size:14px}
+html.narrow .wrap{max-width:none}
+html.narrow body{padding-left:max(6px,env(safe-area-inset-left,0px));padding-right:max(6px,env(safe-area-inset-right,0px));font-size:14.5px}
 html.narrow .brand h1{font-size:20px}
 html.narrow .brand .bt span{display:none}
 html.narrow .rbtn{width:34px;height:34px}
@@ -475,6 +475,25 @@ html.narrow .pill{padding:4px 9px;font-size:12.5px}
   .sheet ol,.sheet ul{padding-left:15px!important;margin:2px 0!important}
   .sheetg{grid-template-columns:repeat(3,1fr)!important;gap:0 14px!important}
 }
+
+/* тренажёр v2 */
+.trg{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:8px}
+.trt{display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;padding:11px 13px;min-width:0}
+.trt b{font:600 14.5px var(--f-body)}
+.trt small{color:var(--muted);font-size:12.5px;line-height:1.35;font-weight:400}
+.trt[disabled]{opacity:.55;cursor:default}
+.trlv{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.trlv b{font:700 20px var(--f-head)}
+.trtp{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.trrow{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,2fr) auto;gap:12px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.trrow .bar{margin:0}
+.trbad i{background:var(--s5)}
+.trtm{display:flex;align-items:baseline;gap:10px;font:600 22px var(--f-mono);font-variant-numeric:tabular-nums}
+.trfc{min-height:120px}
+.trref{white-space:nowrap}
+html.narrow .trrow{grid-template-columns:minmax(0,1fr) auto}
+html.narrow .trrow .bar{grid-column:1/-1;order:3}
+@media (max-width:560px){.trrow{grid-template-columns:minmax(0,1fr) auto}.trrow .bar{grid-column:1/-1;order:3}}
 </style>
 
 <div class="wrap">
@@ -1864,16 +1883,242 @@ function updSup(){var v=checked("sp"),bad=SUP.filter(function(s){return v.indexO
 function updDec(){var t=$("#decT");if(!t)return;t.value="РЕШЕНИЕ ПО СТ. 19 ПК СА\n\nЗадержанный: "+(DEC.n||"[ФИО]")+"\nСтатья: "+(DEC.art||"[статья]")+"\n\n"+(DEC.res==="ok"?"Задержание признано правомерным, противоправное деяние установлено.\nМера наказания: "+(DEC.meas||"[мера]")+".\nПри лишении свободы руководство обязано прекратить трудовые отношения; при штрафе увольнение на усмотрение работодателя или ОГП (ст. 19 ч. 3).":"Противоправное деяние не установлено либо решение сотрудника не поддержано. Задержанный подлежит освобождению (ст. 19 ч. 2).")}
 AF.sup=function(){updSup();updDec()};
 
-/* Обучение: тренажёр */
-var QS=[["Сколько длится задержание до избрания меры?",["20 минут","1 час","2 часа","72 часа"],1,"Ст. 15 ч. 1, ст. 20 ч. 1 п. «г»"],["Максимальная длительность звонка задержанного?",["1 минута","3 минуты","5 минут","10 минут"],1,"Ст. 22 ч. 1, ст. 17 ч. 5"],["Сколько ждать частного адвоката после окончания звонка?",["3 минуты","5 минут","10 минут","15 минут"],2,"Ст. 17 ч. 4.1, прим. 1"],["Сколько ждать ответа адвоката на вызов?",["3 минуты","5 минут","10 минут","1 час"],0,"Ст. 17 ч. 4.1, прим. 2"],["Сколько ждать ответа ОГП при задержании госслужащего?",["5 минут","10 минут","до 15 минут","1 час"],2,"Ст. 19 ч. 1"],["Сколько часов на жалобу на сотрудника?",["24","48","72","96"],2,"Ст. 9 ч. 5"],["Что делается первым при задержании по ст. 17 ч. 1?",["Миранда","Наручники","Обыск","Доставка в участок"],1,"Ст. 17 ч. 1 п. «а»"],["Когда можно сразу применить пятую стадию силы?",["Всегда","При бегстве","При угрозе жизни или скоплении вооружённых людей","Никогда"],2,"Ст. 37 ч. 1"],["Сколько ждать прокурора по требованию адвоката (всего)?",["5 минут","10 минут","не более 15 минут","30 минут"],2,"Ст. 17 ч. 6"],["Сколько WN может удерживать лицо до передачи силовикам?",["10 минут","20 минут","30 минут","1 час"],1,"Ст. 15 ч. 2"],["Минимальный залог?",["$10 000","$25 000","$50 000","$100 000"],1,"Ст. 34 ч. 1"],["Пауза на просмотр видео по боло?",["не более 5 минут","не более 10 минут","до 30 минут","без ограничений"],1,"Ст. 20 ч. 2 п. «е»"]];
-function mkQuiz(){var qs=shuf(QS).slice(0,7).map(function(q){var c=q[1][q[2]],o=shuf(q[1]);return {q:q[0],o:o,a:o.indexOf(c),e:q[3]}}),rs=shuf(UK.filter(function(r){return !r.part&&r.stars&&r.m}));
- rs.slice(0,2).forEach(function(r){var o=shuf([1,2,3,4,5].filter(function(n){return n!==r.stars})).slice(0,3).concat(r.stars);o=shuf(o);qs.push({q:"Сколько звёзд розыска по ст. "+r.code+" «"+r.title+"»?",o:o.map(function(n){return n+" ★"}),a:o.indexOf(r.stars),e:"УК ст. "+r.code})});
- rs.slice(2,3).forEach(function(r){var ms=[];UK.forEach(function(x){if(x.m&&ms.indexOf(x.m)<0&&x.m!==r.m)ms.push(x.m)});var o=shuf(shuf(ms).slice(0,3).concat(r.m));qs.push({q:"Какой срок по ст. "+r.code+" «"+r.title+"»?",o:o.map(function(n){return n+" мес."}),a:o.indexOf(r.m),e:"УК ст. "+r.code})});
- X.quiz={qs:shuf(qs),i:0,s:0,sel:-1}}
-P.quiz=function(){if(!X.quiz)mkQuiz();var z=X.quiz,q=z.qs[z.i];
- if(!q) return '<section class="panel"><h2>Результат</h2><div class="clock" style="font-size:56px">'+z.s+' / '+z.qs.length+'</div><p class="clocksub">'+(z.s===z.qs.length?"Без ошибок.":z.s>=z.qs.length*.7?"Хорошо, повторите пропущенное.":"Перечитайте разделы и пройдите ещё раз.")+'</p><div class="rowbtn" style="justify-content:center"><button class="btn primary" data-x="qnew">Новый раунд</button></div></section>';
- var d=z.sel>-1;
- return '<section class="panel"><h2>Вопрос '+(z.i+1)+' из '+z.qs.length+'</h2><div class="bar"><i style="width:'+(z.i/z.qs.length*100)+'%"></i></div><p style="font-size:16px;font-weight:600">'+esc(q.q)+'</p><div class="basket">'+q.o.map(function(o,i){var c=d&&i===q.a?" ok":(d&&i===z.sel?" bad":"");return '<button class="btn qo'+c+'" data-x="qa" data-v="'+i+'"'+(d?' disabled':'')+'>'+esc(o)+'</button>'}).join("")+'</div>'+(d?'<div class="verdict">'+(z.sel===q.a?"Верно. ":"Неверно. ")+esc(q.e)+'</div><div class="rowbtn"><button class="btn primary" data-x="qn">Дальше</button></div>':'')+'</section>'};
+/* Обучение: тренажёр (v2): режимы, статистика, карточки, аттестация, уровень, экспорт */
+var TOP={time:"Сроки",adv:"Адвокат и звонок",ogp:"ОГП и госслужащие",proc:"Процедура и права",force:"Сила и оружие",bail:"Залог",dk:"Дорожный кодекс",uk:"УК: розыск и сроки"};
+var TORD=["time","adv","ogp","proc","force","bail","dk","uk"];
+var MN={std:"Тест",daily:"Мини-тест дня",exam:"Аттестация",weak:"Повтор слабых",sec:"Тест по разделу",redo:"Работа над ошибками"};
+var SB=[
+["s1","time","Сколько длится задержание до избрания меры?",["20 минут","1 час","2 часа","72 часа"],1,"Ст. 15 ч. 1, ст. 20 ч. 1 п. «г»","ПК ст. 15"],
+["s2","adv","Максимальная длительность звонка задержанного?",["1 минута","3 минуты","5 минут","10 минут"],1,"Ст. 22 ч. 1, ст. 17 ч. 5","ПК ст. 22"],
+["s3","adv","Сколько ждать частного адвоката после окончания звонка?",["3 минуты","5 минут","10 минут","15 минут"],2,"Ст. 17 ч. 4.1, прим. 1","ПК ст. 17"],
+["s4","adv","Сколько ждать ответа адвоката на вызов?",["3 минуты","5 минут","10 минут","1 час"],0,"Ст. 17 ч. 4.1, прим. 2","ПК ст. 17"],
+["s5","ogp","Сколько ждать ответа ОГП при задержании госслужащего?",["5 минут","10 минут","до 15 минут","1 час"],2,"Ст. 19 ч. 1","ПК ст. 19"],
+["s6","proc","Сколько часов на жалобу на сотрудника?",["24","48","72","96"],2,"Ст. 9 ч. 5","ПК ст. 9"],
+["s7","proc","Что делается первым при задержании по ст. 17 ч. 1?",["Миранда","Наручники","Обыск","Доставка в участок"],1,"Ст. 17 ч. 1 п. «а»","ПК ст. 17"],
+["s8","force","Когда можно сразу применить пятую стадию силы?",["Всегда","При бегстве","При угрозе жизни или скоплении вооружённых людей","Никогда"],2,"Ст. 37 ч. 1","ПК ст. 37"],
+["s9","adv","Сколько ждать прокурора по требованию адвоката (всего)?",["5 минут","10 минут","не более 15 минут","30 минут"],2,"Ст. 17 ч. 6","ПК ст. 17"],
+["s10","time","Сколько WN может удерживать лицо до передачи силовикам?",["10 минут","20 минут","30 минут","1 час"],1,"Ст. 15 ч. 2","ПК ст. 15"],
+["s11","bail","Минимальный залог?",["$10 000","$25 000","$50 000","$100 000"],1,"Ст. 34 ч. 1","ПК ст. 34"],
+["s12","time","Пауза на просмотр видео по боло?",["не более 5 минут","не более 10 минут","до 30 минут","без ограничений"],1,"Ст. 20 ч. 2 п. «е»","ПК ст. 20"],
+["s13","bail","Как рассчитывается залог?",["$25 000 + $25 000 за каждый уровень розыска","$10 000 за каждый уровень розыска","Фиксированно $50 000","$25 000 × срок в месяцах"],0,"Ст. 34: $25 000 плюс $25 000 за каждый уровень розыска","ПК ст. 34"],
+["s14","force","Что запрещено при применении силы?",["Предупредительные выстрелы и удары","Использование наручников","Видеозапись задержания","Вызов подкрепления"],0,"Ст. 37 ч. 6, 7","ПК ст. 37"],
+["s15","force","Можно ли применять огнестрел при скоплении граждан?",["Да, при любой угрозе","Нет, если пострадают случайные лица","Да, после предупредительного выстрела","Да, если согласен напарник"],1,"Ст. 37 ч. 7","ПК ст. 37"],
+["s16","force","В каком порядке идут стадии силы?",["Строго по порядку, пропуск только по исключениям закона","В любом порядке","Сразу с высшей стадии","Порядок выбирает напарник"],0,"Ст. 37 ч. 1","ПК ст. 37"],
+["s17","proc","Что с показаниями, полученными на допросе до зачтения прав?",["Недопустимы","Допустимы","Допустимы с согласия прокурора","Допустимы при наличии видео"],0,"Ст. 12 ч. 2 п. «а»","ПК ст. 12"],
+["s18","proc","Что происходит с уликами, добытыми обыском без ордера как первичным основанием?",["Аннулируются","Принимаются","Принимаются при согласии задержанного","Считаются косвенными"],0,"Ст. 12 ч. 2 п. «в»","ПК ст. 12"],
+["s19","adv","Кому разрешён звонок задержанного?",["Только адвокату, сотрудник находится рядом","Любому знакомому","Родственникам","Своей организации"],0,"Ст. 17 ч. 5","ПК ст. 17"],
+["s20","adv","Адвокат не ответил в течение 3 минут. Что дальше?",["Процедура продолжается, право считается реализованным","Ждать ещё час","Освободить задержанного","Вызвать другого адвоката бесконечно"],0,"Ст. 17 ч. 4.1","ПК ст. 17"],
+["s21","ogp","ОГП не ответил за 15 минут при задержании госслужащего. Что делать?",["Освободить и обратиться в ОГП в течение часа","Ждать до часа","Продолжить задержание","Передать вопрос руководству"],0,"Ст. 19 ч. 1–2","ПК ст. 19"],
+["s22","ogp","Кого вызывают при задержании госслужащего?",["Руководство и сотрудника ОГП","Только руководство","Только адвоката","Никого"],0,"Ст. 19 ч. 1","ПК ст. 19"],
+["s23","ogp","Что обязано сделать руководство при мере «лишение свободы» для госслужащего?",["Прекратить трудовые отношения","Объявить выговор","Ничего","Перевести на другую должность"],0,"Ст. 19 ч. 3","ПК ст. 19"],
+["s24","ogp","Что недопустимо для сотрудника ОГП?",["Наручники и силовое задержание","Решение по ст. 19 ч. 2","Освобождение при непризнании деяния","Проверка правомерности задержания"],0,"Ст. 35 ч. 6","ПК ст. 35"],
+["s25","proc","Какая обязанность сотрудника закреплена в ст. 23 ч. 1 п. «а»?",["Видеозапись задержания","Письменное согласие задержанного","Вызов адвоката","Уведомление СМИ"],0,"Ст. 23 ч. 1 п. «а»","ПК ст. 23"],
+["s26","proc","Где вправе задерживать SANG?",["Только Занкудо (в 500 м от КПП) и Кайо-Перико","По всему штату","Только в городе","Везде, если идёт погоня"],0,"Ст. 15 ч. 3","ПК ст. 15"],
+["s27","proc","Какой шаг идёт после предъявления жетона?",["Первичный обыск (по усмотрению)","Доставка в участок","Допрос","Звонок адвокату"],0,"Порядок задержания, ст. 17 ч. 1","ПК ст. 17"],
+["s28","dk","Максимальная скорость в городе?",["60 км/ч","80 км/ч","100 км/ч","120 км/ч"],2,"ДК ст. 29","ДК ст. 29"],
+["s29","dk","Максимальная скорость за городом?",["100 км/ч","120 км/ч","160 км/ч","200 км/ч"],1,"ДК ст. 29","ДК ст. 29"],
+["s30","dk","Максимальная скорость на дороге с разделителем?",["120 км/ч","140 км/ч","160 км/ч","200 км/ч"],2,"ДК ст. 29","ДК ст. 29"],
+["s32","bail","Каков залог при 2 уровнях розыска?",["$50 000","$75 000","$100 000","$125 000"],1,"Ст. 34: $25 000 плюс $25 000 за каждый уровень розыска","ПК ст. 34"],
+["s33","bail","Каков залог при 4 уровнях розыска?",["$100 000","$125 000","$150 000","$200 000"],1,"Ст. 34: $25 000 плюс $25 000 за каждый уровень розыска","ПК ст. 34"],
+["s31","dk","Максимальная скорость на магистрали?",["120 км/ч","160 км/ч","180 км/ч","200 км/ч"],3,"ДК ст. 29","ДК ст. 29"]
+];
+var SD=SB.map(function(a){return {id:a[0],tp:a[1],q:a[2],o:a[3],a:a[4],e:a[5],ref:a[6]}});
+var UKD=null,IDX=null;
+function ukDescs(){if(UKD)return UKD;UKD=[];UK.forEach(function(r){if(!r.part&&r.stars&&r.m){UKD.push({id:"uS|"+r.code,tp:"uk",u:r,kind:"S"});UKD.push({id:"uM|"+r.code,tp:"uk",u:r,kind:"M"})}});return UKD}
+function descById(id){if(!IDX){IDX={};SD.concat(ukDescs()).forEach(function(d){IDX[d.id]=d})}return IDX[id]}
+function seedR(s){var h=1779033703^s.length,i;for(i=0;i<s.length;i++){h=Math.imul(h^s.charCodeAt(i),3432918353);h=h<<13|h>>>19}var a=h>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function shufR(a,rnd){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(rnd()*(i+1)),t=a[i];a[i]=a[j];a[j]=t}return a}
+function mkQ(d,rnd){
+ if(d.u){var r=d.u,o;
+  if(d.kind==="S"){o=shufR([1,2,3,4,5].filter(function(n){return n!==r.stars}),rnd).slice(0,3).concat(r.stars);o=shufR(o,rnd);
+   return {id:d.id,tp:"uk",q:"Сколько звёзд розыска по ст. "+r.code+" «"+r.title+"»?",o:o.map(function(n){return n+" ★"}),a:o.indexOf(r.stars),e:"",ref:"УК ст. "+r.code}}
+  var ms=[];UK.forEach(function(x){if(x.m&&ms.indexOf(x.m)<0&&x.m!==r.m)ms.push(x.m)});
+  o=shufR(shufR(ms,rnd).slice(0,3).concat(r.m),rnd);
+  return {id:d.id,tp:"uk",q:"Какой срок по ст. "+r.code+" «"+r.title+"»?",o:o.map(function(n){return n+" мес."}),a:o.indexOf(r.m),e:"",ref:"УК ст. "+r.code}}
+ var c=d.o[d.a],o2=shufR(d.o,rnd);
+ return {id:d.id,tp:d.tp,q:d.q,o:o2,a:o2.indexOf(c),e:d.e,ref:d.ref}}
+
+/* хранилище тренажёра */
+function lg(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}}
+function sg(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+var ST=lg("bos-qstat",{q:{},tp:{}}); if(!ST||typeof ST!=="object"||!ST.q||!ST.tp)ST={q:{},tp:{}};
+var XP=+lg("bos-xp",0)||0, DY=lg("bos-daily",{d:"",s:0,n:0}), SKR=lg("bos-streak",{last:"",n:0});
+function pad2(n){return ("0"+n).slice(-2)}
+function dkey(d){return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate())}
+function today(){return dkey(new Date())}
+function yest(){var d=new Date();d.setDate(d.getDate()-1);return dkey(d)}
+function rec(id,tp,ok,ct){var q=ST.q[id]||(ST.q[id]={a:0,w:0,c:0,t:0});q.a++;q.t=Date.now();if(ok)q.c++;else{q.w++;q.c=0}
+ if(ct!==false){var t=ST.tp[tp]||(ST.tp[tp]={a:0,w:0});t.a++;if(!ok)t.w++}sg("bos-qstat",ST)}
+function weakIds(){return Object.keys(ST.q).filter(function(id){var q=ST.q[id];return q.w>0&&q.c<2&&descById(id)}).sort(function(a,b){return ST.q[b].t-ST.q[a].t})}
+var LVN=["Стажёр","Помощник","Специалист","Знаток","Старший","Мастер","Наставник","Легенда"],LVT=[0,100,250,450,700,1000,1400,1900];
+function lvInfo(x){x=x==null?XP:x;var i=0;while(i<LVT.length-1&&x>=LVT[i+1])i++;var top=i>=LVT.length-1,from=LVT[i],to=top?from:LVT[i+1];
+ return {n:i+1,name:LVN[i],xp:x,from:from,to:to,top:top,pct:top?100:Math.round((x-from)/(to-from)*100)}}
+function addXp(n){XP+=n;sg("bos-xp",XP)}
+var RNM=["","Новичок","Практик","Уверенно","Профи","Эксперт"];
+function ratingOf(p){return p>=90?5:p>=75?4:p>=60?3:p>=40?2:1}
+function starsH(r){var s="";for(var i=1;i<=5;i++)s+=i<=r?"★":"<i>★</i>";return '<span class="rt r'+r+'" role="img" aria-label="Рейтинг '+r+' из 5">'+s+'</span>'}
+function curRating(){var T=lg("bos-tests",[]);if(!Array.isArray(T)||!T.length)return 0;var l=T.slice(0,10);return ratingOf(Math.round(l.reduce(function(a,t){return a+(t.p||0)},0)/l.length))}
+function streak(){return (SKR.last===today()||SKR.last===yest())?SKR.n:0}
+function mmss(ms){var s=Math.ceil(ms/1000);return Math.floor(s/60)+":"+pad2(s%60)}
+function pct(a,b){return b?Math.round(a/b*100):0}
+
+/* сборка наборов вопросов */
+function pickMix(nS,nU,rnd,pred){var p=pred||function(){return true};return shufR(SD.filter(p),rnd).slice(0,nS).concat(shufR(ukDescs().filter(p),rnd).slice(0,nU))}
+function startQuiz(mode,arg){
+ var rnd=Math.random,ds=[],ex=false,title=MN[mode]||"Тест",tp="",limit=0;
+ if(mode==="std"){ds=pickMix(8,2,rnd)}
+ else if(mode==="daily"){rnd=seedR("senko-daily-"+today());ds=pickMix(4,1,rnd);title="Мини-тест дня"}
+ else if(mode==="exam"){ds=pickMix(12,3,rnd);ex=true;limit=8*60000}
+ else if(mode==="weak"){ds=weakIds().slice(0,10).map(descById)}
+ else if(mode==="redo"){ds=(arg||[]).map(descById).filter(Boolean)}
+ else if(mode==="sec"){tp=arg;if(!TOP[tp])return;ds=shufR(SD.concat(ukDescs()).filter(function(d){return d.tp===tp}),rnd).slice(0,10);title=TOP[tp]}
+ if(!ds.length){X.qv="menu";X.msg=mode==="weak"?"Слабых вопросов пока нет: ошибки появятся после первых тестов.":"Не нашлось вопросов для этого режима.";return}
+ var qs=shufR(ds,rnd).map(function(d){return mkQ(d,rnd)});
+ X.quiz={mode:mode,tp:tp,title:title,qs:qs,i:0,s:0,sel:-1,wrong:[],t0:Date.now(),dl:limit?Date.now()+limit:0,exam:ex,over:false};
+ X.qv="run";X.msg=""}
+function pushWrong(q,mine){X.quiz.wrong.push({id:q.id,q:q.q,mine:mine,right:q.o[q.a],e:q.e,ref:q.ref})}
+function fin(z){
+ if(z.over)return;z.over=true;z.end=Date.now();
+ var n=z.qs.length,lv0=lvInfo().n,gain=z.s*10;
+ if(z.exam&&z.s/n>=0.8){z.pass=true;gain+=50}
+ if(z.mode==="daily"&&DY.d!==today()){DY={d:today(),s:z.s,n:n};sg("bos-daily",DY);SKR=(SKR.last===yest())?{last:today(),n:SKR.n+1}:{last:today(),n:1};sg("bos-streak",SKR);gain+=20;z.firstDaily=true}
+ z.gain=gain;addXp(gain);z.lvUp=lvInfo().n>lv0}
+function expire(z,timeout){
+ for(;z.i<z.qs.length;z.i++){var q=z.qs[z.i];rec(q.id,q.tp,false);z.wrong.push({id:q.id,q:q.q,mine:null,right:q.o[q.a],e:q.e,ref:q.ref})}
+ z.timeout=!!timeout;fin(z)}
+function onAnswer(i){
+ var z=X.quiz,q=z&&z.qs[z.i];if(!q||z.over)return;if(!z.exam&&z.sel>-1)return;
+ var ok=i===q.a;rec(q.id,q.tp,ok);if(ok)z.s++;else pushWrong(q,q.o[i]);
+ if(z.exam){z.i++;if(z.i>=z.qs.length)fin(z)}else z.sel=i}
+function onNext(){var z=X.quiz;if(!z||z.sel<0)return;z.i++;z.sel=-1;if(z.i>=z.qs.length)fin(z)}
+
+/* карточки */
+function startCards(){
+ var rnd=Math.random,w=weakIds().slice(0,8).map(descById),ids={};w.forEach(function(d){ids[d.id]=1});
+ var rest=shufR(SD.concat(ukDescs().slice(0,0)).filter(function(d){return !ids[d.id]}),rnd).slice(0,15-w.length);
+ var uk=shufR(ukDescs().filter(function(d){return !ids[d.id]}),rnd).slice(0,3);
+ var ds=shufR(w.concat(rest).concat(uk),rnd).slice(0,15);
+ X.fc={qs:ds.map(function(d){return mkQ(d,rnd)}),i:0,flip:false,know:0,again:0};X.qv="cards"}
+
+/* экспорт */
+function fd(t){var d=new Date(t);return pad2(d.getDate())+"."+pad2(d.getMonth()+1)+"."+d.getFullYear()+" "+pad2(d.getHours())+":"+pad2(d.getMinutes())}
+function expTxt(){
+ var T=lg("bos-tests",[]);if(!Array.isArray(T))T=[];var li=lvInfo(),tot=0,wr=0,o=[];
+ Object.keys(ST.tp).forEach(function(k){tot+=ST.tp[k].a;wr+=ST.tp[k].w});
+ o.push("Senko Assistant · Majestic RP Boston");o.push("Результаты тренажёра · "+fd(Date.now()));o.push("");
+ o.push("Уровень: "+li.n+" ("+li.name+"), опыт "+li.xp+" XP");
+ var r=curRating();o.push("Рейтинг: "+(r?r+" из 5 ("+RNM[r]+")":"пока нет"));
+ o.push("Отвечено вопросов: "+tot+", ошибок: "+wr+(tot?" (точность "+pct(tot-wr,tot)+"%)":""));
+ o.push("Слабых вопросов на повторение: "+weakIds().length);o.push("");o.push("Ошибки по темам:");
+ var has=false;TORD.forEach(function(k){var t=ST.tp[k];if(t&&t.a){has=true;o.push(" - "+TOP[k]+": "+t.w+" из "+t.a+" ("+pct(t.w,t.a)+"% ошибок)")}});
+ if(!has)o.push(" пока нет данных");
+ o.push("");o.push("Последние тесты ("+T.length+"):");
+ if(!T.length)o.push(" пока нет результатов");
+ T.forEach(function(t){o.push(" - "+fd(t.t)+" · "+(MN[t.m]||"Тест")+(t.tp&&TOP[t.tp]?" ("+TOP[t.tp]+")":"")+" · "+t.s+" из "+t.n+" · "+t.p+"% · рейтинг "+t.r)});
+ return o.join("\n")}
+function expCsv(){
+ var T=lg("bos-tests",[]);if(!Array.isArray(T))T=[];
+ var o=["Дата;Режим;Раздел;Верно;Всего;Процент;Рейтинг"];
+ T.forEach(function(t){o.push([fd(t.t),MN[t.m]||"Тест",t.tp&&TOP[t.tp]?TOP[t.tp]:"",t.s,t.n,t.p,t.r].join(";"))});
+ o.push("");o.push("Тема;Отвечено;Ошибок;Процент ошибок");
+ TORD.forEach(function(k){var t=ST.tp[k];if(t&&t.a)o.push([TOP[k],t.a,t.w,pct(t.w,t.a)].join(";"))});
+ return "\ufeff"+o.join("\r\n")}
+function dlFile(name,text,mime){try{var b=new Blob([text],{type:mime}),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){a.remove();URL.revokeObjectURL(u)},600);return true}catch(e){return false}}
+function doExport(kind,btn){
+ var T=lg("bos-tests",[]);if((!Array.isArray(T)||!T.length)&&!Object.keys(ST.tp).length)return "Пока нечего сохранять";
+ var d=today();
+ if(kind==="copy"){copyText(expTxt(),btn);return ""}
+ if(kind==="csv")return dlFile("senko-tests-"+d+".csv",expCsv(),"text/csv;charset=utf-8")?"Файл сохраняется…":"Не вышло, нажмите «Копировать»";
+ return dlFile("senko-tests-"+d+".txt",expTxt(),"text/plain;charset=utf-8")?"Файл сохраняется…":"Не вышло, нажмите «Копировать»"}
+window.SA_TR={lvl:function(){return lvInfo()},exp:doExport,mn:function(m){return MN[m]||"Тест"}};
+
+/* экраны */
+var tmr=null;
+function tick(){var z=X.quiz,el=$("#trTm");if(!z||!z.exam||z.over||!el||X.qv!=="run"){clearInterval(tmr);tmr=null;return}
+ var left=Math.max(0,z.dl-Date.now());el.textContent=mmss(left);var b=$("#trTb");if(b)b.style.width=(left/(z.dl-z.t0)*100)+"%";
+ if(left<=0){clearInterval(tmr);tmr=null;expire(z,true);render()}}
+AF.quiz=function(){clearInterval(tmr);tmr=null;var z=X.quiz;if(X.qv==="run"&&z&&z.exam&&!z.over){tmr=setInterval(tick,500)}};
+function tile(act,v,t,d,dis,tag){return '<button type="button" class="btn trt" data-x="t_'+act+'" data-v="'+v+'"'+(dis?' disabled':'')+'><b>'+t+(tag?' <span class="chip">'+tag+'</span>':'')+'</b><small>'+d+'</small></button>'}
+function backBtn(){return '<div class="rowbtn" style="margin:0 0 8px"><button type="button" class="btn" data-x="t_menu">← К тренажёру</button></div>'}
+function menuHtml(){
+ var li=lvInfo(),r=curRating(),wk=weakIds().length,done=DY.d===today(),sk=streak(),h="";
+ if(X.msg)h+=ban("warn",esc(X.msg));
+ h+='<section class="panel"><h2>Тренажёр</h2><p class="sub">Короткие тесты по Процессуальному, Дорожному и Уголовному кодексам. Ошибки запоминаются, а в разборе есть ссылка на статью.</p>'+
+ '<div class="trlv"><span><b>Уровень '+li.n+'</b> · '+li.name+'</span><span>'+(r?starsH(r)+' '+RNM[r]:'<span class="hint" style="margin:0">рейтинг появится после первого теста</span>')+'</span></div>'+
+ '<div class="bar"><i style="width:'+li.pct+'%"></i></div><p class="hint" style="margin:0">'+(li.top?'Максимальный уровень, '+li.xp+' XP':li.xp+' из '+li.to+' XP до уровня '+(li.n+1))+(sk?' · серия дней: '+sk:'')+'</p></section>';
+ h+='<section class="panel"><h2>Режимы</h2><div class="trg">'+
+  tile("start","std","Обычный тест","10 вопросов с разбором после каждого ответа.")+
+  tile("start","daily","Мини-тест дня",done?"Сегодня уже пройден: "+DY.s+" из "+DY.n+". Можно повторить без бонуса.":"5 вопросов, набор меняется каждый день. Бонус за первое прохождение.",false,done?"✓":"")+
+  tile("start","exam","Аттестация","15 вопросов за 8 минут без подсказок. Зачёт от 80%.")+
+  tile("start","weak","Повтор слабых",wk?"Вопросы, где вы ошибались: "+wk+".":"Пока пусто, ошибки появятся после тестов.",!wk,wk?String(wk):"")+
+  tile("cards","1","Карточки","Вопрос с одной стороны, ответ с другой. Для запоминания.")+
+  tile("stats","1","Статистика ошибок","Видно, в каких темах чаще всего допускаются промахи.")+
+ '</div></section>';
+ h+='<section class="panel"><h2>Тест по разделу</h2><p class="sub">Тренировка только по нужной теме, например по залогу.</p><div class="trtp">'+
+  TORD.map(function(k){var n=SD.concat(ukDescs()).filter(function(d){return d.tp===k}).length;return '<button type="button" class="pill" data-x="t_tp" data-v="'+k+'" aria-pressed="'+(X.tsel===k)+'">'+TOP[k]+' · '+n+'</button>'}).join("")+
+  '</div><div class="rowbtn" style="margin-top:0"><button type="button" class="btn primary" data-x="t_start" data-v="sec"'+(X.tsel?'':' disabled')+'>'+(X.tsel?'Начать: '+TOP[X.tsel]:'Выберите раздел')+'</button></div></section>';
+ h+='<section class="panel"><h2>Экспорт результатов</h2><p class="sub">Сохраните итоги тестов в файл для себя или наставника.</p><div class="rowbtn" style="margin-top:0"><button type="button" class="btn" data-x="t_exp" data-v="txt">Скачать .txt</button><button type="button" class="btn" data-x="t_exp" data-v="csv">Скачать .csv</button><button type="button" class="btn" data-x="t_exp" data-v="copy">Копировать</button></div><p class="hint" id="trMsg" role="status" aria-live="polite"></p></section>';
+ return h}
+function statsHtml(){
+ var tot=0,wr=0,rows=[];
+ TORD.forEach(function(k){var t=ST.tp[k];if(t&&t.a){tot+=t.a;wr+=t.w;rows.push({k:k,a:t.a,w:t.w,p:pct(t.w,t.a)})}});
+ rows.sort(function(a,b){return b.p-a.p||b.a-a.a});
+ var h=backBtn()+'<section class="panel"><h2>Статистика ошибок</h2><p class="sub">Видно, в каких темах чаще всего допускаются промахи.</p>';
+ if(!tot)return h+'<div class="empty">Данных пока нет. Пройдите любой тест, и здесь появятся результаты по темам.</div></section>';
+ h+='<div class="sumgrid"><div class="sum"><div class="k">Отвечено</div><div class="v">'+tot+'</div></div><div class="sum"><div class="k">Ошибок</div><div class="v">'+wr+'</div></div><div class="sum"><div class="k">Точность</div><div class="v">'+pct(tot-wr,tot)+'%</div></div><div class="sum"><div class="k">Слабых вопросов</div><div class="v">'+weakIds().length+'</div></div></div>';
+ var worst=rows.filter(function(r){return r.a>=3&&r.p>0})[0];
+ if(worst)h+=ban(worst.p>=40?"over":"warn","<b>Чаще всего ошибки в теме «"+TOP[worst.k]+"»:</b> "+worst.p+"% ответов неверные.");
+ h+='<div style="margin-top:10px">'+rows.map(function(r){return '<div class="trrow"><div><b>'+TOP[r.k]+'</b><div class="hint" style="margin:0">ошибок '+r.w+' из '+r.a+' ('+r.p+'%)</div></div><div class="bar trbad"><i style="width:'+Math.max(r.p,r.w?3:0)+'%"></i></div><button type="button" class="btn" data-x="t_start" data-v="sec:'+r.k+'">Тренировать</button></div>'}).join("")+'</div>';
+ var wk=weakIds().length;
+ h+='<div class="rowbtn">'+(wk?'<button type="button" class="btn primary" data-x="t_start" data-v="weak">Повторить слабые ('+wk+')</button>':'')+'<button type="button" class="btn" data-x="t_reset">Сбросить статистику</button></div></section>';
+ return h}
+function cardsHtml(){
+ var c=X.fc;if(!c)return menuHtml();var q=c.qs[c.i];
+ if(!q)return backBtn()+'<section class="panel"><h2>Карточки пройдены</h2><div class="sumgrid"><div class="sum"><div class="k">Знаю</div><div class="v">'+c.know+'</div></div><div class="sum"><div class="k">Повторить</div><div class="v">'+c.again+'</div></div></div><p class="hint">Карточки с пометкой «Повторить» попали в список слабых вопросов.</p><div class="rowbtn"><button type="button" class="btn primary" data-x="t_cards" data-v="1">Новая колода</button>'+(weakIds().length?'<button type="button" class="btn" data-x="t_start" data-v="weak">Повтор слабых</button>':'')+'</div></section>';
+ return backBtn()+'<section class="panel"><h2>Карточка '+(c.i+1)+' из '+c.qs.length+'</h2><div class="bar"><i style="width:'+(c.i/c.qs.length*100)+'%"></i></div><span class="chip">'+TOP[q.tp]+'</span>'+
+ '<div class="trfc"><p style="font-size:17px;font-weight:600;margin:10px 0">'+esc(q.q)+'</p>'+
+ (c.flip?'<div class="verdict"><b>'+esc(q.o[q.a])+'</b>'+(q.e?'<br>'+esc(q.e):'')+'<br><span class="trref">Статья: '+gref(q.ref)+'</span></div>':'')+'</div>'+
+ '<div class="rowbtn">'+(c.flip?'<button type="button" class="btn primary" data-x="t_know" data-v="1">Знаю</button><button type="button" class="btn" data-x="t_know" data-v="0">Повторить</button>':'<button type="button" class="btn primary" data-x="t_flip" data-v="1">Показать ответ</button>')+'</div></section>'}
+function runHtml(z){
+ var q=z.qs[z.i],d=z.sel>-1;
+ var head='<h2>'+(z.exam?'Аттестация · ':'')+'Вопрос '+(z.i+1)+' из '+z.qs.length+'</h2>';
+ var h='<section class="panel">'+head+(z.exam?'<div class="trtm"><span id="trTm">'+mmss(Math.max(0,z.dl-Date.now()))+'</span><span class="hint" style="margin:0">осталось времени, подсказок нет</span></div><div class="bar"><i id="trTb" style="width:'+(Math.max(0,z.dl-Date.now())/(z.dl-z.t0)*100)+'%"></i></div>':'<div class="bar"><i style="width:'+(z.i/z.qs.length*100)+'%"></i></div><span class="chip">'+esc(TOP[q.tp]||z.title)+'</span>')+
+ '<p style="font-size:16px;font-weight:600">'+esc(q.q)+'</p><div class="basket">'+q.o.map(function(o,i){var c=d&&i===q.a?" ok":(d&&i===z.sel?" bad":"");return '<button class="btn qo'+c+'" data-x="t_ans" data-v="'+i+'"'+(d?' disabled':'')+'>'+esc(o)+'</button>'}).join("")+'</div>';
+ if(d){var ok=z.sel===q.a;h+='<div class="verdict">'+(ok?'Верно. ':'Неверно. Правильный ответ: <b>'+esc(q.o[q.a])+'</b>. ')+(q.e?esc(q.e)+' · ':'')+'<span class="trref">Статья: '+gref(q.ref)+'</span></div><div class="rowbtn"><button type="button" class="btn primary" data-x="t_next" data-v="1">'+(z.i+1>=z.qs.length?'Показать результат':'Дальше')+'</button></div>'}
+ else h+='<div class="rowbtn">'+(z.exam?'<button type="button" class="btn" data-x="t_giveup" data-v="1">Сдать досрочно</button>':'<button type="button" class="btn" data-x="t_menu">В меню</button>')+'</div>';
+ return h+'</section>'}
+function resHtml(z){
+ var n=z.qs.length,p=pct(z.s,n),r=ratingOf(p),h='<section class="panel"><h2>Результат · '+esc(z.title)+'</h2><div class="clock" style="font-size:56px">'+z.s+' / '+n+'</div><p class="clocksub">'+p+'% · '+starsH(r)+' '+RNM[r]+'</p>';
+ if(z.exam)h+=ban(z.pass?"done":"over","<b>"+(z.pass?"Зачёт.":"Не зачёт.")+"</b> Нужно не менее 80%, у вас "+p+"%."+(z.timeout?" Время вышло, неотвеченные вопросы засчитаны как ошибки.":""));
+ h+='<p class="hint" style="text-align:center">'+(z.end?'Время: '+mmss(z.end-z.t0)+' · ':'')+'<b>+'+z.gain+' XP</b>'+(z.firstDaily?' (включая бонус дня)':'')+(z.lvUp?' · новый уровень: '+lvInfo().n+' «'+lvInfo().name+'»':'')+'</p>'+
+ '<div class="rowbtn" style="justify-content:center"><button type="button" class="btn primary" data-x="t_again" data-v="1">'+(z.mode==="redo"?'Ещё раз':'Новый раунд')+'</button>'+(z.wrong.length&&z.mode!=="redo"?'<button type="button" class="btn" data-x="t_redo" data-v="1">Работа над ошибками</button>':'')+'<button type="button" class="btn" data-x="t_menu">В меню</button></div></section>';
+ if(z.wrong.length)h+='<section class="panel"><h2>Разбор ошибок</h2><p class="sub">Вопросы с неверным ответом и статья, где написано правильно.</p><ul class="basket">'+z.wrong.map(function(w){return '<li><span class="t"><b>'+esc(w.q)+'</b><br>Ваш ответ: '+(w.mine==null?'<i>нет ответа</i>':esc(w.mine))+'<br>Верно: <b>'+esc(w.right)+'</b>'+(w.e?' · '+esc(w.e):'')+'<br>Статья: '+gref(w.ref)+'</span></li>'}).join("")+'</ul></section>';
+ return h}
+P.quiz=function(){
+ var z=X.quiz;
+ if(X.qv==="run"&&z&&z.exam&&!z.over&&Date.now()>=z.dl)expire(z,true);
+ if(X.qv==="run"&&z)return z.over?resHtml(z):runHtml(z);
+ if(X.qv==="stats")return statsHtml();
+ if(X.qv==="cards")return cardsHtml();
+ return menuHtml()};
+function TRN(a,v,t){
+ var z=X.quiz;
+ if(a==="start"){var s=v.split(":");if(s[0]==="sec"&&s[1])X.tsel=s[1];startQuiz(s[0],s[0]==="sec"?(s[1]||X.tsel):null);render();window.scrollTo(0,0);return}
+ if(a==="tp"){X.tsel=X.tsel===v?"":v;render();return}
+ if(a==="ans"){onAnswer(+v);render();return}
+ if(a==="next"){onNext();render();window.scrollTo(0,0);return}
+ if(a==="giveup"){if(z&&!z.over){expire(z,false);render()}return}
+ if(a==="again"){if(z){var m=z.mode;startQuiz(m,m==="sec"?z.tp:(m==="redo"?z.wrong.map(function(w){return w.id}):null))}render();window.scrollTo(0,0);return}
+ if(a==="redo"){if(z){startQuiz("redo",z.wrong.map(function(w){return w.id}))}render();window.scrollTo(0,0);return}
+ if(a==="menu"){X.quiz=null;X.qv="menu";X.msg="";render();window.scrollTo(0,0);return}
+ if(a==="stats"){X.qv="stats";render();window.scrollTo(0,0);return}
+ if(a==="cards"){startCards();render();window.scrollTo(0,0);return}
+ if(a==="flip"){X.fc.flip=true;render();return}
+ if(a==="know"){var c=X.fc,q=c.qs[c.i],k=v==="1";rec(q.id,q.tp,k,false);if(k){c.know++;addXp(2)}else c.again++;c.i++;c.flip=false;render();return}
+ if(a==="reset"){if(!t.dataset.arm){t.dataset.arm="1";t.dataset.o=t.textContent;t.textContent="Точно сбросить?";setTimeout(function(){if(t.isConnected){t.textContent=t.dataset.o;delete t.dataset.arm}},3500);return}
+  ST={q:{},tp:{}};sg("bos-qstat",ST);render();return}
+ if(a==="exp"){var msg=doExport(v,t);var el=$("#trMsg");if(el&&msg)el.textContent=msg;return}
+}
 
 /* Сценарии */
 var SC=[["Задержанный требует адвоката",["Государственный: звонок на горячую линию Правительства. Ответили — время замораживается до приезда, ждите до 10 минут.","Частный: дайте телефон, звонок до 3 минут, вы или напарник рядом. Время замораживается, ждите до 10 минут после звонка.","Нет ответа в течение 3 минут: процедура продолжается, право считается реализованным."],"ст. 17 ч. 4, 4.1, 5"],["Задержан сотрудник EMS (госслужащий)",["Вызовите руководство и сотрудника ОГП, время задержания замораживается до 15 минут.","ОГП ответил: ждите его прибытия, затем представьте доказательства.","ОГП не ответил за 15 минут: освободите и обратитесь в ОГП в течение часа."],"ст. 19 ч. 1–2"],["Нет ответа от прокурора",["Если ждали по ст. 19: освободите задержанного, обратитесь в ОГП в течение часа.","Если требовал адвокат: 5 минут на ответ, ожидание прибытия не более 15 минут."],"ст. 19 ч. 1, ст. 17 ч. 6"],["Лицо в маске или без документов",["Потребуйте снять маску и показать документы.","Отказ: наручники, объясните основания, проверьте базы, сверьте с фотороботом.","Личный обыск. Нелегальные предметы: задержание по ст. 17."],"ст. 16 ч. 3"],["Задержание по боло, лицо говорит «есть видео»",["Приобщите видео к делу, пауза на просмотр до 10 минут.","Видео на удалённых серверах: предоставление может занять до 1 часа."],"ст. 20 ч. 2 п. «е», ст. 23 ч. 1 п. «г»"],["Прошёл час, меры нет",["Лицо подлежит освобождению. Паузы (допрос, адвокат, ОГП, EMS, обыск, просмотр видео) время не считают."],"ст. 20 ч. 1 п. «г», ч. 2"],["Есть военный билет, статья из списка",["Вызовите руководящий состав Нацгвардии для изъятия билета.","Не явились 12 минут: вправе изъять сами."],"ст. 17 ч. 1 п. «й», ст. 17"],["Нужны полномочия по чужой статье",["Направьте запрос уполномоченному ведомству и дождитесь одобрения.","Без разрешения действия по статье недопустимы."],"ст. 35 ч. 3–5"]];
@@ -2011,8 +2256,7 @@ view.addEventListener("click",function(e){var t=e.target.closest("button");if(!t
  else if(a==="bclr"){X.bail=[];render()}else if(a==="brm"){X.bail=X.bail.filter(function(i){return i!==v});render()}
  else if(a==="bm"){X.bm=v;render()}else if(a==="doc"){X.doc=v;render()}else if(a==="copyd")copyText($("#docT").value,t)
  else if(a==="dres"){DEC.res=v;view.querySelectorAll("[data-x=dres]").forEach(function(b){b.setAttribute("aria-pressed",String(b.dataset.v===v))});updDec()}else if(a==="copyc")copyText($("#decT").value,t)
- else if(a==="qa"){X.quiz.sel=+v;if(+v===X.quiz.qs[X.quiz.i].a)X.quiz.s++;render()}
- else if(a==="qn"){X.quiz.i++;X.quiz.sel=-1;render()}else if(a==="qnew"){mkQuiz();render()}
+ else if(a.slice(0,2)==="t_"){TRN(a.slice(2),v,t)}
  else if(a==="dif")runDiff();else if(a==="prt")window.print()});
 view.addEventListener("input",function(e){var d=e.target.dataset.d;if(!d||!TABS[state.tab])return;
  if(d in DV){DV[d]=e.target.value;buildDoc()}else if(d==="dn"||d==="da"||d==="dm"){DEC[{dn:"n",da:"art",dm:"meas"}[d]]=e.target.value;updDec()}else if(d==="rq"){X.rq=e.target.value;rlOut()}});
@@ -2326,7 +2570,7 @@ function logQuiz(){
   if(!z||z._logged||!z.qs||!z.qs.length||z.i<z.qs.length) return;
   z._logged=true;
   var n=z.qs.length, s=z.s, p=Math.round(s/n*100);
-  TL.unshift({t:Date.now(),s:s,n:n,p:p,r:ratingOf(p)});
+  TL.unshift({t:Date.now(),s:s,n:n,p:p,r:ratingOf(p),m:z.mode||"std",tp:z.tp||""});
   if(TL.length>30) TL.length=30;
   jset("bos-tests",TL);
 }
@@ -2414,11 +2658,12 @@ function testHtml(){
   h+='<div class="dsum"><div class="sum"><div class="k">Рейтинг</div><div class="v">'+rtHtml(rr)+'</div><div style="font-size:12.5px;color:var(--muted)">'+RN[rr]+'</div></div>'+
      '<div class="sum"><div class="k">Средний балл</div><div class="v">'+avg+'%</div></div>'+
      '<div class="sum"><div class="k">Лучший</div><div class="v">'+best+'%</div></div>'+
-     '<div class="sum"><div class="k">Пройдено</div><div class="v">'+TL.length+'</div></div></div>';
+     '<div class="sum"><div class="k">Пройдено</div><div class="v">'+TL.length+'</div></div>'+
+     (window.SA_TR?'<div class="sum"><div class="k">Уровень</div><div class="v">'+window.SA_TR.lvl().n+'</div><div style="font-size:12.5px;color:var(--muted)">'+window.SA_TR.lvl().name+'</div></div>':'')+'</div>';
   h+='<ul class="dlist">'+TL.slice(0,6).map(function(t){
-    return '<li class="dli"><div class="dli-h"><b>'+fmtDT(t.t)+'</b><span class="chip">'+t.s+' из '+t.n+'</span><span class="chip">'+t.p+'%</span></div><div class="dli-f">'+rtHtml(t.r)+'<span>'+RN[t.r]+'</span></div></li>';
+    return '<li class="dli"><div class="dli-h"><b>'+fmtDT(t.t)+'</b>'+(window.SA_TR?'<span class="chip">'+window.SA_TR.mn(t.m)+'</span>':'')+'<span class="chip">'+t.s+' из '+t.n+'</span><span class="chip">'+t.p+'%</span></div><div class="dli-f">'+rtHtml(t.r)+'<span>'+RN[t.r]+'</span></div></li>';
   }).join("")+'</ul>';
-  h+='<div class="sbtns"><button type="button" class="btn" data-cab="tlclr">Очистить результаты</button></div>';
+  h+='<div class="sbtns"><button type="button" class="btn" data-cab="tlexp" data-v="txt">Экспорт .txt</button><button type="button" class="btn" data-cab="tlexp" data-v="csv">Экспорт .csv</button><button type="button" class="btn" data-cab="tlclr">Очистить результаты</button></div>';
   return h;
 }
 function cabHtml(){
@@ -2529,6 +2774,11 @@ ov.addEventListener("click",function(e){
       DL=[]; jset("bos-dlog",DL);
       if(tm&&tm.start){dlCleared=tm.start; try{localStorage.setItem("bos-dlog-cl",String(dlCleared))}catch(err){}}
       paintSheet(); return;
+    }
+    if(c==="tlexp"){
+      var em=window.SA_TR?window.SA_TR.exp(b.dataset.v,b):"";
+      if(em){var eo=b.textContent; b.textContent=em; setTimeout(function(){if(b.isConnected)b.textContent=eo},2200)}
+      return;
     }
     if(c==="tlclr"){
       if(!armBtn(b,"Точно очистить?",function(){return tlArm},function(v){tlArm=v})) return;
