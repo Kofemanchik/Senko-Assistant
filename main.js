@@ -11,6 +11,10 @@ const UPDATE_EVERY_MS = 3 * 60 * 60 * 1000; // повторная проверк
 const KEEP_BACKUPS = 14;                    // сколько дневных копий хранить
 // ──────────────────────────────────────
 
+// Имя программы теперь «Senko Assistant», но папку данных оставляем прежней («Boston»),
+// чтобы у тех, кто уже пользовался приложением, не пропали заметки и настройки.
+app.setPath("userData", path.join(app.getPath("appData"), "Boston"));
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 }

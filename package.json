@@ -1,6 +1,6 @@
 {
   "name": "boston-pamyatka",
-  "productName": "Boston",
+  "productName": "Senko Assistant",
   "version": "1.0.0",
   "description": "Памятка Boston — законодательство (Senko Assistant)",
   "main": "main.js",
@@ -19,7 +19,7 @@
   },
   "build": {
     "appId": "local.boston.pamyatka",
-    "productName": "Boston",
+    "productName": "Senko Assistant",
     "directories": {
       "output": "dist"
     },
@@ -43,6 +43,7 @@
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "shortcutName": "Senko Assistant",
+      "uninstallDisplayName": "Senko Assistant",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico",
