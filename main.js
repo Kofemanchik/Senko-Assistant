@@ -1,25 +1,32 @@
-const { app, BrowserWindow, shell, Menu, ipcMain, dialog, net } = require("electron");
+const {
+  app, BrowserWindow, shell, Menu, ipcMain, dialog, net, Tray, Notification,
+  globalShortcut, screen, nativeImage
+} = require("electron");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
 
 // ───────────── НАСТРОЙКИ ─────────────
-// Папка в репозитории GitHub, где лежат version.json и index.html для обновлений.
-// После создания репозитория замените OWNER и REPO (см. README.md).
+// Папка в репозитории GitHub, где лежат version.json и index.html для обновления данных памятки.
 const UPDATE_BASE = "https://raw.githubusercontent.com/Kofemanchik/Senko-Assistant/main/update/";
 const UPDATE_EVERY_MS = 3 * 60 * 60 * 1000; // повторная проверка раз в 3 часа
 const KEEP_BACKUPS = 14;                    // сколько дневных копий хранить
+const COMPACT_W = 360;                      // ширина «узкого» окна
 // ──────────────────────────────────────
+
+app.setAppUserModelId("local.boston.pamyatka"); // нужен для системных уведомлений Windows
 
 // Имя программы теперь «Senko Assistant», но папку данных оставляем прежней («Boston»),
 // чтобы у тех, кто уже пользовался приложением, не пропали заметки и настройки.
 app.setPath("userData", path.join(app.getPath("appData"), "Boston"));
 
-if (!app.requestSingleInstanceLock()) {
-  app.quit();
-}
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
 
-let win;
+let win = null;       // главное окно (памятка)
+let authWin = null;   // окно авторизации
+let quitting = false; // true — программа действительно закрывается (а не прячется в трей)
+let startHidden = process.argv.includes("--hidden"); // запуск из автозагрузки
 
 // ───────────── Автосохранение данных ─────────────
 // Файл виден пользователю: Документы\Senko Assistant\Автосохранение
@@ -36,6 +43,13 @@ function readJson(file) {
   } catch (e) {
     return null;
   }
+}
+
+function writeAtomic(file, text) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = file + ".tmp";
+  fs.writeFileSync(tmp, text, "utf8");
+  fs.renameSync(tmp, file);
 }
 
 function newestBackup() {
@@ -64,10 +78,7 @@ ipcMain.on("sa:save", (_e, data) => {
       null,
       2
     );
-    // Атомарная запись: сначала временный файл, потом переименование
-    const tmp = mainFile() + ".tmp";
-    fs.writeFileSync(tmp, payload, "utf8");
-    fs.renameSync(tmp, mainFile());
+    writeAtomic(mainFile(), payload);
 
     // Одна резервная копия в день (последнее состояние дня перезаписывает копию)
     const day = new Date().toISOString().slice(0, 10);
@@ -78,6 +89,48 @@ ipcMain.on("sa:save", (_e, data) => {
     console.error("autosave failed:", err);
   }
 });
+
+// ───────────── Аккаунты ─────────────
+const accounts = require("./accounts")({
+  dataDir: () => app.getPath("userData"),
+  docsDir: () => path.join(app.getPath("documents"), "Senko Assistant")
+});
+
+// ───────────── Настройки программы (.exe) ─────────────
+const DEFAULTS = {
+  alwaysOnTop: false,    // окно поверх всех окон
+  hotkeyEnabled: false,  // глобальная горячая клавиша
+  hotkey: "Ctrl+Alt+S",
+  compact: false,        // узкий компактный режим
+  rememberBounds: true,  // помнить размер и позицию
+  opacity: 100,          // прозрачность окна, %
+  tray: false,           // значок в трее + работа в фоне
+  notify: true,          // системные уведомления таймера
+  bounds: null,          // последние границы обычного окна
+  compactBounds: null,   // последние границы узкого окна
+  maximized: false
+};
+let cfg = { ...DEFAULTS };
+const cfgFile = () => path.join(app.getPath("userData"), "app-settings.json");
+
+function loadCfg() {
+  const j = readJson(cfgFile()) || {};
+  cfg = { ...DEFAULTS, ...j };
+  for (const k of ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "maximized"]) cfg[k] = !!cfg[k];
+  cfg.opacity = Math.min(100, Math.max(30, Math.round(+cfg.opacity || 100)));
+  if (!validHotkey(cfg.hotkey)) cfg.hotkey = DEFAULTS.hotkey;
+}
+let cfgTimer = null;
+function saveCfg() {
+  clearTimeout(cfgTimer);
+  cfgTimer = setTimeout(() => {
+    try { writeAtomic(cfgFile(), JSON.stringify(cfg, null, 2)); } catch (e) {}
+  }, 300);
+}
+function saveCfgNow() {
+  clearTimeout(cfgTimer);
+  try { writeAtomic(cfgFile(), JSON.stringify(cfg, null, 2)); } catch (e) {}
+}
 
 // ───────────── Обновление данных (index.html) через GitHub ─────────────
 const updDir = () => path.join(app.getPath("userData"), "app");
@@ -107,7 +160,16 @@ function currentVersion() {
   return pickIndex().version;
 }
 
-async function checkForUpdate() {
+// Родитель для диалогов: только если окно сейчас на экране
+function dlgParent() {
+  return win && !win.isDestroyed() && win.isVisible() && !win.isMinimized() ? win : null;
+}
+function box(opts) {
+  const p = dlgParent();
+  return p ? dialog.showMessageBox(p, opts) : dialog.showMessageBox(opts);
+}
+
+async function checkForUpdate(manual) {
   if (UPDATE_BASE.includes("OWNER/REPO")) return; // заглушка не заменена — обновления выключены
   try {
     const t = Date.now();
@@ -135,7 +197,7 @@ async function checkForUpdate() {
     fs.writeFileSync(updMeta(), JSON.stringify({ version: info.version, hash, at: new Date().toISOString() }));
 
     if (win && !win.isDestroyed()) {
-      const r = await dialog.showMessageBox(win, {
+      const r = await box({
         type: "info",
         title: "Обновление",
         message: `Доступна новая версия памятки (${info.version}).`,
@@ -144,79 +206,466 @@ async function checkForUpdate() {
         defaultId: 0,
         cancelId: 1
       });
-      if (r.response === 0) win.loadFile(pickIndex().file);
+      if (r.response === 0 && win && !win.isDestroyed()) win.loadFile(pickIndex().file);
     }
   } catch (e) {
     // нет сети / GitHub недоступен — работаем с тем, что есть
   }
 }
 
-// ───────────── Уведомление о новой версии программы (exe) через GitHub Releases ─────────────
-let appUpdateShown = null;
-async function checkForAppUpdate() {
-  try {
-    const res = await net.fetch(
-      "https://api.github.com/repos/Kofemanchik/Senko-Assistant/releases/latest",
-      {
-        headers: { "User-Agent": "Senko-Assistant", Accept: "application/vnd.github+json" },
-        signal: AbortSignal.timeout(15000)
-      }
-    );
-    if (!res.ok) return;
-    const rel = await res.json();
-    const latest = String(rel.tag_name || "").replace(/^v/i, "");
-    if (!latest || cmpVer(latest, app.getVersion()) <= 0) return;
-    if (appUpdateShown === latest) return; // не показываем одно и то же повторно
-    appUpdateShown = latest;
+// ───────────── Автообновление самой программы (установщика) ─────────────
+// Работает через GitHub Releases: electron-updater читает latest.yml из последнего релиза,
+// скачивает новый установщик в фоне и предлагает перезапуск.
+let updater = null;
+let manualCheck = false;
 
-    if (win && !win.isDestroyed()) {
-      const r = await dialog.showMessageBox(win, {
+function info(message, detail) {
+  return box({ type: "info", title: "Senko Assistant", message, detail, buttons: ["OK"], noLink: true });
+}
+
+function initUpdater() {
+  if (!app.isPackaged) return; // в режиме разработки (npm start) не работает
+  try {
+    const { autoUpdater } = require("electron-updater");
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.logger = null;
+    autoUpdater.on("update-available", (i) => {
+      if (manualCheck) info(`Найдена версия ${i.version}`, "Она скачивается в фоне. Когда загрузка закончится, программа предложит перезапуск.");
+    });
+    autoUpdater.on("update-not-available", () => {
+      if (manualCheck) info("У вас последняя версия программы.", `Версия ${app.getVersion()}`);
+      manualCheck = false;
+    });
+    autoUpdater.on("error", () => {
+      if (manualCheck) info("Не удалось проверить обновления.", "Проверьте подключение к интернету и попробуйте позже.");
+      manualCheck = false;
+    });
+    autoUpdater.on("update-downloaded", async (i) => {
+      manualCheck = false;
+      const r = await box({
         type: "info",
         title: "Обновление программы",
-        message: `Вышла новая версия Senko Assistant (${latest}).`,
-        detail: (rel.body ? rel.body + "\n\n" : "") + "Скачайте и запустите новый установщик.",
-        buttons: ["Скачать", "Позже"],
+        message: `Новая версия Senko Assistant (${i.version}) загружена.`,
+        detail: "Перезапустить программу и установить обновление сейчас? Заметки и настройки сохранятся.",
+        buttons: ["Перезапустить и обновить", "Позже"],
         defaultId: 0,
         cancelId: 1
       });
-      if (r.response === 0 && /^https:\/\/github\.com\//i.test(rel.html_url || "")) {
-        shell.openExternal(rel.html_url);
-      }
-    }
+      if (r.response === 0) {
+        quitting = true;
+        autoUpdater.quitAndInstall(false, true);
+      } // «Позже» — обновление установится при следующем выходе из программы
+    });
+    updater = autoUpdater;
   } catch (e) {
-    // нет сети / GitHub недоступен — ничего не делаем
+    updater = null; // electron-updater не установлен
   }
 }
 
-// ───────────── Окно ─────────────
-function createWindow() {
+function checkForAppUpdate(manual) {
+  if (!updater) {
+    if (manual) info("Автообновление работает только в установленной версии программы.");
+    return;
+  }
+  manualCheck = !!manual;
+  updater.checkForUpdates().catch(() => {
+    if (manualCheck) info("Не удалось проверить обновления.", "Проверьте подключение к интернету и попробуйте позже.");
+    manualCheck = false;
+  });
+}
+
+// ───────────── Окно: границы, режимы ─────────────
+const iconPath = () => path.join(__dirname, "build", "icon.ico");
+const boundsKey = () => (cfg.compact ? "compactBounds" : "bounds");
+
+function visibleBounds(b) {
+  if (!b || ![b.x, b.y, b.width, b.height].every(Number.isFinite)) return null;
+  if (b.width < 200 || b.height < 300) return null;
+  const ok = screen.getAllDisplays().some((d) => {
+    const a = d.workArea;
+    return b.x + b.width > a.x + 60 && b.x < a.x + a.width - 60 && b.y >= a.y - 10 && b.y < a.y + a.height - 60;
+  });
+  return ok ? { x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.width), height: Math.round(b.height) } : null;
+}
+
+function saveBoundsNow() {
+  if (!cfg.rememberBounds || !win || win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return;
+  if (win.isMaximized()) {
+    if (!cfg.compact) cfg.maximized = true;
+  } else {
+    if (!cfg.compact) cfg.maximized = false;
+    cfg[boundsKey()] = win.getBounds();
+  }
+  saveCfg();
+}
+let boundsTimer = null;
+function saveBoundsSoon() {
+  clearTimeout(boundsTimer);
+  boundsTimer = setTimeout(saveBoundsNow, 500);
+}
+
+function setCompact(on) {
+  if (!win || win.isDestroyed()) { cfg.compact = on; return; }
+  saveBoundsNow(); // запомнить границы прежнего режима
+  if (win.isMaximized()) win.unmaximize();
+  const cur = win.getBounds();
+  cfg.compact = on;
+  if (on) cfg.maximized = false;
+  win.setMinimumSize(on ? 300 : 380, on ? 400 : 600);
+  const saved = cfg.rememberBounds ? visibleBounds(cfg[boundsKey()]) : null;
+  win.setBounds(saved || { x: cur.x, y: cur.y, width: on ? COMPACT_W : 560, height: cur.height });
+}
+
+function applyWindowCfg() {
+  if (!win || win.isDestroyed()) return;
+  win.setAlwaysOnTop(cfg.alwaysOnTop, "screen-saver");
+  win.setOpacity(cfg.opacity / 100);
+}
+
+function showWindow() {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.moveTop();
+  win.focus();
+}
+function toggleWindow() {
+  if (!win || win.isDestroyed()) return;
+  if (win.isVisible() && !win.isMinimized() && win.isFocused()) {
+    if (cfg.tray) win.hide();
+    else win.minimize();
+  } else {
+    showWindow();
+  }
+}
+
+// ───────────── Горячая клавиша ─────────────
+const HOTKEY_RE = /^((Ctrl|Alt|Shift|Super)\+)+([A-Z0-9]|F([1-9]|1[0-9]|2[0-4])|Space|Tab|Enter|Backspace|Delete|Insert|Home|End|PageUp|PageDown|Up|Down|Left|Right)$/;
+function validHotkey(s) {
+  return typeof s === "string" && HOTKEY_RE.test(s) && /(Ctrl|Alt|Super)\+/.test(s);
+}
+let hotkeyActive = null;
+let hotkeyError = "";
+function registerHotkey() {
+  if (hotkeyActive) {
+    try { globalShortcut.unregister(hotkeyActive); } catch (e) {}
+    hotkeyActive = null;
+  }
+  hotkeyError = "";
+  if (!cfg.hotkeyEnabled) return { ok: true };
+  try {
+    if (globalShortcut.register(cfg.hotkey, toggleWindow)) {
+      hotkeyActive = cfg.hotkey;
+      return { ok: true };
+    }
+    hotkeyError = "Это сочетание занято другой программой.";
+  } catch (e) {
+    hotkeyError = "Недопустимое сочетание клавиш.";
+  }
+  return { ok: false, error: hotkeyError };
+}
+
+// ───────────── Трей ─────────────
+let tray = null;
+function ensureTray() {
+  if (cfg.tray && !tray) {
+    try {
+      tray = new Tray(nativeImage.createFromPath(iconPath()));
+      tray.setToolTip("Senko Assistant");
+      tray.on("click", toggleWindow);
+      updateTrayMenu();
+    } catch (e) {
+      tray = null;
+    }
+  } else if (!cfg.tray && tray) {
+    tray.destroy();
+    tray = null;
+  }
+}
+function updateTrayMenu() {
+  if (!tray) return;
+  const u = accounts.current();
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "Показать / скрыть окно", click: toggleWindow },
+      { type: "separator" },
+      { label: "Поверх всех окон", type: "checkbox", checked: cfg.alwaysOnTop, click: (m) => applySet("alwaysOnTop", m.checked) },
+      { label: "Компактный режим", type: "checkbox", checked: cfg.compact, click: (m) => applySet("compact", m.checked) },
+      { type: "separator" },
+      { label: "О программе", click: showAbout },
+      { label: "Проверить обновления", click: () => { checkForAppUpdate(true); checkForUpdate(true); } },
+      ...(u ? [{ label: `Выйти из аккаунта (${u.login})`, click: logout }] : []),
+      { type: "separator" },
+      { label: "Выход", click: () => { quitting = true; app.quit(); } }
+    ])
+  );
+}
+
+// ───────────── Автозапуск ─────────────
+function getAutostart() {
+  try { return !!app.getLoginItemSettings().openAtLogin; } catch (e) { return false; }
+}
+
+// ───────────── Состояние для окна памятки ─────────────
+function getState() {
+  const u = accounts.current();
+  return {
+    cfg: {
+      alwaysOnTop: cfg.alwaysOnTop, hotkeyEnabled: cfg.hotkeyEnabled, hotkey: cfg.hotkey,
+      compact: cfg.compact, rememberBounds: cfg.rememberBounds, opacity: cfg.opacity,
+      tray: cfg.tray, notify: cfg.notify
+    },
+    autostart: getAutostart(),
+    hotkeyError,
+    packaged: app.isPackaged,
+    version: app.getVersion(),
+    dataVersion: currentVersion(),
+    user: u ? { login: u.login, nick: u.nick, roleName: u.roleName, org: u.org } : null
+  };
+}
+function pushState() {
+  if (win && !win.isDestroyed()) win.webContents.send("senko:cfg", getState());
+}
+
+function applySet(key, val) {
+  const bools = ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify"];
+  let result = { ok: true };
+  if (key === "autostart") {
+    if (!app.isPackaged) return { ok: false, error: "Автозапуск доступен только в установленной версии." };
+    app.setLoginItemSettings({ openAtLogin: !!val, args: ["--hidden"] });
+  } else if (bools.includes(key)) {
+    val = !!val;
+    if (key !== "compact") cfg[key] = val; // compact переключает setCompact (ему нужны границы прежнего режима)
+    if (key === "alwaysOnTop") applyWindowCfg();
+    if (key === "compact") setCompact(val);
+    if (key === "rememberBounds" && val) saveBoundsNow();
+    if (key === "tray") {
+      ensureTray();
+      if (!val && win && !win.isDestroyed() && !win.isVisible()) showWindow();
+    }
+    if (key === "hotkeyEnabled") {
+      result = registerHotkey();
+      if (!result.ok) { cfg.hotkeyEnabled = false; registerHotkey(); }
+    }
+  } else if (key === "hotkey") {
+    if (!validHotkey(val)) return { ok: false, error: "Нужно сочетание с Ctrl, Alt или Win и обычной клавишей." };
+    const old = cfg.hotkey;
+    cfg.hotkey = val;
+    if (cfg.hotkeyEnabled) {
+      result = registerHotkey();
+      if (!result.ok) { cfg.hotkey = old; registerHotkey(); }
+    }
+  } else if (key === "opacity") {
+    cfg.opacity = Math.min(100, Math.max(30, Math.round(+val || 100)));
+    applyWindowCfg();
+  } else {
+    return { ok: false, error: "Неизвестная настройка." };
+  }
+  saveCfg();
+  updateTrayMenu();
+  pushState();
+  return result;
+}
+
+// ───────────── О программе ─────────────
+function releaseDate() {
+  let d = null;
+  const bi = readJson(path.join(__dirname, "build-info.json"));
+  if (bi && bi.date) d = new Date(bi.date);
+  if (!d || isNaN(d)) {
+    try { d = fs.statSync(app.getAppPath()).mtime; } catch (e) {}
+  }
+  return d && !isNaN(d) ? d.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" }) : "—";
+}
+
+async function showAbout() {
+  const u = accounts.current();
+  const dv = currentVersion();
+  const lines = [
+    `Версия программы: ${app.getVersion()}`,
+    `Версия данных памятки: ${dv}`,
+    `Дата выпуска: ${releaseDate()}`,
+    `Автор: Boston`,
+    `Electron ${process.versions.electron} · Chromium ${process.versions.chrome}`
+  ];
+  if (u) lines.push("", `Вы вошли как: ${u.login} (${u.nick})`);
+  const r = await box({
+    type: "info",
+    title: "О программе",
+    message: "Senko Assistant",
+    detail: lines.join("\n"),
+    buttons: ["Закрыть", "Проверить обновления", "Папка с данными"],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+    icon: nativeImage.createFromPath(iconPath())
+  });
+  if (r.response === 1) { checkForAppUpdate(true); checkForUpdate(true); }
+  if (r.response === 2) shell.openPath(path.join(app.getPath("documents"), "Senko Assistant"));
+}
+
+// ───────────── IPC главного окна ─────────────
+const fromMain = (e) => win && !win.isDestroyed() && e.sender === win.webContents;
+
+ipcMain.on("senko:get", (e) => { e.returnValue = fromMain(e) ? getState() : null; });
+ipcMain.on("senko:set", (e, key, val) => {
+  e.returnValue = fromMain(e) ? { ...applySet(String(key), val), state: getState() } : { ok: false };
+});
+ipcMain.on("senko:session", (e) => {
+  e.returnValue = fromMain(e) ? accounts.current() : null;
+});
+ipcMain.on("senko:seeded", (e) => { if (fromMain(e)) accounts.markSeeded(); });
+ipcMain.on("senko:about", (e) => { if (fromMain(e)) showAbout(); });
+ipcMain.on("senko:check-update", (e) => { if (fromMain(e)) { checkForAppUpdate(true); checkForUpdate(true); } });
+ipcMain.on("senko:logout", (e) => { if (fromMain(e)) logout(); });
+
+// Системное уведомление (сигнал таймера) — работает и при скрытом/свёрнутом окне
+ipcMain.on("senko:notify", (e, title, body) => {
+  if (!fromMain(e) || !cfg.notify || !Notification.isSupported()) return;
+  if (win.isVisible() && !win.isMinimized() && win.isFocused()) return; // окно и так перед глазами
+  const n = new Notification({
+    title: String(title).slice(0, 80) || "Senko Assistant",
+    body: String(body).slice(0, 250),
+    icon: nativeImage.createFromPath(iconPath())
+  });
+  n.on("click", showWindow);
+  n.show();
+});
+
+// ───────────── Окно авторизации ─────────────
+const fromAuth = (e) => authWin && !authWin.isDestroyed() && e.sender === authWin.webContents;
+
+ipcMain.handle("auth:state", (e) =>
+  fromAuth(e)
+    ? { hasUsers: accounts.hasUsers(), depts: accounts.DEPTS, roles: accounts.ROLES, version: app.getVersion() }
+    : null
+);
+ipcMain.handle("auth:login", (e, d) => {
+  if (!fromAuth(e)) return { ok: false, error: "Недоступно." };
+  const r = accounts.login(d || {});
+  if (r.ok) setTimeout(enterApp, 0);
+  return r;
+});
+ipcMain.handle("auth:register", (e, d) => {
+  if (!fromAuth(e)) return { ok: false, error: "Недоступно." };
+  const r = accounts.register(d || {});
+  if (r.ok) setTimeout(enterApp, 0);
+  return r;
+});
+ipcMain.on("auth:quit", (e) => { if (fromAuth(e)) { quitting = true; app.quit(); } });
+
+function createAuthWindow() {
   Menu.setApplicationMenu(null);
-  win = new BrowserWindow({
-    width: 560,
-    height: 900,
-    minWidth: 380,
-    minHeight: 600,
-    title: "Памятка Boston",
+  authWin = new BrowserWindow({
+    width: 460,
+    height: 780,
+    minWidth: 400,
+    minHeight: 640,
+    title: "Senko Assistant — вход",
     autoHideMenuBar: true,
     backgroundColor: "#EDF0F3",
-    icon: path.join(__dirname, "build", "icon.ico"),
+    icon: iconPath(),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
       spellcheck: false,
+      preload: path.join(__dirname, "auth-preload.js")
+    }
+  });
+  authWin.loadFile(path.join(__dirname, "app", "auth.html"));
+  authWin.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  authWin.webContents.on("will-navigate", (e) => e.preventDefault());
+  const w = authWin;
+  authWin.on("closed", () => {
+    if (authWin === w) authWin = null;
+    if (!win && !quitting) app.quit(); // закрыли окно входа, не войдя
+  });
+}
+
+function enterApp() {
+  createMainWindow();
+  if (authWin && !authWin.isDestroyed()) authWin.close();
+}
+
+function logout() {
+  accounts.logout();
+  tearDownSystem();
+  const old = win;
+  win = null;
+  createAuthWindow();
+  if (old && !old.isDestroyed()) old.destroy();
+}
+
+// ───────────── Главное окно ─────────────
+function initSystem() {
+  ensureTray();
+  registerHotkey();
+  applyWindowCfg();
+  updateTrayMenu();
+}
+function tearDownSystem() {
+  if (tray) { tray.destroy(); tray = null; }
+  try { globalShortcut.unregisterAll(); } catch (e) {}
+  hotkeyActive = null;
+}
+
+function createMainWindow() {
+  Menu.setApplicationMenu(null);
+  const saved = cfg.rememberBounds ? visibleBounds(cfg[boundsKey()]) : null;
+  const w = new BrowserWindow({
+    width: cfg.compact ? COMPACT_W : 560,
+    height: 900,
+    ...(saved || {}),
+    minWidth: cfg.compact ? 300 : 380,
+    minHeight: cfg.compact ? 400 : 600,
+    show: false,
+    title: "Памятка Boston",
+    autoHideMenuBar: true,
+    backgroundColor: "#EDF0F3",
+    icon: iconPath(),
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      spellcheck: false,
+      backgroundThrottling: false, // таймер должен идти и при скрытом окне
       preload: path.join(__dirname, "preload.js")
     }
   });
+  win = w;
 
-  win.loadFile(pickIndex().file);
+  w.once("ready-to-show", () => {
+    if (startHidden && cfg.tray) { startHidden = false; return; } // запуск из автозагрузки — сразу в трей
+    startHidden = false;
+    if (cfg.rememberBounds && cfg.maximized && !cfg.compact) w.maximize();
+    w.show();
+  });
+
+  w.loadFile(pickIndex().file);
+  initSystem();
+
+  w.on("resize", saveBoundsSoon);
+  w.on("move", saveBoundsSoon);
+  w.on("maximize", saveBoundsSoon);
+  w.on("unmaximize", saveBoundsSoon);
+  w.on("close", (e) => {
+    saveBoundsNow();
+    saveCfgNow();
+    if (cfg.tray && tray && !quitting) { // «работает в фоне»: крестик прячет окно в трей
+      e.preventDefault();
+      w.hide();
+    }
+  });
+  w.on("closed", () => { if (win === w) win = null; });
 
   // Внешние ссылки открываем в браузере, а не внутри приложения
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  w.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
-  win.webContents.on("will-navigate", (e, url) => {
+  w.webContents.on("will-navigate", (e, url) => {
     if (/^https?:/i.test(url)) {
       e.preventDefault();
       shell.openExternal(url);
@@ -225,17 +674,25 @@ function createWindow() {
 }
 
 app.on("second-instance", () => {
-  if (win) {
-    if (win.isMinimized()) win.restore();
-    win.focus();
+  if (win && !win.isDestroyed()) showWindow();
+  else if (authWin && !authWin.isDestroyed()) {
+    if (authWin.isMinimized()) authWin.restore();
+    authWin.focus();
   }
 });
 
-app.whenReady().then(() => {
-  createWindow();
-  setTimeout(checkForUpdate, 4000);
-  setTimeout(checkForAppUpdate, 6000);
-  setInterval(checkForUpdate, UPDATE_EVERY_MS);
-  setInterval(checkForAppUpdate, UPDATE_EVERY_MS);
-});
+app.on("before-quit", () => { quitting = true; });
+app.on("will-quit", () => { try { globalShortcut.unregisterAll(); } catch (e) {} });
 app.on("window-all-closed", () => app.quit());
+
+app.whenReady().then(() => {
+  if (!gotLock) return;
+  loadCfg();
+  initUpdater();
+
+  if (accounts.restore()) createMainWindow(); // запомненный вход
+  else createAuthWindow();
+
+  setTimeout(() => { checkForUpdate(); checkForAppUpdate(false); }, 5000);
+  setInterval(() => { checkForUpdate(); checkForAppUpdate(false); }, UPDATE_EVERY_MS);
+});

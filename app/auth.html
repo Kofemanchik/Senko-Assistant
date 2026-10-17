@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<title>Senko Assistant — вход</title>
+<style>
+:root{--bg:#EDF0F3;--card:#fff;--ink:#16202b;--muted:#5d6b7a;--line:#d5dbe2;--chip:#e6ebf0;--accent:#2f6fed;--accent-ink:#fff;--err:#b3261e;--errbg:#fdecea;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root{--bg:#10151b;--card:#1a212a;--ink:#e8edf2;--muted:#9aa8b6;--line:#2b3541;--chip:#232c37;--accent:#5b92ff;--accent-ink:#0b1220;--err:#ffb4ab;--errbg:#3a1d1b}}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,sans-serif;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto}
+.wrap{width:100%;max-width:420px;padding:22px 18px 28px}
+.brand{text-align:center;margin:6px 0 18px}
+.brand h1{margin:0;font-size:24px;letter-spacing:.2px}
+.brand span{color:var(--muted);font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.tabs{display:flex;background:var(--chip);border-radius:10px;padding:3px;gap:3px;margin-bottom:14px}
+.tabs button{flex:1;border:0;background:none;color:var(--muted);padding:8px 10px;border-radius:8px;font:600 14px "Segoe UI",system-ui,sans-serif;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
+form{display:grid;gap:11px}
+label{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+input,select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font:inherit}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.pw{position:relative}
+.pw input{padding-right:78px}
+.pw button{position:absolute;right:5px;top:50%;transform:translateY(-50%);border:0;background:var(--chip);color:var(--ink);padding:5px 9px;border-radius:7px;font:inherit;font-size:12px;cursor:pointer}
+.chk{display:flex;gap:8px;align-items:center;color:var(--ink);font-size:13.5px}
+.chk input{width:auto}
+.btn{border:0;border-radius:10px;padding:11px 14px;background:var(--accent);color:var(--accent-ink);font:600 15px "Segoe UI",system-ui,sans-serif;cursor:pointer}
+.btn:disabled{opacity:.6;cursor:default}
+.err{background:var(--errbg);color:var(--err);border-radius:9px;padding:9px 11px;font-size:13.5px}
+.hint{color:var(--muted);font-size:12.5px;margin:12px 2px 0}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.quit{display:block;margin:14px auto 0;background:none;border:0;color:var(--muted);font:inherit;cursor:pointer;text-decoration:underline}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><h1>Senko Assistant</h1><span>Majestic RP · законодательство</span></div>
+  <div class="card">
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tLogin" aria-selected="true">Вход</button>
+      <button type="button" role="tab" id="tReg" aria-selected="false">Регистрация</button>
+    </div>
+
+    <form id="fLogin" autocomplete="off" novalidate>
+      <label>Логин<input id="lLogin" maxlength="24" autocomplete="username" autofocus></label>
+      <label>Пароль<span class="pw"><input id="lPass" type="password" maxlength="100" autocomplete="current-password"><button type="button" data-eye="lPass">Показать</button></span></label>
+      <label class="chk"><input type="checkbox" id="lRem"> Запомнить меня на этом компьютере</label>
+      <div class="err" id="lErr" role="alert" hidden></div>
+      <button class="btn" id="lBtn" type="submit">Войти</button>
+    </form>
+
+    <form id="fReg" autocomplete="off" novalidate hidden>
+      <p class="hint" id="regNote" style="margin:0" hidden>Это первый запуск: создайте личный кабинет.</p>
+      <label>Логин (латиница, цифры, «_», «.», «-»)<input id="rLogin" maxlength="24" autocomplete="username"></label>
+      <div class="row2">
+        <label>Пароль<span class="pw"><input id="rPass" type="password" maxlength="100" autocomplete="new-password"></span></label>
+        <label>Повтор пароля<input id="rPass2" type="password" maxlength="100" autocomplete="new-password"></label>
+      </div>
+      <label class="chk"><input type="checkbox" id="rEye"> Показать пароли</label>
+      <label>Ник игрока<input id="rNick" maxlength="40" autocomplete="off"></label>
+      <label>Статик<input id="rSt" maxlength="12" autocomplete="off"></label>
+      <label>Организация<select id="rOrg"></select></label>
+      <label id="rOrgOtherW" hidden>Название организации<input id="rOrgOther" maxlength="60" autocomplete="off"></label>
+      <label>Роль<select id="rRole"></select></label>
+      <label class="chk"><input type="checkbox" id="rRem" checked> Запомнить меня на этом компьютере</label>
+      <div class="err" id="rErr" role="alert" hidden></div>
+      <button class="btn" id="rBtn" type="submit">Создать кабинет и войти</button>
+    </form>
+  </div>
+  <p class="hint">Аккаунт хранится только на этом компьютере, пароль — в виде хэша. Восстановить забытый пароль нельзя.</p>
+  <button type="button" class="quit" id="quit">Закрыть программу</button>
+</div>
+
+<script>
+(function(){
+  var A=window.senkoAuth, $=function(i){return document.getElementById(i)};
+  var tL=$("tLogin"), tR=$("tReg"), fL=$("fLogin"), fR=$("fReg");
+
+  function tab(reg){
+    tL.setAttribute("aria-selected",String(!reg)); tR.setAttribute("aria-selected",String(reg));
+    fL.hidden=reg; fR.hidden=!reg;
+    var f=reg?$("rLogin"):$("lLogin"); if(f) f.focus();
+  }
+  tL.onclick=function(){tab(false)}; tR.onclick=function(){tab(true)};
+  $("quit").onclick=function(){A&&A.quit()};
+
+  document.addEventListener("click",function(e){
+    var b=e.target.closest("[data-eye]"); if(!b) return;
+    var i=$(b.dataset.eye); var show=i.type==="password";
+    i.type=show?"text":"password"; b.textContent=show?"Скрыть":"Показать";
+  });
+  $("rEye").onchange=function(){var t=this.checked?"text":"password"; $("rPass").type=t; $("rPass2").type=t};
+
+  function showErr(id,msg){var e=$(id); e.textContent=msg||""; e.hidden=!msg}
+  function fill(sel,items,first){
+    sel.innerHTML=""; if(first){var o=document.createElement("option"); o.value=""; o.textContent=first; sel.appendChild(o)}
+    items.forEach(function(it){var o=document.createElement("option"); o.value=it[0]; o.textContent=it[1]; sel.appendChild(o)});
+  }
+
+  if(!A){ showErr("lErr","Окно входа открыто вне программы."); return }
+
+  A.state().then(function(s){
+    if(!s) return;
+    fill($("rOrg"),s.depts.map(function(d){return [d,d]}).concat([["other","Другая организация"]]),"Выберите организацию");
+    fill($("rRole"),Object.keys(s.roles).map(function(k){return [k,s.roles[k]]}));
+    if(!s.hasUsers){ tab(true); $("regNote").hidden=false }
+  });
+  $("rOrg").onchange=function(){ $("rOrgOtherW").hidden=this.value!=="other" };
+
+  fL.addEventListener("submit",function(e){
+    e.preventDefault(); showErr("lErr","");
+    var login=$("lLogin").value.trim(), pass=$("lPass").value;
+    if(!login||!pass){showErr("lErr","Введите логин и пароль.");return}
+    $("lBtn").disabled=true;
+    A.login({login:login,password:pass,remember:$("lRem").checked}).then(function(r){
+      if(!r.ok){showErr("lErr",r.error); $("lBtn").disabled=false; $("lPass").select()}
+    },function(){showErr("lErr","Ошибка связи с программой."); $("lBtn").disabled=false});
+  });
+
+  fR.addEventListener("submit",function(e){
+    e.preventDefault(); showErr("rErr","");
+    if($("rPass").value!==$("rPass2").value){showErr("rErr","Пароли не совпадают.");return}
+    if(!$("rOrg").value){showErr("rErr","Выберите организацию.");return}
+    $("rBtn").disabled=true;
+    A.register({
+      login:$("rLogin").value.trim(), password:$("rPass").value,
+      nick:$("rNick").value.trim(), static:$("rSt").value.trim(),
+      org:$("rOrg").value, orgOther:$("rOrgOther").value.trim(),
+      role:$("rRole").value, remember:$("rRem").checked
+    }).then(function(r){
+      if(!r.ok){showErr("rErr",r.error); $("rBtn").disabled=false}
+    },function(){showErr("rErr","Ошибка связи с программой."); $("rBtn").disabled=false});
+  });
+})();
+</script>
+</body>
+</html>

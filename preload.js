@@ -1,6 +1,6 @@
 // Preload: восстановление данных из файла и автосохранение localStorage в файл.
 // Выполняется ДО скриптов страницы, поэтому index.html сразу видит восстановленные данные.
-const { ipcRenderer } = require("electron");
+const { ipcRenderer, contextBridge } = require("electron");
 
 const PREFIX = "bos-";
 
@@ -49,3 +49,24 @@ window.addEventListener("pagehide", () => flush(true));
 window.addEventListener("beforeunload", () => flush(true));
 // Первое сохранение сразу после загрузки, чтобы файл появился в самом начале.
 window.addEventListener("DOMContentLoaded", () => setTimeout(() => flush(true), 1500));
+
+// ───────────── Мост «памятка ↔ программа» (настройки .exe, уведомления, аккаунт) ─────────────
+// Страница видит его как window.senkoApp. Вне программы (в обычном браузере) его нет.
+const listeners = new Set();
+ipcRenderer.on("senko:cfg", (_e, state) => {
+  listeners.forEach((f) => {
+    try { f(state); } catch (e) {}
+  });
+});
+
+contextBridge.exposeInMainWorld("senkoApp", {
+  state: () => ipcRenderer.sendSync("senko:get"),
+  set: (key, value) => ipcRenderer.sendSync("senko:set", key, value),
+  session: () => ipcRenderer.sendSync("senko:session"),
+  seeded: () => ipcRenderer.send("senko:seeded"),
+  notify: (title, body) => ipcRenderer.send("senko:notify", String(title || ""), String(body || "")),
+  about: () => ipcRenderer.send("senko:about"),
+  checkUpdate: () => ipcRenderer.send("senko:check-update"),
+  logout: () => ipcRenderer.send("senko:logout"),
+  onChange: (f) => { if (typeof f === "function") listeners.add(f); }
+});
