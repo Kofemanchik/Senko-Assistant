@@ -9,8 +9,8 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis --x64",
-    "dist:portable": "electron-builder --win portable --x64",
+    "dist": "electron-builder --win nsis --x64 --publish never",
+    "dist:portable": "electron-builder --win portable --x64 --publish never",
     "publish-update": "node tools/publish-update.js"
   },
   "devDependencies": {
