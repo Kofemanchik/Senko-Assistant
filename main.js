@@ -5,6 +5,7 @@ const {
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const voice = require("./voice"); // голосовой ввод и оверлей
 
 // ───────────── НАСТРОЙКИ ─────────────
 // Папка в репозитории GitHub, где лежат version.json и index.html для обновления данных памятки.
@@ -108,7 +109,11 @@ const DEFAULTS = {
   notify: true,          // системные уведомления таймера
   bounds: null,          // последние границы обычного окна
   compactBounds: null,   // последние границы узкого окна
-  maximized: false
+  maximized: false,
+  voiceEnabled: true,        // голосовой ввод (оверлей)
+  voiceHotkey: "Ctrl+Alt+V", // горячая клавиша голосового ввода
+  voiceOpacity: 80,          // непрозрачность оверлея, %
+  voicePos: null             // позиция оверлея на экране {x, y} (null — по центру сверху)
 };
 let cfg = { ...DEFAULTS };
 const cfgFile = () => path.join(app.getPath("userData"), "app-settings.json");
@@ -116,7 +121,11 @@ const cfgFile = () => path.join(app.getPath("userData"), "app-settings.json");
 function loadCfg() {
   const j = readJson(cfgFile()) || {};
   cfg = { ...DEFAULTS, ...j };
-  for (const k of ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "maximized"]) cfg[k] = !!cfg[k];
+  for (const k of ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "maximized", "voiceEnabled"]) cfg[k] = !!cfg[k];
+  cfg.voiceOpacity = Math.min(100, Math.max(30, Math.round(+cfg.voiceOpacity || DEFAULTS.voiceOpacity)));
+  const vp = cfg.voicePos;
+  cfg.voicePos = vp && Number.isFinite(+vp.x) && Number.isFinite(+vp.y) ? { x: Math.round(+vp.x), y: Math.round(+vp.y) } : null;
+  if (!validHotkey(cfg.voiceHotkey)) cfg.voiceHotkey = DEFAULTS.voiceHotkey;
   cfg.opacity = Math.min(100, Math.max(30, Math.round(+cfg.opacity || 100)));
   if (!validHotkey(cfg.hotkey)) cfg.hotkey = DEFAULTS.hotkey;
 }
@@ -392,6 +401,7 @@ function updateTrayMenu() {
       { type: "separator" },
       { label: "Поверх всех окон", type: "checkbox", checked: cfg.alwaysOnTop, click: (m) => applySet("alwaysOnTop", m.checked) },
       { label: "Компактный режим", type: "checkbox", checked: cfg.compact, click: (m) => applySet("compact", m.checked) },
+      { label: `Голосовой ввод (${cfg.voiceHotkey})`, type: "checkbox", checked: cfg.voiceEnabled, click: (m) => applySet("voiceEnabled", m.checked) },
       { type: "separator" },
       { label: "О программе", click: showAbout },
       { label: "Проверить обновления", click: () => { checkForAppUpdate(true); checkForUpdate(true); } },
@@ -414,7 +424,8 @@ function getState() {
     cfg: {
       alwaysOnTop: cfg.alwaysOnTop, hotkeyEnabled: cfg.hotkeyEnabled, hotkey: cfg.hotkey,
       compact: cfg.compact, rememberBounds: cfg.rememberBounds, opacity: cfg.opacity,
-      tray: cfg.tray, notify: cfg.notify
+      tray: cfg.tray, notify: cfg.notify,
+      voiceEnabled: cfg.voiceEnabled, voiceHotkey: cfg.voiceHotkey, voiceOpacity: cfg.voiceOpacity
     },
     autostart: getAutostart(),
     hotkeyError,
@@ -429,7 +440,7 @@ function pushState() {
 }
 
 function applySet(key, val) {
-  const bools = ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify"];
+  const bools = ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "voiceEnabled"];
   let result = { ok: true };
   if (key === "autostart") {
     if (!app.isPackaged) return { ok: false, error: "Автозапуск доступен только в установленной версии." };
@@ -448,6 +459,10 @@ function applySet(key, val) {
       result = registerHotkey();
       if (!result.ok) { cfg.hotkeyEnabled = false; registerHotkey(); }
     }
+    if (key === "voiceEnabled") {
+      result = voice.registerHotkey();
+      if (!result.ok) { cfg.voiceEnabled = false; voice.registerHotkey(); }
+    }
   } else if (key === "hotkey") {
     if (!validHotkey(val)) return { ok: false, error: "Нужно сочетание с Ctrl, Alt или Win и обычной клавишей." };
     const old = cfg.hotkey;
@@ -456,6 +471,19 @@ function applySet(key, val) {
       result = registerHotkey();
       if (!result.ok) { cfg.hotkey = old; registerHotkey(); }
     }
+  } else if (key === "voiceHotkey") {
+    if (!validHotkey(val)) return { ok: false, error: "Нужно сочетание с Ctrl, Alt или Win и обычной клавишей." };
+    if (val === cfg.hotkey && cfg.hotkeyEnabled) return { ok: false, error: "Это сочетание уже занято для показа окна." };
+    const oldV = cfg.voiceHotkey;
+    cfg.voiceHotkey = val;
+    if (cfg.voiceEnabled) {
+      result = voice.registerHotkey();
+      if (!result.ok) { cfg.voiceHotkey = oldV; voice.registerHotkey(); }
+    }
+    voice.applyOpts();
+  } else if (key === "voiceOpacity") {
+    cfg.voiceOpacity = Math.min(100, Math.max(30, Math.round(+val || DEFAULTS.voiceOpacity)));
+    voice.applyOpts();
   } else if (key === "opacity") {
     cfg.opacity = Math.min(100, Math.max(30, Math.round(+val || 100)));
     applyWindowCfg();
@@ -602,6 +630,7 @@ function logout() {
 function initSystem() {
   ensureTray();
   registerHotkey();
+  voice.registerHotkey();
   applyWindowCfg();
   updateTrayMenu();
 }
@@ -609,6 +638,7 @@ function tearDownSystem() {
   if (tray) { tray.destroy(); tray = null; }
   try { globalShortcut.unregisterAll(); } catch (e) {}
   hotkeyActive = null;
+  voice.destroy();
 }
 
 function createMainWindow() {
@@ -688,6 +718,13 @@ app.on("window-all-closed", () => app.quit());
 app.whenReady().then(() => {
   if (!gotLock) return;
   loadCfg();
+  voice.init({
+    getWin: () => (win && !win.isDestroyed() ? win : null),
+    getCfg: () => cfg,
+    isPackaged: app.isPackaged,
+    applySet,  // оверлей переключает настройки через общий обработчик (трей и окно памятки обновятся сами)
+    saveCfg    // сохранить конфиг (позиция оверлея)
+  });
   initUpdater();
 
   if (accounts.restore()) createMainWindow(); // запомненный вход

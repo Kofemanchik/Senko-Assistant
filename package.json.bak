@@ -1,0 +1,77 @@
+{
+  "name": "boston-pamyatka",
+  "productName": "Senko Assistant",
+  "version": "1.2.0",
+  "description": "Памятка Boston — законодательство (Senko Assistant)",
+  "main": "main.js",
+  "author": "Boston",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "node tools/stamp-build.js && electron-builder --win nsis --x64 --publish never",
+    "dist:portable": "node tools/stamp-build.js && electron-builder --win portable --x64 --publish never",
+    "publish-update": "node tools/publish-update.js"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "local.boston.pamyatka",
+    "productName": "Senko Assistant",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "accounts.js",
+      "preload.js",
+      "auth-preload.js",
+      "voice-preload.js",
+      "voice.js",
+      "build-info.json",
+      "app/**/*",
+      "build/icon.ico"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "artifactName": "Senko-Assistant-Setup-${version}.${ext}",
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Senko Assistant",
+      "uninstallDisplayName": "Senko Assistant",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "Senko-Assistant-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Kofemanchik",
+        "repo": "Senko-Assistant"
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "voice-model",
+        "to": "voice-model"
+      }
+    ]
+  }
+}
