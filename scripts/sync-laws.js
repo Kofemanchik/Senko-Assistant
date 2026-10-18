@@ -61,7 +61,11 @@ async function login() {
   if (!LOGIN || !PASS) throw new Error("Не заданы секреты FORUM_LOGIN / FORUM_PASSWORD.");
   let $ = await page(BASE + "/login/");
   const token = $('input[name="_xfToken"]').first().attr("value") || $("html").attr("data-csrf") || "";
-  if (!token) throw new Error("Не найден _xfToken на странице входа (вёрстка форума изменилась?).");
+  if (!token) {
+    console.error("DEBUG title:", $("title").text().trim());
+    console.error("DEBUG html:", $.html().slice(0, 800).replace(/\s+/g, " "));
+    throw new Error("Не найден _xfToken на странице входа (вёрстка форума изменилась?).");
+  }
   const body = new URLSearchParams({ login: LOGIN, password: PASS, remember: "1", _xfRedirect: BASE + "/", _xfToken: token });
   const r = await http(BASE + "/login/login", {
     method: "POST", body: body.toString(),
