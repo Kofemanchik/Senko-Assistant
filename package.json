@@ -22,7 +22,7 @@
   },
   "build": {
     "appId": "local.senko.assistant",
-    "productName": "Senko Assistant",
+    "productName": "senko.assistant",
     "directories": {
       "output": "dist"
     },
