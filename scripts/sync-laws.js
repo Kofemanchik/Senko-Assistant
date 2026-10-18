@@ -49,16 +49,39 @@ async function http(url, opts = {}, hops = 0) {
     return http(next, {}, hops + 1);
   }
   const text = await res.text();
-  if (res.status === 403 || res.status === 503 || /Just a moment|cf-chl|Attention Required/i.test(text.slice(0, 4000))) {
-    throw new Error("Форум отдал защиту от ботов (Cloudflare) или 403. Статус " + res.status + ", " + url);
+  if (res.status === 403 || res.status === 503 || /Just a moment|cf-chl|Attention Required|vddosw3data/i.test(text.slice(0, 4000))) {
+    throw new Error("Форум отдал защиту от ботов (Cloudflare / DDoS-Guard) или 403. Статус " + res.status + ", " + url);
   }
   if (!res.ok) throw new Error("HTTP " + res.status + " на " + url);
   return { text, url };
 }
 const page = async (url) => cheerio.load((await http(url)).text);
 
+// Проходит проверку браузера (DDoS-Guard) настоящим Chromium и забирает cookie в общий jar.
+async function passAntiBot() {
+  const { chromium } = require("playwright");
+  const browser = await chromium.launch();
+  try {
+    const ctx = await browser.newContext({ userAgent: UA, locale: "ru-RU" });
+    const p = await ctx.newPage();
+    await p.goto(BASE + "/login/", { waitUntil: "domcontentloaded", timeout: 60000 });
+    try {
+      await p.waitForSelector('input[name="_xfToken"], html[data-csrf]', { state: "attached", timeout: 40000 });
+    } catch (e) {
+      console.error("DEBUG после браузера, title:", await p.title());
+      console.error("DEBUG после браузера, текст:", (await p.innerText("body").catch(() => "")).slice(0, 500).replace(/\s+/g, " "));
+      throw new Error("Браузер не прошёл проверку форума.");
+    }
+    for (const c of await ctx.cookies()) jar[c.name] = c.value;
+    console.log("Проверка форума пройдена, cookie получено:", Object.keys(jar).length);
+  } finally {
+    await browser.close();
+  }
+}
+
 async function login() {
   if (!LOGIN || !PASS) throw new Error("Не заданы секреты FORUM_LOGIN / FORUM_PASSWORD.");
+  await passAntiBot();
   let $ = await page(BASE + "/login/");
   const token = $('input[name="_xfToken"]').first().attr("value") || $("html").attr("data-csrf") || "";
   if (!token) {

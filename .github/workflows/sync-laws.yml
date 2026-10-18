@@ -24,6 +24,9 @@ jobs:
       - name: Install parser deps
         working-directory: scripts
         run: npm install --no-audit --no-fund
+      - name: Install Chromium
+        working-directory: scripts
+        run: npx playwright install --with-deps chromium
       - name: Parse forum
         env:
           FORUM_LOGIN: ${{ secrets.FORUM_LOGIN }}
