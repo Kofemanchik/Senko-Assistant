@@ -6,7 +6,8 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write
+  contents: write   # коммит update/laws.enc и update/laws-status.json
+  actions: write    # продление расписания (см. шаг Keepalive)
 
 concurrency:
   group: sync-laws
@@ -16,11 +17,29 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      LAWS_KEY: ${{ secrets.LAWS_KEY }}
     steps:
+      # 1. Защита от «тихой остановки»: GitHub отключает расписание после 60 дней без активности.
+      #    Повторное включение workflow сбрасывает этот счётчик. Шаг выполняется первым, даже если дальше всё упадёт.
+      - name: Keepalive (продлить расписание)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/sync-laws.yml/enable"
+
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      - name: Проверка секретов
+        run: |
+          if [ -z "$LAWS_KEY" ]; then echo "::error::Не задан секрет LAWS_KEY (Settings → Secrets and variables → Actions)"; exit 1; fi
+
+      - name: Расшифровать прошлую версию (для сравнения)
+        run: node scripts/laws-crypt.js decrypt
+
       - name: Install parser deps
         working-directory: scripts
         run: npm install --no-audit --no-fund
@@ -32,14 +51,33 @@ jobs:
           FORUM_LOGIN: ${{ secrets.FORUM_LOGIN }}
           FORUM_PASSWORD: ${{ secrets.FORUM_PASSWORD }}
         run: node scripts/sync-laws.js
-      - name: Commit laws.json
+
+      - name: Разметить изменения и зашифровать
+        run: node scripts/publish-laws.js
+
+      - name: Commit
         run: |
           git config user.name "laws-bot"
           git config user.email "laws-bot@users.noreply.github.com"
-          git add update/laws.json
+          git add -A update/
           if git diff --cached --quiet; then
             echo "Без изменений"
           else
             git commit -m "laws: автообновление $(date -u +%F)"
+            git pull --rebase --autostash
             git push
           fi
+
+      # 2. Если что-то упало — всё равно коммитим пометку об ошибке: это и «активность» для GitHub,
+      #    и сигнал приложению. Сама задача при этом остаётся красной — GitHub пришлёт письмо о сбое.
+      - name: Пометить сбой в laws-status.json
+        if: failure()
+        run: |
+          node scripts/mark-failed.js "парсер или публикация завершились с ошибкой (запуск ${{ github.run_id }})"
+          git config user.name "laws-bot"
+          git config user.email "laws-bot@users.noreply.github.com"
+          rm -f update/.prev.json
+          git add update/laws-status.json
+          git commit -m "laws: сбой автообновления $(date -u +%F)" || true
+          git pull --rebase --autostash || true
+          git push || true

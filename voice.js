@@ -54,11 +54,15 @@ function pageSearch(cands) {
     var qEl = document.getElementById("q");
     if (!qEl || qEl.disabled) return { ok: false, error: "Поиск сейчас недоступен." };
     var txt = function (el) { return el ? (el.textContent || "").replace(/\s+/g, " ").trim() : ""; };
+    var lawFn = window.__senkoLawSearch; // поиск по остальным законам (определён в index.html)
+    var lawRes = [];
     for (var i = 0; i < cands.length; i++) {
       qEl.value = cands[i];
       qEl.dispatchEvent(new Event("input", { bubbles: true }));
       var arts = document.querySelectorAll("#view .art");
-      if (!arts.length) continue;
+      var lw = { total: 0, items: [] };
+      try { if (typeof lawFn === "function") lw = lawFn(cands[i]) || lw; } catch (e) {}
+      if (!arts.length && !lw.items.length) continue;
       var items = [];
       for (var a = 0; a < arts.length && a < 3; a++) {
         var art = arts[a], parts = [], ps = art.querySelectorAll(".part");
@@ -75,8 +79,10 @@ function pageSearch(cands) {
           more: Math.max(0, ps.length - 2)
         });
       }
+      // статьи кодексов — первыми; свободные места (до 3) занимают статьи остальных законов
+      for (var l = 0; l < lw.items.length && items.length < 3; l++) items.push(lw.items[l]);
       var ref = document.querySelector("#view .refbar");
-      return { ok: true, query: cands[i], total: arts.length, ref: ref ? txt(ref).slice(0, 400) : "", items: items };
+      return { ok: true, query: cands[i], total: arts.length + (lw.total || 0), ref: ref ? txt(ref).slice(0, 400) : "", items: items };
     }
     return { ok: true, query: cands[0], total: 0, items: [] };
   } catch (e) {

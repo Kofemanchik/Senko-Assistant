@@ -57,6 +57,8 @@ module.exports = function createAccounts({ dataDir, docsDir }) {
         "Организация": u.org,
         "Роль": ROLES[u.role] || u.role,
         "Создан": u.created,
+        "Принял документы (версия)": u.legalVersion || "",
+        "Дата принятия документов": u.legalAt || "",
         "Обновлён": new Date().toISOString()
       };
       writeFileAtomic(profFile(u.login), JSON.stringify(doc, null, 2));
@@ -111,7 +113,10 @@ module.exports = function createAccounts({ dataDir, docsDir }) {
     current: () => (current ? pub(current) : null),
 
     register(d) {
-      const v = validate(d || {});
+      d = d || {};
+      if (!d.legal || d.legal.accepted !== true)
+        return { ok: false, error: "Для регистрации нужно принять Политику конфиденциальности и Условия пользования." };
+      const v = validate(d);
       if (v.error) return { ok: false, error: v.error };
       const db = readDb();
       if (db.users.some((u) => u.login.toLowerCase() === v.login.toLowerCase()))
@@ -120,7 +125,8 @@ module.exports = function createAccounts({ dataDir, docsDir }) {
       const u = {
         login: v.login, salt, hash: hashPass(v.pass, salt),
         nick: v.nick, static: v.st, org: v.org, dept: v.dept, role: v.role,
-        created: new Date().toISOString(), seeded: false, tokens: []
+        created: new Date().toISOString(), seeded: false, tokens: [],
+        legalVersion: clean(d.legal.version, 20), legalAt: new Date().toISOString()
       };
       db.users.push(u);
       writeDb(db);

@@ -3,3 +3,5 @@ dist/
 *.log
 
 voice-model/model.tar.gz
+laws-key.json
+update/.prev.json

@@ -548,6 +548,38 @@ ipcMain.on("senko:about", (e) => { if (fromMain(e)) showAbout(); });
 ipcMain.on("senko:check-update", (e) => { if (fromMain(e)) { checkForAppUpdate(true); checkForUpdate(true); } });
 ipcMain.on("senko:logout", (e) => { if (fromMain(e)) logout(); });
 
+// ───────────── Законы с форума (сервер парсит форум раз в сутки в 00:05 МСК, приложение сверяет версию каждые 3 часа) ─────────────
+const laws = require("./laws-sync")({
+  dataDir: () => app.getPath("userData"),
+  onProgress: (p) => {
+    if (win && !win.isDestroyed()) win.webContents.send("laws:event", { type: "progress", progress: p });
+  },
+  onUpdate: (info) => {
+    if (win && !win.isDestroyed()) win.webContents.send("laws:event", { type: "done", info });
+    if (info && info.notify && cfg.notify && Notification.isSupported()) {
+      const n = new Notification({
+        title: "Законодательство обновлено",
+        body: `Изменений: ${info.changes.length}. Откройте раздел «Законы» — изменённые статьи помечены.`,
+        icon: nativeImage.createFromPath(iconPath())
+      });
+      n.on("click", showWindow);
+      n.show();
+    }
+  }
+});
+ipcMain.handle("laws:get", (e) => (fromMain(e) ? laws.get() : null));
+// Синхронное чтение сохранённых законов при старте окна: из них собираются актуальные УК/АК/ДК/ПК
+ipcMain.on("laws:get-sync", (e) => { e.returnValue = fromMain(e) ? laws.peek() : null; });
+ipcMain.handle("laws:sync", (e) => (fromMain(e) ? laws.sync() : null));
+ipcMain.handle("laws:diag", (e) => (fromMain(e) ? laws.diagnose() : ""));
+ipcMain.handle("laws:login", (e) => (fromMain(e) ? laws.login() : { ok: false }));
+ipcMain.handle("laws:logout", (e) => (fromMain(e) ? laws.logout() : null));
+ipcMain.on("laws:debug", (e) => {
+  if (!fromMain(e)) return;
+  const f = fs.existsSync(laws.debugPath()) ? laws.debugPath() : laws.dataPath();
+  if (fs.existsSync(f)) shell.showItemInFolder(f); else shell.openPath(app.getPath("userData"));
+});
+
 // Системное уведомление (сигнал таймера) — работает и при скрытом/свёрнутом окне
 ipcMain.on("senko:notify", (e, title, body) => {
   if (!fromMain(e) || !cfg.notify || !Notification.isSupported()) return;
@@ -726,6 +758,7 @@ app.whenReady().then(() => {
     saveCfg    // сохранить конфиг (позиция оверлея)
   });
   initUpdater();
+  laws.start();
 
   if (accounts.restore()) createMainWindow(); // запомненный вход
   else createAuthWindow();

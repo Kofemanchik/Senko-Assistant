@@ -1,7 +1,7 @@
 {
   "name": "boston-pamyatka",
   "productName": "Senko Assistant",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "Памятка Boston — законодательство (Senko Assistant)",
   "main": "main.js",
   "author": "Boston",
@@ -34,6 +34,7 @@
       "auth-preload.js",
       "voice-preload.js",
       "voice.js",
+      "laws-key.json",
       "build-info.json",
       "app/**/*",
       "build/icon.ico"

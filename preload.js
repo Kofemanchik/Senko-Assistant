@@ -59,6 +59,13 @@ ipcRenderer.on("senko:cfg", (_e, state) => {
   });
 });
 
+const lawsListeners = new Set();
+ipcRenderer.on("laws:event", (_e, ev) => {
+  lawsListeners.forEach((f) => {
+    try { f(ev); } catch (e) {}
+  });
+});
+
 contextBridge.exposeInMainWorld("senkoApp", {
   state: () => ipcRenderer.sendSync("senko:get"),
   set: (key, value) => ipcRenderer.sendSync("senko:set", key, value),
@@ -68,5 +75,16 @@ contextBridge.exposeInMainWorld("senkoApp", {
   about: () => ipcRenderer.send("senko:about"),
   checkUpdate: () => ipcRenderer.send("senko:check-update"),
   logout: () => ipcRenderer.send("senko:logout"),
-  onChange: (f) => { if (typeof f === "function") listeners.add(f); }
+  onChange: (f) => { if (typeof f === "function") listeners.add(f); },
+  // Законы с форума: данные, ручное обновление, события (progress/done), папка диагностики
+  laws: {
+    get: () => ipcRenderer.invoke("laws:get"),
+    getSync: () => ipcRenderer.sendSync("laws:get-sync"), // сохранённые законы сразу при старте (для автообновления УК/АК/ДК/ПК)
+    sync: () => ipcRenderer.invoke("laws:sync"),
+    debug: () => ipcRenderer.send("laws:debug"),
+    diag: () => ipcRenderer.invoke("laws:diag"),
+    login: () => ipcRenderer.invoke("laws:login"),
+    logout: () => ipcRenderer.invoke("laws:logout"),
+    on: (f) => { if (typeof f === "function") lawsListeners.add(f); }
+  }
 });
