@@ -1,10 +1,10 @@
 {
-  "name": "boston-pamyatka",
+  "name": "Senko Assistant",
   "productName": "Senko Assistant",
-  "version": "1.2.0",
-  "description": "Памятка Boston — законодательство (Senko Assistant)",
+  "version": "1.3.1",
+  "description": "Ассистент по законодательству для Majestic RP Boston",
   "main": "main.js",
-  "author": "Boston",
+  "author": "Hanami Senko",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
@@ -21,7 +21,7 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "local.boston.pamyatka",
+    "appId": "local.senko.assistant",
     "productName": "Senko Assistant",
     "directories": {
       "output": "dist"
