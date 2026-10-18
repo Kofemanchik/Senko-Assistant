@@ -1,24 +1,46 @@
+
 name: Build installer
+
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
   win:
     runs-on: windows-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
+        with:
+          node-version: 22
+          cache: npm
+
       - run: npm ci
+
       - run: npm run dist
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload installer and update metadata
+        uses: actions/upload-artifact@v4
         with:
           name: Senko-Assistant-Setup
-          path: dist/*.exe
-      - if: startsWith(github.ref, 'refs/tags/')
+          path: |
+            dist/*.exe
+            dist/latest.yml
+            dist/*.blockmap
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.exe
+          files: |
+            dist/*.exe
+            dist/latest.yml
+            dist/*.blockmap
+          fail_on_unmatched_files: true
