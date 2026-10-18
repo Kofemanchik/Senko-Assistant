@@ -572,6 +572,7 @@ html.narrow .trrow .bar{grid-column:1/-1;order:3}
     <button class="tab" role="tab" data-tab="dk" aria-selected="false">ДК</button>
     <button class="tab" role="tab" data-tab="pk" aria-selected="false">ПК</button>
     <button class="tab" role="tab" data-tab="gen" aria-selected="false">Общая часть</button>
+    <button class="tab" role="tab" data-tab="laws" aria-selected="false">Законы<span class="cnt" id="lawsBadge" hidden></span></button>
     <button class="tab" role="tab" data-tab="timer" aria-selected="false">Задержание<span class="cnt" id="timerBadge" hidden></span></button>
     <button class="tab" role="tab" data-tab="calc" aria-selected="false">Калькулятор<span class="cnt" id="basketCnt" hidden>0</span></button>
   </nav>
@@ -2113,7 +2114,7 @@ var TABS={
  learn:["Обучение",[["quiz","Тренажёр"],["scen","Что делать, если…"],["err","Частые ошибки"]]],
  more:["Сервис",[["cmp","Сравнение"],["diff","Изменения"],["print","Шпаргалка"]]]};
 var ROLES={off:["Сотрудник",["timer","calc","tools","rules","learn","more"]],pros:["Прокурор",["sup","rules","learn","more"]],adv:["Адвокат",["def","rules","learn","more"]]};
-var BASE=["uk","ak","dk","pk","gen"];
+var BASE=["uk","ak","dk","pk","gen","laws"];
 var X={sub:{tools:"legal",sup:"sup",def:"def",rules:"rg",learn:"quiz",more:"cmp"},bail:[],bm:"sum",quiz:null,doc:"claim",fs:"",c1:"uk|6.1",c2:"uk|10.1",role:"off",rq:""};
 try{X.role=localStorage.getItem("bos-role")||"off"}catch(e){} if(!ROLES[X.role])X.role="off"; window.SA_X=X; window.SA_TABS=TABS;
 var nav=document.querySelector(".tabs"),tbT=nav.querySelector('[data-tab="timer"]'),tbC=nav.querySelector('[data-tab="calc"]');
@@ -3003,6 +3004,9 @@ function settingsHtml(){
   h+=row("Кнопка «Наверх»","Быстрый возврат к началу длинных списков.",sw("totop",S.totop,"Кнопка «Наверх»"));
   h+=row("Запоминание позиции прокрутки","Страница открывается там, где вы её оставили.",sw("remember",S.remember,"Запоминать позицию"));
   h+=appSettingsHtml();
+  h+='<div class="sgroup">Документы</div>';
+  h+=row("Политика конфиденциальности","Какие данные хранит Senko Assistant и где они находятся.",'<button type="button" class="btn" data-legal="privacy">Читать</button>');
+  h+=row("Условия пользования","Правила использования и ограничения ответственности.",'<button type="button" class="btn" data-legal="terms">Читать</button>');
   h+='<div class="sgroup">Печать</div>';
   h+=row("Печать шпаргалки на одной странице","Компактная версия для распечатки или PDF.",'<button type="button" class="btn primary" data-sk="print">Открыть и распечатать</button>');
   h+='<div class="sbtns"><button type="button" class="btn" data-sk="reset">Сбросить настройки</button></div>';
@@ -4002,5 +4006,522 @@ render();
 
 <script>
 (function(){var b=document.getElementById("dcBtn");if(!b)return;b.addEventListener("click",function(e){e.preventDefault();var sp=b.querySelector("span");var done=function(ok){sp.textContent=ok?"Ник скопирован: hanamis1":"Discord: hanamis1 (скопируйте вручную)";setTimeout(function(){sp.textContent="Discord: hanamis1"},2200)};try{navigator.clipboard.writeText("hanamis1").then(function(){done(true)},function(){fb()})}catch(x){fb()}function fb(){var t=document.createElement("textarea");t.value="hanamis1";t.style.cssText="position:fixed;opacity:0";document.body.appendChild(t);t.select();var ok=false;try{ok=document.execCommand("copy")}catch(x){}document.body.removeChild(t);done(ok)}})})();
+</script>
+<script>
+/* ===== Senko Assistant: Политика конфиденциальности и Условия пользования =====
+   Один и тот же файл подключается и в index.html (настройки), и в app/auth.html (регистрация).
+   API:
+     SenkoLegal.VERSION                    — версия документов (меняйте при правке текстов)
+     SenkoLegal.open("privacy"|"terms")    — открыть мини-окно с документом
+     SenkoLegal.consentHtml(id)            — HTML строки «галочка + кликабельные ссылки»
+     SenkoLegal.bind(root)                 — подключить обработчики; возвращает {checked(), onChange(fn), shake()}
+*/
+(function () {
+  "use strict";
+  if (window.SenkoLegal) return;
+
+  var VERSION = "2026-10-18";
+  var CONTACT = "Discord: hanamis1";
+
+  var DOCS = {
+    privacy: {
+      title: "Политика конфиденциальности",
+      updated: "18 октября 2026",
+      sections: [
+        ["1. Общие положения",
+          ["Senko Assistant (далее — «Программа») — справочное приложение-памятка по законодательству игрового проекта Majestic RP Boston. Эта Политика объясняет, какие данные Программа хранит и как с ними обращается.",
+           "Программа создана игроками и не является официальным продуктом Majestic RP или администрации проекта."]],
+        ["2. Какие данные хранятся",
+          ["При регистрации и использовании Программа хранит: логин, игровой ник, статик, организацию, роль, пароль для входа и аватар (если вы его загрузили). Пароль хранится только в виде хэша, открытого пароля в программе нет. Если вы выбрали «Запомнить меня», на компьютере сохраняется токен автоматического входа.",
+           "Также сохраняются данные вашей работы: настройки интерфейса, история задержаний и расчётов из калькулятора, результаты тестов из раздела «Обучение», позиция прокрутки, избранное и пометки."]],
+        ["3. Где хранятся данные",
+          ["Все перечисленные данные хранятся только на вашем компьютере: в локальном хранилище приложения, в папке данных программы (аккаунты и резервная копия настроек) и в папке «Документы\Senko Assistant\Пользователи» (файл профиля). Программа не отправляет их на серверы разработчика и не передаёт третьим лицам.",
+           "Если вы удалите данные приложения или переустановите систему без переноса папки данных, информация будет утрачена. Резервную копию можно сохранить, скопировав папку данных программы."]],
+        ["4. Сетевые обращения",
+          ["Программа обращается к интернету только для проверки и загрузки обновлений (через GitHub) и для ежедневного получения актуальных текстов законодательства с публичного форума проекта (раздел «Законы»). Это происходит в скрытом окне программы, в этих запросах не передаются ваши логин, пароль, ник и иные личные данные. Загруженные тексты законов сохраняются на вашем компьютере.",
+           "Голосовой ввод работает с помощью модели распознавания речи, встроенной в Программу. Аудио с микрофона обрабатывается на вашем устройстве и никуда не отправляется и не записывается."]],
+        ["5. Аналитика, реклама, cookie",
+          ["Программа не содержит рекламы, счётчиков, аналитики и средств отслеживания. Данные не продаются и не используются для профилирования."]],
+        ["6. Ваши права",
+          ["Вы можете в любой момент изменить или удалить свои данные: очистить историю в личном кабинете, выйти из аккаунта, удалить приложение и его папку данных. После удаления папки данных восстановить информацию невозможно.",
+           "Храните пароль в секрете. Не используйте в Программе пароль, который вы применяете на других сайтах и сервисах."]],
+        ["7. Изменения Политики",
+          ["Текст Политики может обновляться вместе с версиями Программы. Актуальная редакция всегда доступна в Программе: Настройки → Документы."]],
+        ["8. Контакты",
+          ["Вопросы и предложения по обработке данных: " + CONTACT + "."]]
+      ]
+    },
+    terms: {
+      title: "Условия пользования",
+      updated: "18 октября 2026",
+      sections: [
+        ["1. Принятие условий",
+          ["Регистрируясь в Senko Assistant и используя Программу, вы подтверждаете, что прочитали эти Условия и Политику конфиденциальности и согласны с ними. Если вы не согласны, не используйте Программу."]],
+        ["2. Назначение Программы",
+          ["Программа — бесплатный справочный инструмент: памятка по законодательству проекта Majestic RP Boston, калькулятор сроков и штрафов, помощники для сотрудников. Она предназначена только для игровых целей внутри проекта."]],
+        ["3. Неофициальный характер и точность данных",
+          ["Программа не связана с Majestic RP и не является официальным источником. Тексты законов приведены для удобства и могут отставать от актуальной редакции или содержать ошибки.",
+           "При расхождении приоритет всегда имеет официальный текст на форуме проекта. Разработчик не несёт ответственности за последствия решений, принятых только на основании данных Программы, включая игровые наказания, жалобы и иски."]],
+        ["4. Правила использования",
+          ["Запрещается: взламывать или модифицировать Программу с целью обхода ограничений; распространять изменённые копии под видом оригинала; использовать Программу для нарушения правил проекта или причинения вреда другим игрокам; выдавать себя за другого человека при регистрации.",
+           "Вы отвечаете за достоверность данных, которые указываете, и за сохранность своего пароля."]],
+        ["5. Права на программу",
+          ["Программа и её оформление принадлежат её автору. Материалы и названия, принадлежащие проекту Majestic RP и его правообладателям, используются исключительно в информационных целях и остаются собственностью их владельцев.",
+           "Бесплатное использование не означает передачи прав на исходный код. Копирование и перепродажа Программы без согласия автора запрещены."]],
+        ["6. Отсутствие гарантий",
+          ["Программа предоставляется «как есть», без каких-либо гарантий бесперебойной работы. Автор вправе изменять, приостанавливать или прекращать развитие Программы, а также выпускать обновления, в том числе принудительные."]],
+        ["7. Ограничение ответственности",
+          ["В пределах, допустимых законом, автор не отвечает за потерю данных, сбои в работе, а также за любые убытки или игровые последствия, возникшие из-за использования или невозможности использования Программы."]],
+        ["8. Изменение Условий и контакты",
+          ["Условия могут изменяться. Актуальная редакция всегда доступна в Программе: Настройки → Документы. Продолжая пользоваться Программой после обновления, вы принимаете новую редакцию.",
+           "Связь с автором: " + CONTACT + "."]]
+      ]
+    }
+  };
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  /* ---------- стили ---------- */
+  var css =
+    ".sl-ov{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(5,10,18,.6)}" +
+    ".sl-ov[hidden]{display:none}" +
+    ".sl-box{display:flex;flex-direction:column;width:min(640px,100%);max-height:min(82vh,720px);background:var(--surface,#fff);color:var(--ink,#172230);border:1px solid var(--line,#D3D9E0);border-radius:10px;box-shadow:0 16px 48px rgba(0,0,0,.4);font:14px/1.55 var(--f-body,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);outline:none}" +
+    ".sl-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line,#D3D9E0)}" +
+    ".sl-tabs{display:flex;gap:6px;flex:1;min-width:0;flex-wrap:wrap}" +
+    ".sl-tab,.sl-x,.sl-ok{font:inherit;color:inherit;cursor:pointer;border:1px solid var(--line,#D3D9E0);background:var(--surface,#fff);border-radius:6px;padding:6px 12px}" +
+    ".sl-tab{font-weight:600;font-size:13px}" +
+    ".sl-tab[aria-selected=true]{background:var(--accent,#1D4E89);color:var(--accent-ink,#fff);border-color:var(--accent,#1D4E89)}" +
+    ".sl-x{padding:6px 10px;line-height:1}" +
+    ".sl-body{overflow:auto;padding:14px 18px 6px;flex:1;-webkit-overflow-scrolling:touch}" +
+    ".sl-body h2{margin:0 0 2px;font-size:18px}" +
+    ".sl-body .sl-upd{margin:0 0 12px;color:var(--muted,#5B6877);font-size:12px}" +
+    ".sl-body h3{margin:16px 0 4px;font-size:14px}" +
+    ".sl-body p{margin:0 0 8px}" +
+    ".sl-foot{display:flex;justify-content:flex-end;padding:10px 14px;border-top:1px solid var(--line,#D3D9E0)}" +
+    ".sl-ok{background:var(--accent,#1D4E89);color:var(--accent-ink,#fff);border-color:var(--accent,#1D4E89);font-weight:600}" +
+    ".sl-tab:focus-visible,.sl-x:focus-visible,.sl-ok:focus-visible,.sl-link:focus-visible{outline:2px solid var(--accent,#1D4E89);outline-offset:2px}" +
+    ".sl-consent{color:var(--ink,#172230);display:flex;align-items:flex-start;gap:9px;margin:10px 0;font-size:13px;line-height:1.45;cursor:pointer}" +
+    ".sl-consent input{padding:0;margin:2px 0 0;width:17px;height:17px;flex:0 0 auto;accent-color:var(--accent,#1D4E89);cursor:pointer}" +
+    ".sl-link{all:unset;color:var(--accent,#1D4E89);text-decoration:underline;cursor:pointer}" +
+    ".sl-consent.sl-err{outline:2px solid #B3261E;outline-offset:3px;border-radius:4px}" +
+    "@keyframes slShake{0%,100%{transform:none}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}" +
+    ".sl-consent.sl-err{animation:slShake .3s}" +
+    "@media (prefers-reduced-motion:reduce){.sl-consent.sl-err{animation:none}}";
+
+  function ensureCss() {
+    if (document.getElementById("sl-style")) return;
+    var st = document.createElement("style");
+    st.id = "sl-style";
+    st.textContent = css;
+    (document.head || document.documentElement).appendChild(st);
+  }
+
+  /* ---------- модальное окно ---------- */
+  var ov = null, cur = "privacy", lastFocus = null, tabsEl, bodyEl;
+
+  function renderDoc() {
+    var d = DOCS[cur];
+    var h = '<h2>' + esc(d.title) + '</h2><p class="sl-upd">Редакция от ' + esc(d.updated) + '</p>';
+    d.sections.forEach(function (s) {
+      h += "<h3>" + esc(s[0]) + "</h3>";
+      s[1].forEach(function (p) { h += "<p>" + esc(p) + "</p>"; });
+    });
+    bodyEl.innerHTML = h;
+    bodyEl.scrollTop = 0;
+    Array.prototype.forEach.call(tabsEl.children, function (b) {
+      b.setAttribute("aria-selected", b.getAttribute("data-doc") === cur ? "true" : "false");
+    });
+  }
+
+  function build() {
+    ensureCss();
+    ov = document.createElement("div");
+    ov.className = "sl-ov";
+    ov.hidden = true;
+    ov.innerHTML =
+      '<div class="sl-box" role="dialog" aria-modal="true" aria-label="Юридические документы" tabindex="-1">' +
+      '<div class="sl-head"><div class="sl-tabs" role="tablist">' +
+      '<button type="button" class="sl-tab" role="tab" data-doc="privacy">Конфиденциальность</button>' +
+      '<button type="button" class="sl-tab" role="tab" data-doc="terms">Условия пользования</button>' +
+      '</div><button type="button" class="sl-x" aria-label="Закрыть">✕</button></div>' +
+      '<div class="sl-body"></div>' +
+      '<div class="sl-foot"><button type="button" class="sl-ok">Закрыть</button></div></div>';
+    document.body.appendChild(ov);
+    tabsEl = ov.querySelector(".sl-tabs");
+    bodyEl = ov.querySelector(".sl-body");
+    ov.addEventListener("click", function (e) {
+      if (e.target === ov) return close();
+      var b = e.target.closest ? e.target.closest("button") : null;
+      if (!b) return;
+      if (b.classList.contains("sl-x") || b.classList.contains("sl-ok")) return close();
+      var d = b.getAttribute("data-doc");
+      if (d && DOCS[d]) { cur = d; renderDoc(); }
+    });
+    ov.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); close(); return; }
+      if (e.key === "Tab") { // простая ловушка фокуса внутри окна
+        var f = ov.querySelectorAll("button");
+        if (!f.length) return;
+        var first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }, true);
+  }
+
+  function open(kind) {
+    if (!DOCS[kind]) kind = "privacy";
+    if (!ov) build();
+    cur = kind;
+    lastFocus = document.activeElement;
+    renderDoc();
+    ov.hidden = false;
+    var box = ov.querySelector(".sl-box");
+    if (box) box.focus();
+  }
+
+  function close() {
+    if (!ov) return;
+    ov.hidden = true;
+    try { if (lastFocus && lastFocus.focus) lastFocus.focus(); } catch (e) {}
+  }
+
+  /* ---------- галочка согласия для регистрации ---------- */
+  function consentHtml(id) {
+    id = id || "slAgree";
+    return '<label class="sl-consent" data-sl-consent>' +
+      '<input type="checkbox" id="' + esc(id) + '" data-sl-check>' +
+      '<span>Я ознакомился и согласен с ' +
+      '<button type="button" class="sl-link" data-legal="privacy">Политикой конфиденциальности</button> и ' +
+      '<button type="button" class="sl-link" data-legal="terms">Условиями пользования</button></span></label>';
+  }
+
+  // Делегирование: любая кнопка с data-legal открывает окно (работает и после перерисовки интерфейса).
+  document.addEventListener("click", function (e) {
+    var b = e.target && e.target.closest ? e.target.closest("[data-legal]") : null;
+    if (!b) return;
+    e.preventDefault();
+    e.stopPropagation();
+    open(b.getAttribute("data-legal"));
+  }, true);
+
+  function bind(root) {
+    ensureCss();
+    root = root || document;
+    var cb = root.querySelector("[data-sl-check]");
+    var wrap = root.querySelector("[data-sl-consent]");
+    var subs = [];
+    if (cb) cb.addEventListener("change", function () {
+      if (wrap) wrap.classList.remove("sl-err");
+      subs.forEach(function (f) { try { f(cb.checked); } catch (e) {} });
+    });
+    return {
+      checked: function () { return !!(cb && cb.checked); },
+      onChange: function (f) { if (typeof f === "function") subs.push(f); },
+      shake: function () {
+        if (!wrap) return;
+        wrap.classList.remove("sl-err");
+        void wrap.offsetWidth;
+        wrap.classList.add("sl-err");
+        if (cb) cb.focus();
+      },
+      version: VERSION
+    };
+  }
+
+  window.SenkoLegal = { VERSION: VERSION, open: open, close: close, consentHtml: consentHtml, bind: bind, docs: DOCS };
+})();
+
+</script>
+<script>
+/* ===== Senko Assistant: раздел «Законы» (тексты с форума, обновляются автоматически) ===== */
+(function () {
+  "use strict";
+  var A = window.senkoApp, API = A && A.laws;
+  var LW = { data: null, loading: false, q: "", sec: "", open: {}, busy: false, prog: null, err: "", diag: "", diagBusy: false };
+  var WEEK = 7 * 864e5;
+  var SEEN = "bos-laws-seen";
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function msk(ts) {
+    if (!ts) return "—";
+    try {
+      return new Date(ts).toLocaleString("ru-RU", { timeZone: "Europe/Moscow", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) + " МСК";
+    } catch (e) { return new Date(ts).toISOString().slice(0, 16).replace("T", " "); }
+  }
+  function mskDay(ts) {
+    try { return new Date(ts).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow", day: "2-digit", month: "2-digit" }); } catch (e) { return ""; }
+  }
+  function seen() { try { return +localStorage.getItem(SEEN) || 0; } catch (e) { return 0; } }
+  function markSeen() { try { localStorage.setItem(SEEN, String(Date.now())); } catch (e) {} updBadge(); }
+  function updBadge() {
+    var b = document.getElementById("lawsBadge"); if (!b) return;
+    var n = 0, s = seen();
+    if (LW.data && LW.data.laws) LW.data.laws.forEach(function (l) { if (l.changedAt && l.changedAt > s) n++; });
+    b.hidden = !n; b.textContent = n;
+  }
+
+  /* ---------- стили ---------- */
+  var st = document.createElement("style");
+  st.id = "lw-style";
+  st.textContent =
+    ".lw-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 10px}" +
+    ".lw-h{margin:0 0 4px;font:700 20px var(--f-head)}" +
+    ".lw-meta{color:var(--muted);font-size:12.5px;margin:2px 0}" +
+    ".lw-stat{display:flex;flex-wrap:wrap;gap:4px 16px;margin:8px 0;font-size:13.5px}" +
+    ".lw-stat b{font-weight:700}" +
+    ".lw-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}" +
+    ".lw-err{background:rgba(179,38,30,.12);color:var(--s5);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13px}" +
+    ".lw-note{background:var(--chip);border-radius:8px;padding:10px 12px;margin:0 0 10px;font-size:13.5px}" +
+    ".lw-tools{display:flex;flex-direction:column;gap:8px;margin:0 0 10px}" +
+    ".lw-tools input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit}" +
+    ".lw-pills{display:flex;gap:6px;flex-wrap:wrap}" +
+    ".lw-top{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}" +
+    ".lw-t{font-weight:700;font-size:15px;line-height:1.3}" +
+    ".lw-badge{display:inline-block;font:700 11px var(--f-body);padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle;background:var(--s3);color:var(--accent-ink)}" +
+    ".lw-badge.n{background:var(--s1)}" +
+    ".lw-chg{display:flex;gap:8px;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line);padding:7px 0;font-size:13.5px}" +
+    ".lw-chg:first-of-type{border-top:0}" +
+    ".lw-chg time{color:var(--muted);flex:0 0 auto;font-variant-numeric:tabular-nums}" +
+    ".lw-snip{color:var(--muted);font-size:13px;margin:6px 0 0}" +
+    ".lw-text{margin:10px 0 0;border-top:1px solid var(--line);padding-top:8px;max-height:70vh;overflow:auto}" +
+    ".lw-text p{margin:0 0 6px;font-size:14px;line-height:1.5;overflow-wrap:anywhere}" +
+    ".lw-text p.h{font-weight:700;margin-top:12px}" +
+    ".lw-diff{margin:10px 0 0;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px}" +
+    ".lw-diff p{margin:0 0 4px;overflow-wrap:anywhere}" +
+    ".lw-diff .a{color:var(--s1)}.lw-diff .d{color:var(--s5);text-decoration:line-through}" +
+    ".lw-diagbox{margin-top:10px}.lw-diagbox textarea{width:100%;box-sizing:border-box;font:12px/1.4 var(--f-mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px;resize:vertical}" +
+    ".lw-empty{color:var(--muted);text-align:center;padding:24px 8px}";
+  document.head.appendChild(st);
+
+  /* ---------- данные ---------- */
+  function load() {
+    if (!API || LW.loading) return;
+    LW.loading = true;
+    API.get().then(function (d) {
+      LW.data = d; LW.loading = false; LW.busy = !!(d && d.running); LW.err = "";
+      if (d && d.laws) d.laws.forEach(function (l) { l._lc = (l.title + "\n" + l.text).toLowerCase(); });
+      updBadge();
+      if (state.tab === "laws") { draw(); markSeen(); }
+    }, function () {
+      LW.loading = false; LW.err = "Не удалось прочитать данные законов.";
+      if (state.tab === "laws") draw();
+    });
+  }
+  if (API) {
+    API.on(function (ev) {
+      if (!ev) return;
+      if (ev.type === "progress") {
+        LW.busy = true; LW.prog = ev.progress;
+        var el = document.getElementById("lwProg"); if (el) el.textContent = progText();
+      } else if (ev.type === "done") {
+        LW.busy = false; LW.prog = null; load();
+      }
+    });
+    load();
+  }
+  function progText() {
+    var p = LW.prog; if (!p) return "Обновление…";
+    if (p.phase === "list") return "Ищу законы на форуме… найдено: " + p.done;
+    if (p.phase === "threads") return "Читаю законы: " + p.done + " из " + p.total;
+    return "Обновление…";
+  }
+
+  /* ---------- отрисовка ---------- */
+  function isHead(line) { return /^(Глава|Раздел|Статья|Часть|Приложение|Преамбула|Общие положения)\b/i.test(line); }
+
+  function headerHtml() {
+    var d = LW.data, h = '<div class="lw-card"><h2 class="lw-h">Законы Majestic RP</h2>' +
+      '<p class="lw-meta">Тексты берутся с форума проекта и обновляются автоматически каждый день в 00:00 по МСК (если приложение в это время закрыто — при ближайшем запуске). Раздел форума виден только авторизованным: войдите один раз в своё окно — пароль вводится только на сайте форума и приложению не передаётся, в памяти остаётся лишь сессия форума на вашем компьютере.</p>';
+    if (d && d.laws && d.laws.length) {
+      h += '<div class="lw-stat"><span>Законодательство обновлено: <b>' + esc(msk(d.updatedAt)) + '</b></span>' +
+        '<span>Последняя проверка: <b>' + esc(msk(d.checkedAt)) + '</b></span>' +
+        '<span>Законов: <b>' + d.laws.length + '</b></span></div>';
+    }
+    var needLogin = !!(d && d.status && d.status.ok === false && d.status.needLogin);
+    if (d && d.status && d.status.ok === false) {
+      h += '<div class="lw-err" role="alert">' + (needLogin ? "" : "Не удалось обновить: ") + esc(d.status.error) + (d.laws.length ? " Показаны ранее загруженные данные." : "") + "</div>";
+    }
+    if (LW.loginErr) h += '<div class="lw-err" role="alert">' + esc(LW.loginErr) + "</div>";
+    if (d && d.status && d.status.ok && d.status.failed) {
+      h += '<p class="lw-meta">Часть тем (' + d.status.failed + ') не удалось прочитать, для них показана прежняя версия.</p>';
+    }
+    h += '<div class="lw-row">' +
+      (needLogin ? '<button type="button" class="btn primary" data-lw="login"' + (LW.loginBusy || LW.busy ? " disabled" : "") + ">" + (LW.loginBusy ? "Ждём входа в открытом окне…" : "Войти на форум") + "</button>" : "") +
+      '<button type="button" class="btn' + (needLogin ? "" : " primary") + '" data-lw="sync"' + (LW.busy ? " disabled" : "") + ">Проверить сейчас</button>" +
+      '<span class="lw-meta" id="lwProg" aria-live="polite">' + (LW.busy ? esc(progText()) : "") + "</span>" +
+      (d && d.auth && !needLogin ? '<button type="button" class="btn" data-lw="logout"' + (LW.busy ? " disabled" : "") + ">Выйти с форума</button>" : "") +
+      (d && d.status && d.status.ok === false ? '<button type="button" class="btn" data-lw="diag"' + (LW.diagBusy ? " disabled" : "") + ">" + (LW.diagBusy ? "Собираю данные…" : "Диагностика") + "</button>" : "") + "</div>" +
+      (LW.diag ? '<div class="lw-diagbox"><p class="lw-meta">Скопируйте этот текст и отправьте разработчику.</p><textarea id="lwDiag" readonly rows="12" spellcheck="false">' + esc(LW.diag) + '</textarea>' +
+        '<div class="lw-row"><button type="button" class="btn" data-lw="copy">Копировать</button><button type="button" class="btn" data-lw="diagclose">Скрыть</button><span class="lw-meta" id="lwCopied" aria-live="polite"></span></div></div>' : "") + "</div>";
+    return h;
+  }
+
+  function changesHtml() {
+    var ch = (LW.data && LW.data.changes) || [];
+    if (!ch.length) return "";
+    var names = { "new": "Добавлен", changed: "Изменён", removed: "Удалён" };
+    var h = '<div class="lw-card"><b>Что обновилось</b><div style="margin-top:6px">';
+    ch.slice(0, 12).forEach(function (c) {
+      var exists = c.type !== "removed";
+      var extra = c.type === "changed" && (c.addN || c.delN) ? " (+" + (c.addN || 0) + " / −" + (c.delN || 0) + " строк)" : "";
+      h += (exists ? '<button type="button" class="lw-chg" data-lw="goto" data-id="' + esc(c.id) + '">' : '<div class="lw-chg">') +
+        "<time>" + esc(mskDay(c.at)) + "</time><span><b>" + names[c.type] + ":</b> " + esc(c.title) + esc(extra) + "</span>" +
+        (exists ? "</button>" : "</div>");
+    });
+    return h + "</div></div>";
+  }
+
+  function toolsHtml() {
+    var laws = LW.data.laws, secs = [], now = Date.now();
+    laws.forEach(function (l) { if (l.section && secs.indexOf(l.section) < 0) secs.push(l.section); });
+    var updN = laws.filter(function (l) { return l.changedAt && now - l.changedAt < WEEK; }).length;
+    var h = '<div class="lw-tools"><input id="lwQ" type="search" autocomplete="off" placeholder="Поиск по названию и тексту законов…" aria-label="Поиск по законам" value="' + esc(LW.q) + '">' +
+      '<div class="lw-pills"><button type="button" class="pill" data-lw="sec" data-sec="" aria-pressed="' + (LW.sec === "") + '">Все</button>';
+    if (updN) h += '<button type="button" class="pill" data-lw="sec" data-sec="__upd" aria-pressed="' + (LW.sec === "__upd") + '">Обновлённые (' + updN + ")</button>";
+    if (secs.length > 1) secs.forEach(function (s) {
+      h += '<button type="button" class="pill" data-lw="sec" data-sec="' + esc(s) + '" aria-pressed="' + (LW.sec === s) + '">' + esc(s) + "</button>";
+    });
+    return h + "</div></div>";
+  }
+
+  function badges(l) {
+    if (!l.changedAt || Date.now() - l.changedAt > WEEK) return "";
+    return l.isNew ? '<span class="lw-badge n">Новый</span>' : '<span class="lw-badge">Обновлён ' + esc(mskDay(l.changedAt)) + "</span>";
+  }
+
+  function cardHtml(l, q) {
+    var open = !!LW.open[l.id];
+    var h = '<article class="lw-card" id="lw-' + esc(l.id) + '"><div class="lw-top"><div class="lw-t">' + esc(l.title) + badges(l) + "</div>" +
+      '<button type="button" class="btn" data-lw="tog" data-id="' + esc(l.id) + '" aria-expanded="' + open + '">' + (open ? "Свернуть" : "Читать") + "</button></div>";
+    var meta = [];
+    if (l.section) meta.push(esc(l.section));
+    if (l.edited) meta.push("изменён на форуме " + esc(msk(Date.parse(l.edited))));
+    else if (l.posted) meta.push("опубликован " + esc(msk(Date.parse(l.posted))));
+    h += '<p class="lw-meta">' + meta.join(" · ") + "</p>";
+    if (!open && q && l._lc) {
+      var i = l.text.toLowerCase().indexOf(q);
+      if (i >= 0) {
+        var a = Math.max(0, i - 50), b = Math.min(l.text.length, i + q.length + 90);
+        h += '<p class="lw-snip">…' + esc(l.text.slice(a, b).replace(/\n/g, " ")) + "…</p>";
+      }
+    }
+    if (open) {
+      if (l.diff && l.changedAt && !l.isNew) {
+        h += '<div class="lw-diff"><b>Что изменилось (' + esc(msk(l.changedAt)) + "):</b>";
+        l.diff.add.forEach(function (x) { h += '<p class="a">+ ' + esc(x) + "</p>"; });
+        l.diff.del.forEach(function (x) { h += '<p class="d">− ' + esc(x) + "</p>"; });
+        if (l.diff.addN > l.diff.add.length || l.diff.delN > l.diff.del.length) h += '<p class="lw-meta">Показаны первые строки изменений.</p>';
+        h += "</div>";
+      }
+      h += '<div class="lw-text">' + l.text.split("\n").map(function (x) {
+        return "<p" + (isHead(x) ? ' class="h"' : "") + ">" + esc(x) + "</p>";
+      }).join("") + "</div>";
+      h += '<div class="lw-row"><a class="btn" href="' + esc(l.url) + '" target="_blank" rel="noopener">Открыть на форуме</a></div>';
+    }
+    return h + "</article>";
+  }
+
+  function listHtml() {
+    var q = LW.q.trim().toLowerCase(), now = Date.now();
+    var arr = LW.data.laws.filter(function (l) {
+      if (LW.sec === "__upd") { if (!(l.changedAt && now - l.changedAt < WEEK)) return false; }
+      else if (LW.sec && l.section !== LW.sec) return false;
+      return !q || (l._lc || "").indexOf(q) >= 0;
+    });
+    arr.sort(function (a, b) { return a.title.localeCompare(b.title, "ru", { numeric: true }); });
+    if (!arr.length) return '<p class="lw-empty">Ничего не найдено.</p>';
+    return '<p class="lw-meta" style="margin:0 0 8px">Найдено: ' + arr.length + "</p>" + arr.map(function (l) { return cardHtml(l, q); }).join("");
+  }
+
+  function draw() {
+    var d = LW.data, h = "";
+    if (!API) {
+      h = '<div class="lw-card"><h2 class="lw-h">Законы Majestic RP</h2><p class="lw-note">Этот раздел работает только в приложении Senko Assistant (.exe) последней версии: автоматическое обновление берёт тексты с форума через программу. Если вы уже в приложении — обновите его.</p></div>';
+    } else if (!d) {
+      h = '<div class="lw-card"><h2 class="lw-h">Законы Majestic RP</h2><p class="lw-meta">' + esc(LW.err || "Загрузка…") + "</p></div>";
+    } else {
+      h = headerHtml();
+      if (!d.laws.length) {
+        h += '<p class="lw-note">' + (LW.busy
+          ? "Первая загрузка законов с форума займёт несколько минут. Можно пользоваться остальными разделами."
+          : "Законы ещё не загружены. Нажмите «Проверить сейчас» или дождитесь автоматического обновления.") + "</p>";
+      } else {
+        h += changesHtml() + toolsHtml() + '<div id="lwList">' + listHtml() + "</div>";
+      }
+    }
+    var sy = window.scrollY;
+    view.innerHTML = '<section class="lw">' + h + "</section>";
+    window.scrollTo(0, sy);
+  }
+  function redrawList() { var el = document.getElementById("lwList"); if (el && LW.data) el.innerHTML = listHtml(); }
+
+  /* ---------- события (capture, чтобы не пересекаться с остальными обработчиками) ---------- */
+  view.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-lw]");
+    if (!b || state.tab !== "laws") return;
+    e.stopPropagation();
+    var k = b.dataset.lw;
+    if (k === "sync") {
+      if (!API || LW.busy) return;
+      LW.busy = true; LW.prog = { phase: "start" }; draw();
+      API.sync().then(function () { LW.busy = false; load(); }, function () { LW.busy = false; load(); });
+    } else if (k === "diag") {
+      if (!API || LW.diagBusy) return;
+      LW.diagBusy = true; LW.diag = ""; draw();
+      API.diag().then(function (t) { LW.diag = String(t || "Пустой ответ."); LW.diagBusy = false; draw(); },
+        function (e) { LW.diag = "Ошибка: " + e; LW.diagBusy = false; draw(); });
+    } else if (k === "login") {
+      if (!API || !API.login || LW.loginBusy) return;
+      LW.loginBusy = true; LW.loginErr = ""; draw();
+      API.login().then(function (r) {
+        LW.loginBusy = false;
+        if (r && r.ok) { LW.busy = true; LW.prog = { phase: "start" }; } else { LW.loginErr = (r && r.error) || ""; }
+        draw(); load();
+      }, function (e) { LW.loginBusy = false; LW.loginErr = "Ошибка входа: " + e; draw(); });
+    } else if (k === "logout") {
+      if (!API || !API.logout) return;
+      API.logout().then(function () { LW.loginErr = ""; load(); }, function () { load(); });
+    } else if (k === "diagclose") { LW.diag = ""; draw(); }
+    else if (k === "copy") {
+      var ta = document.getElementById("lwDiag"), msg = document.getElementById("lwCopied");
+      if (!ta) return;
+      var done = function (ok) { if (msg) msg.textContent = ok ? "Скопировано" : "Не удалось — выделите текст вручную (Ctrl+A, Ctrl+C)"; };
+      try { navigator.clipboard.writeText(ta.value).then(function () { done(true); }, function () { ta.select(); done(document.execCommand("copy")); }); }
+      catch (x) { ta.select(); var ok = false; try { ok = document.execCommand("copy"); } catch (y) {} done(ok); }
+    }
+    else if (k === "sec") { LW.sec = b.dataset.sec || ""; draw(); }
+    else if (k === "tog") { LW.open[b.dataset.id] = !LW.open[b.dataset.id]; redrawList(); }
+    else if (k === "goto") {
+      LW.open[b.dataset.id] = true; LW.q = ""; LW.sec = ""; draw();
+      var el = document.getElementById("lw-" + b.dataset.id); if (el) el.scrollIntoView({ block: "start" });
+    }
+  }, true);
+  view.addEventListener("input", function (e) {
+    if (e.target && e.target.id === "lwQ") { e.stopPropagation(); LW.q = e.target.value; redrawList(); }
+  }, true);
+
+  /* ---------- встраивание в render ---------- */
+  var RL = render;
+  render = function () {
+    if (state.tab !== "laws") return RL();
+    document.querySelectorAll(".tab").forEach(function (t) { t.setAttribute("aria-selected", String(t.dataset.tab === "laws")); });
+    qEl.disabled = true; qc.hidden = true; qEl.placeholder = "Поиск по законам — внутри раздела";
+    draw();
+    if (LW.data) markSeen();
+    if (API && !LW.data && !LW.loading) load();
+    updateBadge();
+  };
+  if (state.tab === "laws") render();
+})();
+
 </script>
 </body></html>
