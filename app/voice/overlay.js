@@ -4,13 +4,13 @@
   var $ = function (id) { return document.getElementById(id); };
   var MODEL_URL = "senko-voice://app/model.tar.gz";
   var MAX_LISTEN_MS = 15000;   // запись останавливается сама
-  var HIDE_AFTER_MS = 20000;   // оверлей прячется сам после ответа
+  var HIDE_AFTER_MS = 10000;   // оверлей прячется сам после ответа
   var panel = $("panel"), title = $("title"), said = $("said"), res = $("res"), foot = $("foot");
   var bars = $("bars").children;
-  var tools = $("tools"), grip = $("grip"), op = $("op"), opv = $("opv"), pwr = $("pwr");
+  var tools = $("tools"), grip = $("grip"), op = $("op"), opv = $("opv"), pwr = $("pwr"), modeBtn = $("mode"), modeT = $("modeT");
 
   var S = { state: "idle", modelP: null, model: null, token: 0, sess: null, hideT: null, hideMs: 0, hotkey: "",
-            enabled: true, over: false, dragging: false, sliding: false, opT: null };
+            enabled: true, over: false, dragging: false, sliding: false, opT: null, mode: "search", aiOk: false };
 
   function setState(st, titleText, saidNode) {
     S.state = st;
@@ -115,6 +115,25 @@
   window.addEventListener("pointerup", endSlide);
   window.addEventListener("blur", function () { endSlide(); endDrag(); });
 
+  // режим работы: «Поиск» по памятке или вопрос «ИИ»
+  function renderMode() {
+    var ai = S.mode === "ai" && S.aiOk;
+    modeBtn.classList.toggle("ai", ai);
+    modeBtn.disabled = !S.aiOk;
+    modeT.textContent = ai ? "ИИ" : "Поиск";
+    modeBtn.title = !S.aiOk ? "ИИ-помощник не подключён"
+      : ai ? "Режим: вопрос ИИ. Нажмите, чтобы искать по памятке" : "Режим: поиск по памятке. Нажмите, чтобы спрашивать ИИ";
+  }
+  modeBtn.addEventListener("click", function () {
+    if (!S.aiOk) return;
+    S.mode = S.mode === "ai" ? "search" : "ai";
+    renderMode();
+    api.setMode(S.mode);
+    if (S.state === "answer" || S.state === "error" || S.state === "off" || S.state === "idle") {
+      foot.textContent = S.mode === "ai" ? "Режим «ИИ»: ваш вопрос уйдёт ИИ-помощнику" : "Режим «Поиск»: ищу по памятке";
+    }
+  });
+
   // включить / отключить голосовой ввод
   pwr.addEventListener("click", async function () {
     var want = !S.enabled, r;
@@ -218,8 +237,8 @@
     sess.node.connect(actx.destination); // выход тихий (нули), нужен чтобы узел работал
     sess.timer = setTimeout(function () { finish(sess); }, MAX_LISTEN_MS);
 
-    setState("listening", "Слушаю…");
-    foot.textContent = "Говорите. Пауза — и я начну искать" + (S.hotkey ? " (или " + S.hotkey + ")" : "");
+    setState("listening", S.mode === "ai" && S.aiOk ? "Слушаю… (вопрос ИИ)" : "Слушаю…");
+    foot.textContent = "Говорите. Пауза — и я " + (S.mode === "ai" && S.aiOk ? "спрошу ИИ" : "начну искать") + (S.hotkey ? " (или " + S.hotkey + ")" : "");
   }
 
   function stopListening() {
@@ -234,8 +253,39 @@
     return e;
   }
 
+  // Режим «ИИ»: распознанный текст (звук остаётся на компьютере) уходит ИИ-помощнику, ответ показываем в оверлее
+  async function askAi(text, cand) {
+    var q = text;
+    try { // голосом числа часто звучат словами — если numbers.js получил цифры, добавим их, чтобы нашлась нужная статья
+      if (cand && typeof cand.query === "string" && /\d/.test(cand.query) && !/\d/.test(text)) q = text + " (" + cand.query + ")";
+    } catch (e) {}
+    clearRes();
+    setState("thinking", "Спрашиваю ИИ…", bold("Вы сказали: ", "«" + text + "»"));
+    var r;
+    try { r = await api.ask(q); } catch (e) { r = { ok: false, error: "Не удалось связаться с ИИ." }; }
+    if (S.state !== "thinking") return; // пока ждали, пользователь начал новую запись
+    if (!r || !r.ok) return showMessage("error", (r && r.error) || "ИИ не ответил", "«" + text + "»");
+
+    var ans = String(r.answer || "").replace(/\*\*/g, "").trim() || "Пустой ответ.";
+    if (ans.length > 650) ans = ans.slice(0, 650).replace(/\s+\S*$/, "") + "…";
+    clearRes();
+    setState("answer", "Ответ ИИ", bold("Вы сказали: ", "«" + text + "»"));
+    res.appendChild(el("div", "aians", ans));
+    var refs = (r.sources || []).map(function (s) { return String(s.ref || "").split(" — ")[0]; }).filter(Boolean).slice(0, 5);
+    if (refs.length) {
+      var box = el("div", "srcs", "Статьи:");
+      refs.forEach(function (x) { box.appendChild(el("span", "chip", x)); });
+      res.appendChild(box);
+    }
+    hint();
+    if (typeof r.left === "number") foot.textContent = (foot.textContent ? foot.textContent + " · " : "") + "ИИ может ошибаться · осталось вопросов: " + r.left;
+    else foot.textContent = (foot.textContent ? foot.textContent + " · " : "") + "ИИ может ошибаться";
+    scheduleHide();
+  }
+
   async function answer(text) {
     var cand = SenkoNum.candidates(text);
+    if (S.mode === "ai" && S.aiOk) return askAi(text, cand);
     clearRes();
     setState("thinking", "Ищу в памятке…", bold("Вы сказали: ", "«" + text + "»"));
     if (!cand.list.length) return showMessage("error", "Не понял запрос", "«" + text + "»");
@@ -271,6 +321,9 @@
     if (typeof o.opacity === "number" && !S.sliding) op.value = String(applyAlpha(o.opacity));
     if (typeof o.hotkey === "string") S.hotkey = o.hotkey;
     if (typeof o.enabled === "boolean") { S.enabled = o.enabled; renderPower(); }
+    if (typeof o.aiOk === "boolean") S.aiOk = o.aiOk;
+    if (typeof o.mode === "string") S.mode = o.mode === "ai" ? "ai" : "search";
+    renderMode();
   });
   api.onCmd(function (c) {
     if (c === "start") startListening();

@@ -111,7 +111,7 @@ function setupPermissions() {
 }
 
 function sendOpts() {
-  if (live() && overlayReady) overlay.webContents.send("voice:opts", { opacity: ctx.getCfg().voiceOpacity, hotkey: ctx.getCfg().voiceHotkey, enabled: !!ctx.getCfg().voiceEnabled });
+  if (live() && overlayReady) overlay.webContents.send("voice:opts", { opacity: ctx.getCfg().voiceOpacity, hotkey: ctx.getCfg().voiceHotkey, enabled: !!ctx.getCfg().voiceEnabled, mode: ctx.getCfg().voiceMode === "ai" ? "ai" : "search", aiOk: !!(typeof ctx.aiAvailable === "function" && ctx.aiAvailable()) });
 }
 
 function ensureOverlay() {
@@ -299,12 +299,18 @@ function init(c) {
     if (!fromOverlay(e)) return;
     ctx.applySet("voiceOpacity", v); // сохранит, обновит настройки в окне памятки и вернёт значение оверлею
   });
+  ipcMain.on("voice:set-mode", (e, m) => {
+    if (!fromOverlay(e)) return;
+    ctx.applySet("voiceMode", m === "ai" ? "ai" : "search"); // сохранит режим и вернёт его оверлею
+  });
   ipcMain.handle("voice:set-enabled", (e, on) => {
     if (!fromOverlay(e)) return { ok: false, enabled: !!ctx.getCfg().voiceEnabled, error: "Недоступно." };
     const r = ctx.applySet("voiceEnabled", !!on) || {};
     return { ok: r.ok !== false, error: r.error || "", enabled: !!ctx.getCfg().voiceEnabled };
   });
   ipcMain.handle("voice:search", (e, cands) => (fromOverlay(e) ? runSearch(cands) : { ok: false, error: "Недоступно." }));
+  // Вопрос ИИ из оверлея (текст уже распознан офлайн; аудио никуда не уходит)
+  ipcMain.handle("voice:ai", (e, q) => (fromOverlay(e) && typeof ctx.askAi === "function" ? ctx.askAi(String(q || "").slice(0, 500), { short: true }) : { ok: false, error: "Недоступно." }));
 }
 
 module.exports = { init, registerHotkey, destroy, applyOpts: sendOpts, hotkeyError: () => hotkeyError };

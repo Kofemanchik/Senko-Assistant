@@ -34,7 +34,9 @@
       "auth-preload.js",
       "voice-preload.js",
       "voice.js",
+      "ai.js",
       "laws-key.json",
+      "ai-key.json",
       "build-info.json",
       "app/**/*",
       "build/icon.ico"

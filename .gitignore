@@ -5,3 +5,8 @@ dist/
 voice-model/model.tar.gz
 laws-key.json
 update/.prev.json
+
+laws-key.json
+ai-key.json
+dist/
+node_modules/

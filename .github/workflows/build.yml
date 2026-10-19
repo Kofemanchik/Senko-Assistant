@@ -36,6 +36,15 @@ jobs:
           if [ -z "$LAWS_KEY" ]; then echo "::error::Не задан секрет LAWS_KEY"; exit 1; fi
           node -e 'require("fs").writeFileSync("laws-key.json", JSON.stringify({ key: process.env.LAWS_KEY }))'
 
+      # Ключ доступа приложения к ИИ-прокси (на прокси он задан как APP_KEY).
+      - name: Ключ доступа к ИИ
+        shell: bash
+        env:
+          AI_KEY: ${{ secrets.AI_KEY }}
+        run: |
+          if [ -z "$AI_KEY" ]; then echo "::error::Не задан секрет AI_KEY"; exit 1; fi
+          node -e 'require("fs").writeFileSync("ai-key.json", JSON.stringify({ key: process.env.AI_KEY }))'
+
       - run: npm ci
 
       - run: npm run dist

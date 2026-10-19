@@ -32,6 +32,16 @@
     color: #3ddc97; cursor: pointer; }
   .pwr:hover { background: rgba(255,255,255,.16); }
   .pwr.off { color: #ff7a59; }
+  .mode { display: flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: #cfd6e4;
+    font: 600 12px "Segoe UI", system-ui, sans-serif; cursor: pointer; white-space: nowrap; }
+  .mode:hover { background: rgba(255,255,255,.16); }
+  .mode.ai { background: rgba(143,180,255,.24); border-color: rgba(143,180,255,.65); color: #c6d9ff; }
+  .mode:disabled { opacity: .45; cursor: default; }
+  .aians { padding: 9px 11px; border-radius: 10px; background: rgba(143,180,255,.12); font-size: 13.5px; color: #eef2fb;
+    white-space: pre-wrap; word-break: break-word; max-height: 250px; overflow: hidden; }
+  .srcs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; color: #9aa4b8; }
+  .srcs .chip { margin: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: rgba(255,255,255,.1); color: #cfd6e4; }
   .listening .dot { background: #ff4d5e; animation: pulse 1.1s infinite; }
   .loading .dot, .thinking .dot { background: #ffb84d; animation: blink .9s infinite; }
   .answer .dot { background: #3ddc97; }
@@ -70,6 +80,10 @@
       <input type="range" id="op" min="30" max="100" step="1" value="80">
       <span id="opv">80%</span>
     </div>
+    <button type="button" class="mode" id="mode" title="Режим: поиск по памятке">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3zM18 15l.9 2.1L21 18l-2.1.9L18 21l-.9-2.1L15 18l2.1-.9L18 15z"/></svg>
+      <span id="modeT">Поиск</span>
+    </button>
     <button type="button" class="pwr" id="pwr" title="Отключить голосовой ввод">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></svg>
     </button>

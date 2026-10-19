@@ -67,6 +67,11 @@ ipcRenderer.on("laws:event", (_e, ev) => {
 });
 
 contextBridge.exposeInMainWorld("senkoApp", {
+  // ИИ-помощник: ask(вопрос) → {ok, answer, sources, left, error}; available() — подключён ли сервис
+  ai: {
+    ask: (q) => ipcRenderer.invoke("ai:ask", String(q || "").slice(0, 500)),
+    available: () => ipcRenderer.sendSync("ai:available")
+  },
   state: () => ipcRenderer.sendSync("senko:get"),
   set: (key, value) => ipcRenderer.sendSync("senko:set", key, value),
   session: () => ipcRenderer.sendSync("senko:session"),
