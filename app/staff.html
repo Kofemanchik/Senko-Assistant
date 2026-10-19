@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<title>Senko Assistant — сотрудники</title>
+<style>
+:root{--bg:#EDF0F3;--card:#fff;--ink:#16202b;--muted:#5d6b7a;--line:#d5dbe2;--chip:#e6ebf0;--accent:#2f6fed;--accent-ink:#fff;--err:#b3261e;--errbg:#fdecea;--ban:#b3261e;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root{--bg:#10151b;--card:#1a212a;--ink:#e8edf2;--muted:#9aa8b6;--line:#2b3541;--chip:#232c37;--accent:#5b92ff;--accent-ink:#0b1220;--err:#ffb4ab;--errbg:#3a1d1b;--ban:#ff8a80}}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 "Segoe UI",system-ui,sans-serif;display:flex;flex-direction:column}
+header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--card)}
+header h1{margin:0;font-size:17px;margin-right:auto}
+header .who{color:var(--muted);font-size:12.5px}
+input,select,button{font:inherit;color:var(--ink)}
+input,select{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+input[type=search]{width:240px}
+button{border:1px solid var(--line);background:var(--chip);border-radius:8px;padding:7px 12px;cursor:pointer}
+button.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+input:focus,select:focus,button:focus-visible,th[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+main{flex:1;overflow:auto;padding:0 0 12px}
+table{border-collapse:collapse;width:100%;min-width:760px}
+th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--card);z-index:1;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none}
+th[aria-sort=ascending]::after{content:" ▲"}
+th[aria-sort=descending]::after{content:" ▼"}
+td.copy{cursor:copy}
+td.copy:hover{background:var(--chip)}
+tr.banned td{color:var(--muted)}
+tr.banned td:first-child::before{content:"🚫 "}
+.badge{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--chip);font-size:12px}
+.msg{padding:24px 16px;color:var(--muted)}
+.err{margin:12px 16px;padding:10px 12px;border-radius:8px;background:var(--errbg);color:var(--err)}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:.95}
+footer{padding:8px 16px;border-top:1px solid var(--line);background:var(--card);color:var(--muted);font-size:12.5px}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Сотрудники</h1>
+  <span class="who" id="who"></span>
+  <input type="search" id="q" placeholder="Поиск…" aria-label="Поиск">
+  <select id="org" aria-label="Организация"><option value="">Все организации</option></select>
+  <button type="button" class="pri" id="refresh">Обновить</button>
+</header>
+<main>
+  <div class="err" id="err" role="alert" hidden></div>
+  <div class="msg" id="msg">Загрузка…</div>
+  <table id="tbl" hidden>
+    <thead><tr id="head"></tr></thead>
+    <tbody id="body"></tbody>
+  </table>
+</main>
+<footer id="foot">Нажмите на ячейку, чтобы скопировать значение.</footer>
+<div class="toast" id="toast" role="status"></div>
+<script>
+(function(){
+  var S=window.senkoStaff, $=function(i){return document.getElementById(i)};
+  var RANKS={user:"Пользователь",leader:"Руководство",moderator:"Модератор памятки",owner:"Владелец"};
+  var ROLES={off:"Сотрудник",pros:"Прокурор",adv:"Адвокат"};
+  // все возможные столбцы; показываются те, которые сервер прислал для вашей роли
+  var COLS=[
+    {k:"login",t:"Логин"},{k:"nick",t:"Ник"},{k:"static",t:"Статик"},{k:"org",t:"Организация"},
+    {k:"role",t:"Роль в игре",f:function(v){return ROLES[v]||v}},
+    {k:"rank",t:"Права",badge:true,f:function(v){return RANKS[v]||v}},
+    {k:"discord",t:"Discord"},{k:"phone",t:"Номер"},
+    {k:"telegram",t:"Telegram",f:function(v){return v||"—"}},{k:"tg_id",t:"TG ID",f:function(v){return v||"—"}},
+    {k:"det",t:"Задержаний"},{k:"tests",t:"Тестов"},{k:"avg_p",t:"Ср. результат",f:function(v){return v==null?"—":v+"%"}},{k:"xp",t:"XP"},
+    {k:"last_seen",t:"Был в сети",f:date,sortv:ts},{k:"created",t:"Регистрация",f:date,sortv:ts}
+  ];
+  var data=[], cols=[], sort={k:"created",dir:1}, viewer="";
+  function ts(v){return v?new Date(v).getTime():0}
+  function date(v){return v?new Date(v).toLocaleString("ru-RU",{dateStyle:"short",timeStyle:"short"}):"—"}
+  function showErr(m){var e=$("err"); e.textContent=m||""; e.hidden=!m}
+  function toast(m){var t=$("toast"); t.textContent=m; t.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(function(){t.classList.remove("on")},1400)}
+
+  if(!S){ $("msg").textContent="Окно открыто вне программы."; return }
+
+  function load(){
+    $("refresh").disabled=true; showErr("");
+    S.list().then(function(r){
+      $("refresh").disabled=false;
+      if(!r||!r.ok){ showErr((r&&r.error)||"Не удалось загрузить список."); if(!data.length) $("msg").textContent="Данные недоступны."; return }
+      data=r.list; viewer=r.viewer;
+      cols=COLS.filter(function(c){return data.some(function(x){return c.k in x})});
+      $("who").textContent="Вы видите данные как: "+(RANKS[viewer]||viewer);
+      var orgs={}; data.forEach(function(x){orgs[x.org]=1});
+      var sel=$("org"), cur=sel.value; sel.innerHTML='<option value="">Все организации</option>';
+      Object.keys(orgs).sort().forEach(function(o){var op=document.createElement("option"); op.value=o; op.textContent=o; sel.appendChild(op)});
+      sel.value=orgs[cur]?cur:"";
+      head(); render();
+    },function(){ $("refresh").disabled=false; showErr("Ошибка связи с программой.") });
+  }
+  function head(){
+    var tr=$("head"); tr.innerHTML="";
+    cols.forEach(function(c){
+      var th=document.createElement("th"); th.textContent=c.t; th.tabIndex=0; th.setAttribute("role","columnheader");
+      th.setAttribute("aria-sort",sort.k===c.k?(sort.dir>0?"ascending":"descending"):"none");
+      var go=function(){ sort=sort.k===c.k?{k:c.k,dir:-sort.dir}:{k:c.k,dir:1}; head(); render() };
+      th.onclick=go; th.onkeydown=function(e){ if(e.key==="Enter"||e.key===" "){e.preventDefault(); go()} };
+      tr.appendChild(th);
+    });
+  }
+  function render(){
+    var q=$("q").value.trim().toLowerCase(), org=$("org").value;
+    var rows=data.filter(function(x){
+      if(org&&x.org!==org) return false;
+      if(!q) return true;
+      return ["login","nick","static","org","discord","phone","telegram"].some(function(k){return x[k]&&String(x[k]).toLowerCase().indexOf(q)>=0});
+    });
+    var col=cols.filter(function(c){return c.k===sort.k})[0];
+    rows.sort(function(a,b){
+      var va=col&&col.sortv?col.sortv(a[sort.k]):String(a[sort.k]==null?"":a[sort.k]).toLowerCase();
+      var vb=col&&col.sortv?col.sortv(b[sort.k]):String(b[sort.k]==null?"":b[sort.k]).toLowerCase();
+      return (va<vb?-1:va>vb?1:0)*sort.dir;
+    });
+    var body=$("body"); body.innerHTML="";
+    rows.forEach(function(x){
+      var tr=document.createElement("tr"); if(x.banned) tr.className="banned";
+      cols.forEach(function(c){
+        var td=document.createElement("td"), raw=x[c.k], txt=c.f?c.f(raw):(raw==null?"":String(raw));
+        if(c.badge){ var b=document.createElement("span"); b.className="badge"; b.textContent=txt; td.appendChild(b) } else td.textContent=txt;
+        if(x.banned&&c.k==="login"&&x.ban_reason) td.title="Заблокирован: "+x.ban_reason;
+        td.className="copy"; td.title=(td.title?td.title+". ":"")+"Нажмите, чтобы скопировать";
+        td.onclick=function(){ S.copy(txt); toast("Скопировано: "+txt) };
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+    $("tbl").hidden=!rows.length; $("msg").hidden=!!rows.length;
+    if(!rows.length) $("msg").textContent=data.length?"Ничего не найдено.":"Список пуст.";
+    $("foot").textContent="Показано: "+rows.length+" из "+data.length+". Нажмите на ячейку, чтобы скопировать значение.";
+  }
+  $("q").oninput=render; $("org").onchange=render; $("refresh").onclick=load;
+  load();
+})();
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 const {
   app, BrowserWindow, shell, Menu, ipcMain, dialog, net, Tray, Notification,
-  globalShortcut, screen, nativeImage
+  globalShortcut, screen, nativeImage, safeStorage, clipboard
 } = require("electron");
 const path = require("path");
 const fs = require("fs");
@@ -27,6 +27,7 @@ if (!gotLock) app.quit();
 
 let win = null;       // главное окно (памятка)
 let authWin = null;   // окно авторизации
+let staffWin = null;  // окно «Список сотрудников»
 let quitting = false; // true — программа действительно закрывается (а не прячется в трей)
 let startHidden = process.argv.includes("--hidden"); // запуск из автозагрузки
 
@@ -93,9 +94,21 @@ ipcMain.on("sa:save", (_e, data) => {
 });
 
 // ───────────── Аккаунты ─────────────
+// Аккаунты хранятся на сервере (Supabase), см. accounts.js и server-config.js
 const accounts = require("./accounts")({
   dataDir: () => app.getPath("userData"),
-  docsDir: () => path.join(app.getPath("documents"), "Senko Assistant")
+  docsDir: () => path.join(app.getPath("documents"), "Senko Assistant"),
+  fetch: (url, opts) => net.fetch(url, opts),
+  safeStorage,
+  config: require("./server-config")
+});
+
+// Синхронизация данных работы (задержания, тесты, статистика) между компьютерами, см. sync.js
+const sync = require("./sync")({
+  dataDir: () => app.getPath("userData"),
+  authed: (body) => accounts.authed(body),
+  onAuthLost: (r) => setTimeout(() => logout(r.error), 0),
+  backupDir: () => path.join(app.getPath("documents"), "Senko Assistant", "Автосохранение", "Данные другого аккаунта")
 });
 
 // ───────────── Настройки программы (.exe) ─────────────
@@ -406,9 +419,10 @@ function updateTrayMenu() {
       { label: "Компактный режим", type: "checkbox", checked: cfg.compact, click: (m) => applySet("compact", m.checked) },
       { label: `Голосовой ввод (${cfg.voiceHotkey})`, type: "checkbox", checked: cfg.voiceEnabled, click: (m) => applySet("voiceEnabled", m.checked) },
       { type: "separator" },
+      ...(accounts.isStaff() ? [{ label: "Список сотрудников", click: openStaff }] : []),
       { label: "О программе", click: showAbout },
       { label: "Проверить обновления", click: () => { checkForAppUpdate(true); checkForUpdate(true); } },
-      ...(u ? [{ label: `Выйти из аккаунта (${u.login})`, click: logout }] : []),
+      ...(u ? [{ label: `Выйти из аккаунта (${u.login})`, click: () => logout() }] : []),
       { type: "separator" },
       { label: "Выход", click: () => { quitting = true; app.quit(); } }
     ])
@@ -431,11 +445,12 @@ function getState() {
       voiceEnabled: cfg.voiceEnabled, voiceHotkey: cfg.voiceHotkey, voiceOpacity: cfg.voiceOpacity, voiceMode: cfg.voiceMode
     },
     autostart: getAutostart(),
+    sync: sync.status(),
     hotkeyError,
     packaged: app.isPackaged,
     version: app.getVersion(),
     dataVersion: currentVersion(),
-    user: u ? { login: u.login, nick: u.nick, roleName: u.roleName, org: u.org } : null
+    user: u ? { login: u.login, nick: u.nick, roleName: u.roleName, org: u.org, rank: u.rank, rankName: u.rankName, offline: !!u.offline } : null
   };
 }
 function pushState() {
@@ -553,6 +568,23 @@ ipcMain.on("senko:seeded", (e) => { if (fromMain(e)) accounts.markSeeded(); });
 ipcMain.on("senko:about", (e) => { if (fromMain(e)) showAbout(); });
 ipcMain.on("senko:check-update", (e) => { if (fromMain(e)) { checkForAppUpdate(true); checkForUpdate(true); } });
 ipcMain.on("senko:logout", (e) => { if (fromMain(e)) logout(); });
+ipcMain.on("senko:staff", (e) => { if (fromMain(e)) openStaff(); });
+
+// Синхронизация данных: слияние при запуске страницы, отправка изменений, ручной запуск
+ipcMain.on("sync:startup", (e, local) => { e.returnValue = fromMain(e) ? sync.startup(local || {}) : null; });
+ipcMain.on("sync:local", (e, map) => { if (fromMain(e)) sync.noteLocal(map); });
+ipcMain.handle("senko:sync", async (e) => {
+  if (!fromMain(e)) return { ok: false };
+  await sync.pushNow();
+  const r = await sync.prefetch();
+  if (r && r.items.length && win && !win.isDestroyed()) {
+    win.webContents.reload(); // страница перечитает слитые данные
+    return { ok: true, changed: true };
+  }
+  pushState();
+  const st = sync.status();
+  return { ok: !!r, changed: false, error: r ? "" : st.offline ? "Нет связи с сервером." : st.error || "Не удалось синхронизировать." };
+});
 
 // ───────────── Законы с форума (сервер парсит форум раз в сутки в 00:05 МСК, приложение сверяет версию каждые 3 часа) ─────────────
 const laws = require("./laws-sync")({
@@ -604,20 +636,55 @@ const fromAuth = (e) => authWin && !authWin.isDestroyed() && e.sender === authWi
 
 ipcMain.handle("auth:state", (e) =>
   fromAuth(e)
-    ? { hasUsers: accounts.hasUsers(), depts: accounts.DEPTS, roles: accounts.ROLES, version: app.getVersion() }
+    ? {
+        lastLogin: accounts.lastLogin(),
+        depts: accounts.DEPTS,
+        roles: accounts.ROLES,
+        version: app.getVersion(),
+        notice: accounts.takeNotice()
+      }
     : null
 );
-ipcMain.handle("auth:login", (e, d) => {
+ipcMain.handle("auth:login", async (e, d) => {
   if (!fromAuth(e)) return { ok: false, error: "Недоступно." };
-  const r = accounts.login(d || {});
-  if (r.ok) setTimeout(enterApp, 0);
+  const r = await accounts.login(d || {});
+  if (r.ok && !r.needLegal) setTimeout(enterApp, 0); // при needLegal окно сначала просит принять документы
   return r;
 });
-ipcMain.handle("auth:register", (e, d) => {
+ipcMain.handle("auth:register", async (e, d) => {
   if (!fromAuth(e)) return { ok: false, error: "Недоступно." };
-  const r = accounts.register(d || {});
-  if (r.ok) setTimeout(enterApp, 0);
-  return r;
+  // Программа откроется после auth:enter, когда пользователь подтвердит, что сохранил код восстановления
+  return accounts.register(d || {});
+});
+ipcMain.on("auth:enter", (e) => {
+  if (!fromAuth(e) || !accounts.current()) return;
+  accounts.commit();
+  enterApp();
+});
+ipcMain.handle("auth:accept-legal", (e, version) => (fromAuth(e) ? accounts.acceptLegal(version) : { ok: false }));
+ipcMain.handle("auth:reset-request", (e, d) => (fromAuth(e) ? accounts.resetRequest(d || {}) : { ok: false }));
+ipcMain.handle("auth:reset-status", (e, d) => (fromAuth(e) ? accounts.resetStatus(d || {}) : { ok: false }));
+ipcMain.handle("auth:reset-complete", (e, d) => (fromAuth(e) ? accounts.resetComplete(d || {}) : { ok: false }));
+ipcMain.on("auth:copy", (e, text) => { if (fromAuth(e)) clipboard.writeText(String(text).slice(0, 200)); });
+ipcMain.handle("auth:save-code", async (e, login, code) => {
+  if (!fromAuth(e)) return { ok: false };
+  const safe = String(login).replace(/[^\w.-]/g, "_").slice(0, 24) || "user";
+  const r = await dialog.showSaveDialog(authWin, {
+    title: "Сохранить код восстановления",
+    defaultPath: path.join(app.getPath("documents"), `senko-recovery-${safe}.txt`),
+    filters: [{ name: "Текст", extensions: ["txt"] }]
+  });
+  if (r.canceled || !r.filePath) return { ok: false };
+  try {
+    fs.writeFileSync(
+      r.filePath,
+      `Senko Assistant\nЛогин: ${login}\nКод восстановления пароля: ${code}\n\nХраните файл в надёжном месте. Код нужен, если вы забудете пароль.\n`,
+      "utf8"
+    );
+    return { ok: true };
+  } catch (err) {
+    return { ok: false };
+  }
 });
 ipcMain.on("auth:quit", (e) => { if (fromAuth(e)) { quitting = true; app.quit(); } });
 
@@ -655,8 +722,66 @@ function enterApp() {
   if (authWin && !authWin.isDestroyed()) authWin.close();
 }
 
-function logout() {
+// ───────────── Список сотрудников (руководство, модераторы, владелец) ─────────────
+const fromStaff = (e) => staffWin && !staffWin.isDestroyed() && e.sender === staffWin.webContents;
+ipcMain.handle("staff:list", async (e) => {
+  if (!fromStaff(e)) return { ok: false, error: "Недоступно." };
+  const r = await accounts.staffList();
+  if (r && (r.code === "auth" || r.code === "banned")) setTimeout(() => logout(r.error), 0);
+  return r;
+});
+ipcMain.on("staff:copy", (e, text) => { if (fromStaff(e)) clipboard.writeText(String(text).slice(0, 200)); });
+
+function openStaff() {
+  if (!accounts.isStaff()) return;
+  if (staffWin && !staffWin.isDestroyed()) {
+    if (staffWin.isMinimized()) staffWin.restore();
+    staffWin.show();
+    staffWin.focus();
+    return;
+  }
+  const w = new BrowserWindow({
+    width: 980,
+    height: 640,
+    minWidth: 640,
+    minHeight: 420,
+    title: "Senko Assistant — сотрудники",
+    autoHideMenuBar: true,
+    backgroundColor: "#EDF0F3",
+    icon: iconPath(),
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      spellcheck: false,
+      preload: path.join(__dirname, "staff-preload.js")
+    }
+  });
+  staffWin = w;
+  w.setMenuBarVisibility(false);
+  w.loadFile(path.join(__dirname, "app", "staff.html"));
+  w.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  w.webContents.on("will-navigate", (ev) => ev.preventDefault());
+  w.on("closed", () => { if (staffWin === w) staffWin = null; });
+}
+
+// Периодическая сверка с сервером: блокировка, смена прав, обновление профиля
+async function verifySession() {
+  if (!accounts.current()) return;
+  const r = await accounts.verify();
+  if (!r.ok) { logout(r.error); return; }
+  if (r.changed) {
+    if (!accounts.isStaff() && staffWin && !staffWin.isDestroyed()) staffWin.destroy();
+    updateTrayMenu();
+    pushState();
+  }
+}
+
+function logout(reason) {
+  sync.pushNow().catch(() => {}); // токен захватывается до выхода, последние изменения уходят на сервер
   accounts.logout();
+  if (reason) accounts.setNotice(reason);
+  if (staffWin && !staffWin.isDestroyed()) staffWin.destroy();
   tearDownSystem();
   const old = win;
   win = null;
@@ -711,7 +836,16 @@ function createMainWindow() {
     w.show();
   });
 
-  w.loadFile(pickIndex().file);
+  // Перед показом страницы скачиваем общие данные аккаунта (не дольше 4 секунд),
+  // чтобы страница сразу стартовала с ними; без сети работаем с локальными.
+  const u0 = accounts.current();
+  const loadPage = () => { if (!w.isDestroyed()) w.loadFile(pickIndex().file); };
+  if (u0) {
+    sync.begin(u0.login);
+    Promise.race([sync.prefetch().catch(() => null), new Promise((res) => setTimeout(res, 4000))]).then(loadPage, loadPage);
+  } else {
+    loadPage();
+  }
   initSystem();
 
   w.on("resize", saveBoundsSoon);
@@ -749,7 +883,7 @@ app.on("second-instance", () => {
   }
 });
 
-app.on("before-quit", () => { quitting = true; });
+app.on("before-quit", () => { quitting = true; sync.pushNow().catch(() => {}); });
 app.on("will-quit", () => { try { globalShortcut.unregisterAll(); } catch (e) {} });
 app.on("window-all-closed", () => app.quit());
 
@@ -769,8 +903,10 @@ app.whenReady().then(() => {
   initUpdater();
   laws.start();
 
-  if (accounts.restore()) createMainWindow(); // запомненный вход
-  else createAuthWindow();
+  // запомненный вход проверяется на сервере (без связи — по сохранённому профилю)
+  accounts.restore().then((u) => { if (u) createMainWindow(); else createAuthWindow(); }, () => createAuthWindow());
+  setTimeout(verifySession, 20000);
+  setInterval(verifySession, 20 * 60 * 1000);
 
   setTimeout(() => { checkForUpdate(); checkForAppUpdate(false); }, 5000);
   setInterval(() => { checkForUpdate(); checkForAppUpdate(false); }, UPDATE_EVERY_MS);

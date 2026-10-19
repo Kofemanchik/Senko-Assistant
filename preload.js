@@ -30,10 +30,49 @@ try {
   }
 } catch (e) {}
 
+// 1b) Общие данные аккаунта (задержания, тесты, статистика): слияние с сервером до запуска страницы.
+const SYNC_KEYS = ["bos-thist", "bos-dlog", "bos-tests", "bos-qstat", "bos-xp", "bos-daily", "bos-streak"];
+function syncSnapshot() {
+  const o = {};
+  for (const k of SYNC_KEYS) {
+    try {
+      const v = localStorage.getItem(k);
+      if (v != null) o[k] = v;
+    } catch (e) {}
+  }
+  return o;
+}
+try {
+  const r = ipcRenderer.sendSync("sync:startup", syncSnapshot());
+  if (r && r.values) {
+    for (const k of Object.keys(r.values)) {
+      if (SYNC_KEYS.indexOf(k) < 0) continue;
+      const v = r.values[k];
+      if (v === null) localStorage.removeItem(k);
+      else if (typeof v === "string") localStorage.setItem(k, v);
+    }
+  }
+} catch (e) {}
+let syncLast = syncSnapshot();
+// Об изменениях общих данных, сделанных страницей, сообщаем главному процессу (он отправит их на сервер)
+function flushSync() {
+  try {
+    const cur = syncSnapshot();
+    const ch = {};
+    let any = false;
+    for (const k of SYNC_KEYS) {
+      if (cur[k] !== syncLast[k]) { ch[k] = cur[k] === undefined ? null : cur[k]; any = true; }
+    }
+    syncLast = cur;
+    if (any) ipcRenderer.send("sync:local", ch);
+  } catch (e) {}
+}
+
 // 2) Автосохранение: раз в 3 секунды, только если что-то изменилось, и при закрытии.
 let last = JSON.stringify(snapshot());
 
 function flush(force) {
+  flushSync();
   try {
     const data = snapshot();
     const json = JSON.stringify(data);
@@ -80,6 +119,8 @@ contextBridge.exposeInMainWorld("senkoApp", {
   about: () => ipcRenderer.send("senko:about"),
   checkUpdate: () => ipcRenderer.send("senko:check-update"),
   logout: () => ipcRenderer.send("senko:logout"),
+  syncNow: () => ipcRenderer.invoke("senko:sync"), // синхронизировать сейчас
+  staff: () => ipcRenderer.send("senko:staff"), // окно «Список сотрудников» (для руководства и выше)
   onChange: (f) => { if (typeof f === "function") listeners.add(f); },
   // Законы с форума: данные, ручное обновление, события (progress/done), папка диагностики
   laws: {

@@ -6,12 +6,12 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
 <title>Senko Assistant — вход</title>
 <style>
-:root{--bg:#EDF0F3;--card:#fff;--ink:#16202b;--muted:#5d6b7a;--line:#d5dbe2;--chip:#e6ebf0;--accent:#2f6fed;--accent-ink:#fff;--err:#b3261e;--errbg:#fdecea;--surface:var(--card);color-scheme:light dark}
-@media (prefers-color-scheme:dark){:root{--bg:#10151b;--card:#1a212a;--ink:#e8edf2;--muted:#9aa8b6;--line:#2b3541;--chip:#232c37;--accent:#5b92ff;--accent-ink:#0b1220;--err:#ffb4ab;--errbg:#3a1d1b}}
+:root{--bg:#EDF0F3;--card:#fff;--ink:#16202b;--muted:#5d6b7a;--line:#d5dbe2;--chip:#e6ebf0;--accent:#2f6fed;--accent-ink:#fff;--err:#b3261e;--errbg:#fdecea;--ok:#1b6e3c;--okbg:#e6f4ea;--warn:#7a5200;--warnbg:#fff4d6;--surface:var(--card);color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root{--bg:#10151b;--card:#1a212a;--ink:#e8edf2;--muted:#9aa8b6;--line:#2b3541;--chip:#232c37;--accent:#5b92ff;--accent-ink:#0b1220;--err:#ffb4ab;--errbg:#3a1d1b;--ok:#8fd9a8;--okbg:#17301f;--warn:#f5d98a;--warnbg:#3a2f12}}
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,sans-serif;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto}
-.wrap{width:100%;max-width:420px;padding:22px 18px 28px}
+.wrap{width:100%;max-width:440px;padding:22px 18px 28px}
 .brand{text-align:center;margin:6px 0 18px}
 .brand h1{margin:0;font-size:24px;letter-spacing:.2px}
 .brand span{color:var(--muted);font-size:13px}
@@ -19,9 +19,12 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",sy
 .tabs{display:flex;background:var(--chip);border-radius:10px;padding:3px;gap:3px;margin-bottom:14px}
 .tabs button{flex:1;border:0;background:none;color:var(--muted);padding:8px 10px;border-radius:8px;font:600 14px "Segoe UI",system-ui,sans-serif;cursor:pointer}
 .tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
-form{display:grid;gap:11px}
+form,.view{display:grid;gap:11px}
+h2{margin:0;font-size:17px}
+p{margin:0}
 label{display:grid;gap:4px;font-size:13px;color:var(--muted)}
 input,select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font:inherit}
+input[readonly]{opacity:.7}
 input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .pw{position:relative}
 .pw input{padding-right:78px}
@@ -29,51 +32,124 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
 .chk{display:flex;gap:8px;align-items:center;color:var(--ink);font-size:13.5px}
 .chk input{width:auto}
 .btn{border:0;border-radius:10px;padding:11px 14px;background:var(--accent);color:var(--accent-ink);font:600 15px "Segoe UI",system-ui,sans-serif;cursor:pointer}
+.btn.sec{background:var(--chip);color:var(--ink)}
 .btn:disabled{opacity:.6;cursor:default}
 .err{background:var(--errbg);color:var(--err);border-radius:9px;padding:9px 11px;font-size:13.5px}
+.ok{background:var(--okbg);color:var(--ok);border-radius:9px;padding:9px 11px;font-size:13.5px}
+.warn{background:var(--warnbg);color:var(--warn);border-radius:9px;padding:9px 11px;font-size:13.5px}
 .hint{color:var(--muted);font-size:12.5px;margin:12px 2px 0}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row{display:flex;gap:8px}
+.row .btn{flex:1}
+.link{all:unset;color:var(--accent);text-decoration:underline;cursor:pointer;font-size:13px;text-align:center}
+.link:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .quit{display:block;margin:14px auto 0;background:none;border:0;color:var(--muted);font:inherit;cursor:pointer;text-decoration:underline}
+.code{font:700 20px Consolas,"Cascadia Mono",monospace;letter-spacing:2px;text-align:center;padding:14px 8px;background:var(--bg);border:1px dashed var(--line);border-radius:10px;user-select:all;word-break:break-all}
+.wait{display:flex;gap:10px;align-items:center;color:var(--muted)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--accent);animation:pulse 1.2s infinite ease-in-out;flex:none}
+@keyframes pulse{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
+@media (prefers-reduced-motion:reduce){.dot{animation:none}}
 [hidden]{display:none!important}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="brand"><h1>Senko Assistant</h1><span>Majestic RP · законодательство</span></div>
+  <div id="notice" class="warn" role="status" hidden style="margin-bottom:12px"></div>
   <div class="card">
-    <div class="tabs" role="tablist">
+    <div class="tabs" role="tablist" id="tabs">
       <button type="button" role="tab" id="tLogin" aria-selected="true">Вход</button>
       <button type="button" role="tab" id="tReg" aria-selected="false">Регистрация</button>
     </div>
 
+    <!-- Вход -->
     <form id="fLogin" autocomplete="off" novalidate>
       <label>Логин<input id="lLogin" maxlength="24" autocomplete="username" autofocus></label>
-      <label>Пароль<span class="pw"><input id="lPass" type="password" maxlength="100" autocomplete="current-password"><button type="button" data-eye="lPass">Показать</button></span></label>
+      <label>Пароль<span class="pw"><input id="lPass" type="password" maxlength="72" autocomplete="current-password"><button type="button" data-eye="lPass">Показать</button></span></label>
       <label class="chk"><input type="checkbox" id="lRem"> Запомнить меня на этом компьютере</label>
+      <div class="ok" id="lOk" role="status" hidden></div>
       <div class="err" id="lErr" role="alert" hidden></div>
       <button class="btn" id="lBtn" type="submit">Войти</button>
+      <button class="link" id="forgot" type="button">Забыли пароль?</button>
     </form>
 
+    <!-- Регистрация -->
     <form id="fReg" autocomplete="off" novalidate hidden>
-      <p class="hint" id="regNote" style="margin:0" hidden>Это первый запуск: создайте личный кабинет.</p>
+      <p class="warn" id="regNote" hidden>Ваш локальный аккаунт переносится на сервер. Логин, пароль и данные подставлены: добавьте Discord и номер в игре.</p>
       <label>Логин (латиница, цифры, «_», «.», «-»)<input id="rLogin" maxlength="24" autocomplete="username"></label>
       <div class="row2">
-        <label>Пароль<span class="pw"><input id="rPass" type="password" maxlength="100" autocomplete="new-password"></span></label>
-        <label>Повтор пароля<input id="rPass2" type="password" maxlength="100" autocomplete="new-password"></label>
+        <label>Пароль<span class="pw"><input id="rPass" type="password" maxlength="72" autocomplete="new-password"></span></label>
+        <label>Повтор пароля<input id="rPass2" type="password" maxlength="72" autocomplete="new-password"></label>
       </div>
       <label class="chk"><input type="checkbox" id="rEye"> Показать пароли</label>
       <label>Ник игрока<input id="rNick" maxlength="40" autocomplete="off"></label>
       <label>Статик<input id="rSt" maxlength="12" autocomplete="off"></label>
       <label>Организация<select id="rOrg"></select></label>
       <label id="rOrgOtherW" hidden>Название организации<input id="rOrgOther" maxlength="60" autocomplete="off"></label>
-      <label>Роль<select id="rRole"></select></label>
+      <label>Роль в игре<select id="rRole"></select></label>
+      <label>Discord<input id="rDiscord" maxlength="40" autocomplete="off" placeholder="ник пользователя"></label>
+      <label>Telegram (необязательно)<input id="rTg" maxlength="40" autocomplete="off" placeholder="@name"></label>
+      <label>Номер телефона в игре<input id="rPhone" maxlength="16" inputmode="numeric" autocomplete="off"></label>
       <label class="chk"><input type="checkbox" id="rRem" checked> Запомнить меня на этом компьютере</label>
       <div id="rLegal"></div>
       <div class="err" id="rErr" role="alert" hidden></div>
-      <button class="btn" id="rBtn" type="submit" disabled>Создать кабинет и войти</button>
+      <button class="btn" id="rBtn" type="submit" disabled>Создать аккаунт и войти</button>
     </form>
+
+    <!-- Сброс пароля -->
+    <div class="view" id="vReset" hidden>
+      <h2>Сброс пароля</h2>
+      <form id="fRs1" class="view" autocomplete="off" novalidate>
+        <p class="hint" style="margin:0">Введите данные своего аккаунта. Если они совпадут с профилем, запрос получат владелец и модераторы. После подтверждения вы зададите новый пароль.</p>
+        <label>Логин<input id="sLogin" maxlength="24" autocomplete="off"></label>
+        <label>Ник игрока<input id="sNick" maxlength="40" autocomplete="off"></label>
+        <label>Статик<input id="sSt" maxlength="12" autocomplete="off"></label>
+        <label>Код восстановления (если сохранили)<input id="sCode" maxlength="40" autocomplete="off" placeholder="XXXX-XXXX-XXXX-XXXX"></label>
+        <p class="hint" style="margin:0">С верным кодом подтверждение модератора не нужно.</p>
+        <div class="err" id="sErr" role="alert" hidden></div>
+        <button class="btn" id="sBtn" type="submit">Отправить запрос</button>
+        <button class="link" type="button" data-back>Назад ко входу</button>
+      </form>
+      <div id="rsWait" class="view" hidden>
+        <div class="wait" role="status"><span class="dot"></span><span id="rsWaitText">Запрос отправлен. Ожидаем подтверждения…</span></div>
+        <p class="hint" style="margin:0">Владельцу и модераторам пришло уведомление. Обычно это занимает несколько минут. Окно можно не закрывать: пароль можно будет задать сразу после подтверждения.</p>
+        <div class="err" id="rsWaitErr" role="alert" hidden></div>
+        <button class="btn sec" id="rsCancel" type="button">Отменить запрос</button>
+      </div>
+      <form id="fRs3" class="view" autocomplete="off" novalidate hidden>
+        <p class="ok" role="status">Подтверждено. Задайте новый пароль.</p>
+        <label>Новый пароль<span class="pw"><input id="nPass" type="password" maxlength="72" autocomplete="new-password"></span></label>
+        <label>Повтор пароля<input id="nPass2" type="password" maxlength="72" autocomplete="new-password"></label>
+        <label class="chk"><input type="checkbox" id="nEye"> Показать пароли</label>
+        <div class="err" id="nErr" role="alert" hidden></div>
+        <button class="btn" id="nBtn" type="submit">Сохранить пароль</button>
+      </form>
+    </div>
+
+    <!-- Обновлённые документы -->
+    <div class="view" id="vLegal" hidden>
+      <h2>Документы обновились</h2>
+      <p>Изменились Политика конфиденциальности и Условия пользования: теперь задержания и результаты тестов хранятся в вашем аккаунте и доступны на всех ваших компьютерах. Чтобы продолжить, ознакомьтесь с ними и подтвердите согласие.</p>
+      <div id="gLegal"></div>
+      <div class="err" id="gErr" role="alert" hidden></div>
+      <button class="btn" id="gBtn" type="button" disabled>Принять и продолжить</button>
+      <button class="link" id="gCancel" type="button">Выйти без принятия</button>
+    </div>
+
+    <!-- Код восстановления -->
+    <div class="view" id="vCode" hidden>
+      <h2 id="cTitle">Код восстановления</h2>
+      <p id="cText">Этот код показывается один раз. С ним можно сбросить пароль без подтверждения модератора. Сохраните его в надёжном месте.</p>
+      <div class="code" id="cCode" aria-label="Код восстановления"></div>
+      <div class="row">
+        <button class="btn sec" id="cCopy" type="button">Скопировать</button>
+        <button class="btn sec" id="cSave" type="button">Сохранить в файл</button>
+      </div>
+      <label class="chk"><input type="checkbox" id="cOk"> Я сохранил(а) код восстановления</label>
+      <button class="btn" id="cGo" type="button" disabled>Продолжить</button>
+    </div>
   </div>
-  <p class="hint">Аккаунт хранится только на этом компьютере, пароль — в виде хэша. Восстановить забытый пароль нельзя.</p>
+  <p class="hint">Аккаунт хранится на сервере, пароль — только в виде хэша: его не видит никто, включая владельца. Для входа нужен интернет.</p>
   <button type="button" class="quit" id="quit">Закрыть программу</button>
 </div>
 
@@ -90,41 +166,52 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
   "use strict";
   if (window.SenkoLegal) return;
 
-  var VERSION = "2026-10-19";
+  var VERSION = "2026-10-19.2";
   var CONTACT = "Discord: hanamis1";
 
   var DOCS = {
     privacy: {
       title: "Политика конфиденциальности",
-      updated: "19 октября 2026",
+      updated: "19 октября 2026, редакция 2",
       sections: [
         ["1. Общие положения",
-          ["Senko Assistant (далее — «Программа») — справочное приложение-памятка по законодательству игрового проекта Majestic RP Boston. Эта Политика объясняет, какие данные Программа хранит и как с ними обращается.",
+          ["Senko Assistant (далее — «Программа») — справочное приложение-памятка по законодательству игрового проекта Majestic RP Boston. Эта Политика объясняет, какие данные Программа хранит, где они находятся и кто может их видеть.",
            "Программа создана игроками и не является официальным продуктом Majestic RP или администрации проекта."]],
         ["2. Какие данные хранятся",
-          ["При регистрации и использовании Программа хранит: логин, игровой ник, статик, организацию, роль, пароль для входа и аватар (если вы его загрузили). Пароль хранится только в виде хэша, открытого пароля в программе нет. Если вы выбрали «Запомнить меня», на компьютере сохраняется токен автоматического входа.",
-           "Также сохраняются данные вашей работы: настройки интерфейса, история задержаний и расчётов из калькулятора, результаты тестов из раздела «Обучение», позиция прокрутки, избранное и пометки."]],
+          ["При регистрации: логин, пароль (только в виде хэша, открытого пароля не существует нигде), игровой ник, статик, организация, роль в игре, Discord, номер телефона в игре и, если вы его указали, Telegram. Также сохраняются версия и дата принятия этих документов, дата регистрации и дата последнего входа.",
+           "Служебные данные: права в Программе (пользователь, руководство, модератор памятки, владелец), отметка о блокировке и её причина, журнал административных действий (выдача прав, блокировки, сбросы паролей), хэш кода восстановления и хэши токенов входа. Если вы выбрали «Запомнить меня», на компьютере хранится зашифрованный токен входа.",
+           "Данные вашей работы, которые синхронизируются между вашими компьютерами и хранятся на сервере в вашем аккаунте: история задержаний из таймера (ник и статик задержанного, которые вы вводите, статьи, время и ход дела), журнал статей, результаты тестов из раздела «Обучение» и статистика тренажёра (ответы по вопросам, опыт, уровень, серия дней). Не вводите в Программу сведения, которые не относятся к игре.",
+           "Настройки интерфейса, заметки, избранное, история калькулятора и позиция прокрутки хранятся только на вашем компьютере."]],
         ["3. Где хранятся данные",
-          ["Все перечисленные данные хранятся только на вашем компьютере: в локальном хранилище приложения, в папке данных программы (аккаунты и резервная копия настроек) и в папке «Документы\Senko Assistant\Пользователи» (файл профиля). Программа не отправляет их на серверы разработчика и не передаёт третьим лицам (текст вопросов к ИИ-помощнику — отдельный случай, он описан в разделе 4).",
-           "Если вы удалите данные приложения или переустановите систему без переноса папки данных, информация будет утрачена. Резервную копию можно сохранить, скопировав папку данных программы."]],
-        ["4. Сетевые обращения",
-          ["Программа обращается к интернету для проверки и загрузки обновлений (через GitHub) и, если вы включите соответствующие функции, для получения актуальных текстов законодательства с форума проекта. В этих запросах не передаются ваши логин, пароль, ник и иные личные данные.",
+          ["Данные аккаунта (раздел 2, первый и второй абзацы) хранятся на сервере в облачной базе данных Supabase, доступ к которой есть у владельца Программы. На вашем компьютере остаются: зашифрованный токен входа (если выбрано «Запомнить меня»), копия вашего профиля для работы без интернета и файл профиля в папке «Документы\\Senko Assistant\\Пользователи».",
+           "Синхронизируемые данные работы (раздел 2, второй абзац) также хранятся на сервере, а на компьютере остаётся их копия в локальном хранилище приложения и в папке «Документы\\Senko Assistant\\Автосохранение». Остальные данные работы хранятся только на компьютере: если вы удалите данные приложения или переустановите систему без переноса папки, они будут утрачены. Аккаунт и синхронизируемые данные при этом останутся на сервере, и войти в аккаунт можно с любого компьютера.",
+           "Если на компьютере входит другой аккаунт, локальные синхронизируемые данные предыдущего аккаунта на сервер не передаются: копия сохраняется в папке «Документы\\Senko Assistant\\Автосохранение\\Данные другого аккаунта»."]],
+        ["4. Кто видит ваши данные",
+          ["Вы видите только свои данные. Другие пользователи не видят ваши данные.",
+           "Владелец Программы имеет доступ ко всем данным аккаунтов, включая историю задержаний и результаты тестов; в списке сотрудников ему показывается сводка (число задержаний и тестов, средний результат, опыт). Пароли не видит никто, в том числе владелец: хранится только необратимый хэш.",
+           "Модераторы памятки видят все данные, кроме Telegram. Руководство видит ник, статик, организацию, роль в игре, Discord и номер телефона в игре. Данные вашей работы (задержания, тесты, статистика) модераторам и руководству не показываются. Права руководства и модератора выдаёт и отзывает только владелец.",
+           "Данные не продаются, не передаются рекламным сервисам и не используются для профилирования."]],
+        ["5. Telegram-бот",
+          ["При регистрации владельцу приходит уведомление в Telegram-бот Программы со всеми указанными вами данными. При запросе на сброс пароля владельцу и модераторам приходит запрос с данными вашего профиля в пределах их прав (модераторам Telegram не показывается). Telegram является сторонним сервисом и работает по собственным правилам."]],
+        ["6. Сетевые обращения",
+          ["Программа обращается к интернету, чтобы войти в аккаунт и зарегистрироваться (сервер Программы), проверить и загрузить обновления (через GitHub) и, если вы включите соответствующие функции, получить актуальные тексты законодательства с форума проекта. В запросах к GitHub и форуму ваши логин, пароль, ник и иные личные данные не передаются.",
            "Голосовой ввод работает с помощью модели распознавания речи, встроенной в Программу. Аудио с микрофона обрабатывается на вашем устройстве и никуда не отправляется и не записывается.",
            "Если вы пользуетесь ИИ-помощником, текст вашего вопроса и найденные в памятке выдержки из законов отправляются на сервер-посредник (Cloudflare) и далее внешнему ИИ-провайдеру (например, Google Gemini или Groq) для формирования ответа. Вместе с вопросом передаются только анонимный идентификатор установки и IP-адрес (для дневного лимита); логин, пароль, ник, статик и иные данные аккаунта не передаются. Не указывайте в вопросах личные данные. Провайдеры бесплатных тарифов могут хранить запросы и использовать их для улучшения своих сервисов согласно собственным условиям. Если вы задаёте вопрос голосом, на сервер уходит только уже распознанный текст, но не звук."]],
-        ["5. Аналитика, реклама, cookie",
-          ["Программа не содержит рекламы, счётчиков, аналитики и средств отслеживания. Данные не продаются и не используются для профилирования."]],
-        ["6. Ваши права",
-          ["Вы можете в любой момент изменить или удалить свои данные: очистить историю в личном кабинете, выйти из аккаунта, удалить приложение и его папку данных. После удаления папки данных восстановить информацию невозможно.",
-           "Храните пароль в секрете. Не используйте в Программе пароль, который вы применяете на других сайтах и сервисах."]],
-        ["7. Изменения Политики",
-          ["Текст Политики может обновляться вместе с версиями Программы. Актуальная редакция всегда доступна в Программе: Настройки → Документы."]],
-        ["8. Контакты",
-          ["Вопросы и предложения по обработке данных: " + CONTACT + "."]]
+        ["7. Безопасность и сброс пароля",
+          ["Пароль хранится в виде хэша. Число попыток входа ограничено. Не используйте в Программе пароль, который вы применяете на других сайтах и сервисах.",
+           "Забытый пароль можно сбросить: либо по коду восстановления, который показывается один раз при регистрации (нужно также указать логин, ник и статик), либо после подтверждения запроса владельцем или модератором. Храните код восстановления в надёжном месте: тот, кто знает ваш логин, ник, статик и код, может сменить пароль."]],
+        ["8. Срок хранения и ваши права",
+          ["Данные аккаунта хранятся, пока существует аккаунт. Вы можете запросить исправление или удаление аккаунта и связанных с ним данных, написав владельцу (контакт в разделе 10). Записи журнала административных действий могут храниться дольше, чтобы разбирать спорные ситуации.",
+           "Историю задержаний и результаты тестов можно очистить в программе: содержимое удалённых записей сразу стирается и на сервере. Локальные данные можно удалить, удалив папку данных программы."]],
+        ["9. Аналитика, реклама, cookie",
+          ["Программа не содержит рекламы, счётчиков, аналитики и средств отслеживания."]],
+        ["10. Изменения Политики и контакты",
+          ["Текст Политики может обновляться вместе с версиями Программы. Актуальная редакция всегда доступна в Программе: Настройки → Документы. Вопросы и предложения по обработке данных: " + CONTACT + "."]]
       ]
     },
     terms: {
       title: "Условия пользования",
-      updated: "19 октября 2026",
+      updated: "19 октября 2026, редакция 2",
       sections: [
         ["1. Принятие условий",
           ["Регистрируясь в Senko Assistant и используя Программу, вы подтверждаете, что прочитали эти Условия и Политику конфиденциальности и согласны с ними. Если вы не согласны, не используйте Программу."]],
@@ -133,23 +220,27 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
         ["3. Неофициальный характер и точность данных",
           ["Программа не связана с Majestic RP и не является официальным источником. Тексты законов приведены для удобства и могут отставать от актуальной редакции или содержать ошибки.",
            "При расхождении приоритет всегда имеет официальный текст на форуме проекта. Разработчик не несёт ответственности за последствия решений, принятых только на основании данных Программы, включая игровые наказания, жалобы и иски."]],
-        ["4. Правила использования",
-          ["Запрещается: взламывать или модифицировать Программу с целью обхода ограничений; распространять изменённые копии под видом оригинала; использовать Программу для нарушения правил проекта или причинения вреда другим игрокам; выдавать себя за другого человека при регистрации.",
-           "Вы отвечаете за достоверность данных, которые указываете, и за сохранность своего пароля."]],
-        ["5. Права на программу",
+        ["4. Аккаунт",
+          ["Для работы нужен аккаунт. Вы обязаны указывать достоверные данные: ник, статик, Discord и номер телефона в игре. Нельзя выдавать себя за другого человека и регистрировать аккаунт на чужие данные.",
+           "Вы отвечаете за сохранность пароля и кода восстановления и за действия, совершённые из вашего аккаунта. Передавать аккаунт другим лицам нельзя."]],
+        ["5. Права и роли",
+          ["В Программе есть роли: пользователь, руководство, модератор памятки и владелец. Роли руководства и модератора выдаёт и отзывает только владелец, пользователь не может присвоить их себе. Дополнительные права дают доступ к данным других пользователей в объёме, описанном в Политике конфиденциальности, и накладывают обязанность не передавать эти данные третьим лицам и не использовать их вне целей Программы."]],
+        ["6. Блокировка",
+          ["Владелец и модераторы памятки вправе заблокировать аккаунт при нарушении этих Условий, злоупотреблении правами, попытках взлома или обмана. Заблокированному пользователю доступ к аккаунту закрывается, причина блокировки показывается при попытке входа. Вопросы по блокировке решаются через контакт владельца."]],
+        ["7. Правила использования",
+          ["Запрещается: взламывать или модифицировать Программу с целью обхода ограничений и защиты; пытаться получить доступ к чужим аккаунтам и данным; распространять изменённые копии под видом оригинала; использовать Программу для нарушения правил проекта или причинения вреда другим игрокам; вносить в Программу сведения, не относящиеся к игре."]],
+        ["8. Права на программу",
           ["Программа и её оформление принадлежат её автору. Материалы и названия, принадлежащие проекту Majestic RP и его правообладателям, используются исключительно в информационных целях и остаются собственностью их владельцев.",
            "Бесплатное использование не означает передачи прав на исходный код. Копирование и перепродажа Программы без согласия автора запрещены."]],
-        ["6. Отсутствие гарантий",
-          ["Программа предоставляется «как есть», без каких-либо гарантий бесперебойной работы. Автор вправе изменять, приостанавливать или прекращать развитие Программы, а также выпускать обновления, в том числе принудительные."]],
-        ["7. Ограничение ответственности",
-          ["В пределах, допустимых законом, автор не отвечает за потерю данных, сбои в работе, а также за любые убытки или игровые последствия, возникшие из-за использования или невозможности использования Программы."]],
-        ["8. Изменение Условий и контакты",
+        ["9. Отсутствие гарантий и ограничение ответственности",
+          ["Программа предоставляется «как есть», без гарантий бесперебойной работы, в том числе сервера аккаунтов. Автор вправе изменять, приостанавливать или прекращать развитие Программы, а также выпускать обновления, в том числе принудительные.",
+           "В пределах, допустимых законом, автор не отвечает за потерю данных, сбои в работе, а также за любые убытки или игровые последствия, возникшие из-за использования или невозможности использования Программы."]],
+        ["10. Изменение Условий и контакты",
           ["Условия могут изменяться. Актуальная редакция всегда доступна в Программе: Настройки → Документы. Продолжая пользоваться Программой после обновления, вы принимаете новую редакцию.",
            "Связь с автором: " + CONTACT + "."]]
       ]
     }
   };
-
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
@@ -312,14 +403,28 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
 <script>
 (function(){
   var A=window.senkoAuth, $=function(i){return document.getElementById(i)};
-  var tL=$("tLogin"), tR=$("tReg"), fL=$("fLogin"), fR=$("fReg");
+  var MAIN=["fLogin","fReg","vReset","vCode","vLegal"];
+  var migrating=false, poll=null, rsReq=null, rsToken="", codeMode="register", codeLogin="";
+
+  function show(id){
+    MAIN.forEach(function(v){ $(v).hidden=(v!==id) });
+    $("tabs").hidden=(id==="vReset"||id==="vCode");
+    $("tLogin").setAttribute("aria-selected",String(id==="fLogin"));
+    $("tReg").setAttribute("aria-selected",String(id==="fReg"));
+  }
+  function showErr(id,msg){var e=$(id); e.textContent=msg||""; e.hidden=!msg}
+  function fill(sel,items,first){
+    sel.innerHTML=""; if(first){var o=document.createElement("option"); o.value=""; o.textContent=first; sel.appendChild(o)}
+    items.forEach(function(it){var o=document.createElement("option"); o.value=it[0]; o.textContent=it[1]; sel.appendChild(o)});
+  }
+  function notice(msg){var n=$("notice"); n.textContent=msg||""; n.hidden=!msg}
 
   function tab(reg){
-    tL.setAttribute("aria-selected",String(!reg)); tR.setAttribute("aria-selected",String(reg));
-    fL.hidden=reg; fR.hidden=!reg;
+    stopPoll(); resetRegForm();
+    show(reg?"fReg":"fLogin");
     var f=reg?$("rLogin"):$("lLogin"); if(f) f.focus();
   }
-  tL.onclick=function(){tab(false)}; tR.onclick=function(){tab(true)};
+  $("tLogin").onclick=function(){tab(false)}; $("tReg").onclick=function(){tab(true)};
   $("quit").onclick=function(){A&&A.quit()};
 
   document.addEventListener("click",function(e){
@@ -328,12 +433,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
     i.type=show?"text":"password"; b.textContent=show?"Скрыть":"Показать";
   });
   $("rEye").onchange=function(){var t=this.checked?"text":"password"; $("rPass").type=t; $("rPass2").type=t};
-
-  function showErr(id,msg){var e=$(id); e.textContent=msg||""; e.hidden=!msg}
-  function fill(sel,items,first){
-    sel.innerHTML=""; if(first){var o=document.createElement("option"); o.value=""; o.textContent=first; sel.appendChild(o)}
-    items.forEach(function(it){var o=document.createElement("option"); o.value=it[0]; o.textContent=it[1]; sel.appendChild(o)});
-  }
+  $("nEye").onchange=function(){var t=this.checked?"text":"password"; $("nPass").type=t; $("nPass2").type=t};
 
   if(!A){ showErr("lErr","Окно входа открыто вне программы."); return }
 
@@ -341,40 +441,170 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
     if(!s) return;
     fill($("rOrg"),s.depts.map(function(d){return [d,d]}).concat([["other","Другая организация"]]),"Выберите организацию");
     fill($("rRole"),Object.keys(s.roles).map(function(k){return [k,s.roles[k]]}));
-    if(!s.hasUsers){ tab(true); $("regNote").hidden=false }
+    if(s.lastLogin) $("lLogin").value=s.lastLogin;
+    if(s.notice) notice(s.notice);
+    if(s.lastLogin) $("lPass").focus();
   });
   $("rOrg").onchange=function(){ $("rOrgOtherW").hidden=this.value!=="other" };
+
+  // Обновлённые документы у уже зарегистрированного пользователя
+  var gLegal=$("gLegal"); gLegal.innerHTML=SenkoLegal.consentHtml("gAgree");
+  var GL=SenkoLegal.bind(gLegal);
+  GL.onChange(function(on){ $("gBtn").disabled=!on });
+  function showLegalUpdate(){ showErr("gErr",""); show("vLegal") }
+  $("gBtn").onclick=function(){
+    if(!GL.checked()){GL.shake();return}
+    $("gBtn").disabled=true; showErr("gErr","");
+    A.acceptLegal(SenkoLegal.VERSION).then(function(r){
+      if(r.ok){ A.enter(); return }
+      $("gBtn").disabled=!GL.checked(); showErr("gErr",r.error||"Не удалось сохранить согласие.");
+    },function(){ $("gBtn").disabled=!GL.checked(); showErr("gErr","Ошибка связи с программой.") });
+  };
+  $("gCancel").onclick=function(){ A.quit() };
 
   // Согласие с документами: кнопка регистрации активна только с галочкой
   var rLegal=$("rLegal"); rLegal.innerHTML=SenkoLegal.consentHtml("rAgree");
   var LG=SenkoLegal.bind(rLegal);
   LG.onChange(function(on){ $("rBtn").disabled=!on });
 
-  fL.addEventListener("submit",function(e){
-    e.preventDefault(); showErr("lErr","");
-    var login=$("lLogin").value.trim(), pass=$("lPass").value;
-    if(!login||!pass){showErr("lErr","Введите логин и пароль.");return}
-    $("lBtn").disabled=true;
-    A.login({login:login,password:pass,remember:$("lRem").checked}).then(function(r){
-      if(!r.ok){showErr("lErr",r.error); $("lBtn").disabled=false; $("lPass").select()}
-    },function(){showErr("lErr","Ошибка связи с программой."); $("lBtn").disabled=false});
-  });
+  function resetRegForm(){
+    migrating=false; $("regNote").hidden=true; $("rLogin").readOnly=false; showErr("rErr","");
+  }
 
-  fR.addEventListener("submit",function(e){
+  // ───── вход ─────
+  fLogin_init();
+  function fLogin_init(){
+    $("fLogin").addEventListener("submit",function(e){
+      e.preventDefault(); showErr("lErr",""); $("lOk").hidden=true; notice("");
+      var login=$("lLogin").value.trim(), pass=$("lPass").value;
+      if(!login||!pass){showErr("lErr","Введите логин и пароль.");return}
+      $("lBtn").disabled=true;
+      A.login({login:login,password:pass,remember:$("lRem").checked}).then(function(r){
+        if(r.ok&&r.needLegal){ $("lBtn").disabled=false; showLegalUpdate(); return }
+        if(r.ok) return; // окно закроется, откроется программа
+        $("lBtn").disabled=false;
+        if(r.code==="migrate"){ startMigrate(r.prefill,pass); return }
+        showErr("lErr",r.error); $("lPass").select();
+      },function(){showErr("lErr","Ошибка связи с программой."); $("lBtn").disabled=false});
+    });
+    $("forgot").onclick=function(){
+      stopPoll(); showErr("sErr",""); notice("");
+      $("sLogin").value=$("lLogin").value.trim(); $("sNick").value=""; $("sSt").value=""; $("sCode").value="";
+      rsStep("fRs1"); show("vReset"); $(($("sLogin").value?"sNick":"sLogin")).focus();
+    };
+  }
+
+  function startMigrate(p,pass){
+    show("fReg"); migrating=true; $("regNote").hidden=false;
+    $("rLogin").value=p.login; $("rLogin").readOnly=true;
+    $("rPass").value=pass; $("rPass2").value=pass;
+    $("rNick").value=p.nick; $("rSt").value=p.static;
+    $("rOrg").value=p.org; $("rOrgOtherW").hidden=p.org!=="other"; $("rOrgOther").value=p.orgOther||"";
+    $("rRole").value=p.role;
+    $("rDiscord").focus();
+  }
+
+  // ───── регистрация ─────
+  $("fReg").addEventListener("submit",function(e){
     e.preventDefault(); showErr("rErr","");
     if(!LG.checked()){LG.shake();showErr("rErr","Подтвердите ознакомление с Политикой конфиденциальности и Условиями пользования.");return}
     if($("rPass").value!==$("rPass2").value){showErr("rErr","Пароли не совпадают.");return}
     if(!$("rOrg").value){showErr("rErr","Выберите организацию.");return}
     $("rBtn").disabled=true;
+    var login=$("rLogin").value.trim();
     A.register({
-      login:$("rLogin").value.trim(), password:$("rPass").value,
+      login:login, password:$("rPass").value,
       nick:$("rNick").value.trim(), static:$("rSt").value.trim(),
       org:$("rOrg").value, orgOther:$("rOrgOther").value.trim(),
       role:$("rRole").value, remember:$("rRem").checked,
+      discord:$("rDiscord").value.trim(), telegram:$("rTg").value.trim(), phone:$("rPhone").value.trim(),
+      migrated:migrating,
       legal:{accepted:LG.checked(), version:SenkoLegal.VERSION}
     }).then(function(r){
-      if(!r.ok){showErr("rErr",r.error); $("rBtn").disabled=!LG.checked()}
+      if(!r.ok){showErr("rErr",r.error); $("rBtn").disabled=!LG.checked(); return}
+      showCode(r.recoveryCode, r.user.login, "register");
     },function(){showErr("rErr","Ошибка связи с программой."); $("rBtn").disabled=!LG.checked()});
+  });
+
+  // ───── код восстановления ─────
+  function showCode(code,login,mode){
+    codeMode=mode; codeLogin=login;
+    $("cCode").textContent=code; $("cOk").checked=false; $("cGo").disabled=true;
+    $("cTitle").textContent=mode==="register"?"Аккаунт создан":"Пароль изменён";
+    $("cText").textContent=(mode==="register"?"":"Использованный код заменён новым. ")+
+      "Это код восстановления: он показывается один раз. С ним можно сбросить пароль без подтверждения модератора. Сохраните его в надёжном месте.";
+    $("cGo").textContent=mode==="register"?"Продолжить":"Ко входу";
+    show("vCode");
+  }
+  $("cCopy").onclick=function(){ A.copy($("cCode").textContent); this.textContent="Скопировано"; var b=this; setTimeout(function(){b.textContent="Скопировать"},1500) };
+  $("cSave").onclick=function(){ A.saveCode(codeLogin,$("cCode").textContent) };
+  $("cOk").onchange=function(){ $("cGo").disabled=!this.checked };
+  $("cGo").onclick=function(){
+    if(codeMode==="register"){ $("cGo").disabled=true; A.enter(); return }
+    $("lLogin").value=codeLogin; $("lPass").value="";
+    show("fLogin"); $("lOk").textContent="Пароль изменён. Войдите с новым паролем."; $("lOk").hidden=false; $("lPass").focus();
+  };
+
+  // ───── сброс пароля ─────
+  function rsStep(id){
+    ["fRs1","rsWait","fRs3"].forEach(function(v){ $(v).hidden=(v!==id) });
+  }
+  function stopPoll(){ if(poll){clearInterval(poll); poll=null} rsReq=null }
+  function back(){ stopPoll(); show("fLogin"); $("lLogin").focus() }
+  document.querySelectorAll("[data-back]").forEach(function(b){b.onclick=back});
+  $("rsCancel").onclick=back;
+
+  $("fRs1").addEventListener("submit",function(e){
+    e.preventDefault(); showErr("sErr","");
+    var d={login:$("sLogin").value.trim(), nick:$("sNick").value.trim(), static:$("sSt").value.trim(), recoveryCode:$("sCode").value.trim()};
+    if(!d.login||!d.nick||!d.static){showErr("sErr","Заполните логин, ник и статик.");return}
+    $("sBtn").disabled=true;
+    A.resetRequest(d).then(function(r){
+      $("sBtn").disabled=false;
+      if(!r.ok){showErr("sErr",r.error||"Не удалось отправить запрос."); return}
+      codeLogin=d.login;
+      if(r.mode==="code"){ rsToken=r.resetToken; rsMode="code"; askNewPass(); return }
+      rsMode="bot"; rsReq={requestId:r.requestId,secret:r.secret}; rsStep("rsWait"); showErr("rsWaitErr","");
+      $("rsWaitText").textContent="Запрос отправлен. Ожидаем подтверждения…";
+      poll=setInterval(checkStatus,4000);
+    },function(){ $("sBtn").disabled=false; showErr("sErr","Ошибка связи с программой.") });
+  });
+  var rsMode="bot", busy=false;
+  function checkStatus(){
+    if(!rsReq||busy) return; busy=true;
+    var req=rsReq;
+    A.resetStatus(req).then(function(r){
+      busy=false; if(rsReq!==req) return;
+      if(!r.ok){
+        if(r.code==="gone"){ stopPoll(); rsStep("fRs1"); showErr("sErr","Запрос не найден. Отправьте его заново."); return }
+        showErr("rsWaitErr",r.error||"Нет связи с сервером, пробуем снова…"); return;
+      }
+      showErr("rsWaitErr","");
+      if(r.status==="approved"){ rsToken=r.resetToken; stopPoll(); askNewPass(); }
+      else if(r.status==="rejected"){ stopPoll(); rsStep("fRs1"); showErr("sErr","Запрос отклонён. Свяжитесь с владельцем: Discord: hanamis1."); }
+      else if(r.status==="expired"||r.status==="done"){ stopPoll(); rsStep("fRs1"); showErr("sErr","Время ожидания вышло. Отправьте запрос заново."); }
+    },function(){ busy=false });
+  }
+  function askNewPass(){
+    $("nPass").value=""; $("nPass2").value=""; $("nEye").checked=false; $("nPass").type="password"; $("nPass2").type="password"; showErr("nErr","");
+    rsStep("fRs3"); $("nPass").focus();
+  }
+  $("fRs3").addEventListener("submit",function(e){
+    e.preventDefault(); showErr("nErr","");
+    if($("nPass").value!==$("nPass2").value){showErr("nErr","Пароли не совпадают.");return}
+    $("nBtn").disabled=true;
+    A.resetComplete({resetToken:rsToken,password:$("nPass").value}).then(function(r){
+      $("nBtn").disabled=false;
+      if(!r.ok){
+        showErr("nErr",r.error||"Не удалось сохранить пароль.");
+        if(r.code==="gone"){ setTimeout(function(){ rsStep("fRs1"); showErr("sErr","Сброс устарел. Отправьте запрос заново.") },1500) }
+        return;
+      }
+      rsToken="";
+      if(r.recoveryCode){ showCode(r.recoveryCode,codeLogin,"reset"); return }
+      $("lLogin").value=codeLogin; $("lPass").value="";
+      show("fLogin"); $("lOk").textContent="Пароль изменён. Войдите с новым паролем."; $("lOk").hidden=false; $("lPass").focus();
+    },function(){ $("nBtn").disabled=false; showErr("nErr","Ошибка связи с программой.") });
   });
 })();
 </script>

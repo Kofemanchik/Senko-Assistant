@@ -1,194 +1,360 @@
-// Локальные аккаунты Senko Assistant.
-// Пароли хранятся только в виде хэша scrypt (с индивидуальной солью), открытого пароля нигде нет.
-//  • База логинов и паролей:  %APPDATA%\Boston\accounts.json
-//  • Документ профиля:        Документы\Senko Assistant\Пользователи\user-<логин>.json
-//  • Запомненный вход:        %APPDATA%\Boston\session.json
+// Аккаунты Senko Assistant: хранятся на сервере (Supabase), локально лежит только запомненная сессия.
+//  • Сессия (токен, шифруется средствами Windows):  %APPDATA%\Boston\session.json
+//  • Кэш профиля для работы без интернета:            %APPDATA%\Boston\profile-cache.json
+//  • Документ профиля (копия ваших данных):           Документы\Senko Assistant\Пользователи\user-<логин>.json
+//  • accounts.json от старых версий читается только один раз, для переноса аккаунта на сервер.
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
 const ROLES = { off: "Сотрудник", pros: "Прокурор", adv: "Адвокат" };
 const DEPTS = ["LSPD", "LSCSD", "FIB", "SANG", "USSS"]; // как в списке «Мой департамент» в памятке
-const OTHER = "other";
+const OFFLINE_GRACE_DAYS = 14; // сколько дней можно работать без связи с сервером по запомненному входу
+const STAFF_RANKS = ["leader", "moderator", "owner"];
 
-module.exports = function createAccounts({ dataDir, docsDir }) {
-  const dbFile = () => path.join(dataDir(), "accounts.json");
+module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, safeStorage, config }) {
   const sessFile = () => path.join(dataDir(), "session.json");
+  const cacheFile = () => path.join(dataDir(), "profile-cache.json");
+  const deviceFile = () => path.join(dataDir(), "device.json");
+  const legacyFile = () => path.join(dataDir(), "accounts.json");
   const profDir = () => path.join(docsDir(), "Пользователи");
-  const profFile = (login) => path.join(profDir(), `user-${login}.json`);
+  const profFile = (login) => path.join(profDir(), `user-${String(login).replace(/[^\w.-]/g, "_")}.json`);
 
-  let current = null; // вошедший пользователь (запись из базы)
-  const fails = new Map(); // защита от подбора пароля: логин -> {n, until}
+  let current = null; // вошедший пользователь
+  let token = null; // токен сессии (только в памяти и, если «запомнить», в зашифрованном файле)
+  let remember = false;
+  let pending = null; // свежая регистрация: сессия сохраняется после подтверждения кода восстановления
+  let lastOk = 0; // когда в последний раз сервер подтвердил сессию
+  let notice = "";
 
-  function readDb() {
-    try {
-      const j = JSON.parse(fs.readFileSync(dbFile(), "utf8"));
-      if (j && Array.isArray(j.users)) return j;
-    } catch (e) {}
-    return { v: 1, users: [] };
-  }
+  // ───────────── файлы ─────────────
   function writeFileAtomic(file, text) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = file + ".tmp";
     fs.writeFileSync(tmp, text, "utf8");
     fs.renameSync(tmp, file);
   }
-  function writeDb(db) {
-    writeFileAtomic(dbFile(), JSON.stringify(db, null, 2));
-  }
+  const readJson = (file) => {
+    try {
+      const j = JSON.parse(fs.readFileSync(file, "utf8"));
+      return j && typeof j === "object" ? j : null;
+    } catch (e) {
+      return null;
+    }
+  };
+  const clean = (s, max) => String(s == null ? "" : s).replace(/[\u0000-\u001f]/g, " ").trim().slice(0, max);
 
-  const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
-  function hashPass(pass, saltHex) {
-    return crypto.scryptSync(pass, Buffer.from(saltHex, "hex"), 64, { N: 16384, r: 8, p: 1 }).toString("hex");
+  function saveSession(login, tok) {
+    const rec = { login };
+    if (safeStorage && safeStorage.isEncryptionAvailable()) rec.enc = safeStorage.encryptString(tok).toString("base64");
+    else rec.token = tok;
+    writeFileAtomic(sessFile(), JSON.stringify(rec));
   }
-  function samePass(pass, u) {
-    const a = Buffer.from(hashPass(pass, u.salt), "hex");
-    const b = Buffer.from(u.hash, "hex");
-    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  function loadSession() {
+    const j = readJson(sessFile());
+    if (!j || !j.login) return null;
+    try {
+      const tok = j.enc ? safeStorage.decryptString(Buffer.from(j.enc, "base64")) : j.token;
+      if (typeof tok !== "string" || !/^[0-9a-f]{64}$/.test(tok)) return null;
+      return { login: String(j.login), token: tok };
+    } catch (e) {
+      return null; // другой пользователь Windows или повреждённый файл
+    }
+  }
+  const clearSession = () => {
+    try { fs.unlinkSync(sessFile()); } catch (e) {}
+  };
+  function saveCache(u) {
+    try { writeFileAtomic(cacheFile(), JSON.stringify({ user: u, at: Date.now() })); } catch (e) {}
+  }
+  function loadCache(login) {
+    const j = readJson(cacheFile());
+    if (!j || !j.user || String(j.user.login).toLowerCase() !== String(login).toLowerCase()) return null;
+    return j;
+  }
+  function rememberLogin(login) {
+    try {
+      const d = readJson(deviceFile()) || {};
+      d.lastLogin = login;
+      writeFileAtomic(deviceFile(), JSON.stringify(d));
+    } catch (e) {}
+  }
+  function isSeeded(login) {
+    const d = readJson(deviceFile()) || {};
+    return !!(d.seeded && d.seeded[String(login).toLowerCase()]);
+  }
+  function setSeeded(login) {
+    try {
+      const d = readJson(deviceFile()) || {};
+      d.seeded = d.seeded || {};
+      d.seeded[String(login).toLowerCase()] = true;
+      writeFileAtomic(deviceFile(), JSON.stringify(d));
+    } catch (e) {}
   }
 
   function writeProfileDoc(u) {
     try {
-      const doc = {
-        "Программа": "Senko Assistant",
-        "Логин": u.login,
-        "Ник игрока": u.nick,
-        "Статик": u.static,
-        "Организация": u.org,
-        "Роль": ROLES[u.role] || u.role,
-        "Создан": u.created,
-        "Принял документы (версия)": u.legalVersion || "",
-        "Дата принятия документов": u.legalAt || "",
-        "Обновлён": new Date().toISOString()
-      };
-      writeFileAtomic(profFile(u.login), JSON.stringify(doc, null, 2));
+      writeFileAtomic(
+        profFile(u.login),
+        JSON.stringify(
+          {
+            "Программа": "Senko Assistant",
+            "Логин": u.login,
+            "Ник игрока": u.nick,
+            "Статик": u.static,
+            "Организация": u.org,
+            "Роль в игре": u.roleName,
+            "Права в памятке": u.rankName,
+            "Дискорд": u.discord,
+            "Телеграм": u.telegram || "",
+            "Номер в игре": u.phone,
+            "Обновлён": new Date().toISOString()
+          },
+          null,
+          2
+        )
+      );
     } catch (e) {
       console.error("profile doc failed:", e);
     }
   }
 
-  const clean = (s, max) => String(s == null ? "" : s).replace(/[\u0000-\u001f]/g, " ").trim().slice(0, max);
+  // ───────────── запросы к серверу ─────────────
+  async function call(body, timeoutMs) {
+    let res;
+    try {
+      res = await netFetch(config.API_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json", apikey: config.ANON_KEY },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs || 20000)
+      });
+    } catch (e) {
+      return { ok: false, code: "network", error: "Нет связи с сервером. Проверьте подключение к интернету." };
+    }
+    let j = null;
+    try { j = await res.json(); } catch (e) {}
+    if (!j || typeof j !== "object") return { ok: false, code: "server", error: "Сервер временно недоступен. Попробуйте позже." };
+    return j;
+  }
+  const isOffline = (r) => r && (r.code === "network" || r.code === "server");
 
-  function validate(d) {
-    const login = clean(d.login, 24);
-    if (!/^[A-Za-z0-9_.-]{3,24}$/.test(login)) return { error: "Логин: 3–24 символа, латиница, цифры, «_», «.» или «-»." };
-    const pass = String(d.password == null ? "" : d.password);
-    if (pass.length < 6 || pass.length > 100) return { error: "Пароль должен быть не короче 6 символов." };
-    const nick = clean(d.nick, 40);
-    if (nick.length < 2) return { error: "Укажите ник игрока." };
-    const st = clean(d.static, 12);
-    if (!/^[0-9A-Za-z-]{1,12}$/.test(st)) return { error: "Статик: до 12 символов, цифры или латиница." };
-    if (!ROLES[d.role]) return { error: "Выберите роль." };
-    let org = clean(d.org, 60);
-    if (d.org === OTHER) org = clean(d.orgOther, 60);
-    if (!org) return { error: "Укажите организацию." };
-    if (d.org !== OTHER && !DEPTS.includes(org)) return { error: "Выберите организацию из списка." };
-    return { login, pass, nick, st, org, role: d.role, dept: DEPTS.includes(org) ? org : "" };
+  function pub() {
+    return current ? { ...current } : null;
+  }
+  function setCurrent(u, tok, offline) {
+    token = tok;
+    current = { ...u, seeded: isSeeded(u.login), offline: !!offline };
+    if (!offline) lastOk = Date.now();
   }
 
-  function pub(u) {
+  // ───────────── перенос локального аккаунта старой версии ─────────────
+  function legacyCheck(login, pass) {
+    const db = readJson(legacyFile());
+    if (!db || !Array.isArray(db.users)) return null;
+    const u = db.users.find((x) => String(x.login).toLowerCase() === String(login).toLowerCase());
+    if (!u || !u.salt || !u.hash) return null;
+    try {
+      const a = crypto.scryptSync(pass, Buffer.from(u.salt, "hex"), 64, { N: 16384, r: 8, p: 1 });
+      const b = Buffer.from(u.hash, "hex");
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    } catch (e) {
+      return null;
+    }
+    const inList = DEPTS.includes(u.org);
     return {
-      login: u.login,
-      nick: u.nick,
-      static: u.static,
-      org: u.org,
-      dept: u.dept || "",
-      role: u.role,
-      roleName: ROLES[u.role] || u.role,
-      seeded: !!u.seeded
+      seeded: !!u.seeded,
+      prefill: {
+        login: u.login,
+        nick: u.nick || "",
+        static: u.static || "",
+        org: inList ? u.org : "other",
+        orgOther: inList ? "" : u.org || "",
+        role: ROLES[u.role] ? u.role : "off"
+      }
     };
   }
-
-  function rememberToken(db, u) {
-    const token = crypto.randomBytes(32).toString("hex");
-    u.tokens = (u.tokens || []).concat(sha(token)).slice(-5);
-    writeDb(db);
-    writeFileAtomic(sessFile(), JSON.stringify({ login: u.login, token }));
+  function legacyRemove(login) {
+    try {
+      const db = readJson(legacyFile());
+      if (!db || !Array.isArray(db.users)) return;
+      db.users = db.users.filter((x) => String(x.login).toLowerCase() !== String(login).toLowerCase());
+      if (db.users.length) writeFileAtomic(legacyFile(), JSON.stringify(db, null, 2));
+      else fs.unlinkSync(legacyFile());
+    } catch (e) {}
   }
 
+  // ───────────── публичный интерфейс ─────────────
   return {
     ROLES,
     DEPTS,
-    hasUsers: () => readDb().users.length > 0,
-    current: () => (current ? pub(current) : null),
+    current: () => pub(),
+    isStaff: () => !!(current && STAFF_RANKS.includes(current.rank)),
+    lastLogin: () => (readJson(deviceFile()) || {}).lastLogin || "",
+    takeNotice() {
+      const n = notice;
+      notice = "";
+      return n;
+    },
+    setNotice(n) {
+      notice = String(n || "");
+    },
 
-    register(d) {
+    async login(d) {
       d = d || {};
-      if (!d.legal || d.legal.accepted !== true)
-        return { ok: false, error: "Для регистрации нужно принять Политику конфиденциальности и Условия пользования." };
-      const v = validate(d);
-      if (v.error) return { ok: false, error: v.error };
-      const db = readDb();
-      if (db.users.some((u) => u.login.toLowerCase() === v.login.toLowerCase()))
-        return { ok: false, error: "Такой логин уже занят." };
-      const salt = crypto.randomBytes(16).toString("hex");
-      const u = {
-        login: v.login, salt, hash: hashPass(v.pass, salt),
-        nick: v.nick, static: v.st, org: v.org, dept: v.dept, role: v.role,
-        created: new Date().toISOString(), seeded: false, tokens: [],
-        legalVersion: clean(d.legal.version, 20), legalAt: new Date().toISOString()
-      };
-      db.users.push(u);
-      writeDb(db);
-      writeProfileDoc(u);
-      current = u;
-      if (d.remember) rememberToken(db, u);
-      return { ok: true, user: pub(u) };
-    },
-
-    login(d) {
-      const login = clean(d && d.login, 24).toLowerCase();
-      const pass = String((d && d.password) || "");
-      const f = fails.get(login);
-      if (f && f.until > Date.now())
-        return { ok: false, error: `Слишком много попыток. Подождите ${Math.ceil((f.until - Date.now()) / 1000)} с.` };
-      const db = readDb();
-      const u = db.users.find((x) => x.login.toLowerCase() === login);
-      if (!u || !pass || !samePass(pass, u)) {
-        const n = ((f && f.n) || 0) + 1;
-        fails.set(login, { n, until: n >= 5 ? Date.now() + 30000 : 0 });
-        if (n >= 5) fails.set(login, { n: 0, until: Date.now() + 30000 });
-        return { ok: false, error: "Неверный логин или пароль." };
+      const login = clean(d.login, 24);
+      const password = String(d.password == null ? "" : d.password);
+      if (!login || !password) return { ok: false, error: "Введите логин и пароль." };
+      const r = await call({ action: "login", login, password, remember: !!d.remember });
+      if (r.ok) {
+        remember = !!d.remember;
+        setCurrent(r.user, r.token);
+        rememberLogin(r.user.login);
+        writeProfileDoc(current);
+        if (r.user.needLegal) {
+          // обновились Политика и Условия: сессия сохранится после принятия (см. commit)
+          pending = { login: r.user.login, token: r.token };
+          return { ok: true, needLegal: true, user: pub() };
+        }
+        if (remember) { saveSession(r.user.login, r.token); saveCache(r.user); } else clearSession();
+        return { ok: true, user: pub() };
       }
-      fails.delete(login);
-      current = u;
-      if (!fs.existsSync(profFile(u.login))) writeProfileDoc(u);
-      if (d.remember) rememberToken(db, u);
-      return { ok: true, user: pub(u) };
+      if (!r.code) {
+        // Сервер не знает такой пароль, но он мог быть создан в старой, локальной версии
+        const lg = legacyCheck(login, password);
+        if (lg) return { ok: false, code: "migrate", prefill: lg.prefill, error: "Ваш локальный аккаунт нужно перенести на сервер. Дополните данные." };
+      }
+      return { ok: false, error: r.error || "Не удалось войти.", code: r.code };
     },
 
-    restore() {
-      try {
-        const s = JSON.parse(fs.readFileSync(sessFile(), "utf8"));
-        if (!s || !s.login || !s.token) return null;
-        const u = readDb().users.find((x) => x.login === s.login);
-        if (!u || !(u.tokens || []).includes(sha(s.token))) return null;
-        current = u;
-        return pub(u);
-      } catch (e) {
+    async register(d) {
+      d = d || {};
+      const lg = d.migrated ? legacyCheck(clean(d.login, 24), String(d.password || "")) : null;
+      const r = await call({
+        action: "register",
+        login: d.login, password: d.password, nick: d.nick, static: d.static,
+        org: d.org, orgOther: d.orgOther, role: d.role,
+        discord: d.discord, telegram: d.telegram, phone: d.phone,
+        remember: !!d.remember, migrated: !!lg,
+        legal: d.legal
+      });
+      if (!r.ok) return { ok: false, error: r.error || "Не удалось зарегистрироваться.", code: r.code };
+      if (lg) {
+        if (lg.seeded) setSeeded(r.user.login);
+        legacyRemove(r.user.login);
+      }
+      setCurrent(r.user, r.token);
+      remember = !!d.remember;
+      pending = { login: r.user.login, token: r.token }; // сохраним сессию после подтверждения кода
+      rememberLogin(r.user.login);
+      writeProfileDoc(current);
+      return { ok: true, user: pub(), recoveryCode: r.recoveryCode };
+    },
+
+    // Пользователь подтвердил, что сохранил код восстановления
+    commit() {
+      if (pending && current && remember) {
+        saveSession(pending.login, pending.token);
+        saveCache(current);
+      }
+      pending = null;
+    },
+
+    // Запомненный вход при старте программы
+    async restore() {
+      const s = loadSession();
+      if (!s) return null;
+      const r = await call({ action: "me", token: s.token }, 10000);
+      if (r.ok && r.user.needLegal) {
+        notice = "Обновились Политика конфиденциальности и Условия пользования. Войдите и примите их.";
+        clearSession();
         return null;
       }
+      if (r.ok) {
+        remember = true;
+        setCurrent(r.user, s.token);
+        saveCache(r.user);
+        return pub();
+      }
+      if (isOffline(r)) {
+        const c = loadCache(s.login);
+        if (c && Date.now() - c.at < OFFLINE_GRACE_DAYS * 864e5) {
+          remember = true;
+          setCurrent(c.user, s.token, true);
+          lastOk = c.at;
+          return pub();
+        }
+        notice = "Нет связи с сервером. Для входа нужен интернет.";
+        return null;
+      }
+      if (r.code === "banned") notice = r.error;
+      else notice = "Сессия завершена. Войдите заново.";
+      clearSession();
+      return null;
+    },
+
+    // Периодическая проверка: бан, смена ролей, обновление данных профиля
+    async verify() {
+      if (!current || !token) return { ok: true };
+      const r = await call({ action: "me", token }, 12000);
+      if (r.ok && r.user.needLegal) return { ok: false, error: "Обновились Политика и Условия. Войдите заново и примите их." };
+      if (r.ok) {
+        const changed = ["rank", "nick", "org", "role", "discord", "phone", "telegram", "static"].some((k) => r.user[k] !== current[k]);
+        const wasOffline = current.offline;
+        setCurrent(r.user, token);
+        if (remember) saveCache(r.user);
+        return { ok: true, changed: changed || wasOffline };
+      }
+      if (isOffline(r)) {
+        if (current) current.offline = true;
+        if (Date.now() - lastOk > OFFLINE_GRACE_DAYS * 864e5)
+          return { ok: false, error: "Давно не было связи с сервером. Подключитесь к интернету и войдите заново." };
+        return { ok: true, offline: true };
+      }
+      return { ok: false, error: r.code === "banned" ? r.error : "Сессия завершена. Войдите заново." };
     },
 
     logout() {
-      try {
-        const s = JSON.parse(fs.readFileSync(sessFile(), "utf8"));
-        const db = readDb();
-        const u = db.users.find((x) => x.login === (s && s.login));
-        if (u && s.token) {
-          u.tokens = (u.tokens || []).filter((h) => h !== sha(s.token));
-          writeDb(db);
-        }
-      } catch (e) {}
-      try { fs.unlinkSync(sessFile()); } catch (e) {}
+      const t = token;
       current = null;
+      token = null;
+      pending = null;
+      remember = false;
+      clearSession();
+      if (t) call({ action: "logout", token: t }, 5000).catch(() => {});
     },
 
     markSeeded() {
       if (!current) return;
-      const db = readDb();
-      const u = db.users.find((x) => x.login === current.login);
-      if (u) { u.seeded = true; writeDb(db); current.seeded = true; }
+      setSeeded(current.login);
+      current.seeded = true;
+    },
+
+    // Запрос к серверу от имени вошедшего пользователя (токен берётся сразу, до первого await)
+    authed(body) {
+      if (!token) return Promise.resolve({ ok: false, code: "auth", error: "Нужно войти в аккаунт." });
+      return call({ ...body, token });
+    },
+
+    async acceptLegal(version) {
+      if (!token) return { ok: false, code: "auth", error: "Нужно войти в аккаунт." };
+      const r = await call({ action: "accept_legal", token, version: String(version || "") });
+      if (r.ok && current) current.needLegal = false;
+      return r;
+    },
+
+    async staffList() {
+      if (!current || !token) return { ok: false, error: "Нужно войти в аккаунт.", code: "auth" };
+      return call({ action: "staff_list", token });
+    },
+
+    resetRequest: (d) =>
+      call({ action: "reset_request", login: clean(d && d.login, 24), nick: clean(d && d.nick, 40), static: clean(d && d.static, 12), recoveryCode: clean(d && d.recoveryCode, 40) }),
+    resetStatus: (d) => call({ action: "reset_status", requestId: String((d && d.requestId) || ""), secret: String((d && d.secret) || "") }),
+    async resetComplete(d) {
+      const r = await call({ action: "reset_complete", resetToken: String((d && d.resetToken) || ""), password: String((d && d.password) || "") });
+      if (r.ok) clearSession();
+      return r;
     },
 
     profileFolder: () => profDir()
