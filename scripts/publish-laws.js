@@ -98,6 +98,7 @@ function main() {
 
   [F.plain, F.prev].forEach((f) => { try { fs.unlinkSync(f); } catch (e) {} });
   console.log(`Законов: ${cur.laws.length}; новых: ${nNew}; изменённых статей: ${nChanged}; ${wrote ? "laws.enc обновлён" : "laws.enc без изменений"}.`);
+  notify.count = cur.laws.length;
   return notify;
 }
 
@@ -105,10 +106,11 @@ function main() {
 // Сбой оповещения не ломает публикацию законов.
 async function notifyBot(items) {
   const secret = process.env.CRON_SECRET;
-  if (!items.length || !secret) { if (items.length) console.log("CRON_SECRET не задан — оповещение в Telegram пропущено."); return; }
+  const manual = process.env.GITHUB_EVENT_NAME === "workflow_dispatch"; // запуск вручную (кнопка или /laws) — сообщаем и «изменений нет»
+  if ((!items.length && !manual) || !secret) { if (items.length || manual) console.log("CRON_SECRET не задан — оповещение в Telegram пропущено."); return; }
   const url = process.env.SENKO_API_URL || "https://wcjspwailippjmyffkei.supabase.co/functions/v1/senko";
   try {
-    const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", "x-senko-cron": secret }, body: JSON.stringify({ action: "laws_changed", items }), signal: AbortSignal.timeout(20000) });
+    const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", "x-senko-cron": secret }, body: JSON.stringify({ action: "laws_changed", items, manual, count: items.count }), signal: AbortSignal.timeout(20000) });
     console.log("Оповещение о законах:", r.status, await r.text());
   } catch (e) {
     console.warn("Оповещение о законах не отправлено:", e.message);

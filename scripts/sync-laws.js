@@ -32,6 +32,9 @@ function eatCookies(res) {
 }
 const cookieHeader = () => Object.keys(jar).map((k) => k + "=" + jar[k]).join("; ");
 
+// у «fetch failed» настоящая причина (ECONNRESET, таймаут…) лежит в e.cause
+const errText = (e) => e.message + (e.cause ? " (" + (e.cause.code || e.cause.message || e.cause) + ")" : "");
+
 async function http(url, opts = {}, hops = 0) {
   await sleep(DELAY);
   let res;
@@ -50,7 +53,7 @@ async function http(url, opts = {}, hops = 0) {
       break;
     } catch (e) {
       if (i >= 2 || (opts.method && opts.method !== "GET")) throw e;
-      console.warn("Повтор " + (i + 1) + ":", url, e.message);
+      console.warn("Повтор " + (i + 1) + ":", url, errText(e));
       await sleep(i ? 10000 : 3000);
     }
   }
@@ -202,7 +205,15 @@ async function main() {
 
   const laws = [], changes = [];
   let failed = 0;
-  for (const t of list.values()) {
+  const later = [];
+  // второй проход: темы, которые не открылись, пробуем ещё раз в конце, после паузы
+  const queue = [...list.values()].map((t) => ({ t, last: false }));
+  for (let qi = 0; qi < queue.length; qi++) {
+    if (qi === list.size && later.length) {
+      console.log("Второй проход по " + later.length + " темам через 30 секунд…");
+      await sleep(30000);
+    }
+    const { t, last } = queue[qi];
     const old = prevMap.get(t.id);
     try {
       const r = await readThread(t);
@@ -220,10 +231,14 @@ async function main() {
       }
       laws.push(law);
     } catch (e) {
-      failed++; console.error("Не удалось:", t.url, e.message);
+      if (!last) { later.push(t); queue.push({ t, last: true }); console.warn("Отложено на второй проход:", t.url, errText(e)); continue; }
+      failed++; console.error("Не удалось:", t.url, errText(e));
       if (old) laws.push(old);
     }
   }
+  // темы со второго прохода возвращаем на их место, чтобы порядок законов не менялся
+  const order = new Map([...list.keys()].map((k, i) => [k, i]));
+  laws.sort((a, b) => (order.has(a.id) ? order.get(a.id) : 1e9) - (order.has(b.id) ? order.get(b.id) : 1e9));
   const alive = new Set(list.keys());
   for (const old of prevMap.values()) {
     if (!alive.has(old.id)) changes.push({ type: "removed", id: old.id, title: old.title, at: now });

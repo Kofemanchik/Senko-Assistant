@@ -74,7 +74,14 @@ jobs:
       #    и сигнал приложению. Сама задача при этом остаётся красной — GitHub пришлёт письмо о сбое.
       - name: Пометить сбой в laws-status.json
         if: failure()
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}   # сообщение о сбое владельцу в Telegram
         run: |
+          if [ -n "$CRON_SECRET" ]; then
+            curl -s -m 20 -X POST "https://wcjspwailippjmyffkei.supabase.co/functions/v1/senko" \
+              -H "content-type: application/json" -H "x-senko-cron: $CRON_SECRET" \
+              -d '{"action":"laws_failed","run":"${{ github.run_id }}","manual":${{ github.event_name == 'workflow_dispatch' }}}' || true
+          fi
           node scripts/mark-failed.js "парсер или публикация завершились с ошибкой (запуск ${{ github.run_id }})"
           git config user.name "laws-bot"
           git config user.email "laws-bot@users.noreply.github.com"
