@@ -8,11 +8,12 @@ const path = require("path");
 const crypto = require("crypto");
 
 const ROLES = { off: "Сотрудник", pros: "Прокурор", adv: "Адвокат" };
-const DEPTS = ["LSPD", "LSCSD", "FIB", "SANG", "USSS"]; // как в списке «Мой департамент» в памятке
+const DEPTS = ["Government", "LSPD", "LSCSD", "FIB", "SANG"]; // должен совпадать с DEPTS в supabase/functions/senko/index.ts
+const GOV_ORG = "Government"; // только этой организации доступны роли «Прокурор» и «Адвокат»
 const OFFLINE_GRACE_DAYS = 14; // сколько дней можно работать без связи с сервером по запомненному входу
 const STAFF_RANKS = ["leader", "moderator", "owner"];
 
-module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, safeStorage, config }) {
+module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, safeStorage, config, version }) {
   const sessFile = () => path.join(dataDir(), "session.json");
   const cacheFile = () => path.join(dataDir(), "profile-cache.json");
   const deviceFile = () => path.join(dataDir(), "device.json");
@@ -26,6 +27,8 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
   let pending = null; // свежая регистрация: сессия сохраняется после подтверждения кода восстановления
   let lastOk = 0; // когда в последний раз сервер подтвердил сессию
   let notice = "";
+  let sys = null; // от сервера: режим техработ и сообщения от разработчика
+  const takeSys = (r) => { if (r && r.ok && r.sys) sys = r.sys; };
 
   // ───────────── файлы ─────────────
   function writeFileAtomic(file, text) {
@@ -72,6 +75,19 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
     if (!j || !j.user || String(j.user.login).toLowerCase() !== String(login).toLowerCase()) return null;
     return j;
   }
+  // Случайный ID этой установки: сервер по нему замечает вход руководства с нового устройства
+  function deviceId() {
+    try {
+      const d = readJson(deviceFile()) || {};
+      if (typeof d.id === "string" && /^[0-9a-f]{32}$/.test(d.id)) return d.id;
+      d.id = crypto.randomBytes(16).toString("hex");
+      writeFileAtomic(deviceFile(), JSON.stringify(d));
+      return d.id;
+    } catch (e) {
+      return "";
+    }
+  }
+  const client = () => ({ ver: String(version || ""), device: deviceId() });
   function rememberLogin(login) {
     try {
       const d = readJson(deviceFile()) || {};
@@ -170,7 +186,7 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
         static: u.static || "",
         org: inList ? u.org : "other",
         orgOther: inList ? "" : u.org || "",
-        role: ROLES[u.role] ? u.role : "off"
+        role: ROLES[u.role] && (u.role === "off" || u.org === GOV_ORG) ? u.role : "off"
       }
     };
   }
@@ -188,6 +204,7 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
   return {
     ROLES,
     DEPTS,
+    GOV_ORG,
     current: () => pub(),
     isStaff: () => !!(current && STAFF_RANKS.includes(current.rank)),
     lastLogin: () => (readJson(deviceFile()) || {}).lastLogin || "",
@@ -205,7 +222,8 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
       const login = clean(d.login, 24);
       const password = String(d.password == null ? "" : d.password);
       if (!login || !password) return { ok: false, error: "Введите логин и пароль." };
-      const r = await call({ action: "login", login, password, remember: !!d.remember });
+      const r = await call({ action: "login", login, password, remember: !!d.remember, ...client() });
+      takeSys(r);
       if (r.ok) {
         remember = !!d.remember;
         setCurrent(r.user, r.token);
@@ -239,6 +257,7 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
         legal: d.legal
       });
       if (!r.ok) return { ok: false, error: r.error || "Не удалось зарегистрироваться.", code: r.code };
+      takeSys(r);
       if (lg) {
         if (lg.seeded) setSeeded(r.user.login);
         legacyRemove(r.user.login);
@@ -264,7 +283,8 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
     async restore() {
       const s = loadSession();
       if (!s) return null;
-      const r = await call({ action: "me", token: s.token }, 10000);
+      const r = await call({ action: "me", token: s.token, ...client() }, 10000);
+      takeSys(r);
       if (r.ok && r.user.needLegal) {
         notice = "Обновились Политика конфиденциальности и Условия пользования. Войдите и примите их.";
         clearSession();
@@ -296,10 +316,12 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
     // Периодическая проверка: бан, смена ролей, обновление данных профиля
     async verify() {
       if (!current || !token) return { ok: true };
-      const r = await call({ action: "me", token }, 12000);
+      const before = JSON.stringify(sys);
+      const r = await call({ action: "me", token, ...client() }, 12000);
+      takeSys(r);
       if (r.ok && r.user.needLegal) return { ok: false, error: "Обновились Политика и Условия. Войдите заново и примите их." };
       if (r.ok) {
-        const changed = ["rank", "nick", "org", "role", "discord", "phone", "telegram", "static"].some((k) => r.user[k] !== current[k]);
+        const changed = ["rank", "nick", "org", "role", "discord", "phone", "telegram", "static"].some((k) => r.user[k] !== current[k]) || JSON.stringify(sys) !== before;
         const wasOffline = current.offline;
         setCurrent(r.user, token);
         if (remember) saveCache(r.user);
@@ -341,6 +363,31 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
       const r = await call({ action: "accept_legal", token, version: String(version || "") });
       if (r.ok && current) current.needLegal = false;
       return r;
+    },
+
+    // Изменение данных из личного кабинета (ник, статик, контакты, организация)
+    async updateProfile(d) {
+      if (!current || !token) return { ok: false, error: "Нужно войти в аккаунт.", code: "auth" };
+      d = d || {};
+      const r = await call({
+        action: "update_profile", token,
+        nick: clean(d.nick, 40), static: clean(d.static, 12), discord: clean(d.discord, 40),
+        telegram: clean(d.telegram, 60), phone: clean(d.phone, 20), org: clean(d.org, 60)
+      });
+      if (r.ok && r.user) {
+        setCurrent(r.user, token);
+        if (remember) saveCache(r.user);
+        writeProfileDoc(current);
+      }
+      return r;
+    },
+
+    sys: () => sys,
+
+    // Сообщение об ошибке из программы — уходит владельцу в Telegram
+    bugReport(text) {
+      if (!current || !token) return Promise.resolve({ ok: false, error: "Нужно войти в аккаунт.", code: "auth" });
+      return call({ action: "bug_report", token, text: String(text == null ? "" : text).slice(0, 2000), ver: String(version || "") });
     },
 
     async staffList() {

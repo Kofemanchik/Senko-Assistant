@@ -1405,8 +1405,9 @@ function chips(r){
 }
 /* ===== Юрисдикции, пункты, поисковый движок (обновление 6) ===== */
 var JN = {"R":"Региональная","F/R":"Регионально-федеральная","M":"Военная","F":"Федеральная","E":"Финансовая"};
-var JW = {"R":"LSPD, LSCSD","F/R":"LSPD, LSCSD, FIB","M":"SANG","F":"FIB","E":"USSS, FIB"};
-var DEPT_J = {LSPD:{"R":1,"F/R":1},LSCSD:{"R":1,"F/R":1},FIB:{"F/R":1,"F":1,"E":1},SANG:{"M":1},USSS:{"E":1}};
+var JW = {"R":"LSPD, LSCSD, Government","F/R":"LSPD, LSCSD, FIB, Government","M":"SANG, Government","F":"FIB, Government","E":"FIB, Government"};
+var DEPT_J = {LSPD:{"R":1,"F/R":1},LSCSD:{"R":1,"F/R":1},FIB:{"F/R":1,"F":1,"E":1},SANG:{"M":1},Government:{"R":1,"F/R":1,"M":1,"F":1,"E":1}};
+if(dept&&!DEPT_J[dept]) dept=""; // организация не из списка (например, бывший USSS): без фильтра по компетенции
 var DATA = {uk:UK,ak:AK,dk:DK,pk:PK};
 var KNAME = {uk:"Уголовный кодекс",ak:"Административный кодекс",dk:"Дорожный кодекс",pk:"Процессуальный кодекс"};
 var KINDS = ["uk","ak","dk","pk"];
@@ -1616,7 +1617,7 @@ var DEPTS = {
   LSCSD:"Свои: региональные (R) и регионально-федеральные (F/R). Федеральные, военные и финансовые статьи только по одобрению запроса старшим составом нужного ведомства (ПК ст. 35 ч.3). Боло-розыск объявлять можно (ПК ст. 39 ч.4). Назначаете лишение свободы и уголовный штраф (УК ст. 5).",
   FIB:"Свои: регионально-федеральные (F/R), федеральные (F) и финансовые (E). Региональные статьи только по одобрению запроса старшим составом регионального органа (ПК ст. 35 ч.3). Если должность директора FIB пуста, региональные органы сами ведут дела по ст. 7.1 УК (ПК ст. 36). Боло-розыск объявлять можно.",
   SANG:"Свои: военные (M). Задерживает и передаёт FIB, LSCSD, LSPD по R, F/R и военным (M) статьям. Граждан задерживает только у Форта-Занкудо (до 500 м от КПП) и на Кайо-Перико (ПК ст. 15 ч.3). В списке тех, кто объявляет боло-розыск, SANG нет (ПК ст. 39 ч.4). Военный билет изымают её руководители (ПК ст. 17).",
-  USSS:"Свои: финансовые (E). У Секретной Службы исключительное право доступа к компетенции любого ведомства (ПК ст. 36). Боло-розыск объявлять можно (ПК ст. 39 ч.4)."
+  Government:"Свои: любые юрисдикции (R, F/R, M, F, E). Офис Генерального Прокурора и суд вправе привлекать по любым статьям (УК ст. 2.8)."
 };
 function deptList(d){ return Object.keys(DEPT_J[d]).join(", "); }
 function deptBar(){
@@ -2645,15 +2646,20 @@ var ROLES={off:["Сотрудник",["timer","calc","tools","rules","learn","mo
 var BASE=["uk","ak","dk","pk","gen","laws"];
 var X={sub:{tools:"legal",sup:"sup",def:"def",rules:"rg",learn:"quiz",more:"cmp"},bail:[],bm:"sum",quiz:null,doc:"claim",fs:"",c1:"uk|6.1",c2:"uk|10.1",role:"off",rq:""};
 try{X.role=localStorage.getItem("bos-role")||"off"}catch(e){} if(!ROLES[X.role])X.role="off"; window.SA_X=X; window.SA_TABS=TABS;
+/* Режимы «Прокурор» и «Адвокат» доступны только организации Government */
+function allowedRoles(){var A=window.senkoApp,st=null;if(!A)return Object.keys(ROLES);try{st=A.state()}catch(e){}
+ var u=st&&st.user;return u&&u.org==="Government"?Object.keys(ROLES):["off"]}
+var ALLOW=allowedRoles(); if(ALLOW.indexOf(X.role)<0)X.role="off";
 var nav=document.querySelector(".tabs"),tbT=nav.querySelector('[data-tab="timer"]'),tbC=nav.querySelector('[data-tab="calc"]');
 var nav2=document.createElement("nav");nav2.className="tabs tabs2";nav2.setAttribute("role","tablist");nav2.setAttribute("aria-label","Инструменты роли");nav.insertAdjacentElement("afterend",nav2);
 var rl=document.createElement("div");rl.className="roles noprint";rl.setAttribute("role","group");rl.setAttribute("aria-label","Роль");
-rl.innerHTML=Object.keys(ROLES).map(function(k){return '<button type="button" data-role="'+k+'">'+ROLES[k][0]+'</button>'}).join("");
+function buildRoles(){rl.innerHTML=ALLOW.map(function(k){return '<button type="button" data-role="'+k+'">'+ROLES[k][0]+'</button>'}).join("");rl.hidden=ALLOW.length<2}
+buildRoles();
 document.querySelector(".brand").insertAdjacentElement("afterend",rl);
 function buildNav(){nav2.innerHTML="";[tbT,tbC].forEach(function(b){b.hidden=true;nav.appendChild(b)});
  ROLES[X.role][1].forEach(function(k){if(k==="timer"||k==="calc"){var b=k==="timer"?tbT:tbC;b.hidden=false;nav2.appendChild(b)}else{var n=document.createElement("button");n.className="tab";n.setAttribute("role","tab");n.dataset.tab=k;n.setAttribute("aria-selected","false");n.textContent=TABS[k][0];nav2.appendChild(n)}});
  rl.querySelectorAll("button").forEach(function(b){b.setAttribute("aria-pressed",String(b.dataset.role===X.role))})}
-function setRole(r){X.role=r;try{localStorage.setItem("bos-role",r)}catch(e){}buildNav();var L=ROLES[r][1];if(BASE.indexOf(state.tab)<0&&L.indexOf(state.tab)<0)state.tab=L[0];render();window.scrollTo(0,0)}
+function setRole(r){if(ALLOW.indexOf(r)<0)r="off";X.role=r;try{localStorage.setItem("bos-role",r)}catch(e){}buildNav();var L=ROLES[r][1];if(BASE.indexOf(state.tab)<0&&L.indexOf(state.tab)<0)state.tab=L[0];render();window.scrollTo(0,0)}
 var R0=render;
 render=function(){
  if(!TABS[state.tab]) return R0();
@@ -3123,7 +3129,10 @@ view.addEventListener("change",function(e){var t=e.target;if(!TABS[state.tab])re
  else if(t.dataset.d==="dsel")defOut();else if(t.dataset.d==="c1"||t.dataset.d==="c2"){X[t.dataset.d]=t.value;render()}});
 rl.addEventListener("click",function(e){var b=e.target.closest("button");if(b)setRole(b.dataset.role)});
 nav2.addEventListener("click",function(e){var t=e.target.closest(".tab");if(!t)return;state.tab=t.dataset.tab;state.stars=0;render();window.scrollTo(0,0)});
+if(TABS[state.tab]&&ROLES[X.role][1].indexOf(state.tab)<0)state.tab=ROLES[X.role][1][0];
 buildNav();
+// Организация могла смениться (сервер обновил профиль): пересобираем доступные режимы
+if(window.senkoApp&&window.senkoApp.onChange)window.senkoApp.onChange(function(){var n=allowedRoles();if(n.join()===ALLOW.join())return;ALLOW=n;buildRoles();setRole(ALLOW.indexOf(X.role)<0?"off":X.role)});
 })();
 </script>
 <script>
@@ -3481,9 +3490,9 @@ function appSettingsHtml(){
   if(st.user){
     var uRank=st.user.rank&&st.user.rank!=="user"?" · "+esc(st.user.rankName||st.user.rank):"";
     var uOff=st.user.offline?" · нет связи с сервером":"";
-    var uStaff=(st.user.rank==="leader"||st.user.rank==="moderator"||st.user.rank==="owner")&&window.senkoApp&&window.senkoApp.staff;
     h+=row("Аккаунт",esc(st.user.login)+" · "+esc(st.user.nick)+uRank+uOff,
-      '<div class="fsctl">'+(uStaff?'<button type="button" class="btn" data-ap="staff">Сотрудники</button>':'')+'<button type="button" class="btn" data-ap="logout">Выйти</button></div>');
+      '<div class="fsctl"><button type="button" class="btn" data-ap="logout">Выйти</button></div>');
+    if(window.senkoApp&&window.senkoApp.bug) h+=row("Сообщить об ошибке","Сообщение уйдёт разработчику вместе с версией программы, ответ придёт в программу.",'<button type="button" class="btn" data-ap="bug">Написать</button>');
     if(st.sync&&window.senkoApp&&window.senkoApp.syncNow){
       var sy=st.sync, syTxt="Задержания и результаты тестов хранятся в вашем аккаунте и одинаковы на всех ваших компьютерах.";
       if(sy.offline) syTxt="Нет связи с сервером: изменения отправятся, когда появится интернет.";
@@ -3510,6 +3519,7 @@ function apClick(b){
   if(k==="about"){A.about();return}
   if(k==="upd"){A.checkUpdate();return}
   if(k==="staff"){ if(A.staff) A.staff(); return }
+  if(k==="bug"){ if(window.SA_bug) window.SA_bug(); return }
   if(k==="syncnow"){
     if(!A.syncNow) return;
     b.disabled=true; b.textContent="Синхронизация…";
@@ -3613,6 +3623,24 @@ function testHtml(){
   return h;
 }
 function cabHtml(){
+  // В программе данные кабинета — это данные аккаунта: кнопка «Сохранить» отправляет их на сервер
+  var acc=null, AL=[]; try{var _st=window.senkoApp&&window.senkoApp.updateProfile&&window.senkoApp.state(); if(_st&&_st.user){acc=_st.user; AL=(_st.depts||[]).slice()}}catch(e){}
+  if(acc){
+    if(AL.indexOf(acc.org)<0) AL.unshift(acc.org);
+    var aopts=AL.map(function(d){return '<option value="'+escA(d)+'"'+(acc.org===d?' selected':'')+'>'+esc(d)+'</option>'}).join("");
+    var fld=function(k,l,v,ml,ph){return '<label>'+l+'<input data-acc="'+k+'" maxlength="'+ml+'" autocomplete="off" value="'+escA(v||"")+'"'+(ph?' placeholder="'+ph+'"':'')+'></label>'};
+    var ah='<div class="cab-top"><div class="cab-ava"><div class="cab-av" id="cabAvBig">'+avatarInner(true)+'</div>'+
+      '<div class="cab-btns"><button type="button" class="btn" data-cab="avpick">'+(AVA?'Заменить':'Загрузить фото')+'</button>'+(AVA?'<button type="button" class="btn" data-cab="avrm">Удалить</button>':'')+'</div>'+
+      '<input type="file" id="saFile" accept="image/*" hidden><div class="cab-msg" id="cabMsg" role="status" aria-live="polite"></div></div>'+
+      '<div class="cab-fields">'+fld("nick","Ник игрока",acc.nick,40,"Например, Senko")+fld("static","Статик",acc.static,12,"Ваш статик")+
+      '<label>Ведомство<select data-acc="org">'+aopts+'</select></label>'+
+      fld("discord","Discord",acc.discord,40,"ник в Discord")+fld("telegram","Telegram",acc.telegram,33,"@name или пусто")+fld("phone","Номер в игре",acc.phone,12,"только цифры")+
+      '<div class="sbtns" style="margin:0"><button type="button" class="btn" data-cab="accsave" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Сохранить</button></div>'+
+      '<div id="accMsg" role="status" aria-live="polite" style="font-size:12.5px;color:var(--muted);min-height:1.2em"></div></div></div>';
+    ah+=detHtml()+testHtml();
+    ah+='<p class="cab-foot">Данные кабинета хранятся в вашем аккаунте. После смены ведомства программу нужно перезапустить.</p>';
+    return ah;
+  }
   var opts='<option value="">Не выбрано</option>'+Object.keys(DEPTS).map(function(d){
     return '<option value="'+d+'"'+(dept===d?' selected':'')+'>'+d+'</option>';
   }).join("");
@@ -3714,6 +3742,21 @@ ov.addEventListener("click",function(e){
   var c=b.dataset.cab;
   if(c){
     if(c==="avpick"){var f=$("#saFile"); if(f) f.click(); return}
+    if(c==="accsave"){
+      var A2=window.senkoApp, am=$("#accMsg"), d={};
+      sheet.querySelectorAll("[data-acc]").forEach(function(i){d[i.dataset.acc]=i.value.trim()});
+      if(!A2||!A2.updateProfile) return;
+      b.disabled=true; b.textContent="Сохранение…"; if(am) am.textContent="";
+      A2.updateProfile(d).then(function(r){
+        b.disabled=false; b.textContent="Сохранить";
+        if(!r||!r.ok){ if(am) am.textContent=(r&&r.error)||"Не удалось сохранить."; return }
+        var prev=autoRep(); PR.nick=r.user.nick; PR.st=r.user.static; saveProf();
+        if(!rep.o||rep.o===prev){ rep.o=autoRep(); save(); }
+        updHdr(); paintSheet();
+        var am2=$("#accMsg"); if(am2) am2.textContent=r.changed?"Сохранено в аккаунте.":"Изменений нет.";
+      },function(){ b.disabled=false; b.textContent="Сохранить"; if(am) am.textContent="Ошибка связи с программой." });
+      return;
+    }
     if(c==="avrm"){AVA=""; lsDel("bos-avatar"); updHdr(); paintSheet(); return}
     if(c==="dlmore"){cabAll=!cabAll; paintSheet(); return}
     if(c==="dlclr"){
@@ -5344,6 +5387,294 @@ render();
     if(!ls("bos-ai-used") && Date.now() - first < 7 * 24 * 3600 * 1000) btn.classList.add("pulse");
     btn.addEventListener("click", function(){ btn.classList.remove("pulse"); ls("bos-ai-used", "1"); open(); });
   }
+})();
+</script>
+<style>
+/* ===== Панель руководителя ===== */
+.rbtn.bpbtn[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.bp-head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.bp-head h2{margin:0;margin-right:auto}
+.bp-head select,.bp-tools input,.bp-tools select{font:inherit;color:var(--ink);padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+.bp-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:4px 0 16px}
+.bp-tile{border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--bg)}
+.bp-tile b{display:block;font-size:24px;line-height:1.15;color:var(--accent)}
+.bp-tile span{font-size:12.5px;color:var(--muted)}
+.bp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.bp-box{border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.bp-box h3{margin:0 0 8px;font-size:14.5px}
+.bp-box ol,.bp-box ul{margin:0;padding-left:20px}
+.bp-box li{padding:3px 0}
+.bp-box li small{color:var(--muted)}
+.bp-empty{color:var(--muted);font-size:13.5px}
+.bp-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.bp-tools input[type=search]{flex:1 1 200px}
+.bp-wrap{overflow:auto;max-height:65vh;border:1px solid var(--line);border-radius:8px}
+.bp table{border-collapse:collapse;width:100%;min-width:720px;font-size:13.5px}
+.bp th,.bp td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+.bp th{position:sticky;top:0;background:var(--surface);color:var(--muted);font-size:12.5px;cursor:pointer;user-select:none}
+.bp th[aria-sort=ascending]::after{content:" ▲"}
+.bp th[aria-sort=descending]::after{content:" ▼"}
+.bp td.cp{cursor:copy}
+.bp td.cp:hover{background:var(--bg)}
+.bp tr.ban td{color:var(--muted)}
+.bp tr.ban td:first-child::before{content:"🚫 "}
+.bp-badge{display:inline-block;padding:1px 8px;border-radius:999px;border:1px solid var(--line);font-size:12px}
+.bp-foot{margin-top:8px;color:var(--muted);font-size:12.5px}
+.bp-err{border-left:4px solid #b3261e;padding:10px 14px;margin-bottom:12px}
+</style>
+<script>
+/* ===== Панель руководителя: видна руководству, модераторам памятки и владельцу =====
+   Данные приходят с сервера уже отфильтрованными: руководство видит только свою организацию,
+   личные поля (Telegram, баны) — только модераторы и владелец. */
+(function(){
+var A=window.senkoApp; if(!A||!A.staffList) return;
+var STAFF=["leader","moderator","owner"];
+var RANKS={user:"Пользователь",leader:"Руководство",moderator:"Модератор памятки",owner:"Владелец"};
+var GROLES={off:"Сотрудник",pros:"Прокурор",adv:"Адвокат"};
+var COLS=[
+ {k:"login",t:"Логин"},{k:"nick",t:"Ник"},{k:"static",t:"Статик"},{k:"org",t:"Организация"},
+ {k:"role",t:"Роль",f:function(v){return GROLES[v]||v}},
+ {k:"rank",t:"Права",badge:1,f:function(v){return RANKS[v]||v}},
+ {k:"discord",t:"Discord"},{k:"phone",t:"Номер"},
+ {k:"telegram",t:"Telegram",f:function(v){return v||"—"}},{k:"tg_id",t:"TG ID",f:function(v){return v||"—"}},
+ {k:"det7",t:"Задерж. за 7 дн."},{k:"det",t:"Задержаний"},{k:"tests",t:"Тестов"},
+ {k:"avg_p",t:"Ср. тест",f:function(v){return v==null?"—":v+"%"}},{k:"xp",t:"Опыт"},
+ {k:"last_seen",t:"Был в сети",f:dt,sv:ts},{k:"created",t:"Регистрация",f:dt,sv:ts}
+];
+var B={sub:"sum",data:null,loading:false,err:"",org:"",q:"",sort:{k:"det7",dir:-1},viewer:"",scope:null,orgs:[]};
+var DAY=864e5;
+function ts(v){return v?new Date(v).getTime():0}
+function dt(v){return v?new Date(v).toLocaleString("ru-RU",{dateStyle:"short",timeStyle:"short"}):"—"}
+function ago(v){if(!v)return "никогда";var d=Math.floor((Date.now()-ts(v))/DAY);return d<1?"сегодня":d+" дн. назад"}
+function me(){var st=null;try{st=A.state()}catch(e){}return st&&st.user}
+function allowed(){var u=me();return !!(u&&STAFF.indexOf(u.rank)>=0)}
+
+/* кнопка в шапке, рядом с личным кабинетом */
+var cab=document.getElementById("cabBtn"), tb=document.createElement("button");
+tb.type="button"; tb.className="rbtn bpbtn"; tb.id="bossBtn"; tb.title="Панель руководителя"; tb.setAttribute("aria-label","Панель руководителя"); tb.setAttribute("aria-pressed","false");
+tb.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18M12 12v2"/></svg>';
+tb.addEventListener("click",function(){if(state.tab==="boss"){state.tab="uk"}else{state.tab="boss";state.stars=0}render();window.scrollTo(0,0)});
+var who="";
+function syncTab(){var ok=allowed(),u=me(),k=u?u.rank+"|"+u.org:"";
+ if(k!==who){who=k;B.data=null;B.org=""}  // сменились права или организация: данные загрузим заново
+ if(ok&&!tb.parentNode&&cab)cab.insertAdjacentElement("beforebegin",tb);
+ if(!ok){if(tb.parentNode)tb.remove();if(state.tab==="boss"){state.tab="uk";render()}}
+ else if(state.tab==="boss")render()}
+syncTab();
+if(A.onChange)A.onChange(syncTab);
+
+function load(){
+ if(B.loading)return; B.loading=true; B.err=""; if(state.tab==="boss")draw();
+ A.staffList().then(function(r){
+  B.loading=false;
+  if(!r||!r.ok){B.err=(r&&r.error)||"Не удалось загрузить данные.";}
+  else{B.data=r.list||[];B.viewer=r.viewer;B.scope=r.scope||null;B.orgs=r.orgs||[];if(B.scope)B.org=""}
+  if(state.tab==="boss")draw();
+ },function(){B.loading=false;B.err="Ошибка связи с программой.";if(state.tab==="boss")draw()});
+}
+function rows(){var d=B.data||[];return B.org?d.filter(function(x){return x.org===B.org}):d}
+function orgList(){var o={};B.orgs.forEach(function(x){o[x]=1});(B.data||[]).forEach(function(x){o[x.org]=1});return Object.keys(o).sort()}
+function top(list,k,n){return list.filter(function(x){return (x[k]||0)>0}).sort(function(a,b){return (b[k]||0)-(a[k]||0)}).slice(0,n)}
+function li(x,extra){return '<li><b>'+esc(x.nick||x.login)+'</b> <small>'+esc(x.login)+(B.org||B.scope?'':' · '+esc(x.org))+'</small>'+(extra?' — '+extra:'')+'</li>'}
+function box(t,items,empty,ordered){var tag=ordered?"ol":"ul";return '<div class="bp-box"><h3>'+t+'</h3>'+(items.length?'<'+tag+'>'+items.join("")+'</'+tag+'>':'<p class="bp-empty">'+empty+'</p>')+'</div>'}
+function tile(n,t){return '<div class="bp-tile"><b>'+n+'</b><span>'+t+'</span></div>'}
+
+function pSum(){
+ var L=rows(), now=Date.now();
+ var act=L.filter(function(x){return now-ts(x.last_seen)<7*DAY}).length;
+ var fresh=L.filter(function(x){return now-ts(x.created)<7*DAY});
+ var det7=L.reduce(function(s,x){return s+(x.det7||0)},0);
+ var tp=L.filter(function(x){return x.avg_p!=null});
+ var avg=tp.length?Math.round(tp.reduce(function(s,x){return s+x.avg_p},0)/tp.length)+"%":"—";
+ var h='<div class="bp-tiles">'+tile(L.length,"Всего сотрудников")+tile(act,"Заходили за 7 дней")+tile(fresh.length,"Новых за 7 дней")+tile(det7,"Задержаний за 7 дней")+tile(avg,"Средний результат тестов");
+ if(L.some(function(x){return "banned" in x}))h+=tile(L.filter(function(x){return x.banned}).length,"Заблокировано");
+ h+='</div><div class="bp-grid">';
+ h+=box("🏆 Лучшие по опыту",top(L,"xp",5).map(function(x){return li(x,x.xp+" опыта")}),"Пока ни у кого нет опыта.",1);
+ h+=box("🚓 Больше всего задержаний за неделю",top(L,"det7",5).map(function(x){return li(x,x.det7)}),"За неделю задержаний нет.",1);
+ h+=box("🎯 Лучшие в тестах",L.filter(function(x){return x.avg_p!=null&&x.tests>=3}).sort(function(a,b){return b.avg_p-a.avg_p}).slice(0,5).map(function(x){return li(x,x.avg_p+"% · тестов: "+x.tests)}),"Нужно хотя бы 3 пройденных теста.",1);
+ var idle=L.filter(function(x){return !x.banned&&now-ts(x.last_seen)>=14*DAY}).sort(function(a,b){return ts(a.last_seen)-ts(b.last_seen)});
+ h+=box("💤 Не заходили 14+ дней"+(idle.length>8?" ("+idle.length+")":""),idle.slice(0,8).map(function(x){return li(x,ago(x.last_seen))}),"Все заходили недавно.");
+ h+=box("🆕 Новые сотрудники",fresh.sort(function(a,b){return ts(b.created)-ts(a.created)}).slice(0,8).map(function(x){return li(x,dt(x.created))}),"За неделю новых нет.");
+ return h+'</div>';
+}
+function pStaff(){
+ var data=rows(), q=B.q.trim().toLowerCase();
+ var cols=COLS.filter(function(c){return data.some(function(x){return c.k in x})});
+ var list=data.filter(function(x){return !q||["login","nick","static","org","discord","phone","telegram"].some(function(k){return x[k]&&String(x[k]).toLowerCase().indexOf(q)>=0})});
+ var col=COLS.filter(function(c){return c.k===B.sort.k})[0];
+ var val=function(x){var v=x[B.sort.k];return col&&col.sv?col.sv(v):typeof v==="number"?v:String(v==null?"":v).toLowerCase()};
+ list.sort(function(a,b){var va=val(a),vb=val(b);return (va<vb?-1:va>vb?1:0)*B.sort.dir});
+ var h='<div class="bp-tools"><input type="search" id="bpQ" placeholder="Поиск по логину, нику, статику, Discord…" aria-label="Поиск сотрудников" value="'+esc(B.q)+'"><button type="button" class="btn" data-bp="win">Открыть в отдельном окне</button></div>';
+ if(!list.length) return h+'<p class="bp-empty">'+(data.length?"Ничего не найдено.":"Список пуст.")+'</p>';
+ h+='<div class="bp-wrap"><table><thead><tr>'+cols.map(function(c){return '<th tabindex="0" data-bps="'+c.k+'" aria-sort="'+(B.sort.k===c.k?(B.sort.dir>0?"ascending":"descending"):"none")+'">'+c.t+'</th>'}).join("")+'</tr></thead><tbody>';
+ list.forEach(function(x){
+  h+='<tr'+(x.banned?' class="ban"':'')+'>'+cols.map(function(c){var raw=x[c.k],t=c.f?c.f(raw):(raw==null?"":String(raw));
+   var tip=(x.banned&&c.k==="login"&&x.ban_reason?"Заблокирован: "+x.ban_reason+". ":"")+"Нажмите, чтобы скопировать";
+   return '<td class="cp" data-cp="'+esc(t)+'" title="'+esc(tip)+'">'+(c.badge?'<span class="bp-badge">'+esc(t)+'</span>':esc(t))+'</td>'}).join("")+'</tr>';
+ });
+ return h+'</tbody></table></div><p class="bp-foot">Показано: '+list.length+' из '+data.length+'. Нажмите на ячейку, чтобы скопировать значение.</p>';
+}
+function pOrgs(){
+ var now=Date.now(), d=B.data||[];
+ var h='<div class="bp-wrap"><table><thead><tr><th>Организация</th><th>Сотрудников</th><th>Руководство</th><th>Заходили за 7 дн.</th><th>Задерж. за 7 дн.</th><th>Ср. тест</th></tr></thead><tbody>';
+ orgList().forEach(function(o){
+  var L=d.filter(function(x){return x.org===o}), tp=L.filter(function(x){return x.avg_p!=null});
+  h+='<tr><td><b>'+esc(o)+'</b></td><td>'+L.length+'</td><td>'+L.filter(function(x){return x.rank==="leader"}).length+'</td><td>'+L.filter(function(x){return now-ts(x.last_seen)<7*DAY}).length+'</td><td>'+L.reduce(function(s,x){return s+(x.det7||0)},0)+'</td><td>'+(tp.length?Math.round(tp.reduce(function(s,x){return s+x.avg_p},0)/tp.length)+"%":"—")+'</td></tr>';
+ });
+ return h+'</tbody></table></div><p class="bp-foot">Нажмите на организацию в списке сверху, чтобы посмотреть её сводку.</p>';
+}
+
+function draw(){
+ var subs=[["sum","Обзор"],["staff","Сотрудники"]]; if(!B.scope)subs.push(["orgs","Организации"]);
+ if(!subs.some(function(s){return s[0]===B.sub}))B.sub="sum";
+ var title=B.scope?"Панель руководителя · "+esc(B.scope):"Панель руководителя";
+ var h='<div class="subnav noprint">'+subs.map(function(s){return '<button class="pill" data-bpsub="'+s[0]+'" aria-pressed="'+(s[0]===B.sub)+'">'+s[1]+'</button>'}).join("")+'</div>';
+ h+='<section class="panel bp"><div class="bp-head"><h2>'+title+'</h2>';
+ if(B.data&&!B.scope&&B.sub!=="orgs")h+='<select id="bpOrg" aria-label="Организация"><option value="">Все организации</option>'+orgList().map(function(o){return '<option'+(o===B.org?' selected':'')+'>'+esc(o)+'</option>'}).join("")+'</select>';
+ h+='<button type="button" class="btn" data-bp="reload"'+(B.loading?' disabled':'')+'>'+(B.loading?"Загрузка…":"Обновить")+'</button></div>';
+ if(B.viewer)h+='<p class="sub">Вы видите данные как: '+(RANKS[B.viewer]||B.viewer)+(B.scope?". Доступна только ваша организация.":".")+'</p>';
+ if(B.err)h+='<div class="banner bp-err" role="alert">'+esc(B.err)+'</div>';
+ if(!B.data)h+='<p class="bp-empty">'+(B.loading?"Загружаем данные…":"Данные недоступны.")+'</p>';
+ else h+=B.sub==="staff"?pStaff():B.sub==="orgs"?pOrgs():pSum();
+ view.innerHTML=h+'</section>';
+}
+
+/* клики и ввод внутри панели */
+view.addEventListener("click",function(e){
+ if(state.tab!=="boss")return;
+ var t=e.target.closest("[data-bpsub],[data-bp],[data-bps],td[data-cp]"); if(!t)return;
+ if(t.dataset.bpsub){B.sub=t.dataset.bpsub;if(B.sub==="staff"&&B.sort.k==="det7"&&!B.touched)B.sort={k:"nick",dir:1};draw();return}
+ if(t.dataset.bp==="reload"){load();return}
+ if(t.dataset.bp==="win"){if(A.staff)A.staff();return}
+ if(t.dataset.bps){var k=t.dataset.bps;B.touched=1;B.sort=B.sort.k===k?{k:k,dir:-B.sort.dir}:{k:k,dir:1};draw();return}
+ if(t.dataset.cp!=null){A.copy(t.dataset.cp);t.style.outline="2px solid var(--accent)";setTimeout(function(){t.style.outline=""},500)}
+});
+view.addEventListener("keydown",function(e){if(state.tab!=="boss")return;var t=e.target;if(t.dataset&&t.dataset.bps&&(e.key==="Enter"||e.key===" ")){e.preventDefault();t.click()}});
+view.addEventListener("input",function(e){
+ if(state.tab!=="boss"||e.target.id!=="bpQ")return; e.stopPropagation();
+ B.q=e.target.value; var pos=e.target.selectionStart; draw(); var q=document.getElementById("bpQ"); if(q){q.focus();try{q.setSelectionRange(pos,pos)}catch(_){}}
+},true);
+view.addEventListener("change",function(e){if(state.tab!=="boss"||e.target.id!=="bpOrg")return;e.stopPropagation();B.org=e.target.value;draw()},true);
+
+/* встраивание в render */
+var RB=render;
+render=function(){
+ tb.setAttribute("aria-pressed",String(state.tab==="boss"));
+ if(state.tab!=="boss")return RB();
+ if(!allowed()){state.tab="uk";return RB()}
+ document.querySelectorAll(".tab").forEach(function(t){t.setAttribute("aria-selected",String(t.dataset.tab==="boss"))});
+ qEl.disabled=true; qc.hidden=true; qEl.placeholder="Поиск работает в разделах УК, АК, ДК, ПК";
+ var qt=document.querySelector(".qtools"), qh=document.getElementById("qh"); if(qt)qt.hidden=true; if(qh)qh.hidden=true;
+ draw();
+ if(!B.data&&!B.loading)load();
+};
+})();
+</script>
+<script>
+/* ===== Смена организации: окно с просьбой перезапустить программу ===== */
+(function(){
+var A=window.senkoApp; if(!A||!A.onChange) return;
+function org(){var st=null;try{st=A.state()}catch(e){}return st&&st.user?st.user.org:null}
+var cur=org(), shown=null, ov=null;
+// фильтр «Мой департамент» следует за организацией аккаунта
+function syncDept(o){if(o&&DEPT_J[o]&&dept!==o){dept=o;try{save();render()}catch(e){}}}
+syncDept(cur);
+function close(){if(ov){ov.remove();ov=null}}
+function show(from,to){
+ close(); shown=to;
+ ov=document.createElement("div"); ov.className="sa-ov noprint";
+ var gov=to==="Government"?" Станут доступны режимы «Прокурор» и «Адвокат».":from==="Government"?" Режимы «Прокурор» и «Адвокат» станут недоступны.":"";
+ ov.innerHTML='<div class="sa-sheet" role="alertdialog" aria-modal="true" aria-labelledby="orgTitle" aria-describedby="orgText" tabindex="-1"><div class="sa-head"><h2 id="orgTitle">Организация изменена</h2></div>'+
+  '<div class="sa-body" style="padding:16px 18px"><p id="orgText" style="margin:0 0 16px">Ваша организация изменена: <b>'+esc(from||"—")+'</b> → <b>'+esc(to)+'</b>.'+gov+' Перезапустите программу, чтобы все изменения применились.</p>'+
+  '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button type="button" class="btn" data-org="later">Позже</button><button type="button" class="btn" data-org="now" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Перезапустить сейчас</button></div></div></div>';
+ document.body.appendChild(ov);
+ ov.addEventListener("click",function(e){var b=e.target.closest("[data-org]");if(!b)return;
+  if(b.dataset.org==="now"&&A.restart){b.disabled=true;b.textContent="Перезапуск…";A.restart()}else close()});
+ ov.addEventListener("keydown",function(e){if(e.key==="Escape")close()});
+ var bn=ov.querySelector('[data-org="now"]'); if(bn) bn.focus();
+}
+A.onChange(function(){var o=org(); syncDept(o); if(!o||!cur){cur=o||cur;return} if(o!==cur&&o!==shown) show(cur,o)});
+})();
+</script>
+<style>
+/* ===== Сообщения от разработчика, техработы, сообщение об ошибке ===== */
+#saNotices{display:grid;gap:8px;margin:10px 0 0}
+.sn{border:1px solid var(--accent);border-left-width:4px;border-radius:8px;background:var(--surface);padding:10px 14px;display:flex;gap:12px;align-items:flex-start}
+.sn-b{flex:1;min-width:0}
+.sn-b b{display:block;margin-bottom:2px}
+.sn-b p{margin:0;white-space:pre-wrap;word-wrap:break-word}
+.sn-b small{color:var(--muted);font-size:12px}
+.sn-warn{border-color:#c77700}
+.mt-ov{position:fixed;inset:0;z-index:2147480000;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--bg)}
+.mt-box{max-width:460px;text-align:center}
+.mt-box h2{margin:10px 0 8px;font-size:22px}
+.mt-box p{color:var(--muted);white-space:pre-wrap;margin:0 0 18px}
+.mt-ico{font-size:46px}
+.bug-ta{width:100%;min-height:140px;font:inherit;color:var(--ink);padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);resize:vertical;box-sizing:border-box}
+</style>
+<script>
+(function(){
+var A=window.senkoApp; if(!A||!A.state) return;
+var DK="bos-ndis"; // скрытые пользователем сообщения
+function dis(){try{return JSON.parse(localStorage.getItem(DK)||"[]")||[]}catch(e){return []}}
+function setDis(a){try{localStorage.setItem(DK,JSON.stringify(a.slice(-50)))}catch(e){}}
+function st(){try{return A.state()}catch(e){return null}}
+var box=document.createElement("div"); box.id="saNotices"; box.className="noprint";
+var top=document.querySelector("header.top"); if(top) top.insertAdjacentElement("afterend",box);
+var mt=null;
+function fmt(v){return v?new Date(v).toLocaleString("ru-RU",{dateStyle:"short",timeStyle:"short"}):""}
+function paint(){
+ var s=st(), sys=s&&s.sys, d=dis();
+ var h="";
+ if(sys&&sys.maintenance&&sys.maintenance.on&&sys.maintenance.exempt) h+='<div class="sn sn-warn"><div class="sn-b"><b>🛠 Включён режим технических работ</b><p>Пользователи видят экран «Идут технические работы». Вы и модераторы работаете как обычно. Выключить: /maintenance off</p></div></div>';
+ ((sys&&sys.notices)||[]).forEach(function(n){ if(d.indexOf(n.id)>=0) return;
+  var own=/^(⚠️|✅)/.test(n.title||""), w=/^⚠️/.test(n.title||"");
+  h+='<div class="sn'+(w?' sn-warn':'')+'" role="'+(w?'alert':'status')+'"><div class="sn-b"><b>'+(own?'':'📣 ')+esc(n.title)+'</b><p>'+esc(n.text)+'</p><small>'+fmt(n.at)+'</small></div><button type="button" class="btn" data-ndis="'+esc(n.id)+'">Понятно</button></div>'; });
+ box.innerHTML=h; box.hidden=!h;
+ var on=sys&&sys.maintenance&&sys.maintenance.on&&!sys.maintenance.exempt;
+ if(on&&!mt){
+  mt=document.createElement("div"); mt.className="mt-ov"; mt.setAttribute("role","alertdialog"); mt.setAttribute("aria-modal","true"); mt.setAttribute("aria-labelledby","mtT");
+  document.body.appendChild(mt);
+ }
+ if(on){
+  mt.innerHTML='<div class="mt-box"><div class="mt-ico" aria-hidden="true">🛠</div><h2 id="mtT">Идут технические работы</h2><p>'+esc(sys.maintenance.text||"Программа скоро снова будет доступна. Попробуйте чуть позже.")+'</p><button type="button" class="btn" data-mt="re">Проверить снова</button></div>';
+ } else if(mt){ mt.remove(); mt=null }
+}
+document.addEventListener("click",function(e){
+ var b=e.target.closest("[data-ndis],[data-mt]"); if(!b) return;
+ if(b.dataset.ndis){var d=dis(); d.push(b.dataset.ndis); setDis(d); paint(); return}
+ if(b.dataset.mt==="re"&&A.recheck){b.disabled=true; b.textContent="Проверяем…"; A.recheck().then(paint,paint)}
+});
+paint();
+if(A.onChange) A.onChange(paint);
+
+/* окно «Сообщить об ошибке» */
+var bo=null;
+function closeBug(){if(bo){bo.remove();bo=null}}
+window.SA_bug=function(){
+ if(!A.bug) return; closeBug();
+ bo=document.createElement("div"); bo.className="sa-ov noprint"; bo.style.zIndex="2147470000";
+ bo.innerHTML='<div class="sa-sheet" role="dialog" aria-modal="true" aria-labelledby="bugT" tabindex="-1"><div class="sa-head"><h2 id="bugT">Сообщить об ошибке</h2><button type="button" class="ic sa-x" data-bug="x" aria-label="Закрыть">×</button></div>'+
+  '<div class="sa-body" style="padding:16px 18px"><p style="margin:0 0 10px;color:var(--muted)">Опишите, что случилось и что вы делали перед этим. Сообщение получит разработчик вместе с версией программы, ответ придёт сюда же, в программу.</p>'+
+  '<textarea class="bug-ta" id="bugText" maxlength="2000" placeholder="Например: в разделе «Задержание» не останавливается таймер после нажатия «Пауза»…"></textarea>'+
+  '<div style="display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:10px;flex-wrap:wrap"><span id="bugMsg" role="status" style="font-size:12.5px;color:var(--muted)"></span>'+
+  '<button type="button" class="btn" data-bug="send" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Отправить</button></div></div></div>';
+ document.body.appendChild(bo);
+ bo.addEventListener("click",function(e){
+  if(e.target===bo){closeBug();return}
+  var b=e.target.closest("[data-bug]"); if(!b) return;
+  if(b.dataset.bug==="x"){closeBug();return}
+  var t=document.getElementById("bugText").value.trim(), m=document.getElementById("bugMsg");
+  if(t.length<10){m.textContent="Опишите подробнее, хотя бы пару предложений.";return}
+  b.disabled=true; b.textContent="Отправка…";
+  A.bug(t).then(function(r){
+   if(r&&r.ok){ bo.querySelector(".sa-body").innerHTML='<p style="margin:0 0 14px">✅ Спасибо! Сообщение №'+esc(r.id)+' отправлено разработчику.</p><div style="text-align:right"><button type="button" class="btn" data-bug="x">Закрыть</button></div>'; return }
+   b.disabled=false; b.textContent="Отправить"; m.textContent=(r&&r.error)||"Не удалось отправить.";
+  },function(){b.disabled=false; b.textContent="Отправить"; m.textContent="Ошибка связи с программой."});
+ });
+ bo.addEventListener("keydown",function(e){if(e.key==="Escape")closeBug()});
+ var ta=document.getElementById("bugText"); if(ta) ta.focus();
+};
 })();
 </script>
 </body></html>

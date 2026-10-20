@@ -69,7 +69,7 @@ footer{padding:8px 16px;border-top:1px solid var(--line);background:var(--card);
     {k:"rank",t:"Права",badge:true,f:function(v){return RANKS[v]||v}},
     {k:"discord",t:"Discord"},{k:"phone",t:"Номер"},
     {k:"telegram",t:"Telegram",f:function(v){return v||"—"}},{k:"tg_id",t:"TG ID",f:function(v){return v||"—"}},
-    {k:"det",t:"Задержаний"},{k:"tests",t:"Тестов"},{k:"avg_p",t:"Ср. результат",f:function(v){return v==null?"—":v+"%"}},{k:"xp",t:"XP"},
+    {k:"det7",t:"Задерж. за 7 дн."},{k:"det",t:"Задержаний"},{k:"tests",t:"Тестов"},{k:"avg_p",t:"Ср. результат",f:function(v){return v==null?"—":v+"%"}},{k:"xp",t:"XP"},
     {k:"last_seen",t:"Был в сети",f:date,sortv:ts},{k:"created",t:"Регистрация",f:date,sortv:ts}
   ];
   var data=[], cols=[], sort={k:"created",dir:1}, viewer="";
@@ -87,8 +87,8 @@ footer{padding:8px 16px;border-top:1px solid var(--line);background:var(--card);
       if(!r||!r.ok){ showErr((r&&r.error)||"Не удалось загрузить список."); if(!data.length) $("msg").textContent="Данные недоступны."; return }
       data=r.list; viewer=r.viewer;
       cols=COLS.filter(function(c){return data.some(function(x){return c.k in x})});
-      $("who").textContent="Вы видите данные как: "+(RANKS[viewer]||viewer);
-      var orgs={}; data.forEach(function(x){orgs[x.org]=1});
+      $("who").textContent="Вы видите данные как: "+(RANKS[viewer]||viewer)+(r.scope?" · только "+r.scope:"");
+      var orgs={}; (r.orgs||[]).forEach(function(o){orgs[o]=1}); data.forEach(function(x){orgs[x.org]=1});
       var sel=$("org"), cur=sel.value; sel.innerHTML='<option value="">Все организации</option>';
       Object.keys(orgs).sort().forEach(function(o){var op=document.createElement("option"); op.value=o; op.textContent=o; sel.appendChild(op)});
       sel.value=orgs[cur]?cur:"";

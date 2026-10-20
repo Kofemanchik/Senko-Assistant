@@ -109,6 +109,85 @@ create table if not exists public.sync_items (
 );
 create index if not exists sync_items_seq_idx on public.sync_items (user_id, seq);
 
+-- Этап 2: модерация через бота -----------------------------------------------
+alter table public.profiles add column if not exists banned_until timestamptz;           -- временная блокировка: снимается сама
+alter table public.profiles add column if not exists tags text[] not null default '{}';   -- теги аккаунта (/tag)
+
+-- Внутренние заметки к аккаунту (/note), пользователь их не видит
+create table if not exists public.account_notes (
+  id       bigint generated always as identity primary key,
+  user_id  uuid not null references public.profiles(id) on delete cascade,
+  author   text not null,
+  text     text not null,
+  at       timestamptz not null default now()
+);
+create index if not exists account_notes_user_idx on public.account_notes (user_id);
+
+-- Предупреждения (/warn); после лимита аккаунт блокируется автоматически
+create table if not exists public.account_warns (
+  id       bigint generated always as identity primary key,
+  user_id  uuid not null references public.profiles(id) on delete cascade,
+  author   text not null,
+  reason   text not null default '',
+  at       timestamptz not null default now()
+);
+create index if not exists account_warns_user_idx on public.account_warns (user_id);
+
+-- Действия бота, ждущие подтверждения кнопкой (/ban, /delete, /role, /tempban)
+create table if not exists public.bot_pending (
+  id          uuid primary key default gen_random_uuid(),
+  actor_tg    text not null,
+  action      text not null,
+  payload     jsonb not null default '{}'::jsonb,
+  created_at  timestamptz not null default now(),
+  expires_at  timestamptz not null
+);
+
+-- Этап 3: уведомления, рассылки, сервис ------------------------------------
+alter table public.profiles add column if not exists app_version text not null default '';  -- версия программы (/versions)
+alter table public.profiles add column if not exists devices text[] not null default '{}';  -- хэши устройств руководства (вход с нового устройства)
+
+-- Настройки бота: техработы, сводка, регистрация, чёрный список слов
+create table if not exists public.bot_settings (
+  key         text primary key,
+  value       jsonb not null,
+  updated_at  timestamptz not null default now()
+);
+
+-- Сообщения в программе: всем (org и user_id пустые), организации или одному пользователю
+create table if not exists public.broadcasts (
+  id          bigint generated always as identity primary key,
+  org         text,
+  user_id     uuid references public.profiles(id) on delete cascade,
+  title       text not null default '',
+  author      text not null,
+  text        text not null,
+  created_at  timestamptz not null default now(),
+  expires_at  timestamptz not null
+);
+create index if not exists broadcasts_exp_idx on public.broadcasts (expires_at);
+
+-- Сообщения об ошибках из программы
+create table if not exists public.bug_reports (
+  id           bigint generated always as identity primary key,
+  user_id      uuid not null references public.profiles(id) on delete cascade,
+  text         text not null,
+  app_version  text not null default '',
+  answered     boolean not null default false,
+  at           timestamptz not null default now()
+);
+
+-- Отложенные команды бота (/in 2h unban логин)
+create table if not exists public.bot_delayed (
+  id           bigint generated always as identity primary key,
+  actor_tg     text not null,
+  actor_label  text not null,
+  command      text not null,
+  run_at       timestamptz not null,
+  created_at   timestamptz not null default now()
+);
+create index if not exists bot_delayed_run_idx on public.bot_delayed (run_at);
+
 -- Закрываем таблицы от публичного API ----------------------------------------
 alter table public.profiles       enable row level security;
 alter table public.sessions       enable row level security;
@@ -117,9 +196,18 @@ alter table public.reset_requests enable row level security;
 alter table public.audit_log      enable row level security;
 alter table public.rate_limits    enable row level security;
 alter table public.sync_items     enable row level security;
+alter table public.account_notes  enable row level security;
+alter table public.account_warns  enable row level security;
+alter table public.bot_pending    enable row level security;
+alter table public.bot_settings   enable row level security;
+alter table public.broadcasts     enable row level security;
+alter table public.bug_reports    enable row level security;
+alter table public.bot_delayed    enable row level security;
 
 revoke all on table public.profiles, public.sessions, public.recovery_codes,
-                    public.reset_requests, public.audit_log, public.rate_limits, public.sync_items
+                    public.reset_requests, public.audit_log, public.rate_limits, public.sync_items,
+                    public.account_notes, public.account_warns, public.bot_pending,
+                    public.bot_settings, public.broadcasts, public.bug_reports, public.bot_delayed
   from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;
 

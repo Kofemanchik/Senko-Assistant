@@ -53,6 +53,8 @@ jobs:
         run: node scripts/sync-laws.js
 
       - name: Разметить изменения и зашифровать
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}   # оповещение в Telegram о новых законах
         run: node scripts/publish-laws.js
 
       - name: Commit

@@ -100,7 +100,8 @@ const accounts = require("./accounts")({
   docsDir: () => path.join(app.getPath("documents"), "Senko Assistant"),
   fetch: (url, opts) => net.fetch(url, opts),
   safeStorage,
-  config: require("./server-config")
+  config: require("./server-config"),
+  version: app.getVersion()
 });
 
 // Синхронизация данных работы (задержания, тесты, статистика) между компьютерами, см. sync.js
@@ -450,7 +451,9 @@ function getState() {
     packaged: app.isPackaged,
     version: app.getVersion(),
     dataVersion: currentVersion(),
-    user: u ? { login: u.login, nick: u.nick, roleName: u.roleName, org: u.org, rank: u.rank, rankName: u.rankName, offline: !!u.offline } : null
+    depts: accounts.DEPTS,
+    sys: accounts.sys(),
+    user: u ? { login: u.login, nick: u.nick, static: u.static, discord: u.discord, telegram: u.telegram, phone: u.phone, role: u.role, roleName: u.roleName, org: u.org, rank: u.rank, rankName: u.rankName, offline: !!u.offline } : null
   };
 }
 function pushState() {
@@ -569,6 +572,37 @@ ipcMain.on("senko:about", (e) => { if (fromMain(e)) showAbout(); });
 ipcMain.on("senko:check-update", (e) => { if (fromMain(e)) { checkForAppUpdate(true); checkForUpdate(true); } });
 ipcMain.on("senko:logout", (e) => { if (fromMain(e)) logout(); });
 ipcMain.on("senko:staff", (e) => { if (fromMain(e)) openStaff(); });
+// Панель руководителя в главном окне: тот же список, что и в окне «Сотрудники»
+ipcMain.handle("senko:staff-list", async (e) => {
+  if (!fromMain(e)) return { ok: false, error: "Недоступно." };
+  const r = await accounts.staffList();
+  if (r && (r.code === "auth" || r.code === "banned")) setTimeout(() => logout(r.error), 0);
+  return r;
+});
+// Личный кабинет: изменение данных в аккаунте (сервер уведомляет владельца в Telegram)
+ipcMain.handle("senko:profile-update", async (e, d) => {
+  if (!fromMain(e)) return { ok: false, error: "Недоступно." };
+  const r = await accounts.updateProfile(d || {});
+  if (r && (r.code === "auth" || r.code === "banned")) setTimeout(() => logout(r.error), 0);
+  else if (r && r.ok) { updateTrayMenu(); pushState(); }
+  return r;
+});
+// Сообщение об ошибке (уходит владельцу в Telegram) и ручная сверка с сервером (кнопка «Проверить снова»)
+ipcMain.handle("senko:bug", async (e, text) => (fromMain(e) ? accounts.bugReport(text) : { ok: false, error: "Недоступно." }));
+ipcMain.handle("senko:recheck", async (e) => {
+  if (!fromMain(e)) return null;
+  await verifySession();
+  pushState();
+  return getState();
+});
+// Перезапуск программы (например, после смены организации): сначала отправляем несохранённые изменения
+ipcMain.on("senko:restart", (e) => {
+  if (!fromMain(e)) return;
+  quitting = true;
+  const go = () => { app.relaunch(); app.quit(); };
+  Promise.race([sync.pushNow().catch(() => {}), new Promise((r) => setTimeout(r, 3000))]).then(go, go);
+});
+ipcMain.on("senko:copy", (e, text) => { if (fromMain(e)) clipboard.writeText(String(text).slice(0, 200)); });
 
 // Синхронизация данных: слияние при запуске страницы, отправка изменений, ручной запуск
 ipcMain.on("sync:startup", (e, local) => { e.returnValue = fromMain(e) ? sync.startup(local || {}) : null; });
@@ -640,6 +674,7 @@ ipcMain.handle("auth:state", (e) =>
         lastLogin: accounts.lastLogin(),
         depts: accounts.DEPTS,
         roles: accounts.ROLES,
+        gov: accounts.GOV_ORG,
         version: app.getVersion(),
         notice: accounts.takeNotice()
       }
@@ -907,6 +942,13 @@ app.whenReady().then(() => {
   accounts.restore().then((u) => { if (u) createMainWindow(); else createAuthWindow(); }, () => createAuthWindow());
   setTimeout(verifySession, 20000);
   setInterval(verifySession, 20 * 60 * 1000);
+  // Вернулись в окно программы: сверяемся с сервером (не чаще раза в 2 минуты), чтобы смена организации или прав была видна сразу
+  let lastFocusCheck = 0;
+  app.on("browser-window-focus", (_e, w) => {
+    if (!win || w !== win || Date.now() - lastFocusCheck < 120000) return;
+    lastFocusCheck = Date.now();
+    verifySession();
+  });
 
   setTimeout(() => { checkForUpdate(); checkForAppUpdate(false); }, 5000);
   setInterval(() => { checkForUpdate(); checkForAppUpdate(false); }, UPDATE_EVERY_MS);

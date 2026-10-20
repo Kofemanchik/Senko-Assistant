@@ -405,6 +405,13 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
   var A=window.senkoAuth, $=function(i){return document.getElementById(i)};
   var MAIN=["fLogin","fReg","vReset","vCode","vLegal"];
   var migrating=false, poll=null, rsReq=null, rsToken="", codeMode="register", codeLogin="";
+  var ROLES_ALL={}, GOV="Government";
+  // «Прокурор» и «Адвокат» доступны только организации Government
+  function fillRoles(){
+    var sel=$("rRole"), cur=sel.value, gov=$("rOrg").value===GOV;
+    fill(sel,Object.keys(ROLES_ALL).filter(function(k){return gov||k==="off"}).map(function(k){return [k,ROLES_ALL[k]]}));
+    sel.value=gov&&ROLES_ALL[cur]?cur:"off"; sel.disabled=!gov;
+  }
 
   function show(id){
     MAIN.forEach(function(v){ $(v).hidden=(v!==id) });
@@ -440,12 +447,12 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
   A.state().then(function(s){
     if(!s) return;
     fill($("rOrg"),s.depts.map(function(d){return [d,d]}).concat([["other","Другая организация"]]),"Выберите организацию");
-    fill($("rRole"),Object.keys(s.roles).map(function(k){return [k,s.roles[k]]}));
+    ROLES_ALL=s.roles||{}; if(s.gov) GOV=s.gov; fillRoles();
     if(s.lastLogin) $("lLogin").value=s.lastLogin;
     if(s.notice) notice(s.notice);
     if(s.lastLogin) $("lPass").focus();
   });
-  $("rOrg").onchange=function(){ $("rOrgOtherW").hidden=this.value!=="other" };
+  $("rOrg").onchange=function(){ $("rOrgOtherW").hidden=this.value!=="other"; fillRoles() };
 
   // Обновлённые документы у уже зарегистрированного пользователя
   var gLegal=$("gLegal"); gLegal.innerHTML=SenkoLegal.consentHtml("gAgree");
@@ -500,7 +507,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
     $("rPass").value=pass; $("rPass2").value=pass;
     $("rNick").value=p.nick; $("rSt").value=p.static;
     $("rOrg").value=p.org; $("rOrgOtherW").hidden=p.org!=="other"; $("rOrgOther").value=p.orgOther||"";
-    $("rRole").value=p.role;
+    fillRoles(); if(!$("rRole").disabled) $("rRole").value=p.role;
     $("rDiscord").focus();
   }
 

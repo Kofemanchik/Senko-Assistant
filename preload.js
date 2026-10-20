@@ -121,6 +121,12 @@ contextBridge.exposeInMainWorld("senkoApp", {
   logout: () => ipcRenderer.send("senko:logout"),
   syncNow: () => ipcRenderer.invoke("senko:sync"), // синхронизировать сейчас
   staff: () => ipcRenderer.send("senko:staff"), // окно «Список сотрудников» (для руководства и выше)
+  staffList: () => ipcRenderer.invoke("senko:staff-list"), // данные для панели руководителя
+  updateProfile: (d) => ipcRenderer.invoke("senko:profile-update", d || {}), // сохранить данные кабинета в аккаунт
+  bug: (text) => ipcRenderer.invoke("senko:bug", String(text || "").slice(0, 2000)), // сообщение об ошибке
+  recheck: () => ipcRenderer.invoke("senko:recheck"), // сверка с сервером сейчас
+  restart: () => ipcRenderer.send("senko:restart"), // перезапуск программы
+  copy: (text) => ipcRenderer.send("senko:copy", String(text || "").slice(0, 200)),
   onChange: (f) => { if (typeof f === "function") listeners.add(f); },
   // Законы с форума: данные, ручное обновление, события (progress/done), папка диагностики
   laws: {

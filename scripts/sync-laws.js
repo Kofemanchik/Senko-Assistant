@@ -34,15 +34,26 @@ const cookieHeader = () => Object.keys(jar).map((k) => k + "=" + jar[k]).join(";
 
 async function http(url, opts = {}, hops = 0) {
   await sleep(DELAY);
-  const res = await fetch(url, {
-    method: opts.method || "GET",
-    redirect: "manual",
-    headers: Object.assign({
-      "User-Agent": UA, "Accept-Language": "ru-RU,ru;q=0.9", "Accept": "text/html,application/xhtml+xml",
-      "Cookie": cookieHeader()
-    }, opts.headers || {}),
-    body: opts.body
-  });
+  let res;
+  // «fetch failed» — обрыв связи с форумом; повторяем до 3 раз с паузой 3 и 10 секунд
+  for (let i = 0; ; i++) {
+    try {
+      res = await fetch(url, {
+        method: opts.method || "GET",
+        redirect: "manual",
+        headers: Object.assign({
+          "User-Agent": UA, "Accept-Language": "ru-RU,ru;q=0.9", "Accept": "text/html,application/xhtml+xml",
+          "Cookie": cookieHeader()
+        }, opts.headers || {}),
+        body: opts.body
+      });
+      break;
+    } catch (e) {
+      if (i >= 2 || (opts.method && opts.method !== "GET")) throw e;
+      console.warn("Повтор " + (i + 1) + ":", url, e.message);
+      await sleep(i ? 10000 : 3000);
+    }
+  }
   eatCookies(res);
   if (res.status >= 300 && res.status < 400 && res.headers.get("location") && hops < 6) {
     const next = new URL(res.headers.get("location"), url).toString();
