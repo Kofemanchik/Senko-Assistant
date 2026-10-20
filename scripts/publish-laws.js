@@ -46,6 +46,7 @@ function main() {
   if (havePrev && cur.laws.length < prev.laws.length * MIN_KEEP_RATIO) fail("Законов стало " + cur.laws.length + " вместо " + prev.laws.length + " — похоже на сбой парсера, файл не обновлён.");
 
   const changes = Array.isArray(cur.changes) ? cur.changes.slice() : [];
+  const notify = []; // что изменилось в этот запуск — уходит владельцу и руководству в Telegram
   let nNew = 0, nChanged = 0;
   cur.laws.forEach((l) => {
     const p = prevById[l.id];
@@ -53,6 +54,7 @@ function main() {
       if (havePrev) {
         l.isNew = true; l.changedAt = l.changedAt || now; nNew++;
         if (!changes.some((c) => c.id === l.id && c.type === "new")) changes.unshift({ type: "new", id: l.id, title: l.title, at: now });
+        notify.push({ type: "new", title: l.title });
       }
       l.arts = [];
       return;
@@ -66,6 +68,8 @@ function main() {
         const touched = {}; ev.forEach((e) => { touched[e.n] = 1; });
         arts = arts.filter((x) => !touched[x.n]).concat(ev);
         nChanged += ev.length;
+        const nums = ev.map((e) => e.n).slice(0, 12);
+        notify.push({ type: "changed", title: l.title, arts: "ст. " + nums.join(", ") + (ev.length > nums.length ? " и ещё " + (ev.length - nums.length) : "") });
         l.changedAt = now;
         if (l.isNew == null) l.isNew = false;
       }
@@ -94,5 +98,20 @@ function main() {
 
   [F.plain, F.prev].forEach((f) => { try { fs.unlinkSync(f); } catch (e) {} });
   console.log(`Законов: ${cur.laws.length}; новых: ${nNew}; изменённых статей: ${nChanged}; ${wrote ? "laws.enc обновлён" : "laws.enc без изменений"}.`);
+  return notify;
 }
-main();
+
+// Оповещение в Telegram через функцию senko (нужен секрет CRON_SECRET в переменных окружения шага).
+// Сбой оповещения не ломает публикацию законов.
+async function notifyBot(items) {
+  const secret = process.env.CRON_SECRET;
+  if (!items.length || !secret) { if (items.length) console.log("CRON_SECRET не задан — оповещение в Telegram пропущено."); return; }
+  const url = process.env.SENKO_API_URL || "https://wcjspwailippjmyffkei.supabase.co/functions/v1/senko";
+  try {
+    const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", "x-senko-cron": secret }, body: JSON.stringify({ action: "laws_changed", items }), signal: AbortSignal.timeout(20000) });
+    console.log("Оповещение о законах:", r.status, await r.text());
+  } catch (e) {
+    console.warn("Оповещение о законах не отправлено:", e.message);
+  }
+}
+notifyBot(main());
