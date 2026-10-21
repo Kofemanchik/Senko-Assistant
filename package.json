@@ -1,7 +1,7 @@
 {
   "name": "boston-pamyatka",
   "productName": "Senko Assistant",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Памятка Boston — законодательство (Senko Assistant)",
   "main": "main.js",
   "author": "Boston",

@@ -245,11 +245,59 @@ async function checkForUpdate(manual) {
 // ───────────── Автообновление самой программы (установщика) ─────────────
 // Работает через GitHub Releases: electron-updater читает latest.yml из последнего релиза,
 // скачивает новый установщик в фоне и предлагает перезапуск.
+// Каждое ручное нажатие «Проверить обновления» получает ответ: найдено / скачивается / готово / последняя версия / ошибка.
+// Всё, что делает обновлятор, пишется в «%APPDATA%\Senko Assistant\updater.log».
+const RELEASES_URL = "https://github.com/Kofemanchik/Senko-Assistant/releases/latest";
 let updater = null;
 let manualCheck = false;
+let manualTimer = null;
+const upd = { state: "idle", version: "", percent: 0 };
 
 function info(message, detail) {
   return box({ type: "info", title: "Senko Assistant", message, detail, buttons: ["OK"], noLink: true });
+}
+const updLogFile = () => path.join(app.getPath("userData"), "updater.log");
+function updLog(level, ...a) {
+  try {
+    const f = updLogFile();
+    try { if (fs.statSync(f).size > 256 * 1024) fs.renameSync(f, f + ".old"); } catch (e) {}
+    fs.appendFileSync(f, `${new Date().toISOString()} ${level} ${a.map((x) => (x instanceof Error ? x.stack || x.message : typeof x === "string" ? x : JSON.stringify(x))).join(" ")}\n`);
+  } catch (e) {}
+}
+function endManual() {
+  manualCheck = false;
+  clearTimeout(manualTimer);
+}
+// Ошибка или нет ответа: показать причину и дать скачать установщик вручную
+async function updFail(message, err) {
+  const why = err ? String((err && err.message) || err).split("\n")[0].slice(0, 300) : "";
+  const r = await box({
+    type: "warning",
+    title: "Senko Assistant",
+    message,
+    detail: (why ? "Причина: " + why + "\n\n" : "") + "Новую версию можно скачать вручную со страницы релизов: установщик ставится поверх, данные сохранятся.",
+    buttons: ["Скачать вручную", "Открыть журнал", "Закрыть"],
+    defaultId: 0,
+    cancelId: 2,
+    noLink: true
+  });
+  if (r.response === 0) shell.openExternal(RELEASES_URL);
+  else if (r.response === 1) shell.openPath(updLogFile());
+}
+async function askRestart() {
+  const r = await box({
+    type: "info",
+    title: "Обновление программы",
+    message: `Новая версия Senko Assistant (${upd.version}) загружена.`,
+    detail: "Перезапустить программу и установить обновление сейчас? Заметки и настройки сохранятся.",
+    buttons: ["Перезапустить и обновить", "Позже"],
+    defaultId: 0,
+    cancelId: 1
+  });
+  if (r.response === 0 && updater) {
+    quitting = true;
+    updater.quitAndInstall(false, true);
+  } // «Позже» — обновление установится при следующем выходе из программы
 }
 
 function initUpdater() {
@@ -258,49 +306,71 @@ function initUpdater() {
     const { autoUpdater } = require("electron-updater");
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;
-    autoUpdater.logger = null;
+    autoUpdater.logger = { info: (...a) => updLog("info", ...a), warn: (...a) => updLog("warn", ...a), error: (...a) => updLog("error", ...a), debug: () => {} };
+    autoUpdater.on("checking-for-update", () => { if (upd.state !== "ready" && upd.state !== "downloading") upd.state = "checking"; });
     autoUpdater.on("update-available", (i) => {
-      if (manualCheck) info(`Найдена версия ${i.version}`, "Она скачивается в фоне. Когда загрузка закончится, программа предложит перезапуск.");
+      upd.state = "downloading"; upd.version = i.version; upd.percent = 0;
+      if (manualCheck) {
+        endManual();
+        info(`Найдена версия ${i.version}`, "Она скачивается в фоне. Когда загрузка закончится, программа предложит перезапуск.");
+      }
     });
+    autoUpdater.on("download-progress", (p) => { upd.percent = Math.round(p.percent || 0); });
     autoUpdater.on("update-not-available", () => {
-      if (manualCheck) info("У вас последняя версия программы.", `Версия ${app.getVersion()}`);
-      manualCheck = false;
+      if (upd.state === "checking") upd.state = "idle";
+      if (manualCheck) {
+        endManual();
+        info("У вас последняя версия программы.", `Версия ${app.getVersion()}`);
+      }
     });
-    autoUpdater.on("error", () => {
-      if (manualCheck) info("Не удалось проверить обновления.", "Проверьте подключение к интернету и попробуйте позже.");
-      manualCheck = false;
+    autoUpdater.on("error", (err) => {
+      updLog("error", "updater:", err);
+      if (upd.state !== "ready") upd.state = "idle";
+      if (manualCheck) {
+        endManual();
+        updFail("Не удалось проверить или скачать обновление.", err);
+      }
     });
-    autoUpdater.on("update-downloaded", async (i) => {
-      manualCheck = false;
-      const r = await box({
-        type: "info",
-        title: "Обновление программы",
-        message: `Новая версия Senko Assistant (${i.version}) загружена.`,
-        detail: "Перезапустить программу и установить обновление сейчас? Заметки и настройки сохранятся.",
-        buttons: ["Перезапустить и обновить", "Позже"],
-        defaultId: 0,
-        cancelId: 1
-      });
-      if (r.response === 0) {
-        quitting = true;
-        autoUpdater.quitAndInstall(false, true);
-      } // «Позже» — обновление установится при следующем выходе из программы
+    autoUpdater.on("update-downloaded", (i) => {
+      endManual();
+      upd.state = "ready"; upd.version = i.version; upd.percent = 100;
+      askRestart();
     });
     updater = autoUpdater;
+    updLog("info", `start ${app.getVersion()}`);
   } catch (e) {
     updater = null; // electron-updater не установлен
+    updLog("error", "electron-updater не загрузился:", e);
   }
 }
 
 function checkForAppUpdate(manual) {
   if (!updater) {
-    if (manual) info("Автообновление работает только в установленной версии программы.");
+    if (manual) updFail(app.isPackaged ? "Модуль обновлений не загрузился." : "Автообновление работает только в установленной версии программы.");
     return;
   }
-  manualCheck = !!manual;
-  updater.checkForUpdates().catch(() => {
-    if (manualCheck) info("Не удалось проверить обновления.", "Проверьте подключение к интернету и попробуйте позже.");
-    manualCheck = false;
+  if (manual) {
+    // обновление уже скачано или качается: сразу говорим, что с ним
+    if (upd.state === "ready") { askRestart(); return; }
+    if (upd.state === "downloading") {
+      info(`Скачивается версия ${upd.version}: ${upd.percent}%`, "Когда загрузка закончится, программа предложит перезапуск.");
+      return;
+    }
+    manualCheck = true;
+    clearTimeout(manualTimer);
+    manualTimer = setTimeout(() => {
+      if (!manualCheck) return;
+      endManual();
+      updFail("Проверка обновлений не ответила за 40 секунд.");
+    }, 40000);
+  }
+  // фоновая проверка не сбрасывает ручную: ответ на нажатие всё равно придёт
+  updater.checkForUpdates().catch((err) => {
+    updLog("error", "checkForUpdates:", err);
+    if (manualCheck) {
+      endManual();
+      updFail("Не удалось проверить обновления.", err);
+    }
   });
 }
 
