@@ -1,0 +1,39 @@
+name: Rekey laws
+
+# Смена ключа законов (запускать вручную: Actions → Rekey laws → Run workflow).
+# Перед запуском: секрет LAWS_KEY_NEW = новый ключ (тот же, что LAWS_KEY в Supabase).
+# После успешного запуска: замените значение секрета LAWS_KEY на новый ключ и удалите LAWS_KEY_NEW.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-laws
+  cancel-in-progress: false
+
+jobs:
+  rekey:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      LAWS_KEY: ${{ secrets.LAWS_KEY }}
+      LAWS_KEY_NEW: ${{ secrets.LAWS_KEY_NEW }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Перешифровать update/laws.enc
+        run: |
+          if [ -z "$LAWS_KEY" ] || [ -z "$LAWS_KEY_NEW" ]; then echo "::error::Нужны секреты LAWS_KEY (старый) и LAWS_KEY_NEW (новый)"; exit 1; fi
+          node scripts/laws-crypt.js rekey
+      - name: Commit
+        run: |
+          git config user.name "laws-bot"
+          git config user.email "laws-bot@users.noreply.github.com"
+          git add update/laws.enc
+          git commit -m "laws: новый ключ шифрования"
+          git pull --rebase --autostash
+          git push

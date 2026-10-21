@@ -1,39 +1,24 @@
 // Клиентская часть «Законов»: на форум сама не ходит.
 // Тексты законов GitHub Actions раз в сутки кладёт в репозиторий в ЗАШИФРОВАННОМ виде (update/laws.enc),
 // рядом лежит крошечный update/laws-status.json (время проверки и «подпись» версии, без текстов).
-// Приложение сверяет подпись и скачивает/расшифровывает файл только если версия новая.
+// Приложение сверяет подпись и, если версия новая, получает законы с сервера Senko (действие "laws"):
+// расшифровка идёт на сервере, ключа в программе нет (с 2.2.1). Нужен вход в аккаунт.
 // API прежний: start, get, sync, diagnose, login, logout, debugPath, dataPath (+ peek для синхронного чтения при старте).
 const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
-const crypto = require("crypto");
 const { net } = require("electron");
 
 const BASE = "https://raw.githubusercontent.com/Kofemanchik/Senko-Assistant/main/update/";
 const EVERY_MS = 3 * 60 * 60 * 1000;   // как часто сверять подпись версии (скачивание — только если версия новая)
 const STALE_MS = 3 * 24 * 60 * 60 * 1000; // если сервер не проверял форум дольше — предупредить: автообновление встало
-const MAGIC = Buffer.from("SLW1");
-
-function loadKey() {
-  if (process.env.LAWS_KEY) return String(process.env.LAWS_KEY);
-  for (const f of [path.join(__dirname, "laws-key.json"), path.join(process.resourcesPath || "", "laws-key.json")]) {
-    try { const j = JSON.parse(fs.readFileSync(f, "utf8")); if (j && j.key) return String(j.key); } catch (e) {}
-  }
-  return "";
-}
-function decrypt(buf, secret) {
-  if (!secret) throw new Error("в этой сборке программы нет ключа расшифровки законов — скачайте последнюю версию с GitHub Releases");
-  if (buf.length < 32 || !buf.subarray(0, 4).equals(MAGIC)) throw new Error("файл законов имеет неверный формат");
-  const d = crypto.createDecipheriv("aes-256-gcm", crypto.createHash("sha256").update(secret, "utf8").digest(), buf.subarray(4, 16));
-  d.setAuthTag(buf.subarray(16, 32));
-  return zlib.gunzipSync(Buffer.concat([d.update(buf.subarray(32)), d.final()])).toString("utf8");
-}
+const RETRY_MS = 60 * 1000;            // не вошли или нет связи: попробовать снова через минуту
 
 module.exports = function (opts) {
   const file = () => path.join(opts.dataDir(), "laws.json");
   const metaFile = () => path.join(opts.dataDir(), "laws-meta.json");
   const histDir = () => path.join(opts.dataDir(), "laws-history"); // 2.2: прошлые версии для отката (3 последние)
-  let data = null, running = false, timer = null, lastErr = "", remote = null, lastOkAt = 0, hold = 0;
+  let data = null, running = false, timer = null, retry = null, lastErr = "", remote = null, lastOkAt = 0, hold = 0;
 
   function read() {
     if (data) return data;
@@ -113,18 +98,26 @@ module.exports = function (opts) {
       const same = hold || (st && before && before.sig && st.sig === before.sig);
       let changed = false, newCh = [];
       if (!same) {
-        const enc = await getBuf(BASE + "laws.enc", 90000);
-        let j;
-        try { j = JSON.parse(decrypt(enc, loadKey())); } catch (e) { throw new Error("не удалось расшифровать файл законов (" + (e && e.message ? e.message : e) + ")"); }
-        if (!j || !Array.isArray(j.laws) || !j.laws.length) throw new Error("файл законов пустой или повреждён");
-        fs.mkdirSync(path.dirname(file()), { recursive: true });
-        keepHistory();
-        fs.writeFileSync(file() + ".tmp", JSON.stringify(j));
-        fs.renameSync(file() + ".tmp", file());
-        changed = !before || before.sig !== j.sig || before.updatedAt !== j.updatedAt;
-        const seenAt = before ? before.updatedAt || 0 : 0;
-        newCh = (j.changes || []).filter((c) => c.at > seenAt);
-        data = j;
+        const r = await opts.api({ action: "laws", sig: (before && before.sig) || "", want: (st && st.sig) || "" });
+        if (!r || !r.ok) {
+          const e = new Error((r && r.error) || "сервер не ответил");
+          e.code = r && r.code;
+          throw e;
+        }
+        // сервер ответил «та же версия» (например, если GitHub не отдал laws-status.json): ничего не меняем
+        if (!r.same) {
+          let j = null;
+          try { j = JSON.parse(zlib.gunzipSync(Buffer.from(String(r.gz || ""), "base64")).toString("utf8")); } catch (e) { throw new Error("сервер прислал повреждённый файл законов"); }
+          if (!j || !Array.isArray(j.laws) || !j.laws.length) throw new Error("файл законов пустой или повреждён");
+          fs.mkdirSync(path.dirname(file()), { recursive: true });
+          keepHistory();
+          fs.writeFileSync(file() + ".tmp", JSON.stringify(j));
+          fs.renameSync(file() + ".tmp", file());
+          changed = !before || before.sig !== j.sig || before.updatedAt !== j.updatedAt;
+          const seenAt = before ? before.updatedAt || 0 : 0;
+          newCh = (j.changes || []).filter((c) => c.at > seenAt);
+          data = j;
+        }
       }
       lastErr = ""; lastOkAt = Date.now(); saveMeta();
       running = false;
@@ -132,6 +125,8 @@ module.exports = function (opts) {
     } catch (e) {
       lastErr = "Не удалось получить законы: " + (e && e.message ? e.message : e);
       running = false;
+      // не вошли в аккаунт или нет связи: повторим чуть позже, не дожидаясь трёх часов
+      if (e && (e.code === "auth" || e.code === "network" || e.code === "server") && !retry) retry = setTimeout(() => { retry = null; sync(); }, RETRY_MS);
       opts.onUpdate && opts.onUpdate({ notify: false, changed: false, changes: [] });
     }
     return view();
@@ -151,8 +146,7 @@ module.exports = function (opts) {
     diagnose: async () => {
       const d = read();
       return [
-        "Источник: " + BASE,
-        "Ключ расшифровки: " + (loadKey() ? "есть" : "НЕТ"),
+        "Источник: " + BASE + " (версия), сервер Senko (тексты)",
         "Файл на диске: " + file() + (fs.existsSync(file()) ? "" : " (нет)"),
         "Законов: " + ((d && d.laws.length) || 0),
         "Версия данных обновлена: " + (d && d.updatedAt ? new Date(d.updatedAt).toISOString() : "—"),

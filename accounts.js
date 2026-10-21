@@ -367,9 +367,9 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
     },
 
     // Запрос к серверу от имени вошедшего пользователя (токен берётся сразу, до первого await)
-    authed(body) {
+    authed(body, timeoutMs) {
       if (!token) return Promise.resolve({ ok: false, code: "auth", error: "Нужно войти в аккаунт." });
-      return call({ ...body, token });
+      return call({ ...body, token }, timeoutMs);
     },
 
     async acceptLegal(version) {
@@ -405,9 +405,9 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
     },
 
     // Действия этапа 4: прогресс, рейтинг, смены, контрольные тесты
-    act(action, data) {
+    act(action, data, timeoutMs) {
       if (!current || !token) return Promise.resolve({ ok: false, error: "Нужно войти в аккаунт.", code: "auth" });
-      return call({ ...client(), ...(data && typeof data === "object" ? data : {}), action, token });
+      return call({ ...client(), ...(data && typeof data === "object" ? data : {}), action, token }, timeoutMs);
     },
 
     async staffList() {

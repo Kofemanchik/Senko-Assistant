@@ -27,27 +27,21 @@ jobs:
           V=$(node -p "require('./package.json').version")
           if [ "v$V" != "$GITHUB_REF_NAME" ]; then echo "package.json=$V, тег=$GITHUB_REF_NAME"; exit 1; fi
 
-      # Ключ нужен приложению, чтобы расшифровать законы из update/laws.enc.
-      - name: Ключ расшифровки законов
+      - run: npm ci
+
+      - run: npm run dist
+
+      # С 2.2.1 ключей в программе нет: законы и ИИ идут через сервер. Сборка не пройдёт, если ключ законов попал внутрь.
+      - name: Проверка, что ключей нет в сборке
         shell: bash
         env:
           LAWS_KEY: ${{ secrets.LAWS_KEY }}
         run: |
-          if [ -z "$LAWS_KEY" ]; then echo "::error::Не задан секрет LAWS_KEY"; exit 1; fi
-          node -e 'require("fs").writeFileSync("laws-key.json", JSON.stringify({ key: process.env.LAWS_KEY }))'
-
-      # Ключ доступа приложения к ИИ-прокси (на прокси он задан как APP_KEY).
-      - name: Ключ доступа к ИИ
-        shell: bash
-        env:
-          AI_KEY: ${{ secrets.AI_KEY }}
-        run: |
-          if [ -z "$AI_KEY" ]; then echo "::error::Не задан секрет AI_KEY"; exit 1; fi
-          node -e 'require("fs").writeFileSync("ai-key.json", JSON.stringify({ key: process.env.AI_KEY }))'
-
-      - run: npm ci
-
-      - run: npm run dist
+          A=dist/win-unpacked/resources/app.asar
+          if [ ! -f "$A" ]; then echo "нет $A, проверка пропущена"; exit 0; fi
+          if [ -n "$LAWS_KEY" ] && grep -qaF "$LAWS_KEY" "$A"; then echo "::error::В сборку попал ключ законов"; exit 1; fi
+          if grep -qaE '"(laws|ai)-key\.json"' "$A"; then echo "::warning::В сборке упоминается файл ключа"; fi
+          echo "ключей в сборке нет"
 
       - name: Upload installer and update metadata
         uses: actions/upload-artifact@v4

@@ -132,6 +132,8 @@ const maybeCleanup = () => (Math.random() < 0.05 ? cleanup().catch((e) => consol
 
 // ───────────── Telegram ─────────────
 async function tg(method, payload) {
+  const pid = String((payload && (payload.chat_id ?? payload.callback_query_id)) ?? "");
+  if (pid.startsWith("panel:")) return panelCapture(pid, method, payload); // ответ для панели на сайте, не в Telegram
   if (!BOT_TOKEN) return null;
   try {
     const r = await fetch(`${TG_API}/bot${BOT_TOKEN}/${method}`, {
@@ -334,7 +336,7 @@ async function register(b, ip) {
   const token = pend ? null : await newSession(p.id, !!b.remember);
   await logIn(p.id, "register", b, ip);
   maybeCleanup();
-  const ver = clean(b.ver, 20);
+  const ver = appVer(b);
   if (ver) await sql`update profiles set app_version = ${ver} where id = ${p.id}`;
 
   // Уведомление владельцу — сбой Telegram не должен ломать регистрацию
@@ -806,7 +808,7 @@ async function api(req) {
     return J(fail("Некорректный запрос."), 400);
   }
   if (!b || typeof b !== "object") return J(fail("Некорректный запрос."), 400);
-  if (b.action !== "sync" && b.action !== "xfer" && raw.length > 8192) return J(fail("Слишком большой запрос."), 413);
+  if (b.action !== "sync" && b.action !== "xfer" && !((b.action === "ai_ask" || b.action === "panel") && raw.length <= 40000) && raw.length > 8192) return J(fail("Слишком большой запрос."), 413);
   const ip = req.headers.get("cf-connecting-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
   switch (b.action) {
     case "register":
@@ -817,8 +819,14 @@ async function api(req) {
       const { p, err } = await who(b);
       if (err) return J(err);
       await noteClient(p, b);
-      return J({ ok: true, user: pub(p), sys: await sysFor(p) });
+      return J({ ok: true, user: pub(p), sys: await sysFor(p), web: { laws: !!LAWS_KEY, ai: !!AI_KEY } });
     }
+    case "laws":
+      return J(await lawsApi(b));
+    case "ai_ask":
+      return J(await aiAsk(b));
+    case "panel":
+      return J(await panelApi(b, ip, req.headers.get("user-agent") || ""));
     case "bug_report":
       return J(await bugReport(b));
     case "my_stats":
@@ -1080,9 +1088,14 @@ async function sysFor(p) {
   };
 }
 
+// Версия программы; сайт присылает «web …» и версию программы не перезаписывает
+function appVer(b) {
+  const v = clean(b && b.ver, 20);
+  return /^web/i.test(v) ? "" : v;
+}
 // Версия программы и устройство: версия для /versions, новое устройство у руководства — уведомление владельцу
 async function noteClient(p, b) {
-  const ver = clean(b.ver, 20);
+  const ver = appVer(b);
   const dev = clean(b.device, 40);
   const sql = db();
   if (ver && ver !== p.app_version) await sql`update profiles set app_version = ${ver} where id = ${p.id}`;
@@ -1196,6 +1209,11 @@ async function backupFile() {
   return { counts: { profiles: data.profiles.length, sync: data.sync_items_24h.length }, json: JSON.stringify({ v: 1, alg: "AES-256-GCM/PBKDF2-SHA256-200000", salt: b64(salt), iv: b64(iv), data: b64(ct) }) };
 }
 async function sendFile(chat, name, text, caption, type = "application/json") {
+  if (String(chat).startsWith("panel:")) {
+    const out = PANEL_OUT.get(String(chat));
+    if (out) out.push({ t: "file", name, text, caption: String(caption || ""), type });
+    return { ok: true };
+  }
   if (!BOT_TOKEN) return null;
   const fd = new FormData();
   fd.append("chat_id", String(chat));
@@ -1866,7 +1884,8 @@ const HELP_SERVICE =
   "\n<b>Сервис</b>\n" +
   "/health — статус базы, функции, ИИ и законов\n" +
   "/in &lt;срок&gt; &lt;команда&gt; — выполнить команду позже, например /in 2h unban cop1; /jobs — список\n" +
-  "/misses [дней] — что ищут в программе и не находят (по умолчанию за 7 дней); /misses del &lt;запрос&gt;|all — очистить\n";
+  "/misses [дней] — что ищут в программе и не находят (по умолчанию за 7 дней); /misses del &lt;запрос&gt;|all — очистить\n" +
+  "/panel — пароль для панели на сайте; /panel off — отключить вход в панель\n";
 const HELP_OWNER3 =
   "\n<b>Рассылки и режимы (владелец)</b>\n" +
   "/broadcast &lt;текст&gt; — сообщение всем в программе; /broadcast_org &lt;орг&gt; &lt;текст&gt;\n" +
@@ -1881,13 +1900,15 @@ const HELP_OWNER3 =
   "/backup — зашифрованная резервная копия\n" +
   "/approval on|off — приём новичков с подтверждением руководства\n" +
   "/orgreport [организация|on|off] — еженедельный отчёт руководству\n" +
-  "/ailog [дней|on|off] — вопросы к ИИ-помощнику и оценки ответов\n";
+  "/ailog [дней|on|off] — вопросы к ИИ-помощнику и оценки ответов\n" +
+  "/panel &lt;логин&gt; — пароль панели для модератора; /panel off &lt;логин&gt; — закрыть ему вход\n";
 const AUDIT_ACTIONS = [
   "ban", "unban", "tempban", "tempban_end", "autoban", "warn", "unwarn", "kick", "note", "tag", "untag",
   "role", "rename", "setstatic", "setorg", "delete", "profile_update", "password_reset", "reset_approve", "reset_reject",
   "broadcast", "maintenance", "regs", "reglimit", "blacklist", "appeal", "delay", "backup", "laws",
   "approve", "reject", "approval", "shift_start", "shift_end", "ctrl_create", "sync_reset",
   "report_create", "report_delete", "report_review",
+  "panel_login", "panel_key", "panel_revoke", "db_edit", "db_delete", "db_revert",
 ];
 
 async function findProfile(login) {
@@ -1967,7 +1988,7 @@ async function scheduleJob(a, x) {
 
 // Обычный текст (не команда): ответ владельца на сообщение об ошибке
 async function onText(m, text) {
-  const a = await actorOf(m.from.id);
+  const a = m.panelActor || (await actorOf(m.from.id));
   if (!a || a.kind !== "owner") return;
   const [pd] = await db()`delete from bot_pending where actor_tg = ${a.tg} and action = 'bugreply' and expires_at > now() returning *`;
   if (!pd) return send(m.chat.id, "Чтобы ответить на сообщение об ошибке, нажмите «Ответить» под ним. Команды: /help");
@@ -2031,7 +2052,7 @@ async function onMessage(m, opts = {}) {
   const cmd = parts[0].slice(1).split("@")[0].toLowerCase();
   const args = parts.slice(1);
   const chat = m.chat.id;
-  const a = await actorOf(m.from.id);
+  const a = m.panelActor || (await actorOf(m.from.id)); // panelActor — команда из панели на сайте
   const sql = db();
 
   if (cmd === "start" || cmd === "id" || cmd === "whoami") {
@@ -2265,10 +2286,10 @@ async function onMessage(m, opts = {}) {
       const tgArg = args[2];
       if (!p || !RANKS[rank] || (tgArg && !/^\d{3,15}$/.test(tgArg)))
         return send(chat, "Использование: /role &lt;логин&gt; &lt;user|leader|moderator|owner&gt; [telegram_id]\nПользователь должен быть зарегистрирован.");
-      if (rank === "moderator" && !tgArg && p.tg_id == null)
+      if (rank === "moderator" && !tgArg && p.tg_id == null && !a.panel)
         return send(chat, "Для модератора нужен его Telegram ID: /role " + esc(p.login) + " moderator 123456789\nID покажет бот в ответ на /start, пусть модератор напишет боту.");
       const tgNew = rank === "user" ? null : tgArg ? tgArg : p.tg_id == null ? null : String(p.tg_id);
-      return askConfirm(chat, a, "role", { id: p.id, rank, tg: tgNew }, `Выдать <b>${esc(p.login)}</b> роль: ${RANKS[p.rank]} → <b>${RANKS[rank]}</b>?${tgNew ? `\nTelegram ID: <code>${tgNew}</code>` : ""}`);
+      return askConfirm(chat, a, "role", { id: p.id, rank, tg: tgNew }, `Выдать <b>${esc(p.login)}</b> роль: ${RANKS[p.rank]} → <b>${RANKS[rank]}</b>?${tgNew ? `\nTelegram ID: <code>${tgNew}</code>` : rank === "moderator" ? "\nБез Telegram ID модератор работает только в панели на сайте." : ""}`);
     }
 
     case "delete": {
@@ -2467,6 +2488,7 @@ async function onMessage(m, opts = {}) {
 
     case "in": {
       if (opts.confirmed) return send(chat, "Отложенная команда не может создавать новые.");
+      if (!/^\d+$/.test(a.tg)) return send(chat, "Отложенные команды работают только у тех, к кому привязан Telegram: результат приходит туда.");
       const ms = parseDur(args[0]);
       const command = text.replace(/^\/\S+\s+\S+\s*/, "").trim();
       const sub = (command.match(/^\/?(\S+)/) || [])[1];
@@ -2656,6 +2678,9 @@ async function onMessage(m, opts = {}) {
       return send(chat, (await aiStatsText(days)) + "\n\n/ailog 30 — за 30 дней · /ailog off|on · в группу: добавьте бота в группу и напишите там /ailog here");
     }
 
+    case "panel":
+      return panelCmd(chat, a, args);
+
     case "health":
       return send(chat, await healthText());
 
@@ -2674,7 +2699,7 @@ async function onMessage(m, opts = {}) {
 
 async function onCallback(cb) {
   const answer = (text, alert = false) => tg("answerCallbackQuery", { callback_query_id: cb.id, text, show_alert: alert });
-  const a = cb.from ? await actorOf(cb.from.id) : null;
+  const a = cb.panelActor || (cb.from ? await actorOf(cb.from.id) : null);
   if (!a) return answer("Нет доступа.", true);
   const data = String(cb.data || "");
   const chat = cb.message && cb.message.chat ? cb.message.chat.id : null;
@@ -2936,14 +2961,618 @@ async function setup(url) {
       { command: "misses", description: "Поиски без результата" },
       { command: "in", description: "Отложенная команда" },
       { command: "jobs", description: "Отложенные команды" },
+      { command: "panel", description: "Пароль для панели на сайте" },
     ],
   });
   return J({ ok: !!(hook && hook.ok), webhook: SELF_URL, telegram: hook });
 }
 
-// ───────────── Точка входа ─────────────
-Deno.serve(async (req) => {
+// ───────────── Панель владельца и модератора на сайте (/panel/) ─────────────
+// Вход: логин и пароль аккаунта + отдельный пароль панели из 32 знаков (его выдаёт бот: /panel).
+// В базе только хэши. Действия панели выполняют те же функции, что и команды бота:
+// ответы бота для «чата» panel:… не уходят в Telegram, а возвращаются в браузер (см. tg() и sendFile()).
+// Секрет SITE_URL (необязательно): адрес сайта, если он не https://senko-assistant.pages.dev
+const SITE_URL = String(Deno.env.get("SITE_URL") || "https://senko-assistant.pages.dev").replace(/\/+$/, "");
+const PANEL_HOURS = 12; // сессия панели живёт не дольше 12 часов
+const PANEL_IDLE_MIN = 120; // и закрывается после 2 часов без действий
+const PANEL_RANKS = ["owner", "moderator"];
+const PANEL_OUT = new Map(); // panel:<id> → ответы бота за один запрос
+
+function panelCapture(pid, method, p) {
+  const out = PANEL_OUT.get(pid);
+  if (out && method === "sendMessage") {
+    const kb = (p.reply_markup && p.reply_markup.inline_keyboard) || [];
+    const buttons = kb
+      .map((row) => row.filter((x) => x && (x.callback_data || /^https:\/\//.test(x.url || ""))).map((x) => (x.callback_data ? { text: String(x.text), data: String(x.callback_data) } : { text: String(x.text), url: String(x.url) })))
+      .filter((r) => r.length);
+    out.push({ t: "msg", html: String(p.text || ""), buttons });
+  } else if (out && method === "answerCallbackQuery" && p.text) out.push({ t: "toast", text: String(p.text), alert: !!p.show_alert });
+  return { ok: true, result: { message_id: 0 } };
+}
+async function panelRun(fn) {
+  const pid = "panel:" + rand(8);
+  const out = [];
+  PANEL_OUT.set(pid, out);
   try {
+    await fn(pid);
+  } finally {
+    PANEL_OUT.delete(pid);
+  }
+  return out;
+}
+function panelActor(p) {
+  if (p.rank === "owner") return { kind: "owner", tg: OWNER_TG || "web:" + p.login_lc, label: "owner", profile: p, panel: true };
+  if (p.rank === "moderator") return { kind: "moderator", tg: p.tg_id != null ? String(p.tg_id) : "web:" + p.login_lc, label: "moderator:" + p.login, profile: p, panel: true };
+  return null;
+}
+function newPanelKey() {
+  const a = new Uint8Array(32);
+  crypto.getRandomValues(a);
+  return [...a].map((b) => CODE_ALPH[b & 31]).join(""); // 32 знака по 5 бит = 160 бит
+}
+function browserName(ua) {
+  const u = String(ua || "");
+  const b = /Edg\//.test(u) ? "Edge" : /OPR\/|Opera/.test(u) ? "Opera" : /YaBrowser/.test(u) ? "Яндекс Браузер" : /Firefox\//.test(u) ? "Firefox" : /Chrome\//.test(u) ? "Chrome" : /Safari\//.test(u) ? "Safari" : "браузер";
+  const os = /Windows/.test(u) ? "Windows" : /Android/.test(u) ? "Android" : /iPhone|iPad/.test(u) ? "iOS" : /Mac OS/.test(u) ? "macOS" : /Linux/.test(u) ? "Linux" : "";
+  return b + (os ? ", " + os : "");
+}
+
+// Новый пароль панели: старый перестаёт работать, открытые панели закрываются
+async function panelIssue(p, by) {
+  const sql = db();
+  const key = newPanelKey();
+  await sql`insert into panel_keys (user_id, key_hash, created_by) values (${p.id}, ${await sha256(key)}, ${by})
+            on conflict (user_id) do update set key_hash = excluded.key_hash, created_at = now(), created_by = excluded.created_by, last_used_at = null`;
+  await sql`delete from panel_sessions where user_id = ${p.id}`;
+  await audit(by, "panel_key", p.login, {});
+  return key;
+}
+async function panelRevoke(p, by) {
+  const sql = db();
+  const r = await sql`delete from panel_keys where user_id = ${p.id} returning user_id`;
+  await sql`delete from panel_sessions where user_id = ${p.id}`;
+  if (r.length) await audit(by, "panel_revoke", p.login, {});
+  return r.length > 0;
+}
+const panelKeyText = (p, key) =>
+  `🛡 <b>Пароль панели для ${esc(p.login)}</b>\n<tg-spoiler><code>${key}</code></tg-spoiler>\n\n` +
+  `Вход: ${SITE_URL}/panel/ — логин и пароль аккаунта плюс этот пароль. Старый пароль панели больше не работает.\n` +
+  `Никому не пересылайте его. Сохраните в менеджере паролей и удалите это сообщение.`;
+
+// Аккаунт владельца для /panel: привязанный к OWNER_TG_ID или единственный с ролью «Владелец»
+async function ownerProfile() {
+  const sql = db();
+  if (OWNER_TG && /^\d+$/.test(OWNER_TG)) {
+    const [p] = await sql`select * from profiles where rank = 'owner' and tg_id = ${OWNER_TG}`;
+    if (p) return p;
+  }
+  const rows = await sql`select * from profiles where rank = 'owner' limit 2`;
+  return rows.length === 1 ? rows[0] : null;
+}
+
+// /panel — пароль для панели на сайте (владелец и модераторы)
+async function panelCmd(chat, a, args) {
+  if (a.panel) return send(chat, "Пароли панели выдаются в Telegram (/panel) или в панели: «Роли и доступ».");
+  const owner = a.kind === "owner";
+  const v = String(args[0] || "").toLowerCase();
+  const off = v === "off";
+  const login = off ? args[1] : args[0];
+  let p;
+  if (login) {
+    if (!owner) return send(chat, "Пароль панели другим выдаёт только владелец. Свой пароль: /panel");
+    p = await findProfile(login);
+    if (!p) return send(chat, "Пользователь не найден.");
+  } else p = owner ? await ownerProfile() : a.profile;
+  if (!p)
+    return send(chat, "Не нашёл ваш аккаунт с ролью «Владелец». Привяжите его: /role &lt;ваш логин&gt; owner " + esc(OWNER_TG) + " — или укажите логин: /panel &lt;логин&gt;");
+  if (off) {
+    const had = await panelRevoke(p, a.label);
+    return send(chat, had ? `✅ Вход в панель для <b>${esc(p.login)}</b> закрыт, открытые панели завершены.` : "Пароля панели у этого аккаунта нет.");
+  }
+  if (!PANEL_RANKS.includes(p.rank)) return send(chat, `Панель доступна владельцу и модераторам. У <b>${esc(p.login)}</b> роль «${RANKS[p.rank]}». Выдать роль: /role`);
+  if (!(await hit(`pk:${p.id}`, 6, 3600))) return send(chat, RATE_MSG);
+  const key = await panelIssue(p, a.label);
+  const to = p.tg_id != null ? String(p.tg_id) : "";
+  if (to && to !== String(chat)) {
+    const r = await send(to, panelKeyText(p, key));
+    if (r && r.ok) return send(chat, `✅ Новый пароль панели отправлен <b>${esc(p.login)}</b> в Telegram.`);
+  }
+  return send(chat, panelKeyText(p, key) + (p.id !== (a.profile && a.profile.id) && !(owner && p.rank === "owner") ? "\n\nПередайте пароль модератору лично." : ""));
+}
+
+// Сессия панели: {p, a} или {err}
+async function pwho(b, ownerOnly = false) {
+  const t = b.ptoken;
+  if (typeof t !== "string" || !/^[0-9a-f]{64}$/.test(t)) return { err: fail("Войдите в панель.", { code: "auth" }) };
+  const sql = db();
+  const th = await sha256(t);
+  const [s] = await sql`select * from panel_sessions where token_hash = ${th} and expires_at > now()`;
+  if (!s || Date.now() - new Date(s.last_at).getTime() > PANEL_IDLE_MIN * 60e3) {
+    if (s) await sql`delete from panel_sessions where token_hash = ${th}`;
+    return { err: fail("Сессия панели закончилась. Войдите заново.", { code: "auth" }) };
+  }
+  const p = await liftExpiredBan(await profileById(s.user_id));
+  if (!p || p.banned || !PANEL_RANKS.includes(p.rank)) {
+    await sql`delete from panel_sessions where user_id = ${s.user_id}`;
+    return { err: fail("Доступ к панели закрыт.", { code: "auth" }) };
+  }
+  if (Date.now() - new Date(s.last_at).getTime() > 60e3) await sql`update panel_sessions set last_at = now() where token_hash = ${th}`;
+  const a = panelActor(p);
+  if (ownerOnly && a.kind !== "owner") return { err: fail("Это доступно только владельцу.", { code: "forbidden" }) };
+  return { p, a, th };
+}
+const panelMe = (p, a) => ({ login: p.login, nick: p.nick, rank: p.rank, rankName: RANKS[p.rank], kind: a.kind, owner: a.kind === "owner", tg: p.tg_id != null || a.kind === "owner" && !!OWNER_TG, idleMin: PANEL_IDLE_MIN });
+
+async function panelLogin(b, ip, ua) {
+  const lc = clean(b.login, 24).toLowerCase();
+  const pass = String(b.password == null ? "" : b.password);
+  const key = normCode(b.key);
+  if (!lc || !pass || !key) return fail("Введите логин, пароль аккаунта и пароль панели.");
+  if (!(await hit(`pip:${ip}`, 12, 900)) || !(await hit(`pl:${lc}`, 8, 3600))) return fail(RATE_MSG, { code: "rate" });
+  const sql = db();
+  const p = await liftExpiredBan((await sql`select * from profiles where login_lc = ${lc}`)[0] || null);
+  let passOk = false;
+  if (p) [{ ok: passOk }] = await sql`select extensions.crypt(${pass}, ${p.pass_hash}) = ${p.pass_hash} as ok`;
+  else await sql`select extensions.crypt(${pass}, ${DUMMY_SALT})`;
+  const [k] = p ? await sql`select key_hash from panel_keys where user_id = ${p.id}` : [];
+  const keyOk = !!k && safeEq(await sha256(key), k.key_hash);
+  const where = `IP ${ipShort(ip) || "неизвестен"}, ${browserName(ua)}`;
+  if (!p || !passOk || !keyOk || !PANEL_RANKS.includes(p.rank)) {
+    if (p) await logIn(p.id, "fail", { ver: "панель", os: browserName(ua) }, ip);
+    if (p && PANEL_RANKS.includes(p.rank)) {
+      const n = await hitN(`plf:${lc}`, 3600);
+      if (n === 3 || n === 8) await send(OWNER_TG, `⚠️ ${n} неудачных попыток входа в панель: <b>${esc(p.login)}</b> (${RANKS[p.rank]})\n${esc(where)}${passOk ? "\nПароль аккаунта был верным, ошибка в пароле панели." : ""}`);
+    }
+    return fail("Неверный логин, пароль или пароль панели.");
+  }
+  if (p.banned) return fail(banMsg(p), { code: "banned" });
+  await sql`delete from rate_limits where key = ${"pl:" + lc} or key = ${"plf:" + lc}`;
+  await sql`delete from panel_sessions where expires_at < now() or last_at < now() - make_interval(mins => ${PANEL_IDLE_MIN})`;
+  const token = rand(32);
+  await sql`insert into panel_sessions (token_hash, user_id, expires_at, ip, ua)
+            values (${await sha256(token)}, ${p.id}, now() + make_interval(hours => ${PANEL_HOURS}), ${ipShort(ip)}, ${clean(browserName(ua), 60)})`;
+  await sql`update panel_keys set last_used_at = now() where user_id = ${p.id}`;
+  const a = panelActor(p);
+  await audit(a.label, "panel_login", p.login, { ip: ipShort(ip), ua: browserName(ua) });
+  await logIn(p.id, "login", { ver: "панель", os: browserName(ua) }, ip);
+  const msg = `🛡 <b>Вход в панель</b>: ${esc(p.login)} (${RANKS[p.rank]})\n${esc(where)}, ${fmtDate(new Date())}`;
+  if (OWNER_TG) await send(OWNER_TG, msg + `\nЕсли это были не вы: /panel off ${esc(p.login)}`);
+  if (p.rank === "moderator" && p.tg_id != null) await send(String(p.tg_id), msg + "\nЕсли это были не вы, напишите владельцу и смените пароль: /panel");
+  return { ok: true, ptoken: token, me: panelMe(p, a) };
+}
+
+// Редактор базы (только владелец): какие таблицы и поля можно менять.
+// Роль и Telegram ID меняются только через /role (с подтверждением), пароли и сессии не видны вовсе.
+const PANEL_DB = {
+  profiles: { title: "Пользователи", key: "id", order: "created_at", search: ["login", "nick", "static_id", "discord"], hide: ["pass_hash", "devices", "login_lc"],
+    cols: { nick: "text", static_id: "text", org: DEPTS, dept: "text", game_role: ["off", "pros", "adv"], discord: "text", telegram: "text", phone: "text", tags: "tags", contacts_open: "tags", approval: ["ok", "pending", "rejected"], banned: "bool", ban_reason: "text", banned_until: "time", app_version: "text" } },
+  bot_settings: { title: "Настройки бота", key: "key", order: "updated_at", search: ["key"], cols: { value: "json" }, del: true },
+  broadcasts: { title: "Сообщения в программе", key: "id", order: "id", search: ["title", "text", "author", "org"], cols: { title: "text", text: "long", org: "text", expires_at: "time" }, del: true },
+  account_notes: { title: "Заметки к аккаунтам", key: "id", order: "id", search: ["text", "author"], cols: { text: "long" }, del: true, user: true },
+  account_warns: { title: "Предупреждения", key: "id", order: "id", search: ["reason", "author"], cols: { reason: "text" }, del: true, user: true },
+  bug_reports: { title: "Сообщения об ошибках", key: "id", order: "id", search: ["text", "app_version"], hide: ["log"], cols: { answered: "bool" }, del: true, user: true },
+  reports: { title: "Рапорты", key: "id", order: "id", search: ["title", "author", "login", "org", "body"], cols: { title: "text", status: ["new", "ok", "no"], reviewer: "text", review_note: "text" }, del: true },
+  shares: { title: "Ссылки «Поделиться»", key: "code", order: "created_at", search: ["code", "title", "author"], cols: { title: "text" }, del: true },
+  search_misses: { title: "Поиски без результата", key: "q", order: "last_at", search: ["q"], cols: { n: "int" }, del: true },
+  bot_delayed: { title: "Отложенные команды", key: "id", order: "run_at", search: ["command", "actor_label"], cols: { command: "text", run_at: "time" }, del: true },
+  achievements: { title: "Достижения", key: null, order: "at", search: ["code"], cols: {}, user: true },
+  login_log: { title: "Журнал входов", key: null, order: "at", search: ["kind", "ver", "os", "ip"], cols: {}, user: true },
+};
+const pick = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));
+function dbValue(type, v) {
+  if (Array.isArray(type)) return type.includes(v) ? { v } : { e: "значение из списка: " + type.join(", ") };
+  switch (type) {
+    case "text": return { v: clean(v, 500) };
+    case "long": return { v: String(v == null ? "" : v).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").trim().slice(0, 3000) };
+    case "bool": return typeof v === "boolean" ? { v } : { e: "да или нет" };
+    case "int": return Number.isInteger(v) && v >= 0 && v < 1e9 ? { v } : { e: "целое число" };
+    case "tags": return Array.isArray(v) ? { v: [...new Set(v.map(normTag).filter(Boolean))].slice(0, 20) } : { e: "список" };
+    case "time": {
+      if (v == null || v === "") return { v: null };
+      const d = new Date(v);
+      return isNaN(d.getTime()) ? { e: "дата и время" } : { v: d };
+    }
+    case "json": {
+      try {
+        const j = typeof v === "string" ? JSON.parse(v) : v;
+        return JSON.stringify(j).length <= 20000 ? { v: j } : { e: "слишком большое значение" };
+      } catch (e) {
+        return { e: "некорректный JSON" };
+      }
+    }
+  }
+  return { e: "поле нельзя менять" };
+}
+const dbRow = (t, r) => {
+  const o = { ...r };
+  for (const h of t.hide || []) delete o[h];
+  return o;
+};
+
+async function panelDb(b, a) {
+  const sql = db();
+  const t = Object.hasOwn(PANEL_DB, String(b.table)) ? PANEL_DB[b.table] : null;
+  if (b.op === "db_tables") {
+    const out = [];
+    for (const [name, x] of Object.entries(PANEL_DB)) {
+      const [{ n }] = await sql`select count(*)::int n from ${sql(name)}`;
+      out.push({ name, title: x.title, rows: n, key: x.key, edit: Object.keys(x.cols), types: x.cols, del: !!x.del });
+    }
+    return { ok: true, tables: out };
+  }
+  if (!t) return fail("Нет такой таблицы.");
+  if (b.op === "db_rows") {
+    const q = clean(b.q, 60);
+    const page = Math.max(0, Math.min(1000, parseInt(b.page, 10) || 0));
+    const like = "%" + likeEsc(q) + "%";
+    const col = (c) => (t.user ? sql`x.${sql(c)}` : sql(c));
+    const cond = q ? t.search.map((c) => sql`${col(c)}::text ilike ${like}`).reduce((x, y) => sql`${x} or ${y}`) : sql`true`;
+    const rows = t.user
+      ? await sql`select x.*, p.login as user_login from ${sql(b.table)} x left join profiles p on p.id = x.user_id where ${cond} order by x.${sql(t.order)} desc nulls last limit 51 offset ${page * 50}`
+      : await sql`select * from ${sql(b.table)} where ${cond} order by ${sql(t.order)} desc nulls last limit 51 offset ${page * 50}`;
+    return { ok: true, rows: rows.slice(0, 50).map((r) => dbRow(t, r)), more: rows.length > 50, page };
+  }
+  if (!t.key) return fail("Эту таблицу можно только смотреть.");
+  const key = String(b.key == null ? "" : b.key).slice(0, 200);
+  if (t.key === "id" && b.table === "profiles" ? !UUID_RE.test(key) : t.key === "id" && !/^\d{1,18}$/.test(key)) return fail("Некорректная запись.");
+  const [before] = await sql`select * from ${sql(b.table)} where ${sql(t.key)} = ${key}`;
+  if (!before) return fail("Запись не найдена (её могли удалить).");
+  if (b.op === "db_save") {
+    const vals = b.values && typeof b.values === "object" ? b.values : {};
+    const set = {};
+    for (const [c, v] of Object.entries(vals)) {
+      if (!Object.hasOwn(t.cols, c)) return fail(`Поле «${String(c).slice(0, 40)}» менять нельзя.`);
+      const r = dbValue(t.cols[c], v);
+      if (r.e) return fail(`Поле «${c}»: ${r.e}.`);
+      set[c] = r.v;
+    }
+    const cols = Object.keys(set).filter((c) => JSON.stringify(set[c]) !== JSON.stringify(before[c] instanceof Date ? before[c].toISOString() : before[c]));
+    if (!cols.length) return { ok: true, row: dbRow(t, before), changed: 0 };
+    if (b.table === "profiles" && (("nick" in set && !set.nick) || ("static_id" in set && !set.static_id))) return fail("Ник и статик не могут быть пустыми.");
+    if (b.table === "profiles" && before.rank === "owner" && cols.includes("banned") && set.banned) return fail("Владельца заблокировать нельзя.");
+    for (const c of cols) if (t.cols[c] === "json") set[c] = sql.json(set[c]);
+    const [after] = await sql`update ${sql(b.table)} set ${sql(set, cols)} where ${sql(t.key)} = ${key} returning *`;
+    await audit(a.label, "db_edit", `${b.table}:${key}`, { table: b.table, key, before: pick(before, cols), after: pick(after, cols), who: before.login || before.user_id || null });
+    return { ok: true, row: dbRow(t, after), changed: cols.length };
+  }
+  if (b.op === "db_delete") {
+    if (!t.del) return fail("Из этой таблицы удалять нельзя. Аккаунт удаляется командой /delete.");
+    await sql`delete from ${sql(b.table)} where ${sql(t.key)} = ${key}`;
+    await audit(a.label, "db_delete", `${b.table}:${key}`, { table: b.table, key, row: dbRow(t, before) });
+    return { ok: true };
+  }
+  return fail("Неизвестное действие.");
+}
+// Вернуть значения полей, как они были до правки в редакторе базы (по записи журнала)
+async function panelRevert(b, a) {
+  const sql = db();
+  const id = parseInt(b.id, 10);
+  const [e] = id ? await sql`select * from audit_log where id = ${id} and action = 'db_edit'` : [];
+  if (!e || !e.details || !Object.hasOwn(PANEL_DB, String(e.details.table))) return fail("Это изменение нельзя вернуть.");
+  const t = PANEL_DB[e.details.table];
+  const back = {};
+  for (const [c, v] of Object.entries(e.details.before || {}))
+    if (Object.hasOwn(t.cols, c)) back[c] = t.cols[c] === "time" && v ? new Date(v) : t.cols[c] === "json" ? sql.json(v) : v;
+  const cols = Object.keys(back);
+  if (!cols.length) return fail("Нечего возвращать.");
+  const [row] = await sql`update ${sql(e.details.table)} set ${sql(back, cols)} where ${sql(t.key)} = ${e.details.key} returning *`;
+  if (!row) return fail("Запись уже удалена.");
+  await audit(a.label, "db_revert", e.target, { from: id, values: e.details.before });
+  return { ok: true, row: dbRow(t, row) };
+}
+
+async function panelDash(a) {
+  const sql = db();
+  const [u] = await sql`select count(*)::int total,
+      count(*) filter (where last_seen > now() - interval '1 hour')::int online,
+      count(*) filter (where last_seen > now() - interval '1 day')::int today,
+      count(*) filter (where created_at > now() - interval '7 days')::int week,
+      count(*) filter (where banned)::int banned,
+      count(*) filter (where approval = 'pending')::int pending,
+      count(*) filter (where rank = 'moderator')::int mods,
+      count(*) filter (where rank = 'leader')::int leaders from profiles`;
+  const orgs = await sql`select org, count(*)::int n, count(*) filter (where last_seen > now() - interval '7 days')::int active from profiles group by org order by n desc`;
+  const [{ resets }] = await sql`select count(*)::int resets from reset_requests where status = 'pending' and expires_at > now()`;
+  const [{ bugs }] = await sql`select count(*)::int bugs from bug_reports where not answered`;
+  const [{ reports }] = await sql`select count(*)::int reports from reports where status = 'new'`;
+  const [{ notices }] = await sql`select count(*)::int notices from broadcasts where expires_at > now() and user_id is null`;
+  const days = await sql`select to_char(date_trunc('day', created_at + interval '3 hours'), 'DD.MM') d, count(*)::int n from profiles
+                         where created_at > now() - interval '14 days' group by 1 order by min(created_at)`;
+  const modes = {
+    maintenance: await getSetting("maintenance", { on: false }),
+    regs: await getSetting("regs", { open: true, limit: 0 }),
+    approval: await getSetting("approval", { on: false }),
+    summary: await getSetting("summary", null),
+    orgreport: await getSetting("orgreport", {}),
+    ailog: await getSetting("ailog", { on: true }),
+    appeal: await getSetting("appeal", null),
+    blacklist: await getSetting("blacklist", []),
+  };
+  return { ok: true, users: u, orgs, resets, bugs, reports, notices, days, modes: a.kind === "owner" ? modes : { maintenance: modes.maintenance, approval: modes.approval, regs: modes.regs } };
+}
+
+async function panelUsers(b, a) {
+  const sql = db();
+  const q = clean(b.q, 40);
+  const page = Math.max(0, Math.min(1000, parseInt(b.page, 10) || 0));
+  const like = "%" + likeEsc(q.replace(/^#/, "")) + "%";
+  const conds = [sql`true`];
+  if (q.startsWith("#")) conds.push(sql`${normTag(q)} = any(tags)`);
+  else if (q) conds.push(a.kind === "owner"
+    ? sql`(login ilike ${like} or nick ilike ${like} or static_id ilike ${like} or discord ilike ${like} or telegram ilike ${like})`
+    : sql`(login ilike ${like} or nick ilike ${like} or static_id ilike ${like} or discord ilike ${like})`);
+  if (RANKS[b.rank]) conds.push(sql`rank = ${b.rank}`);
+  if (DEPTS.includes(b.org)) conds.push(sql`org = ${b.org}`);
+  if (b.state === "banned") conds.push(sql`banned`);
+  if (b.state === "pending") conds.push(sql`approval <> 'ok'`);
+  if (b.state === "online") conds.push(sql`last_seen > now() - interval '1 hour'`);
+  const where = conds.reduce((x, y) => sql`${x} and ${y}`);
+  const order = b.sort === "seen" ? sql`last_seen desc nulls last` : b.sort === "login" ? sql`login_lc` : sql`created_at desc`;
+  const rows = await sql`select id, login, nick, static_id, org, rank, banned, banned_until, approval, tags, app_version, created_at, last_seen, tg_id is not null as has_tg,
+                           (select count(*)::int from account_warns w where w.user_id = profiles.id) warns
+                         from profiles where ${where} order by ${order} limit 41 offset ${page * 40}`;
+  const [{ n }] = await sql`select count(*)::int n from profiles where ${where}`;
+  return { ok: true, rows: rows.slice(0, 40), more: rows.length > 40, page, total: n };
+}
+
+async function panelUser(b, a) {
+  const p = await findProfile(String(b.login || ""));
+  if (!p) return fail("Пользователь не найден.");
+  const sql = db();
+  const owner = a.kind === "owner";
+  const [k] = await sql`select created_at, last_used_at from panel_keys where user_id = ${p.id}`;
+  const logins = owner ? await sql`select at, kind, ver, os, ip from login_log where user_id = ${p.id} order by at desc limit 10` : [];
+  const [{ sessions }] = await sql`select count(*)::int sessions from sessions where user_id = ${p.id} and expires_at > now()`;
+  return {
+    ok: true,
+    html: await fullCard(p, a.kind),
+    user: { login: p.login, nick: p.nick, static: p.static_id, org: p.org, rank: p.rank, rankName: RANKS[p.rank], banned: p.banned, approval: p.approval, tags: p.tags || [], hasTg: p.tg_id != null, self: p.id === a.profile.id },
+    touch: canTouch(a, p) || "",
+    panelKey: owner && k ? { created: k.created_at, used: k.last_used_at } : null,
+    logins,
+    sessions,
+  };
+}
+
+async function panelStaff(a) {
+  const sql = db();
+  const rows = await sql`select p.login, p.nick, p.org, p.rank, p.tg_id is not null as has_tg, p.last_seen, k.created_at as key_at, k.last_used_at as key_used,
+                           (select count(*)::int from panel_sessions s where s.user_id = p.id and s.expires_at > now()) as panels
+                         from profiles p left join panel_keys k on k.user_id = p.id
+                         where p.rank in ('owner','moderator','leader') order by array_position(array['owner','moderator','leader'], p.rank), p.org, p.login_lc`;
+  return { ok: true, rows: rows.map((r) => (a.kind === "owner" ? r : { ...r, key_at: null, key_used: null, panels: null })), site: SITE_URL };
+}
+
+async function panelApi(b, ip, ua) {
+  const op = String(b.op || "");
+  if (op === "login") return panelLogin(b, ip, ua);
+  const owners = ["audit", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert"];
+  const { p, a, th, err } = await pwho(b, owners.includes(op));
+  if (err) return err;
+  const sql = db();
+  if (!(await hit(`pa:${p.id}`, 300, 600))) return fail(RATE_MSG, { code: "rate" });
+  switch (op) {
+    case "me":
+      return { ok: true, me: panelMe(p, a) };
+    case "logout":
+      await sql`delete from panel_sessions where ${b.all ? sql`user_id = ${p.id}` : sql`token_hash = ${th}`}`;
+      return { ok: true };
+    case "dash":
+      return panelDash(a);
+    case "health":
+      return { ok: true, html: await healthText() };
+    case "users":
+      return panelUsers(b, a);
+    case "user":
+      return panelUser(b, a);
+    case "staff":
+      return panelStaff(a);
+    case "cmd": {
+      const text = String(b.text == null ? "" : b.text).replace(/\r/g, "").trim().slice(0, 1600);
+      if (!/^\/[a-z_]{2,20}\b/i.test(text)) return fail("Команда начинается с «/», например /help.");
+      const out = await panelRun((pid) => onMessage({ from: { id: a.tg }, chat: { id: pid, type: "private" }, text, panelActor: a }));
+      return { ok: true, out };
+    }
+    case "cb": {
+      const data = String(b.data || "").slice(0, 64);
+      if (!/^[a-z]{2}:[\w:-]+$/i.test(data)) return fail("Некорректная кнопка.");
+      const out = await panelRun((pid) => onCallback({ id: pid, from: { id: a.tg }, data, message: { chat: { id: pid }, message_id: 0 }, panelActor: a }));
+      return { ok: true, out };
+    }
+    case "audit": {
+      const q = clean(b.q, 40);
+      const page = Math.max(0, Math.min(1000, parseInt(b.page, 10) || 0));
+      const like = "%" + likeEsc(q) + "%";
+      const rows = q
+        ? await sql`select * from audit_log where action = ${q} or target ilike ${like} or actor ilike ${like} order by id desc limit 51 offset ${page * 50}`
+        : await sql`select * from audit_log order by id desc limit 51 offset ${page * 50}`;
+      return { ok: true, rows: rows.slice(0, 50), more: rows.length > 50, page, actions: AUDIT_ACTIONS };
+    }
+    case "bugs": {
+      const rows = await sql`select b.id, b.user_id, b.text, b.app_version, b.answered, b.at, length(b.log)::int as log_len, p.login, p.nick, p.org
+                             from bug_reports b left join profiles p on p.id = b.user_id
+                             where ${b.all ? sql`true` : sql`not b.answered`} order by b.id desc limit 50`;
+      return { ok: true, rows };
+    }
+    case "bug_log": {
+      const [bug] = await sql`select id, log from bug_reports where id = ${parseInt(b.id, 10) || 0}`;
+      return bug ? { ok: true, name: `senko-log-${bug.id}.txt`, text: bug.log || "" } : fail("Сообщение об ошибке не найдено.");
+    }
+    case "bug_reply": {
+      const body = String(b.text == null ? "" : b.text).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").trim().slice(0, 1500);
+      const [bug] = await sql`select * from bug_reports where id = ${parseInt(b.id, 10) || 0}`;
+      if (!bug) return fail("Сообщение об ошибке не найдено.");
+      if (!body) return fail("Напишите ответ.");
+      await sql`insert into broadcasts (user_id, title, author, text, expires_at)
+                values (${bug.user_id}, ${"Ответ на ваше сообщение об ошибке №" + bug.id}, ${a.label}, ${body}, now() + interval '30 days')`;
+      await sql`update bug_reports set answered = true where id = ${bug.id}`;
+      return { ok: true };
+    }
+    case "staff_key": {
+      const t = await findProfile(String(b.login || ""));
+      if (!t) return fail("Пользователь не найден.");
+      if (!PANEL_RANKS.includes(t.rank)) return fail("Панель доступна только владельцу и модераторам.");
+      if (!(await hit(`pk:${t.id}`, 6, 3600))) return fail(RATE_MSG, { code: "rate" });
+      const key = await panelIssue(t, a.label);
+      if (t.id !== p.id && t.tg_id != null) {
+        const r = await send(String(t.tg_id), panelKeyText(t, key));
+        if (r && r.ok) return { ok: true, sent: true };
+      }
+      if (t.id === p.id) await sql`insert into panel_sessions (token_hash, user_id, expires_at, ip, ua) values (${th}, ${p.id}, now() + make_interval(hours => ${PANEL_HOURS}), ${ipShort(ip)}, ${clean(browserName(ua), 60)}) on conflict do nothing`;
+      return { ok: true, key, self: t.id === p.id };
+    }
+    case "staff_revoke": {
+      const t = await findProfile(String(b.login || ""));
+      if (!t) return fail("Пользователь не найден.");
+      if (t.id === p.id) return fail("Свой вход закрывается командой /panel off в боте.");
+      return { ok: true, had: await panelRevoke(t, a.label) };
+    }
+    case "db_tables":
+    case "db_rows":
+    case "db_save":
+    case "db_delete":
+      return panelDb(b, a);
+    case "db_revert":
+      return panelRevert(b, a);
+  }
+  return fail("Неизвестное действие панели.");
+}
+
+// ───────────── Точка входа ─────────────
+// ───────────── Законы и ИИ для программы и сайта (ключи только здесь), запросы из браузера ─────────────
+// Секреты (Edge Functions → Secrets). С 2.2.1 ключей нет ни в программе, ни на сайте, оба ходят сюда:
+//   LAWS_KEY   ключ расшифровки законов, тот же, что секрет LAWS_KEY на GitHub (им шифрует sync-laws)
+//   AI_KEY     ключ доступа к ИИ-прокси, тот же, что APP_KEY (или WEB_KEY) у Worker
+//   SITE_ORIGINS  необязательно: адреса сайта через запятую, если он не на senko-assistant.pages.dev
+const LAWS_KEY = Deno.env.get("LAWS_KEY") || "";
+const AI_KEY = Deno.env.get("AI_KEY") || "";
+const AI_URL = (Deno.env.get("AI_URL") || "https://senko-ai.senko-assistant.workers.dev").replace(/\/+$/, "");
+const LAWS_BASE = Deno.env.get("LAWS_BASE") || "https://raw.githubusercontent.com/Kofemanchik/Senko-Assistant/main/update/";
+const SITE_ORIGINS = ["https://senko-assistant.pages.dev", ...String(Deno.env.get("SITE_ORIGINS") || "").split(",").map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean)];
+
+function corsOrigin(req) {
+  const o = String(req.headers.get("origin") || "");
+  if (!o) return "";
+  if (SITE_ORIGINS.includes(o)) return o;
+  if (/^https:\/\/[a-z0-9-]+\.senko-assistant\.pages\.dev$/.test(o)) return o; // предпросмотр веток в Cloudflare Pages
+  return "";
+}
+function withCors(req, res) {
+  const o = corsOrigin(req);
+  if (!o) return res;
+  try {
+    res.headers.set("access-control-allow-origin", o);
+    res.headers.set("vary", "origin");
+  } catch (e) {}
+  return res;
+}
+function preflight(req) {
+  const o = corsOrigin(req);
+  if (!o) return new Response(null, { status: 403 });
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "access-control-allow-origin": o,
+      "access-control-allow-methods": "POST, GET, OPTIONS",
+      "access-control-allow-headers": "content-type, apikey, authorization, x-client-info",
+      "access-control-max-age": "86400",
+      vary: "origin",
+    },
+  });
+}
+
+function b64(u8) {
+  let s = "";
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+// Законы для программы и сайта: зашифрованный файл из репозитория расшифровывается здесь, ключ наружу не попадает.
+// Отдаём gzip (base64): программа и браузер распаковывают сами. Копия держится в памяти функции.
+let lawsCache = null; // { sig, updatedAt, count, gz, at }
+let lawsStatusAt = 0;
+async function lawsLoad(want) {
+  // want: подпись, которую программа уже видит в laws-status.json; если копия старее, сверяемся раньше (не чаще раза в 30 с)
+  const fresh = Date.now() - lawsStatusAt < (want && lawsCache && want !== lawsCache.sig ? 30 * 1000 : 5 * 60 * 1000);
+  if (lawsCache && fresh) return lawsCache;
+  let st = null;
+  try {
+    const r = await fetch(LAWS_BASE + "laws-status.json?t=" + Date.now(), { signal: AbortSignal.timeout(15000) });
+    if (r.ok) st = await r.json();
+  } catch (e) {}
+  lawsStatusAt = Date.now();
+  if (lawsCache && (!st || st.sig === lawsCache.sig)) return lawsCache;
+  const r = await fetch(LAWS_BASE + "laws.enc?t=" + Date.now(), { signal: AbortSignal.timeout(60000) });
+  if (!r.ok) throw new Error("GitHub вернул " + r.status);
+  const buf = new Uint8Array(await r.arrayBuffer());
+  if (buf.length < 32 || String.fromCharCode(...buf.subarray(0, 4)) !== "SLW1") throw new Error("неверный формат файла законов");
+  const key = await crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", enc.encode(LAWS_KEY)), "AES-GCM", false, ["decrypt"]);
+  const data = new Uint8Array(buf.length - 16);
+  data.set(buf.subarray(32), 0);
+  data.set(buf.subarray(16, 32), buf.length - 32); // WebCrypto ждёт тег в конце
+  const gz = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.subarray(4, 16) }, key, data));
+  lawsCache = { sig: (st && st.sig) || (await sha256(b64(gz.subarray(0, 4096)))).slice(0, 40), updatedAt: (st && st.updatedAt) || 0, checkedAt: (st && st.checkedAt) || 0, ok: st ? st.ok !== false : true, gz, at: Date.now() };
+  return lawsCache;
+}
+async function lawsApi(b) {
+  const { err } = await who(b);
+  if (err) return err;
+  if (!LAWS_KEY) return fail("Законы с форума на сервере ещё не подключены. Сообщите владельцу.", { code: "laws_off" });
+  let L;
+  try {
+    L = await lawsLoad(b.want ? String(b.want).slice(0, 80) : "");
+  } catch (e) {
+    console.error("laws", e);
+    return fail("Не удалось получить законы. Попробуйте позже.", { code: "server" });
+  }
+  const meta = { sig: L.sig, updatedAt: L.updatedAt, checkedAt: L.checkedAt, srcOk: L.ok };
+  if (b.sig && String(b.sig) === L.sig) return { ok: true, same: true, ...meta };
+  if (b.plain) {
+    const text = await new Response(new Blob([L.gz]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+    return { ok: true, ...meta, data: JSON.parse(text) };
+  }
+  return { ok: true, ...meta, gz: b64(L.gz) };
+}
+
+// ИИ для программы и сайта: запрос подписывается здесь (ключ AI_KEY), лимит считается по аккаунту
+async function hmacHex(secret, msg) {
+  const k = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return hex(await crypto.subtle.sign("HMAC", k, enc.encode(msg)));
+}
+async function aiAsk(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!AI_KEY) return fail("ИИ-помощник на сервере ещё не подключён. Сообщите владельцу.", { code: "ai_off" });
+  if (!(await hit(`aiweb:${p.id}`, 60, 86400))) return fail("Дневной лимит вопросов к ИИ исчерпан. Он обновится завтра.", { limit: true });
+  const q = String(b.q == null ? "" : b.q).replace(/\s+/g, " ").trim().slice(0, 500);
+  if (q.length < 3) return fail("Напишите вопрос подробнее.");
+  const ctx = (Array.isArray(b.ctx) ? b.ctx : []).slice(0, 10).map((c) => ({ ref: clean(c && c.ref, 80), text: String((c && c.text) || "").slice(0, 2000) })).filter((c) => c.ref && c.text);
+  const refs = ctx.map((c) => c.ref);
+  const cid = (await sha256("web:" + p.id)).slice(0, 32);
+  const ts = String(Date.now());
+  let j = null, status = 0;
+  try {
+    const r = await fetch(AI_URL + "/ask", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-senko-cid": cid, "x-senko-ts": ts, "x-senko-sig": await hmacHex(AI_KEY, cid + "." + ts) },
+      body: JSON.stringify({ short: !!b.short, q, ctx }),
+      signal: AbortSignal.timeout(35000),
+    });
+    status = r.status;
+    try { j = await r.json(); } catch (e) {}
+  } catch (e) {
+    return fail("Не удалось связаться с ИИ-сервисом. Попробуйте позже.");
+  }
+  const logged = !(j && j.limit) ? await aiLog({ token: b.token, q, refs, ok: !!(j && j.ok) }).catch(() => null) : null;
+  const logId = logged && logged.ok ? logged.id : "";
+  if (!j || !j.ok) return fail((j && j.error) || "ИИ-сервис вернул ошибку (" + status + ").", { limit: !!(j && j.limit) });
+  return { ok: true, answer: String(j.answer || ""), left: typeof j.left === "number" ? j.left : null, cached: !!j.cached, logId };
+}
+
+Deno.serve(async (req) => withCors(req, await handle(req)));
+
+async function handle(req) {
+  try {
+    if (req.method === "OPTIONS") return preflight(req);
     if (req.method === "GET") {
       const url = new URL(req.url);
       if (url.searchParams.has("setup")) return await setup(url);
@@ -2958,4 +3587,4 @@ Deno.serve(async (req) => {
     console.error(e);
     return J(fail("Ошибка сервера. Попробуйте позже."), 500);
   }
-});
+}

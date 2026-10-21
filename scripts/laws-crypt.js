@@ -1,9 +1,11 @@
 /* Шифрование update/laws.json → update/laws.enc (AES-256-GCM + gzip).
-   Ключ берётся из LAWS_KEY (секрет репозитория и сборки приложения). В публичном репозитории лежит только шифртекст.
+   Ключ берётся из LAWS_KEY (секрет репозитория; тот же ключ задан в Supabase, программе он не нужен). В публичном репозитории лежит только шифртекст.
 
    Команды:
      node scripts/laws-crypt.js decrypt   — перед парсером: расшифровать прошлую версию в update/laws.json и update/.prev.json
      node scripts/laws-crypt.js encrypt   — разово: зашифровать существующий update/laws.json в update/laws.enc
+     node scripts/laws-crypt.js rekey     — смена ключа: расшифровать update/laws.enc ключом LAWS_KEY и зашифровать ключом LAWS_KEY_NEW
+                                            (workflow «Rekey laws», см. .github/workflows/rekey-laws.yml)
 */
 "use strict";
 const fs = require("fs");
@@ -48,6 +50,14 @@ if (require.main === module) {
     } else if (cmd === "encrypt") {
       fs.writeFileSync(enc, encrypt(fs.readFileSync(plain, "utf8").replace(/^\uFEFF/, ""), process.env.LAWS_KEY));
       console.log("Готово:", enc);
-    } else { console.error("Использование: decrypt | encrypt"); process.exit(2); }
+    } else if (cmd === "rekey") {
+      if (!process.env.LAWS_KEY_NEW) throw new Error("LAWS_KEY_NEW не задан.");
+      if (process.env.LAWS_KEY_NEW === process.env.LAWS_KEY) throw new Error("LAWS_KEY_NEW совпадает с LAWS_KEY: ключ уже сменён.");
+      const t = decrypt(fs.readFileSync(enc), process.env.LAWS_KEY);
+      const out = encrypt(t, process.env.LAWS_KEY_NEW);
+      decrypt(out, process.env.LAWS_KEY_NEW); // проверка
+      fs.writeFileSync(enc, out);
+      console.log("laws.enc перешифрован новым ключом. Теперь замените секрет LAWS_KEY значением LAWS_KEY_NEW и удалите LAWS_KEY_NEW.");
+    } else { console.error("Использование: decrypt | encrypt | rekey"); process.exit(2); }
   } catch (e) { console.error("Ошибка:", e.message); process.exit(1); }
 }

@@ -2,7 +2,7 @@
 // Приложение шлёт сюда вопрос + найденные статьи; ключи ИИ-провайдеров хранятся ТОЛЬКО здесь (секреты Worker).
 // Цепочка провайдеров: Gemini → Groq → OpenRouter (какие ключи заданы, те и используются; при 429/5xx идём к следующему).
 //
-// Секреты (wrangler secret put ...): APP_KEY (тот же, что LAWS_KEY), GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY (любые из трёх ключей ИИ).
+// Секреты (wrangler secret put ...): APP_KEY (тот же, что AI_KEY в Supabase), WEB_KEY (необязательно: второй ключ, если в Supabase AI_KEY задан им), GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY (любые из трёх ключей ИИ).
 // Привязка KV: LIMITS (счётчики запросов по пользователям).
 // Необязательные переменные: GEMINI_MODEL, GROQ_MODEL, OPENROUTER_MODEL, DAILY_PER_USER, DAILY_GLOBAL.
 
@@ -158,12 +158,15 @@ async function handle(request, env, ctxW) {
   if (request.method !== "POST" || url.pathname !== "/ask") return json({ ok: false, error: "Not found" }, 404);
   if (!env.APP_KEY) return json({ ok: false, error: "Сервис не настроен." }, 503);
 
-  // подпись приложения: HMAC(APP_KEY, "<cid>.<ts>") — отсекает случайные запросы «с улицы»
+  // подпись сервера Senko: HMAC(APP_KEY, "<cid>.<ts>"). С 2.2.1 ключ есть только у сервера Supabase,
+  // программа и сайт ходят через него, cid = номер аккаунта (хэш)
   const cid = String(request.headers.get("x-senko-cid") || "").slice(0, 64);
   const ts = String(request.headers.get("x-senko-ts") || "");
   const sig = String(request.headers.get("x-senko-sig") || "");
   if (!/^[a-f0-9-]{16,64}$/i.test(cid) || !/^\d{10,14}$/.test(ts) || Math.abs(Date.now() - +ts) > 10 * 60 * 1000) return json({ ok: false, error: "Запрос отклонён." }, 403);
-  if (!safeEq(sig, await hmacHex(env.APP_KEY, cid + "." + ts))) return json({ ok: false, error: "Запрос отклонён." }, 403);
+  // WEB_KEY: необязательный второй ключ (если на сервере Supabase задан он, а не APP_KEY)
+  const okSig = safeEq(sig, await hmacHex(env.APP_KEY, cid + "." + ts)) || (!!env.WEB_KEY && safeEq(sig, await hmacHex(env.WEB_KEY, cid + "." + ts)));
+  if (!okSig) return json({ ok: false, error: "Запрос отклонён." }, 403);
 
   let body;
   try { body = cleanBody(await request.json()); } catch (e) { body = null; }
@@ -180,9 +183,8 @@ async function handle(request, env, ctxW) {
     if (hit) { const j = await hit.json(); return json({ ok: true, answer: j.answer, cached: true }); }
   }
 
-  // игрок = подпись устройства + IP (чтобы нельзя было обойти лимит сменой cid)
-  const ip = request.headers.get("cf-connecting-ip") || "";
-  const uid = (await sha256Hex(cid + "|" + ip)).slice(0, 24);
+  // игрок = аккаунт (cid выдаёт сервер, подделать его без ключа нельзя). IP не учитываем: у сервера Supabase он меняется
+  const uid = (await sha256Hex(cid)).slice(0, 24);
   const quota = await checkQuota(env, uid);
   if (!quota.ok) return json({ ok: false, error: "Дневной лимит вопросов к ИИ исчерпан. Он обновится завтра.", limit: true }, 429);
 

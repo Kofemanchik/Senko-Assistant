@@ -1146,6 +1146,8 @@ ipcMain.handle("senko:sync", async (e) => {
 // ───────────── Законы с форума (сервер парсит форум раз в сутки в 00:05 МСК, приложение сверяет версию каждые 3 часа) ─────────────
 const laws = require("./laws-sync")({
   dataDir: () => app.getPath("userData"),
+  // тексты законов отдаёт сервер (расшифровка там, ключа в программе нет)
+  api: (b) => accounts.authed(b, 90000),
   onProgress: (p) => {
     if (win && !win.isDestroyed()) win.webContents.send("laws:event", { type: "progress", progress: p });
   },
@@ -1370,6 +1372,8 @@ function tearDownSystem() {
 
 function createMainWindow() {
   Menu.setApplicationMenu(null);
+  // законы получаются только после входа: сверяемся сразу, как открылось окно памятки
+  setTimeout(() => laws.sync(), 3000);
   const saved = cfg.rememberBounds ? visibleBounds(cfg[boundsKey()]) : null;
   const w = new BrowserWindow({
     width: cfg.compact ? COMPACT_W : 560,
@@ -1482,9 +1486,8 @@ app.whenReady().then(() => {
   });
   ai.init({
     getWin: () => (win && !win.isDestroyed() ? win : null),
-    dataDir: () => app.getPath("userData"),
-    // вопросы вошедшего пользователя и оценки 👍/👎 сохраняются в аккаунте (см. Политику, раздел 6)
-    log: (d) => accounts.act("ai_log", d),
+    // вопрос уходит на сервер: он обращается к ИИ, сохраняет вопрос в аккаунте и возвращает номер записи для 👍/👎 (см. Политику, раздел 6)
+    ask: (d, ms) => accounts.act("ai_ask", d, ms),
     vote: (id, v) => accounts.act("ai_vote", { id, vote: v })
   });
   initUpdater();
