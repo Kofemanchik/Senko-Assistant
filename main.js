@@ -1,6 +1,6 @@
 const {
   app, BrowserWindow, shell, Menu, ipcMain, dialog, net, Tray, Notification,
-  globalShortcut, screen, nativeImage, safeStorage, clipboard
+  globalShortcut, screen, nativeImage, safeStorage, clipboard, nativeTheme
 } = require("electron");
 const path = require("path");
 const fs = require("fs");
@@ -859,6 +859,11 @@ ipcMain.handle("auth:save-code", async (e, login, code) => {
   }
 });
 ipcMain.on("auth:quit", (e) => { if (fromAuth(e)) { quitting = true; app.quit(); } });
+ipcMain.on("auth:win", (e, a) => {
+  if (!fromAuth(e)) return;
+  if (a === "min") authWin.minimize();
+  else if (a === "close") authWin.close();
+});
 
 function createAuthWindow() {
   Menu.setApplicationMenu(null);
@@ -869,7 +874,8 @@ function createAuthWindow() {
     minHeight: 640,
     title: "Senko Assistant — вход",
     autoHideMenuBar: true,
-    backgroundColor: "#EDF0F3",
+    frame: false, // своя строка окна рисуется в auth.html
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#0A0A0B" : "#F6F3EE",
     icon: iconPath(),
     webPreferences: {
       contextIsolation: true,
@@ -989,7 +995,7 @@ function createMainWindow() {
     title: "Памятка Boston",
     frame: false, // системную серую рамку заменяет своя строка заголовка (её рисует preload.js)
     autoHideMenuBar: true,
-    backgroundColor: "#F6F3EE",
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#0A0A0B" : "#F6F3EE",
     icon: iconPath(),
     webPreferences: {
       contextIsolation: true,

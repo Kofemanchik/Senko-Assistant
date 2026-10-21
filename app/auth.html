@@ -6,55 +6,85 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
 <title>Senko Assistant — вход</title>
 <style>
-:root{--bg:#EDF0F3;--card:#fff;--ink:#16202b;--muted:#5d6b7a;--line:#d5dbe2;--chip:#e6ebf0;--accent:#2f6fed;--accent-ink:#fff;--err:#b3261e;--errbg:#fdecea;--ok:#1b6e3c;--okbg:#e6f4ea;--warn:#7a5200;--warnbg:#fff4d6;--surface:var(--card);color-scheme:light dark}
-@media (prefers-color-scheme:dark){:root{--bg:#10151b;--card:#1a212a;--ink:#e8edf2;--muted:#9aa8b6;--line:#2b3541;--chip:#232c37;--accent:#5b92ff;--accent-ink:#0b1220;--err:#ffb4ab;--errbg:#3a1d1b;--ok:#8fd9a8;--okbg:#17301f;--warn:#f5d98a;--warnbg:#3a2f12}}
+/* новый стиль 2.0: тёплая палитра и своя строка окна, как в основной программе */
+:root{--bg:#F6F3EE;--card:#FFFFFF;--ink:#1F1A15;--muted:#6B625A;--line:#E5DED4;--chip:#F1EBE3;--accent:#C2530E;--accent-ink:#FFFFFF;--soft:#FCEFE5;
+ --err:#B3261E;--errbg:#FCE9E6;--ok:#1D6B36;--okbg:#E4F3E8;--warn:#7A5200;--warnbg:#FFF2D6;--surface:var(--card);
+ --shadow:0 1px 2px rgba(60,40,20,.05),0 10px 30px rgba(60,40,20,.08);--f-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;color-scheme:light}
+:root[data-theme="dark"]{--bg:#0A0A0B;--card:#141416;--ink:#F2F2F3;--muted:#9B9BA4;--line:#26262B;--chip:#1E1E22;--accent:#FF8A3D;--accent-ink:#140A03;--soft:#2B1A0F;
+ --err:#FFB4AB;--errbg:#3A1D1B;--ok:#8FD9A8;--okbg:#17301F;--warn:#F5D98A;--warnbg:#3A2F12;--shadow:0 1px 2px rgba(0,0,0,.5);color-scheme:dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0A0A0B;--card:#141416;--ink:#F2F2F3;--muted:#9B9BA4;--line:#26262B;--chip:#1E1E22;--accent:#FF8A3D;--accent-ink:#140A03;--soft:#2B1A0F;
+ --err:#FFB4AB;--errbg:#3A1D1B;--ok:#8FD9A8;--okbg:#17301F;--warn:#F5D98A;--warnbg:#3A2F12;--shadow:0 1px 2px rgba(0,0,0,.5);color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,sans-serif;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);display:flex;flex-direction:column;overflow:hidden}
+/* строка окна */
+.tbar{flex:0 0 36px;display:flex;align-items:center;gap:8px;padding:0 0 0 12px;-webkit-app-region:drag;user-select:none;border-bottom:1px solid var(--line)}
+.tbar .lg{width:18px;height:18px;border-radius:4px;overflow:hidden;flex:0 0 auto}
+.tbar .lg svg{display:block;width:100%;height:100%}
+.tbar b{font-size:12.5px;font-weight:600;color:var(--muted);margin-right:auto}
+.tbar button{-webkit-app-region:no-drag;width:46px;height:36px;border:0;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}
+.tbar button:hover{background:var(--chip);color:var(--ink)}
+.tbar button.x:hover{background:#D6453D;color:#fff}
+.tbar svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round}
+.scroll{flex:1 1 auto;overflow-y:auto;display:flex;justify-content:center}
 .wrap{width:100%;max-width:440px;padding:22px 18px 28px}
-.brand{text-align:center;margin:6px 0 18px}
-.brand h1{margin:0;font-size:24px;letter-spacing:.2px}
+.brand{text-align:center;margin:8px 0 20px}
+.brand .lg{width:76px;height:76px;margin:0 auto 12px;border-radius:20px;overflow:hidden;box-shadow:0 0 0 1px var(--line),0 10px 26px rgba(9,13,21,.18)}
+.brand .lg svg{display:block;width:100%;height:100%}
+.brand h1{margin:0;font-size:25px;font-weight:700;letter-spacing:.01em}
 .brand span{color:var(--muted);font-size:13px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
-.tabs{display:flex;background:var(--chip);border-radius:10px;padding:3px;gap:3px;margin-bottom:14px}
-.tabs button{flex:1;border:0;background:none;color:var(--muted);padding:8px 10px;border-radius:8px;font:600 14px "Segoe UI",system-ui,sans-serif;cursor:pointer}
-.tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
-form,.view{display:grid;gap:11px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow)}
+.tabs{display:flex;background:var(--chip);border-radius:12px;padding:4px;gap:4px;margin-bottom:16px}
+.tabs button{flex:1;border:0;background:none;color:var(--muted);padding:8px 10px;border-radius:9px;font:600 14px var(--f-body);cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+form,.view{display:grid;gap:12px}
 h2{margin:0;font-size:17px}
 p{margin:0}
-label{display:grid;gap:4px;font-size:13px;color:var(--muted)}
-input,select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font:inherit}
+label{display:grid;gap:5px;font-size:12.5px;font-weight:600;color:var(--muted)}
+input,select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:400 14px var(--f-body)}
+input::placeholder{color:var(--muted);opacity:.7}
 input[readonly]{opacity:.7}
-input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--soft)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .pw{position:relative}
-.pw input{padding-right:78px}
-.pw button{position:absolute;right:5px;top:50%;transform:translateY(-50%);border:0;background:var(--chip);color:var(--ink);padding:5px 9px;border-radius:7px;font:inherit;font-size:12px;cursor:pointer}
-.chk{display:flex;gap:8px;align-items:center;color:var(--ink);font-size:13.5px}
-.chk input{width:auto}
-.btn{border:0;border-radius:10px;padding:11px 14px;background:var(--accent);color:var(--accent-ink);font:600 15px "Segoe UI",system-ui,sans-serif;cursor:pointer}
-.btn.sec{background:var(--chip);color:var(--ink)}
-.btn:disabled{opacity:.6;cursor:default}
-.err{background:var(--errbg);color:var(--err);border-radius:9px;padding:9px 11px;font-size:13.5px}
-.ok{background:var(--okbg);color:var(--ok);border-radius:9px;padding:9px 11px;font-size:13.5px}
-.warn{background:var(--warnbg);color:var(--warn);border-radius:9px;padding:9px 11px;font-size:13.5px}
-.hint{color:var(--muted);font-size:12.5px;margin:12px 2px 0}
+.pw input{padding-right:84px}
+.pw button{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:var(--chip);color:var(--ink);padding:5px 10px;border-radius:7px;font:600 12px var(--f-body);cursor:pointer}
+.chk{display:flex;gap:9px;align-items:center;color:var(--ink);font-size:13.5px;font-weight:400}
+.chk input{width:16px;height:16px;accent-color:var(--accent);margin:0}
+.btn{border:1px solid var(--accent);border-radius:11px;padding:11px 14px;background:var(--accent);color:var(--accent-ink);font:600 15px var(--f-body);cursor:pointer;transition:filter .15s}
+.btn:hover:not(:disabled){filter:brightness(1.07)}
+.btn.sec{background:var(--chip);border-color:var(--line);color:var(--ink)}
+.btn:disabled{opacity:.55;cursor:default}
+.err{background:var(--errbg);color:var(--err);border-radius:10px;padding:9px 12px;font-size:13.5px}
+.ok{background:var(--okbg);color:var(--ok);border-radius:10px;padding:9px 12px;font-size:13.5px}
+.warn{background:var(--warnbg);color:var(--warn);border-radius:10px;padding:9px 12px;font-size:13.5px}
+.hint{color:var(--muted);font-size:12.5px;margin:14px 4px 0;text-align:center}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .row{display:flex;gap:8px}
 .row .btn{flex:1}
-.link{all:unset;color:var(--accent);text-decoration:underline;cursor:pointer;font-size:13px;text-align:center}
+.link{all:unset;color:var(--accent);cursor:pointer;font-size:13px;font-weight:600;text-align:center}
+.link:hover{text-decoration:underline}
 .link:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.quit{display:block;margin:14px auto 0;background:none;border:0;color:var(--muted);font:inherit;cursor:pointer;text-decoration:underline}
-.code{font:700 20px Consolas,"Cascadia Mono",monospace;letter-spacing:2px;text-align:center;padding:14px 8px;background:var(--bg);border:1px dashed var(--line);border-radius:10px;user-select:all;word-break:break-all}
+.quit{display:block;margin:12px auto 0;background:none;border:0;color:var(--muted);font:13px var(--f-body);cursor:pointer}
+.quit:hover{color:var(--ink);text-decoration:underline}
+.code{font:700 20px Consolas,"Cascadia Mono",monospace;letter-spacing:2px;text-align:center;padding:14px 8px;background:var(--soft);border:1px dashed var(--accent);border-radius:12px;user-select:all;word-break:break-all}
 .wait{display:flex;gap:10px;align-items:center;color:var(--muted)}
 .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);animation:pulse 1.2s infinite ease-in-out;flex:none}
 @keyframes pulse{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
 @media (prefers-reduced-motion:reduce){.dot{animation:none}}
+body:not(.framed) .tbar{display:none}
 [hidden]{display:none!important}
 </style>
+<script>
+/* тема как в программе (Настройки → Тема) */
+(function(){try{var s=JSON.parse(localStorage.getItem("bos-settings")||"null");if(s&&(s.theme==="dark"||s.theme==="light"))document.documentElement.setAttribute("data-theme",s.theme)}catch(e){}})();
+</script>
 </head>
 <body>
+<div class="tbar"><span class="lg"><svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="38" fill="#090D15"/><path fill="#EEE8E4" d="M226.5 474.3C140.3 461.4 69.1 397.3 48 313.5C41.1 286.4 39.1 254.6 42.5 227.9C56.7 115.3 146.3 34 256 34C296.9 34 334.9 44.8 369.7 66.3C442.8 111.7 483.7 206.1 468.4 294.4C452.1 388.9 377.9 461.4 284.2 474.4C269.9 476.4 240.3 476.4 226.5 474.3ZM278.5 461.5C331.4 450.5 385.4 406 412.1 351.5C423.5 328.2 428.8 307.5 429.7 283C430.3 266 430.7 265.9 434.1 282.3C440.2 312.6 432.9 350.2 415 380C409.3 389.5 409.9 389.4 418 379.5C465.3 321.6 472.3 231.3 435.2 157.5C393.4 74.3 300.6 30.9 209.7 52.1C96.7 78.5 28.2 200.5 61.5 316C81.7 386.1 139.5 441.7 209.9 458.7C232.8 464.2 260.3 465.3 278.5 461.5ZM234.5 451.9C220.9 450.1 192 441.2 192 438.9C192 438.6 195 438.2 198.8 438.1C214 437.7 234.2 433 251.1 425.8C266.9 419.1 267.1 418.4 253.7 418.8C216.8 419.9 178.6 408.5 151.8 388.5C141.6 380.8 126.8 365.6 120.9 356.6C118.6 353 116.5 350.2 116.3 350.4C115.7 351 120.3 363.7 123.6 370.5C130.3 384.2 143.6 399 157.3 408C161 410.4 163.8 412.5 163.6 412.7C163 413.3 145.6 405.8 139.7 402.4C108.6 384.2 83.9 347.8 77.6 311.1C75 295.8 76.2 281.4 81.2 268.4L83.5 262.5L84.1 275C84.7 287.9 86.9 298.3 90.9 307L93 311.5L92.4 307.6C92.1 305.5 91.9 297.9 91.9 290.6C91.9 270.1 96.4 255.2 107.4 238.6C121.1 218.1 145.8 200.6 169 195.1C180.8 192.2 180.9 192.3 174.4 199.2C143 233.2 138.9 280.9 164.1 320.1C167.9 326.1 168.7 325.8 166.7 319.3C164.3 311.9 163 303.4 163 295.1L163.1 287.5L165.9 294.7C181 332.9 215.9 361.4 265 375.5C271.7 377.4 281.2 379.6 286.1 380.2C296.4 381.6 295.6 382.3 281.5 384.1C262.9 386.4 236 383.1 213.8 375.6C208.4 373.9 204 372.6 204.1 372.9C204.1 373.8 214.8 382.2 221.9 387C248.2 404.7 280.6 408.8 312.5 398.5C330.5 392.7 349.2 381.3 364.9 366.5C368.8 362.8 372 360.1 372 360.6C372 361.1 369.7 366.2 366.9 372C350.6 406 321.6 433.9 291 445C272.7 451.7 251.7 454.3 234.5 451.9ZM377 373.9C377 373.6 378.3 370.4 379.9 366.9C385.2 355.2 393.3 324.9 391.1 325C390.8 325.1 388.5 327.8 386 331.1C373 348.6 352.6 362.4 332.8 366.9C310 372.2 294.7 370.1 268.4 358.5C253.7 351.9 246.8 350 237.3 350C233.3 350 230 349.7 230 349.3C230 347.2 239.2 335.1 244.7 330.1C257.1 318.7 270.3 313.5 286.5 313.6C296.4 313.7 298.6 314.1 309 317.5C324 322.4 333 323.1 342.8 320.1C372.4 311.1 390.1 269.1 379.4 233.6C378.3 230.3 384.5 234.7 391.9 242.7C421.1 273.8 417.7 331.9 384.8 366.4C380.5 370.9 377.1 374.2 377 373.9ZM199.3 307.9C196.3 307 196.1 306.8 197.2 304.4C198.6 301.3 196.4 299 192.2 299C190.9 299 189 298.5 188 298C186.2 297.1 186.5 296.1 192.5 283.9C202.5 263.2 203.4 257.3 199.5 236C193.7 204.4 206.1 173.8 233.4 152.1C238.4 148.1 249.3 141 250.3 141C250.5 141 249.1 145.4 247.4 150.8C241.6 168.3 242 170 249 156.5C268.7 118.5 293.4 77.7 299.2 73.5C305.2 69.3 310.8 74.1 319.3 90.6C339.8 130.8 342 173.5 325 199.9L321 206L327.9 206C331.6 206 338.1 206.9 342.4 208C349.8 209.9 366 217.4 366 219C366 219.4 363.7 220 360.9 220.3C352.9 221.3 343 224.8 329.2 231.5L316.5 237.7L322.2 238.9C330.5 240.7 339.6 245.6 345.9 251.7C348.9 254.6 351.1 257.2 350.8 257.5C350.5 257.8 347.2 257.3 343.4 256.3C333 253.8 312.1 254 300.8 256.8C288.6 259.8 277.9 264.1 268 270C256.9 276.6 256.6 277.1 264.2 275.2C274.2 272.7 291.9 273.1 299.9 275.9C312.4 280.3 322.5 289.3 326.5 299.5C327.3 301.8 327.5 302.7 326.7 301.6C317.1 287.3 306 281.1 288.5 280.2C272.4 279.5 258.9 283.7 237 296.3C216.6 308.1 216.2 308.3 209.1 308.6C205.5 308.8 201.1 308.5 199.3 307.9ZM412.2 260.6C402.2 228.6 375.6 199 349.5 191.1C347.3 190.4 345 189.7 344.3 189.5C343.5 189.2 343.8 187 345.2 181.8C346.9 175.9 347.3 171.5 347.3 159.2L347.3 144L350.9 144.6C367 147.3 381.5 153.6 392.3 162.5C396.1 165.6 399 168.3 398.8 168.5C398.6 168.7 396 168.2 393 167.4C389.6 166.5 383.9 166.1 378.1 166.2L368.7 166.5L374.6 168.9C386.5 173.7 396.1 180.2 406.6 190.5C421.2 204.9 429.9 219.2 435.4 238.3C437.6 245.9 440.2 260 439.5 260.8C439.4 260.9 437.4 257.2 435.2 252.6C429.5 240.6 423.9 232.7 415.2 224.2C411.1 220.2 407.6 217 407.5 217.2C407.3 217.4 408.2 220.7 409.5 224.5C413.5 236.4 415.1 246.6 414.8 257.8L414.5 268.2L412.2 260.6ZM236.2 251.9C240.4 248.6 245.1 244.3 246.6 242.2C248.1 240.2 250.9 236.5 252.7 234.1C254.5 231.7 255.8 229.5 255.6 229.3C254.9 228.6 244.1 233.8 238.4 237.6C231.8 242 227.8 247.8 225 256.9C222.5 264.9 222.5 265.2 225.8 261.1C227.2 259.3 231.9 255.1 236.2 251.9ZM296.8 193.5C314.5 185 322 171.2 322 146.5C322 140.4 321.3 131.4 320.4 126.5C317.7 110.4 308.2 85.8 304.3 84.3C299.7 82.5 287.8 107.4 272.1 152L268 163.5L276.3 155C280.8 150.3 288 142.7 292.3 138L300 129.5L300 137.5C300 150.3 295.5 164.5 288 175.8L285.7 179.1L291.4 176.6C294.5 175.2 298.5 173.1 300.1 171.9C304 169.2 304.4 169.7 302.5 175C300.4 181 297.4 185.7 291.6 191.8C285.9 197.9 286.9 198.3 296.8 193.5ZM204.2 171.9C203.7 170.6 200.5 162.2 197.1 153.2C183.1 116.2 176.1 91.5 178 86.4C179.8 81.7 187.3 84.4 208.9 97.7C226.1 108.3 252 127.1 252 128.9C252 129.3 249.1 131.2 245.6 133.2C231.3 141.5 219.2 153 209.8 167.2C205.3 174 205 174.3 204.2 171.9Z"/></svg></span><b>Senko Assistant · вход</b><button type="button" id="wMin" aria-label="Свернуть" title="Свернуть"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg></button><button type="button" class="x" id="wClose" aria-label="Закрыть" title="Закрыть"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg></button></div>
+<div class="scroll">
 <div class="wrap">
-  <div class="brand"><h1>Senko Assistant</h1><span>Majestic RP · законодательство</span></div>
+  <div class="brand"><div class="lg"><svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="38" fill="#090D15"/><path fill="#EEE8E4" d="M226.5 474.3C140.3 461.4 69.1 397.3 48 313.5C41.1 286.4 39.1 254.6 42.5 227.9C56.7 115.3 146.3 34 256 34C296.9 34 334.9 44.8 369.7 66.3C442.8 111.7 483.7 206.1 468.4 294.4C452.1 388.9 377.9 461.4 284.2 474.4C269.9 476.4 240.3 476.4 226.5 474.3ZM278.5 461.5C331.4 450.5 385.4 406 412.1 351.5C423.5 328.2 428.8 307.5 429.7 283C430.3 266 430.7 265.9 434.1 282.3C440.2 312.6 432.9 350.2 415 380C409.3 389.5 409.9 389.4 418 379.5C465.3 321.6 472.3 231.3 435.2 157.5C393.4 74.3 300.6 30.9 209.7 52.1C96.7 78.5 28.2 200.5 61.5 316C81.7 386.1 139.5 441.7 209.9 458.7C232.8 464.2 260.3 465.3 278.5 461.5ZM234.5 451.9C220.9 450.1 192 441.2 192 438.9C192 438.6 195 438.2 198.8 438.1C214 437.7 234.2 433 251.1 425.8C266.9 419.1 267.1 418.4 253.7 418.8C216.8 419.9 178.6 408.5 151.8 388.5C141.6 380.8 126.8 365.6 120.9 356.6C118.6 353 116.5 350.2 116.3 350.4C115.7 351 120.3 363.7 123.6 370.5C130.3 384.2 143.6 399 157.3 408C161 410.4 163.8 412.5 163.6 412.7C163 413.3 145.6 405.8 139.7 402.4C108.6 384.2 83.9 347.8 77.6 311.1C75 295.8 76.2 281.4 81.2 268.4L83.5 262.5L84.1 275C84.7 287.9 86.9 298.3 90.9 307L93 311.5L92.4 307.6C92.1 305.5 91.9 297.9 91.9 290.6C91.9 270.1 96.4 255.2 107.4 238.6C121.1 218.1 145.8 200.6 169 195.1C180.8 192.2 180.9 192.3 174.4 199.2C143 233.2 138.9 280.9 164.1 320.1C167.9 326.1 168.7 325.8 166.7 319.3C164.3 311.9 163 303.4 163 295.1L163.1 287.5L165.9 294.7C181 332.9 215.9 361.4 265 375.5C271.7 377.4 281.2 379.6 286.1 380.2C296.4 381.6 295.6 382.3 281.5 384.1C262.9 386.4 236 383.1 213.8 375.6C208.4 373.9 204 372.6 204.1 372.9C204.1 373.8 214.8 382.2 221.9 387C248.2 404.7 280.6 408.8 312.5 398.5C330.5 392.7 349.2 381.3 364.9 366.5C368.8 362.8 372 360.1 372 360.6C372 361.1 369.7 366.2 366.9 372C350.6 406 321.6 433.9 291 445C272.7 451.7 251.7 454.3 234.5 451.9ZM377 373.9C377 373.6 378.3 370.4 379.9 366.9C385.2 355.2 393.3 324.9 391.1 325C390.8 325.1 388.5 327.8 386 331.1C373 348.6 352.6 362.4 332.8 366.9C310 372.2 294.7 370.1 268.4 358.5C253.7 351.9 246.8 350 237.3 350C233.3 350 230 349.7 230 349.3C230 347.2 239.2 335.1 244.7 330.1C257.1 318.7 270.3 313.5 286.5 313.6C296.4 313.7 298.6 314.1 309 317.5C324 322.4 333 323.1 342.8 320.1C372.4 311.1 390.1 269.1 379.4 233.6C378.3 230.3 384.5 234.7 391.9 242.7C421.1 273.8 417.7 331.9 384.8 366.4C380.5 370.9 377.1 374.2 377 373.9ZM199.3 307.9C196.3 307 196.1 306.8 197.2 304.4C198.6 301.3 196.4 299 192.2 299C190.9 299 189 298.5 188 298C186.2 297.1 186.5 296.1 192.5 283.9C202.5 263.2 203.4 257.3 199.5 236C193.7 204.4 206.1 173.8 233.4 152.1C238.4 148.1 249.3 141 250.3 141C250.5 141 249.1 145.4 247.4 150.8C241.6 168.3 242 170 249 156.5C268.7 118.5 293.4 77.7 299.2 73.5C305.2 69.3 310.8 74.1 319.3 90.6C339.8 130.8 342 173.5 325 199.9L321 206L327.9 206C331.6 206 338.1 206.9 342.4 208C349.8 209.9 366 217.4 366 219C366 219.4 363.7 220 360.9 220.3C352.9 221.3 343 224.8 329.2 231.5L316.5 237.7L322.2 238.9C330.5 240.7 339.6 245.6 345.9 251.7C348.9 254.6 351.1 257.2 350.8 257.5C350.5 257.8 347.2 257.3 343.4 256.3C333 253.8 312.1 254 300.8 256.8C288.6 259.8 277.9 264.1 268 270C256.9 276.6 256.6 277.1 264.2 275.2C274.2 272.7 291.9 273.1 299.9 275.9C312.4 280.3 322.5 289.3 326.5 299.5C327.3 301.8 327.5 302.7 326.7 301.6C317.1 287.3 306 281.1 288.5 280.2C272.4 279.5 258.9 283.7 237 296.3C216.6 308.1 216.2 308.3 209.1 308.6C205.5 308.8 201.1 308.5 199.3 307.9ZM412.2 260.6C402.2 228.6 375.6 199 349.5 191.1C347.3 190.4 345 189.7 344.3 189.5C343.5 189.2 343.8 187 345.2 181.8C346.9 175.9 347.3 171.5 347.3 159.2L347.3 144L350.9 144.6C367 147.3 381.5 153.6 392.3 162.5C396.1 165.6 399 168.3 398.8 168.5C398.6 168.7 396 168.2 393 167.4C389.6 166.5 383.9 166.1 378.1 166.2L368.7 166.5L374.6 168.9C386.5 173.7 396.1 180.2 406.6 190.5C421.2 204.9 429.9 219.2 435.4 238.3C437.6 245.9 440.2 260 439.5 260.8C439.4 260.9 437.4 257.2 435.2 252.6C429.5 240.6 423.9 232.7 415.2 224.2C411.1 220.2 407.6 217 407.5 217.2C407.3 217.4 408.2 220.7 409.5 224.5C413.5 236.4 415.1 246.6 414.8 257.8L414.5 268.2L412.2 260.6ZM236.2 251.9C240.4 248.6 245.1 244.3 246.6 242.2C248.1 240.2 250.9 236.5 252.7 234.1C254.5 231.7 255.8 229.5 255.6 229.3C254.9 228.6 244.1 233.8 238.4 237.6C231.8 242 227.8 247.8 225 256.9C222.5 264.9 222.5 265.2 225.8 261.1C227.2 259.3 231.9 255.1 236.2 251.9ZM296.8 193.5C314.5 185 322 171.2 322 146.5C322 140.4 321.3 131.4 320.4 126.5C317.7 110.4 308.2 85.8 304.3 84.3C299.7 82.5 287.8 107.4 272.1 152L268 163.5L276.3 155C280.8 150.3 288 142.7 292.3 138L300 129.5L300 137.5C300 150.3 295.5 164.5 288 175.8L285.7 179.1L291.4 176.6C294.5 175.2 298.5 173.1 300.1 171.9C304 169.2 304.4 169.7 302.5 175C300.4 181 297.4 185.7 291.6 191.8C285.9 197.9 286.9 198.3 296.8 193.5ZM204.2 171.9C203.7 170.6 200.5 162.2 197.1 153.2C183.1 116.2 176.1 91.5 178 86.4C179.8 81.7 187.3 84.4 208.9 97.7C226.1 108.3 252 127.1 252 128.9C252 129.3 249.1 131.2 245.6 133.2C231.3 141.5 219.2 153 209.8 167.2C205.3 174 205 174.3 204.2 171.9Z"/></svg></div><h1>Senko Assistant</h1><span>Памятка Majestic RP · Boston</span></div>
   <div id="notice" class="warn" role="status" hidden style="margin-bottom:12px"></div>
   <div class="card">
     <div class="tabs" role="tablist" id="tabs">
@@ -151,6 +181,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
   </div>
   <p class="hint">Аккаунт хранится на сервере, пароль — только в виде хэша: его не видит никто, включая владельца. Для входа нужен интернет.</p>
   <button type="button" class="quit" id="quit">Закрыть программу</button>
+</div>
 </div>
 
 <script>
@@ -438,6 +469,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
   }
   $("tLogin").onclick=function(){tab(false)}; $("tReg").onclick=function(){tab(true)};
   $("quit").onclick=function(){A&&A.quit()};
+  if(A&&A.win){document.body.classList.add("framed");$("wMin").onclick=function(){A.win("min")};$("wClose").onclick=function(){A.win("close")}}
 
   document.addEventListener("click",function(e){
     var b=e.target.closest("[data-eye]"); if(!b) return;

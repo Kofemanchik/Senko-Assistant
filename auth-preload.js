@@ -12,5 +12,6 @@ contextBridge.exposeInMainWorld("senkoAuth", {
   resetComplete: (d) => ipcRenderer.invoke("auth:reset-complete", d),
   copy: (text) => ipcRenderer.send("auth:copy", String(text || "")),
   saveCode: (login, code) => ipcRenderer.invoke("auth:save-code", String(login || ""), String(code || "")),
-  quit: () => ipcRenderer.send("auth:quit")
+  quit: () => ipcRenderer.send("auth:quit"),
+  win: (a) => ipcRenderer.send("auth:win", String(a || "")) // свернуть / закрыть окно без системной рамки
 });
