@@ -314,3 +314,12 @@ section{scroll-margin-top:80px}
 .rv.in{opacity:1;transform:none}
 @media (prefers-reduced-motion: reduce){.rv{opacity:1;transform:none}}
 @media (max-width:640px){.wrap{padding:0 16px}}
+
+/* веб-версия: ссылка в блоке «Скачать» и кнопка в шапке */
+.dl-web{display:flex;align-items:center;gap:14px;margin:4px 0 18px;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--soft);color:var(--ink);text-decoration:none;transition:border-color .15s,transform .15s}
+.dl-web:hover{border-color:var(--accent);transform:translateY(-1px)}
+.dl-web .ico{width:26px;height:26px;flex:0 0 auto;color:var(--accent)}
+.dl-web .go{width:20px;height:20px;color:var(--muted)}
+.dl-web span{font-size:14px;line-height:1.45;color:var(--muted)}
+.dl-web b{color:var(--ink);display:block;margin-bottom:2px}
+@media (max-width:560px){.top-web{display:none}}

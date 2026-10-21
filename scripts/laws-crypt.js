@@ -40,7 +40,14 @@ if (require.main === module) {
   try {
     if (cmd === "decrypt") {
       if (fs.existsSync(enc)) {
-        const t = decrypt(fs.readFileSync(enc), process.env.LAWS_KEY);
+        let t;
+        try { t = decrypt(fs.readFileSync(enc), process.env.LAWS_KEY); } catch (e) {
+          // ключ сменили, а старого нет: с галочкой «reset» начинаем как в первый раз (метки «новое/изменено» обнулятся)
+          if (process.env.LAWS_RESET !== "1") throw new Error(e.message + ". Если ключ LAWS_KEY сменён, запустите «Sync laws» вручную с галочкой reset.");
+          console.log("::warning::Прошлую версию не расшифровать текущим ключом — начинаем заново (reset).");
+          fs.rmSync(enc);
+          return;
+        }
         fs.writeFileSync(plain, t); fs.writeFileSync(prev, t);
         console.log("Прошлая версия расшифрована.");
       } else if (fs.existsSync(plain)) {

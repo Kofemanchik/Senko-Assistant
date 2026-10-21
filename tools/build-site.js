@@ -64,3 +64,45 @@ const out = {
 };
 for (const [f, html] of Object.entries(out)) fs.writeFileSync(path.join(SITE, f), html);
 console.log("site: " + Object.keys(out).join(", ") + " · документы " + version);
+
+/* ───── веб-версия помощника: /app/index.html и /app/login.html из программы ─────
+   Скрипты страницы получают type="text/x-senko": их запускает site/app/web.js, когда готовы вход, данные и законы. */
+function buildApp() {
+  const conf = require(path.join(ROOT, "server-config.js"));
+  const ver = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
+  const APP = path.join(SITE, "app");
+  fs.mkdirSync(APP, { recursive: true });
+  fs.writeFileSync(path.join(APP, "config.js"), "window.SENKO_WEB=" + JSON.stringify({ api: conf.API_URL, ver, built: new Date().toISOString().slice(0, 10) }) + ";\n");
+  const stamp = "?v=" + ver + "-" + Date.now().toString(36);
+  const headTags = (title) =>
+    '<meta name="robots" content="noindex">\n<link rel="manifest" href="/app/manifest.webmanifest">\n<link rel="icon" href="/favicon.svg" type="image/svg+xml">\n<link rel="apple-touch-icon" href="/apple-touch-icon.png">\n' +
+    '<meta name="theme-color" content="#F6F3EE" media="(prefers-color-scheme: light)">\n<meta name="theme-color" content="#0A0A0B" media="(prefers-color-scheme: dark)">\n' +
+    '<meta name="apple-mobile-web-app-capable" content="yes">\n<meta name="mobile-web-app-capable" content="yes">\n<meta name="apple-mobile-web-app-title" content="Senko">\n' +
+    "<title>" + title + "</title>\n";
+  const must = (s, a, what) => { if (s.indexOf(a) < 0) throw new Error("не найдено в " + what + ": " + a.slice(0, 60)); };
+
+  let ix = fs.readFileSync(path.join(ROOT, "app", "index.html"), "utf8");
+  const n = (ix.match(/<script>/g) || []).length;
+  if (!n || /<script\s[^>]*>/.test(ix)) throw new Error("app/index.html: неожиданный вид тегов <script>");
+  ix = ix.replace(/<script>/g, '<script type="text/x-senko">');
+  must(ix, "<meta charset=utf8>", "app/index.html");
+  ix = ix.replace("<html><head><meta charset=utf8>", '<html lang="ru"><head><meta charset=utf8>\n' + headTags("Senko Assistant") +
+    '<script src="/app/config.js' + stamp + '"></script>\n<script src="/app/web-core.js' + stamp + '"></script>\n<script src="/app/web.js' + stamp + '"></script>\n');
+  ix = ix.replace("<title>Senko Assistant</title>", "");
+  fs.writeFileSync(path.join(APP, "index.html"), ix);
+
+  let au = fs.readFileSync(path.join(ROOT, "app", "auth.html"), "utf8");
+  au = au.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>\n?/, "").replace(/<title>[^<]*<\/title>\n?/, "");
+  must(au, '<meta charset="utf-8">', "app/auth.html");
+  au = au.replace('<meta charset="utf-8">', '<meta charset="utf-8">\n' + headTags("Вход · Senko Assistant") + '<link rel="stylesheet" href="/assets/fonts.css">\n' +
+    '<script src="/app/config.js' + stamp + '"></script>\n<script src="/app/web-core.js' + stamp + '"></script>\n<script src="/app/web-auth.js' + stamp + '"></script>\n');
+  au = au.split("Ошибка связи с программой.").join("Ошибка связи с сервером.")
+    .replace(">Закрыть программу<", ">На главную сайта<")
+    .replace(">Выйти без принятия<", ">Не принимать и выйти<")
+    .split("Запомнить меня на этом компьютере").join("Запомнить меня на этом устройстве");
+  fs.mkdirSync(path.join(APP, "login"), { recursive: true });
+  fs.writeFileSync(path.join(APP, "login", "index.html"), au);
+  return { scripts: n, ver };
+}
+const appInfo = buildApp();
+console.log("site: app/index.html (" + appInfo.scripts + " скриптов), app/login/ · версия " + appInfo.ver);

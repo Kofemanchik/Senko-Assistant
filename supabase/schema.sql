@@ -330,6 +330,27 @@ create table if not exists public.login_log (
 );
 create index if not exists login_log_user_idx on public.login_log (user_id, at desc);
 
+-- Панель владельца и модератора на сайте (сайт, этап 3) ----------------------
+-- Пароль панели (32 знака) выдаёт бот командой /panel; в базе только хэш
+create table if not exists public.panel_keys (
+  user_id      uuid primary key references public.profiles(id) on delete cascade,
+  key_hash     text not null,
+  created_at   timestamptz not null default now(),
+  created_by   text not null default '',
+  last_used_at timestamptz
+);
+-- Открытые панели: не дольше 12 часов, закрываются после 2 часов без действий
+create table if not exists public.panel_sessions (
+  token_hash  text primary key,
+  user_id     uuid not null references public.profiles(id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  expires_at  timestamptz not null,
+  last_at     timestamptz not null default now(),
+  ip          text not null default '',
+  ua          text not null default ''
+);
+create index if not exists panel_sessions_user_idx on public.panel_sessions (user_id);
+
 -- Закрываем таблицы от публичного API ----------------------------------------
 alter table public.profiles       enable row level security;
 alter table public.sessions       enable row level security;
@@ -356,6 +377,8 @@ alter table public.shares         enable row level security;
 alter table public.transfers      enable row level security;
 alter table public.search_misses  enable row level security;
 alter table public.login_log      enable row level security;
+alter table public.panel_keys     enable row level security;
+alter table public.panel_sessions enable row level security;
 
 revoke all on table public.profiles, public.sessions, public.recovery_codes,
                     public.reset_requests, public.audit_log, public.rate_limits, public.sync_items,
@@ -363,7 +386,8 @@ revoke all on table public.profiles, public.sessions, public.recovery_codes,
                     public.bot_settings, public.broadcasts, public.bug_reports, public.bot_delayed,
                     public.xp_week, public.achievements, public.shifts, public.control_tests,
                     public.control_results, public.ai_log, public.reports,
-                    public.shares, public.transfers, public.search_misses, public.login_log
+                    public.shares, public.transfers, public.search_misses, public.login_log,
+                    public.panel_keys, public.panel_sessions
   from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;
 
