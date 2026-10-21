@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Senko Assistant · памятка по законам Majestic RP Boston</title>
+<meta name="description" content="Бесплатная программа для сотрудников LSPD, LSCSD, FIB, SANG и Government на Majestic RP Boston: кодексы с поиском, таймер задержания, калькулятор наказаний, рапорты и обучение. Законы обновляются сами каждый день.">
+<meta name="theme-color" content="#F6F3EE" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0A0A0B" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Senko Assistant · памятка по законам Majestic RP Boston">
+<meta property="og:description" content="Кодексы с поиском, таймер задержания, калькулятор наказаний, рапорты и обучение. Законы обновляются сами каждый день.">
+<meta property="og:image" content="https://senko-assistant.pages.dev/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/fonts/ibm-plex-sans-400-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/fonts.css">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var t=localStorage.getItem("site-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body>
+<!--SPRITE-->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+ <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7.5"/><path d="m20.5 20.5-4.2-4.2"/></symbol>
+ <symbol id="i-timer" viewBox="0 0 24 24"><path d="M10 2h4M12 14l3-3"/><circle cx="12" cy="14" r="8"/></symbol>
+ <symbol id="i-calc" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2.5"/><path d="M8 6h8M8 10.5h.01M12 10.5h.01M16 10.5h.01M8 14.5h.01M12 14.5h.01M8 18.5h.01M12 18.5h.01M16 14.5v4"/></symbol>
+ <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></symbol>
+ <symbol id="i-file" viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5Z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></symbol>
+ <symbol id="i-cap" viewBox="0 0 24 24"><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c3 3 9 3 12 0v-5M22 10v6"/></symbol>
+ <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8Z"/></symbol>
+ <symbol id="i-layers" viewBox="0 0 24 24"><rect x="3" y="3" width="13" height="13" rx="2.5"/><path d="M8 21h10.5a2.5 2.5 0 0 0 2.5-2.5V8"/></symbol>
+ <symbol id="i-sync" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"/><path d="M3 12a9 9 0 0 1 15.4-6.4L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/></symbol>
+ <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></symbol>
+ <symbol id="i-offline" viewBox="0 0 24 24"><path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3Z"/><path d="M4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+ <symbol id="i-gift" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/></symbol>
+ <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7Z"/></symbol>
+ <symbol id="i-down" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+ <symbol id="i-win" viewBox="0 0 24 24"><path d="M3 5.5 10.5 4.5v7H3ZM12 4.3 21 3v8.5h-9ZM3 12.5h7.5v7L3 18.5ZM12 12.5h9V21l-9-1.3Z" fill="currentColor" stroke="none"/></symbol>
+ <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+ <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></symbol>
+ <symbol id="i-auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor"/></symbol>
+ <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+ <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
+ <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
+ <symbol id="i-tg" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M21.9 3.6 2.8 10.9c-1.3.5-1.3 1.3-.2 1.6l4.9 1.5 1.9 5.8c.2.6.4.8.9.8s.7-.2 1-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.1-14.8c.3-1.3-.5-1.9-1.3-1.5zM9 13.6l9.5-6c.4-.3.8-.1.5.2l-7.9 7.1-.3 3.3L9 13.6z"/></symbol>
+ <symbol id="i-dc" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.5a18 18 0 0 1 4.3 2 14.7 14.7 0 0 0-15 0 18 18 0 0 1 4.3-2L8.6 3a19.8 19.8 0 0 0-4.9 1.4C.6 9 0 13.5.3 18a19.9 19.9 0 0 0 6 3l.8-1.3a13 13 0 0 1-2-1l.5-.4a14.2 14.2 0 0 0 12.8 0l.5.4a13 13 0 0 1-2 1l.8 1.3a19.9 19.9 0 0 0 6-3c.4-5.2-.7-9.6-3.4-13.6zM8.3 15.3c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4zm7.4 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4z"/></symbol>
+</svg>
+<!--/SPRITE-->
+<a class="skip" href="#main">К содержимому</a>
+<!--HEADER-->
+<header class="top" id="top">
+ <div class="wrap">
+  <a class="brand" href="/" aria-label="Senko Assistant, на главную"><img src="/img/logo.svg" alt="" width="36" height="36"><span>Senko Assistant<small>Majestic RP · Boston</small></span></a>
+  <nav class="nav" id="nav" aria-label="Разделы сайта">
+   <a href="/#features">Возможности</a>
+   <a href="/#screens">Скриншоты</a>
+   <a href="/#download">Скачать</a>
+   <a href="/#team">Команда</a>
+   <a href="/#faq">Вопросы</a>
+  </nav>
+  <div class="top-act">
+   <button class="icon-btn" id="themeBtn" type="button" aria-label="Тема: как в системе" title="Тема: как в системе"><svg class="ico"><use href="#i-auto"/></svg></button>
+   <a class="btn btn-p btn-sm" href="/#download"><svg class="ico" style="width:18px;height:18px"><use href="#i-down"/></svg>Скачать</a>
+   <button class="icon-btn burger" id="burger" type="button" aria-label="Меню" aria-expanded="false" aria-controls="nav"><svg class="ico"><use href="#i-menu"/></svg></button>
+  </div>
+ </div>
+</header>
+<!--/HEADER-->
+
+<main id="main">
+<section class="hero">
+ <div class="wrap">
+  <div>
+   <span class="eyebrow"><i></i>Версия <span data-ver>2.2.0</span> · бесплатно</span>
+   <h1>Законы штата под рукой. <em>Прямо поверх игры.</em></h1>
+   <p class="lead">Senko Assistant помогает сотрудникам LSPD, LSCSD, FIB, SANG и Government на Majestic RP Boston: найдёт статью, посчитает наказание, проведёт по порядку задержания и проверит знания. Законы обновляются сами каждый день.</p>
+   <div class="hero-cta">
+    <a class="btn btn-p btn-lg" href="#download" data-dl><svg class="ico"><use href="#i-win"/></svg>Скачать для Windows</a>
+    <a class="btn btn-s btn-lg" href="https://t.me/majestic_judiciary" target="_blank" rel="noopener"><svg class="ico" style="color:#2AABEE"><use href="#i-tg"/></svg>Telegram-канал</a>
+   </div>
+   <div class="hero-note">
+    <span><svg class="ico"><use href="#i-check"/></svg>Windows 10 и 11</span>
+    <span><svg class="ico"><use href="#i-check"/></svg>Обновляется сама</span>
+    <span><svg class="ico"><use href="#i-check"/></svg>Работает без интернета</span>
+   </div>
+  </div>
+  <div class="hero-vis">
+   <div class="shot-frame">
+    <div class="shot-bar"><img src="/img/logo.svg" alt=""><b>Senko Assistant</b><span class="dots">— ▢ ✕</span></div>
+    <img class="hero-img" data-light="/img/hero-light.webp" data-dark="/img/hero-dark.webp" src="/img/hero-light.webp" alt="Главный экран Senko Assistant: меню, поиск статьи и быстрые действия" width="1320" height="880" fetchpriority="high">
+   </div>
+   <div class="float f1"><svg class="ico"><use href="#i-timer"/></svg><div><b>59:59</b><span>таймер задержания</span></div></div>
+   <div class="float f2"><svg class="ico"><use href="#i-calc"/></svg><div><b>до 40 мес.</b><span>по ст. 6.1 УК</span></div></div>
+  </div>
+ </div>
+</section>
+
+<div class="orgs">
+ <div class="wrap">
+  <span class="lbl">Для ведомств</span>
+  <span class="chip">LSPD</span><span class="chip">LSCSD</span><span class="chip">FIB</span><span class="chip">SANG</span><span class="chip">Government</span>
+ </div>
+</div>
+
+<section class="sec" id="features">
+ <div class="wrap">
+  <div class="sec-h rv">
+   <span class="kick">Возможности</span>
+   <h2>Всё для смены в одном окне</h2>
+   <p>От первого вопроса «какая это статья» до готового рапорта: без вкладок с форумом и таблиц в заметках.</p>
+  </div>
+  <div class="grid">
+   <article class="card rv"><div class="ic"><svg class="ico"><use href="#i-search"/></svg></div><h3>Поиск по кодексам</h3><p>УК, АК, ДК, ПК и все законы штата. Номер статьи, часть или просто слово: «ствол», «маска», 12.2.б. <kbd>Ctrl+F</kbd> с любого экрана.</p></article>
+   <article class="card rv"><div class="ic"><svg class="ico"><use href="#i-timer"/></svg></div><h3>Таймер задержания</h3><p>До 10 задержаний сразу, паузы по ст. 20 ПК, чек-лист порядка по ст. 17, фото и ссылки на доказательства. <kbd>Alt+T</kbd> прямо из игры.</p></article>
+   <article class="card rv"><div class="ic"><svg class="ico"><use href="#i-calc"/></svg></div><h3>Калькулятор наказаний</h3><p>Итоговый срок, штрафы, залог и судимость. Готовые наборы статей, свои наборы и проверка несовместимых статей.</p></article>
+   <article class="card rv"><div class="ic"><svg class="ico"><use href="#i-pin"/></svg></div><h3>На месте</h3><p>Нарушения ДК по описанию ситуации, что изымать, оружие и лицензии, фразы для рации, вежливые формулировки и карта зон.</p></article>
+   <article class="card rv"><div class="ic"><svg class="ico"><use href="#i-file"/></svg></div><h3>Рапорты</h3><p>Заполняются из задержания и калькулятора. Руководство принимает или отклоняет их в программе и в Telegram-боте.</p></article>
+   <article class="card rv"><div class="ic"><svg class="ico"><use href="#i-cap"/></svg></div><h3>Обучение</h3><p>Тесты, учебные ситуации с разбором ошибок, карточки и повторение по расписанию. Уровни, достижения и рейтинг недели.</p></article>
+   <article class="card rv"><div class="ic"><svg class="ico"><use href="#i-spark"/></svg></div><h3>ИИ-помощник</h3><p>Опишите ситуацию своими словами: помощник найдёт подходящие статьи и ответит со ссылками на них.</p></article>
+   <article class="card rv"><div class="ic"><svg class="ico"><use href="#i-layers"/></svg></div><h3>Поверх игры</h3><p>Окно поверх всех, прозрачность, призрачный режим, сворачивание в полоску и профили «в игре» и «за столом». Режим «Стрим» прячет ваши данные на записи.</p></article>
+   <article class="card rv"><div class="ic"><svg class="ico"><use href="#i-sync"/></svg></div><h3>Аккаунт и синхронизация</h3><p>Избранное, заметки, метки и папки на всех ваших компьютерах. Личный кабинет, итоги смены и роли для руководства.</p></article>
+  </div>
+ </div>
+</section>
+
+<section class="sec" style="padding-top:0">
+ <div class="wrap">
+  <div class="stats rv">
+   <div class="stat"><b>5</b><span>ведомств: от LSPD до Government</span></div>
+   <div class="stat"><b>4</b><span>кодекса и все законы штата</span></div>
+   <div class="stat"><b>00:05</b><span>каждый день сверка законов с форумом</span></div>
+   <div class="stat"><b>10</b><span>задержаний одновременно</span></div>
+  </div>
+ </div>
+</section>
+
+<section class="sec" id="screens" style="padding-top:24px">
+ <div class="wrap">
+  <div class="sec-h rv">
+   <span class="kick">Скриншоты</span>
+   <h2>Тёплая тема днём, чёрная ночью</h2>
+   <p>Тот же интерфейс, что вы видите на сайте. Переключите тему сайта, и скриншоты поменяются вместе с ней.</p>
+  </div>
+  <div class="gallery rv">
+   <div class="tabs" role="tablist" aria-label="Экраны программы">
+    <button class="tab" role="tab" aria-selected="true" data-shot="home" data-cap="Главная: поиск, быстрые действия и ваш прогресс.">Главная</button>
+    <button class="tab" role="tab" aria-selected="false" data-shot="uk" data-cap="Кодексы: звёзды розыска, сроки, юрисдикции и кнопка «+» в калькулятор.">Кодексы</button>
+    <button class="tab" role="tab" aria-selected="false" data-shot="timer" data-cap="Задержание: таймер на час, паузы по ст. 20 ПК и данные задержанного.">Задержание</button>
+    <button class="tab" role="tab" aria-selected="false" data-shot="calc" data-cap="Калькулятор: итоговый срок, розыск и штрафы по выбранным статьям.">Калькулятор</button>
+    <button class="tab" role="tab" aria-selected="false" data-shot="field" data-cap="На месте: подбор нарушения ДК по описанию ситуации.">На месте</button>
+    <button class="tab" role="tab" aria-selected="false" data-shot="learn" data-cap="Обучение: уровни, тесты, карточки и статистика ошибок.">Обучение</button>
+   </div>
+   <div class="shot-frame">
+    <div class="shot-bar"><img src="/img/logo.svg" alt=""><b>Senko Assistant</b><span class="dots">— ▢ ✕</span></div>
+    <img id="galImg" data-light="/img/home-light-1440.webp" data-dark="/img/home-dark-1440.webp" src="/img/home-light-1440.webp" alt="Экран программы" width="1600" height="1000" loading="lazy">
+   </div>
+   <p class="gal-cap" id="galCap" aria-live="polite">Главная: поиск, быстрые действия и ваш прогресс.</p>
+  </div>
+ </div>
+</section>
+
+<section class="sec" id="why">
+ <div class="wrap adv">
+  <div>
+   <div class="sec-h rv" style="text-align:left;margin:0 0 30px">
+    <span class="kick">Почему Senko Assistant</span>
+    <h2>Сделано игроками для игроков</h2>
+    <p>Мы сами работаем в ведомствах и знаем, как неудобно искать статью на форуме, пока задержанный ждёт.</p>
+   </div>
+   <div class="adv-list">
+    <div class="adv-item rv"><div class="ic"><svg class="ico"><use href="#i-bolt"/></svg></div><div><h3>Законы всегда актуальные</h3><p>Сервер каждый день сверяет законы с форумом и сам обновляет кодексы. Новые и изменённые статьи помечаются на 14 дней.</p></div></div>
+    <div class="adv-item rv"><div class="ic"><svg class="ico"><use href="#i-offline"/></svg></div><div><h3>Работает без интернета</h3><p>Кодексы, калькулятор, таймеры и заметки хранятся на компьютере. Интернет нужен только для входа, синхронизации и обновлений.</p></div></div>
+    <div class="adv-item rv"><div class="ic"><svg class="ico"><use href="#i-shield"/></svg></div><div><h3>Ваши данные под защитой</h3><p>Пароль хранится только как хэш, есть PIN при запуске. Заметки, задержания и вопросы ИИ руководству не видны.</p></div></div>
+    <div class="adv-item rv"><div class="ic"><svg class="ico"><use href="#i-gift"/></svg></div><div><h3>Бесплатно и без рекламы внутри</h3><p>Все функции доступны всем. Новые версии приходят сами и ставятся в один клик.</p></div></div>
+   </div>
+  </div>
+  <div class="rv">
+   <div class="phones">
+    <div class="phone"><img data-light="/img/uk-light-400.webp" data-dark="/img/uk-dark-400.webp" src="/img/uk-light-400.webp" alt="Уголовный кодекс в узком окне" width="600" height="1230" loading="lazy"></div>
+    <div class="phone"><img data-light="/img/home-light-400.webp" data-dark="/img/home-dark-400.webp" src="/img/home-light-400.webp" alt="Главная в узком окне" width="600" height="1230" loading="lazy"></div>
+   </div>
+   <p class="phones-cap">Узкое окно сбоку от игры: всё на месте, меню прячется под ☰.</p>
+  </div>
+ </div>
+</section>
+
+<section class="sec" id="download">
+ <div class="wrap">
+  <div class="dl rv">
+   <div class="dl-main">
+    <div class="dl-app"><img src="/img/logo.svg" alt=""><div><h2>Senko Assistant <span data-ver>2.2.0</span></h2>
+     <div class="dl-meta"><span>Windows 10 / 11</span><span data-size-tag>установщик .exe</span><span data-date-tag hidden></span></div></div></div>
+    <p style="color:var(--muted)">Одна кнопка, и установщик последней версии начнёт скачиваться. Дальше программа обновляется сама.</p>
+    <a class="btn btn-p btn-lg" href="https://github.com/Kofemanchik/Senko-Assistant/releases/latest" data-dl id="dlBtn"><svg class="ico"><use href="#i-down"/></svg>Скачать <span data-ver>2.2.0</span> <small data-size></small></a>
+    <p class="dl-alt" id="dlAlt">Ссылка всегда ведёт на самую новую версию.</p>
+    <ol class="steps">
+     <li><span><b>Скачайте и запустите установщик.</b> Программа ставится в вашу папку пользователя, права администратора не нужны.</span></li>
+     <li><span><b>Если Windows покажет «Система Windows защитила ваш компьютер»,</b> нажмите «Подробнее», затем «Выполнить в любом случае». Так бывает с программами без платной цифровой подписи.</span></li>
+     <li><span><b>Зарегистрируйтесь или войдите</b> и выберите своё ведомство. Готово.</span></li>
+    </ol>
+   </div>
+   <div class="dl-news">
+    <h3>Что нового</h3>
+    <div class="when" id="newsWhen">Версия <span data-ver>2.2.0</span></div>
+    <div class="notes" id="notes">
+     <ul>
+      <li><b>Безопасность:</b> PIN при запуске, смена пароля и журнал входов в личном кабинете.</li>
+      <li><b>Режим «Стрим»</b> прячет ник, статик и фото и сам включается при OBS и других программах записи.</li>
+      <li><b>Окно:</b> призрачный режим, сворачивание в полоску, прилипание к краям, профили «в игре» и «за столом».</li>
+      <li><b>Оформление:</b> свой цвет, шрифты, тема по времени суток и английский интерфейс.</li>
+      <li><b>На месте:</b> нарушения ДК по ситуации, изъятие, оружие, рация и карта зон.</li>
+      <li><b>Роли, рапорты, обучение</b> и многое другое.</li>
+     </ul>
+    </div>
+   </div>
+  </div>
+ </div>
+</section>
+
+<section class="sec" id="ad" style="padding-top:0" aria-label="Реклама">
+ <div class="wrap">
+  <div class="ad rv">
+   <div class="ad-img"><img src="/img/senko-family.webp" srcset="/img/senko-family-820.webp 820w, /img/senko-family.webp 1642w" sizes="(max-width:860px) 100vw, 680px" alt="Баннер Senko Family, Majestic RP" width="1642" height="958" loading="lazy"></div>
+   <div class="ad-body">
+    <span class="ad-tag">Реклама</span>
+    <span class="ad-srv">Majestic RP · Los Angeles</span>
+    <h3>Senko Family</h3>
+    <p>Семья на сервере Los Angeles. Заходите в Discord и Telegram: знакомство, набор и новости семьи.</p>
+    <div class="ad2-row">
+     <a class="btn btn-ad" href="https://discord.gg/ZEz5kfG6W8" target="_blank" rel="noopener sponsored"><svg class="ico"><use href="#i-dc"/></svg>Discord семьи</a>
+     <a class="btn btn-tg" href="https://t.me/senkofamq" target="_blank" rel="noopener sponsored"><svg class="ico"><use href="#i-tg"/></svg>Telegram семьи</a>
+    </div>
+   </div>
+  </div>
+  <div class="ad2 rv">
+   <div class="ad2-img"><img src="/img/docossum.webp" alt="Опоссум, талисман Docossum" width="512" height="512" loading="lazy"></div>
+   <div class="ad2-body">
+    <span class="ad-tag ad2-tag">Реклама</span>
+    <span class="ad2-srv">Программа-ассистент · GTA 5 RP</span>
+    <h3>Docossum | Ассистент GTA 5RP</h3>
+    <p>Помощник для игроков GTA 5 RP, похожий на наш, только умеет ещё больше. Загляните в Discord и Telegram, а с нашим промокодом будет приятнее.</p>
+    <div class="ad2-row">
+     <button class="promo" type="button" data-copy="Senko" title="Скопировать промокод"><span>Промокод</span><b>Senko</b><svg class="ico"><use href="#i-copy"/></svg></button>
+     <a class="btn btn-ad btn-sm" href="https://discord.gg/Nnv9YjX3px" target="_blank" rel="noopener sponsored"><svg class="ico" style="width:18px;height:18px"><use href="#i-dc"/></svg>Discord</a>
+     <a class="btn btn-tg btn-sm" href="https://t.me/docossum" target="_blank" rel="noopener sponsored"><svg class="ico" style="width:18px;height:18px"><use href="#i-tg"/></svg>Telegram</a>
+    </div>
+   </div>
+  </div>
+ </div>
+</section>
+
+<section class="sec" id="team" style="padding-top:24px">
+ <div class="wrap">
+  <div class="sec-h rv">
+   <span class="kick">Команда</span>
+   <h2>Кто за этим стоит</h2>
+   <p>Senko Assistant развивает Senko Corporation. Пишите нам: идеи, ошибки и предложения читаем все.</p>
+  </div>
+  <div class="team">
+   <div class="person rv">
+    <div class="person-h"><div class="ava"><img src="/img/logo.svg" alt=""></div><div><span class="role">Владелец и разработчик</span><h3>Hanami Senko</h3></div></div>
+    <p>Создатель Senko Assistant и Senko Corporation. Отвечает за программу, сервер и Telegram-бота.</p>
+    <div class="links">
+     <a class="lnk tg" href="https://t.me/hanamochka" target="_blank" rel="noopener"><svg class="ico"><use href="#i-tg"/></svg>@hanamochka</a>
+     <button class="lnk dc" type="button" data-copy="hanamis1" title="Скопировать ник Discord"><svg class="ico"><use href="#i-dc"/></svg>hanamis1</button>
+    </div>
+   </div>
+   <div class="person rv">
+    <div class="person-h"><div class="ava">N</div><div><span class="role">Модератор памятки</span><h3>Noxi Riversons</h3></div></div>
+    <p>Следит за порядком, помогает пользователям и разбирает сообщения об ошибках.</p>
+    <div class="links">
+     <button class="lnk dc" type="button" data-copy="noxi_riversons" title="Скопировать ник Discord"><svg class="ico"><use href="#i-dc"/></svg>noxi_riversons</button>
+    </div>
+   </div>
+   <div class="person rv">
+    <div class="person-h"><div class="ava" style="background:linear-gradient(135deg,#2AABEE,#1b7fc0)"><svg class="ico" style="width:26px;height:26px;color:#fff"><use href="#i-tg"/></svg></div><div><span class="role">Сообщество</span><h3>Telegram-канал</h3></div></div>
+    <p>Новости программы, обновления законов и полезное для сотрудников ведомств Majestic RP.</p>
+    <div class="links">
+     <a class="lnk tg" href="https://t.me/majestic_judiciary" target="_blank" rel="noopener"><svg class="ico"><use href="#i-tg"/></svg>@majestic_judiciary</a>
+    </div>
+   </div>
+  </div>
+ </div>
+</section>
+
+<section class="sec" id="faq" style="padding-top:24px">
+ <div class="wrap">
+  <div class="sec-h rv"><span class="kick">Вопросы</span><h2>Частые вопросы</h2></div>
+  <div class="faq rv">
+   <details><summary>Это официальная программа Majestic RP?</summary><p>Нет. Senko Assistant сделан игроками и не связан с Rockstar Games, Majestic RP и администрацией проекта. Тексты законов берутся с форума Majestic RP, и при спорных вопросах решает именно текст на форуме.</p></details>
+   <details><summary>Сколько это стоит?</summary><p>Нисколько. Программа бесплатная, все функции доступны всем пользователям.</p></details>
+   <details><summary>Как обновляются законы?</summary><p>Каждый день в 00:05 по московскому времени сервер сверяет законы с форумом. Программа проверяет изменения при запуске и каждые 3 часа и сама обновляет кодексы. Изменённые статьи помечаются, чтобы вы их не пропустили.</p></details>
+   <details><summary>Почему Windows предупреждает при установке?</summary><p>У установщика нет платной цифровой подписи, поэтому SmartScreen показывает предупреждение для новых программ. Нажмите «Подробнее», затем «Выполнить в любом случае». Скачивайте программу только с этого сайта или из нашего Telegram-канала.</p></details>
+   <details><summary>Кто видит мои данные?</summary><p>Руководство вашего ведомства видит ваш ник, статик, роль и сводку работы. Заметки, подробности задержаний и вопросы ИИ-помощнику не видит никто, кроме вас. Подробно всё описано в <a href="/privacy.html">Политике конфиденциальности</a>.</p></details>
+   <details><summary>Будет ли версия для телефона?</summary><p>Да, мы готовим веб-версию для ПК и телефона с тем же аккаунтом, что и в программе.</p></details>
+   <details><summary>Нашёл ошибку. Куда писать?</summary><p>В программе есть кнопка «Сообщить об ошибке» в настройках и флажок ⚑ у каждой статьи. Ещё можно написать в Discord: <b>hanamis1</b>.</p></details>
+  </div>
+ </div>
+</section>
+
+<section class="cta">
+ <div class="wrap">
+  <div class="cta-box rv">
+   <h2>Готовы к следующей смене?</h2>
+   <p>Скачайте Senko Assistant и держите все законы штата в одном окне рядом с игрой.</p>
+   <a class="btn btn-lg" href="#download" data-dl><svg class="ico"><use href="#i-down"/></svg>Скачать бесплатно <small data-size></small></a>
+  </div>
+ </div>
+</section>
+</main>
+
+<!--FOOTER-->
+<footer class="foot">
+ <div class="wrap">
+  <div class="foot-top">
+   <div>
+    <a class="brand" href="/"><img src="/img/logo.svg" alt="" width="36" height="36"><span>Senko Assistant<small>Senko Corporation</small></span></a>
+    <p class="foot-about">Памятка по законодательству Majestic RP Boston для сотрудников ведомств: кодексы, задержания, наказания, рапорты и обучение в одном окне.</p>
+    <div class="soc">
+     <a href="https://t.me/majestic_judiciary" target="_blank" rel="noopener" aria-label="Telegram-канал"><svg class="ico"><use href="#i-tg"/></svg></a>
+     <a href="#" data-copy="hanamis1" aria-label="Скопировать Discord владельца"><svg class="ico"><use href="#i-dc"/></svg></a>
+    </div>
+   </div>
+   <div>
+    <h4>Программа</h4>
+    <ul>
+     <li><a href="/#features">Возможности</a></li>
+     <li><a href="/#screens">Скриншоты</a></li>
+     <li><a href="/#download">Скачать</a></li>
+     <li><a href="/#faq">Вопросы</a></li>
+    </ul>
+   </div>
+   <div>
+    <h4>Документы</h4>
+    <ul>
+     <li><a href="/privacy.html">Политика конфиденциальности</a></li>
+     <li><a href="/terms.html">Условия пользования</a></li>
+    </ul>
+   </div>
+   <div>
+    <h4>Связь</h4>
+    <ul>
+     <li><a href="https://t.me/hanamochka" target="_blank" rel="noopener">Telegram: @hanamochka</a></li>
+     <li><a href="https://t.me/majestic_judiciary" target="_blank" rel="noopener">Канал: @majestic_judiciary</a></li>
+     <li><a href="#" data-copy="hanamis1">Discord: hanamis1</a></li>
+     <li><a href="#" data-copy="noxi_riversons">Модератор: noxi_riversons</a></li>
+    </ul>
+   </div>
+  </div>
+  <div class="foot-legal">
+   <p><b>© 2026 Senko Corporation.</b> Все права на программу Senko Assistant, её код, дизайн, логотип и материалы памятки принадлежат Senko Corporation. Копирование, перепродажа, изменение и иное распространение без письменного разрешения автора запрещены.</p>
+   <p><b>Проект неофициальный.</b> Senko Assistant не связан с Rockstar Games, Take-Two Interactive и Majestic RP и не претендует на их права. Grand Theft Auto, Majestic RP, их названия, торговые марки и материалы принадлежат их правообладателям.</p>
+  </div>
+  <div class="foot-bottom">
+   <span class="made">Сделано с <span class="heart">♥</span> Hanami Senko | Senko Corporation</span>
+   <span><a href="/privacy.html">Конфиденциальность</a> · <a href="/terms.html">Условия</a></span>
+  </div>
+ </div>
+</footer>
+<!--/FOOTER-->
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
