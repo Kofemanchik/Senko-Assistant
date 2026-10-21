@@ -3,7 +3,12 @@ name: Sync laws
 on:
   schedule:
     - cron: "5 21 * * *"   # 00:05 по МСК
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      reset:
+        description: "Начать заново: прошлая версия зашифрована старым ключом (после смены LAWS_KEY)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write   # коммит update/laws.enc и update/laws-status.json
@@ -38,6 +43,8 @@ jobs:
           if [ -z "$LAWS_KEY" ]; then echo "::error::Не задан секрет LAWS_KEY (Settings → Secrets and variables → Actions)"; exit 1; fi
 
       - name: Расшифровать прошлую версию (для сравнения)
+        env:
+          LAWS_RESET: ${{ inputs.reset && '1' || '' }}
         run: node scripts/laws-crypt.js decrypt
 
       - name: Install parser deps
