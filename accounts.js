@@ -1,6 +1,6 @@
 // Аккаунты Senko Assistant: хранятся на сервере (Supabase), локально лежит только запомненная сессия.
-//  • Сессия (токен, шифруется средствами Windows):  %APPDATA%\Boston\session.json
-//  • Кэш профиля для работы без интернета:            %APPDATA%\Boston\profile-cache.json
+//  • Сессия (токен, шифруется средствами Windows):  %APPDATA%\Senko Assistant\session.json
+//  • Кэш профиля для работы без интернета:            %APPDATA%\Senko Assistant\profile-cache.json
 //  • Документ профиля (копия ваших данных):           Документы\Senko Assistant\Пользователи\user-<логин>.json
 //  • accounts.json от старых версий читается только один раз, для переноса аккаунта на сервер.
 const fs = require("fs");
@@ -87,7 +87,16 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
       return "";
     }
   }
-  const client = () => ({ ver: String(version || ""), device: deviceId() });
+  // система для журнала входов: «Windows 11», «Windows 10» (без имени компьютера и пользователя)
+  function osName() {
+    try {
+      const os = require("os");
+      if (process.platform !== "win32") return process.platform + " " + os.release();
+      const build = parseInt(String(os.release()).split(".")[2], 10) || 0;
+      return build >= 22000 ? "Windows 11" : "Windows 10";
+    } catch (e) { return ""; }
+  }
+  const client = () => ({ ver: String(version || ""), device: deviceId(), os: osName() });
   function rememberLogin(login) {
     try {
       const d = readJson(deviceFile()) || {};
@@ -123,7 +132,7 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
             "Права в памятке": u.rankName,
             "Дискорд": u.discord,
             "Телеграм": u.telegram || "",
-            "Номер в игре": u.phone,
+            "Номер в игре": u.phone || "",
             "Обновлён": new Date().toISOString()
           },
           null,
@@ -390,15 +399,15 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
     sys: () => sys,
 
     // Сообщение об ошибке из программы — уходит владельцу в Telegram
-    bugReport(text) {
+    bugReport(text, log) {
       if (!current || !token) return Promise.resolve({ ok: false, error: "Нужно войти в аккаунт.", code: "auth" });
-      return call({ action: "bug_report", token, text: String(text == null ? "" : text).slice(0, 2000), ver: String(version || "") });
+      return call({ action: "bug_report", token, text: String(text == null ? "" : text).slice(0, 2000), ver: String(version || ""), log: typeof log === "string" ? log.slice(0, 60000) : "" });
     },
 
     // Действия этапа 4: прогресс, рейтинг, смены, контрольные тесты
     act(action, data) {
       if (!current || !token) return Promise.resolve({ ok: false, error: "Нужно войти в аккаунт.", code: "auth" });
-      return call({ ...(data && typeof data === "object" ? data : {}), action, token });
+      return call({ ...client(), ...(data && typeof data === "object" ? data : {}), action, token });
     },
 
     async staffList() {

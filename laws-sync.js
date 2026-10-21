@@ -32,15 +32,51 @@ function decrypt(buf, secret) {
 module.exports = function (opts) {
   const file = () => path.join(opts.dataDir(), "laws.json");
   const metaFile = () => path.join(opts.dataDir(), "laws-meta.json");
-  let data = null, running = false, timer = null, lastErr = "", remote = null, lastOkAt = 0;
+  const histDir = () => path.join(opts.dataDir(), "laws-history"); // 2.2: прошлые версии для отката (3 последние)
+  let data = null, running = false, timer = null, lastErr = "", remote = null, lastOkAt = 0, hold = 0;
 
   function read() {
     if (data) return data;
     try { data = JSON.parse(fs.readFileSync(file(), "utf8")); } catch (e) { data = null; }
     return data;
   }
-  try { const m = JSON.parse(fs.readFileSync(metaFile(), "utf8")); remote = m.remote || null; lastOkAt = m.lastOkAt || 0; } catch (e) {}
-  const saveMeta = () => { try { fs.writeFileSync(metaFile(), JSON.stringify({ remote, lastOkAt })); } catch (e) {} };
+  try { const m = JSON.parse(fs.readFileSync(metaFile(), "utf8")); remote = m.remote || null; lastOkAt = m.lastOkAt || 0; hold = m.hold || 0; } catch (e) {}
+  const saveMeta = () => { try { fs.writeFileSync(metaFile(), JSON.stringify({ remote, lastOkAt, hold })); } catch (e) {} };
+  function keepHistory() {
+    try {
+      if (!fs.existsSync(file())) return;
+      const cur = read();
+      fs.mkdirSync(histDir(), { recursive: true });
+      fs.copyFileSync(file(), path.join(histDir(), "laws-" + ((cur && cur.updatedAt) || Date.now()) + ".json"));
+      const all = fs.readdirSync(histDir()).filter((f) => /^laws-\d+\.json$/.test(f)).sort((a, b) => parseInt(b.slice(5), 10) - parseInt(a.slice(5), 10));
+      all.slice(3).forEach((f) => { try { fs.rmSync(path.join(histDir(), f)); } catch (e) {} });
+    } catch (e) {}
+  }
+  function versions() {
+    const d = read();
+    let list = [];
+    try {
+      list = fs.readdirSync(histDir()).filter((f) => /^laws-\d+\.json$/.test(f)).map((f) => {
+        let n = 0;
+        try { const j = JSON.parse(fs.readFileSync(path.join(histDir(), f), "utf8")); n = (j.laws || []).length; } catch (e) {}
+        return { id: f.slice(5, -5), updatedAt: parseInt(f.slice(5), 10), count: n };
+      }).filter((x) => !d || x.updatedAt !== d.updatedAt).sort((a, b) => b.updatedAt - a.updatedAt);
+    } catch (e) {}
+    return { current: d ? { updatedAt: d.updatedAt || 0, count: (d.laws || []).length } : null, history: list, hold: !!hold };
+  }
+  function restore(id) {
+    if (!/^\d+$/.test(String(id))) return { ok: false, error: "Неизвестная версия законов." };
+    const f = path.join(histDir(), "laws-" + id + ".json");
+    if (!fs.existsSync(f)) return { ok: false, error: "Эта версия законов уже удалена." };
+    let j;
+    try { j = JSON.parse(fs.readFileSync(f, "utf8")); } catch (e) { return { ok: false, error: "Файл версии повреждён." }; }
+    if (!j || !Array.isArray(j.laws) || !j.laws.length) return { ok: false, error: "Файл версии пустой." };
+    keepHistory();
+    fs.writeFileSync(file() + ".tmp", JSON.stringify(j));
+    fs.renameSync(file() + ".tmp", file());
+    data = j; hold = Date.now(); saveMeta();
+    return { ok: true };
+  }
 
   function view() {
     const d = read() || { updatedAt: 0, checkedAt: 0, laws: [], changes: [] };
@@ -73,7 +109,8 @@ module.exports = function (opts) {
       try { st = JSON.parse((await getBuf(BASE + "laws-status.json", 20000)).toString("utf8")); } catch (e) { st = null; }
       if (st) { remote = st; saveMeta(); }
 
-      const same = st && before && before.sig && st.sig === before.sig;
+      // после отката пользователь сам возвращает обновления: до этого новую версию не скачиваем
+      const same = hold || (st && before && before.sig && st.sig === before.sig);
       let changed = false, newCh = [];
       if (!same) {
         const enc = await getBuf(BASE + "laws.enc", 90000);
@@ -81,6 +118,7 @@ module.exports = function (opts) {
         try { j = JSON.parse(decrypt(enc, loadKey())); } catch (e) { throw new Error("не удалось расшифровать файл законов (" + (e && e.message ? e.message : e) + ")"); }
         if (!j || !Array.isArray(j.laws) || !j.laws.length) throw new Error("файл законов пустой или повреждён");
         fs.mkdirSync(path.dirname(file()), { recursive: true });
+        keepHistory();
         fs.writeFileSync(file() + ".tmp", JSON.stringify(j));
         fs.renameSync(file() + ".tmp", file());
         changed = !before || before.sig !== j.sig || before.updatedAt !== j.updatedAt;
@@ -105,6 +143,9 @@ module.exports = function (opts) {
       timer = setInterval(sync, EVERY_MS);
     },
     peek: () => read(),
+    versions,
+    restore,
+    resume() { hold = 0; saveMeta(); return sync(); },
     get: async () => view(),
     sync,
     diagnose: async () => {
@@ -117,7 +158,8 @@ module.exports = function (opts) {
         "Версия данных обновлена: " + (d && d.updatedAt ? new Date(d.updatedAt).toISOString() : "—"),
         "Сервер проверял форум: " + (remote && remote.checkedAt ? new Date(remote.checkedAt).toISOString() : "—") + (remote && remote.ok === false ? " (с ошибкой: " + remote.error + ")" : ""),
         "Последняя успешная сверка в приложении: " + (lastOkAt ? new Date(lastOkAt).toISOString() : "—"),
-        "Последняя ошибка: " + (lastErr || "нет")
+        "Последняя ошибка: " + (lastErr || "нет"),
+        "Автообновление законов: " + (hold ? "на паузе после отката (" + new Date(hold).toISOString() + ")" : "включено")
       ].join("\n");
     },
     login: async () => ({ ok: true }),

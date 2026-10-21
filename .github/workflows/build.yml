@@ -59,10 +59,17 @@ jobs:
             dist/*.blockmap
           if-no-files-found: error
 
+      # Описание релиза берётся из «Что нового» программы (NEWS в app/index.html)
+      - name: Текст релиза
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: node tools/release-notes.js > release-notes.md
+
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          body_path: release-notes.md
           files: |
             dist/*.exe
             dist/latest.yml

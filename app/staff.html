@@ -67,12 +67,13 @@ footer{padding:8px 16px;border-top:1px solid var(--line);background:var(--card);
     {k:"login",t:"Логин"},{k:"nick",t:"Ник"},{k:"static",t:"Статик"},{k:"org",t:"Организация"},
     {k:"role",t:"Роль в игре",f:function(v){return ROLES[v]||v}},
     {k:"rank",t:"Права",badge:true,f:function(v){return RANKS[v]||v}},
-    {k:"discord",t:"Discord"},{k:"phone",t:"Номер"},
-    {k:"telegram",t:"Telegram",f:function(v){return v||"—"}},{k:"tg_id",t:"TG ID",f:function(v){return v||"—"}},
+    {k:"discord",t:"Discord",f:hid},{k:"phone",t:"Номер",f:hid},
+    {k:"telegram",t:"Telegram",f:function(v){return v===null?"скрыто":v||"—"}},{k:"tg_id",t:"TG ID",f:function(v){return v||"—"}},
     {k:"det7",t:"Задерж. за 7 дн."},{k:"det",t:"Задержаний"},{k:"tests",t:"Тестов"},{k:"avg_p",t:"Ср. результат",f:function(v){return v==null?"—":v+"%"}},{k:"xp",t:"XP"},
     {k:"last_seen",t:"Был в сети",f:date,sortv:ts},{k:"created",t:"Регистрация",f:date,sortv:ts}
   ];
   var data=[], cols=[], sort={k:"created",dir:1}, viewer="";
+  function hid(v){return v===null?"скрыто":(v==null?"":String(v))}   // 2.2: пользователь не открыл эту связь руководству
   function ts(v){return v?new Date(v).getTime():0}
   function date(v){return v?new Date(v).toLocaleString("ru-RU",{dateStyle:"short",timeStyle:"short"}):"—"}
   function showErr(m){var e=$("err"); e.textContent=m||""; e.hidden=!m}

@@ -99,6 +99,8 @@ ipcRenderer.on("senko:cfg", (_e, state) => {
   });
 });
 
+const openListeners = new Set();
+ipcRenderer.on("senko:open", (_e, target) => { openListeners.forEach((f) => { try { f(String(target || "")); } catch (e) {} }); });
 const lawsListeners = new Set();
 ipcRenderer.on("laws:event", (_e, ev) => {
   lawsListeners.forEach((f) => {
@@ -127,11 +129,41 @@ contextBridge.exposeInMainWorld("senkoApp", {
   exportData: (text) => ipcRenderer.invoke("senko:export-data", String(text || "")), // сохранить данные в файл
   importData: () => ipcRenderer.invoke("senko:import-data"), // выбрать файл с данными → {ok, text}
   openBackups: () => ipcRenderer.send("senko:open-backups"), // папка с ежедневными резервными копиями
+  // карточки задержанных: отдельный файл detainees.json в папке данных
+  dets: {
+    load: () => ipcRenderer.sendSync("senko:dets-load"),
+    save: (list) => ipcRenderer.send("senko:dets-save", Array.isArray(list) ? list : []),
+    open: () => ipcRenderer.send("senko:dets-open")
+  },
+  // правка данных статей (только этот компьютер): отдельный файл article-edits.json
+  artEdits: {
+    load: () => ipcRenderer.sendSync("senko:artedit-load"),
+    save: (edits) => ipcRenderer.send("senko:artedit-save", edits && typeof edits === "object" ? edits : {}),
+    open: () => ipcRenderer.send("senko:artedit-open")
+  },
+  // ежедневные копии данных: список и одно значение из копии (для отката заметок)
+  backups: {
+    list: () => ipcRenderer.sendSync("senko:bk-list"),
+    key: (name, key) => ipcRenderer.sendSync("senko:bk-key", String(name || ""), String(key || ""))
+  },
   resetData: (d) => ipcRenderer.invoke("senko:reset-data", { account: !!(d && d.account) }), // сброс всех данных
   syncRebase: () => ipcRenderer.invoke("senko:sync-rebase"), // перед загрузкой данных из файла: заново слить с аккаунтом
   api: (action, data) => ipcRenderer.invoke("senko:api", String(action || ""), data || {}), // прогресс, рейтинг, смены, контрольные тесты
   updateProfile: (d) => ipcRenderer.invoke("senko:profile-update", d || {}), // сохранить данные кабинета в аккаунт
-  bug: (text) => ipcRenderer.invoke("senko:bug", String(text || "").slice(0, 2000)), // сообщение об ошибке
+  bug: (text, log) => ipcRenderer.invoke("senko:bug", String(text || "").slice(0, 2000), typeof log === "string" ? log.slice(0, 60000) : ""), // сообщение об ошибке (+ журнал)
+  // 2.2: журнал и экран «Состояние», откат данных, ярлыки на вкладку или статью
+  diag: () => ipcRenderer.invoke("senko:diag"),
+  diagLog: () => ipcRenderer.invoke("senko:diag-log"),
+  dataVersions: () => ipcRenderer.invoke("senko:data-versions"),
+  dataRollback: (kind, id) => ipcRenderer.invoke("senko:data-rollback", { kind: String(kind || ""), id: String(id || "") }),
+  dataResume: (kind) => ipcRenderer.invoke("senko:data-resume", { kind: String(kind || "") }),
+  openArg: () => ipcRenderer.sendSync("senko:open-arg"),
+  onOpen: (f) => { if (typeof f === "function") openListeners.add(f); },
+  shortcut: (target, name) => ipcRenderer.invoke("senko:shortcut", { target: String(target || ""), name: String(name || "") }),
+  // 2.2: размер данных и «Сохранить сейчас», профили окна «в игре» / «за столом»
+  saveInfo: () => ipcRenderer.invoke("senko:save-info"),
+  saveNow: () => { flush(true); return ipcRenderer.invoke("senko:save-info"); },
+  winProfile: (op, name) => ipcRenderer.send("senko:win", op === "save" ? "prof-save" : "prof-use", String(name || "")),
   recheck: () => ipcRenderer.invoke("senko:recheck"), // сверка с сервером сейчас
   restart: () => ipcRenderer.send("senko:restart"), // перезапуск программы
   copy: (text) => ipcRenderer.send("senko:copy", String(text || "").slice(0, 200)),
@@ -349,7 +381,7 @@ html.noanim .satm{animation:none}
     new MutationObserver(paintTimer).observe(document.documentElement, { attributes: true, attributeFilter: ["data-sa-timer", "data-sa-timer-st"] });
     paintBar(); paintTimer();
   }
-  ipcRenderer.on("senko:winstate", (_e, s) => { if (s) { ws = s; paintBar(); } });
+  ipcRenderer.on("senko:winstate", (_e, s) => { if (s) { ws = s; paintBar(); document.documentElement.classList.toggle("sa-strip", !!s.strip); } });
   ipcRenderer.on("senko:winmenu", (_e, pt) => openMenu(pt && Number.isFinite(pt.x) ? pt : null));
   if (document.body) build(); else document.addEventListener("DOMContentLoaded", build);
 })();

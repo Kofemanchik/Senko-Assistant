@@ -195,6 +195,10 @@ $$ select case when t ~ '^-?[0-9]{1,15}(\.[0-9]{1,6})?$' then t::numeric end $$;
 revoke all on function public.senko_num(text) from anon, authenticated;
 -- Приём новичков: ok — работает, pending — ждёт подтверждения руководства, rejected — отклонён
 alter table public.profiles add column if not exists approval text not null default 'ok';
+-- 2.2: какие спецсвязи (discord, telegram, phone) пользователь открыл руководству своей организации
+alter table public.profiles add column if not exists contacts_open text[] not null default '{}';
+-- 2.2: журнал программы, приложенный к сообщению об ошибке
+alter table public.bug_reports add column if not exists log text not null default '';
 
 -- Опыт на начало недели (неделя с понедельника по МСК): опыт за неделю = текущий опыт − base
 create table if not exists public.xp_week (
@@ -281,6 +285,51 @@ create table if not exists public.reports (
 create index if not exists reports_org_idx  on public.reports (org, created_at desc);
 create index if not exists reports_user_idx on public.reports (user_id, created_at desc);
 
+-- Ссылки «Поделиться» на расчёт или набор статей (обновление 2.6): живут 30 дней
+create table if not exists public.shares (
+  code       text primary key,                -- 8 знаков, например K7M2QX9A
+  kind       text not null check (kind in ('calc','set')),
+  user_id    uuid references public.profiles(id) on delete cascade,
+  author     text not null default '',
+  title      text not null default '',
+  ids        jsonb not null default '[]',     -- статьи: uk12.8-, ak2.1- ...
+  body       text not null default '',        -- текст, который видно по ссылке в браузере
+  views      int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists shares_created_idx on public.shares (created_at);
+
+-- Перенос данных на другой компьютер по коду из 6 цифр (обновление 2.6): один код на аккаунт, 15 минут
+create table if not exists public.transfers (
+  user_id    uuid primary key references public.profiles(id) on delete cascade,
+  code       text not null,
+  data       jsonb not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+
+-- Поиски без результата (обновление 2.6): только текст запроса и счётчики, без логина
+create table if not exists public.search_misses (
+  q        text primary key,
+  n        int not null default 0,              -- сколько раз искали
+  sends    int not null default 0,              -- сколько раз приходило из программ
+  first_at timestamptz not null default now(),
+  last_at  timestamptz not null default now()
+);
+create index if not exists search_misses_last_idx on public.search_misses (last_at desc);
+
+-- Журнал входов (2.2): пользователь видит его в личном кабинете; хранится 90 дней
+create table if not exists public.login_log (
+  id      bigserial primary key,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  at      timestamptz not null default now(),
+  kind    text not null default 'login',   -- login | fail | password | reset | logout_all
+  ver     text not null default '',        -- версия программы
+  os      text not null default '',        -- система: Windows 10 / Windows 11 и т. п.
+  ip      text not null default ''         -- только начало адреса: 85.143.x.x
+);
+create index if not exists login_log_user_idx on public.login_log (user_id, at desc);
+
 -- Закрываем таблицы от публичного API ----------------------------------------
 alter table public.profiles       enable row level security;
 alter table public.sessions       enable row level security;
@@ -303,13 +352,18 @@ alter table public.control_tests  enable row level security;
 alter table public.control_results enable row level security;
 alter table public.ai_log         enable row level security;
 alter table public.reports        enable row level security;
+alter table public.shares         enable row level security;
+alter table public.transfers      enable row level security;
+alter table public.search_misses  enable row level security;
+alter table public.login_log      enable row level security;
 
 revoke all on table public.profiles, public.sessions, public.recovery_codes,
                     public.reset_requests, public.audit_log, public.rate_limits, public.sync_items,
                     public.account_notes, public.account_warns, public.bot_pending,
                     public.bot_settings, public.broadcasts, public.bug_reports, public.bot_delayed,
                     public.xp_week, public.achievements, public.shifts, public.control_tests,
-                    public.control_results, public.ai_log, public.reports
+                    public.control_results, public.ai_log, public.reports,
+                    public.shares, public.transfers, public.search_misses, public.login_log
   from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;
 

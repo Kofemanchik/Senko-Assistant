@@ -5,6 +5,7 @@
 //   • POST от приложения        → API (регистрация, вход, сессии, сброс пароля, список сотрудников)
 //   • POST от Telegram          → бот (роли, баны, подтверждение сброса пароля)
 //   • GET ?setup=<секрет>       → один раз подключает бота (setWebhook)
+//   • GET ?s=<код>              → текст расчёта или набора статей по ссылке «Поделиться»
 //
 // Секреты (Edge Functions → Secrets), значения вводите только там и никому не присылайте:
 //   TELEGRAM_BOT_TOKEN   токен бота от @BotFather
@@ -28,7 +29,7 @@ const GAME_ROLES = { off: "Сотрудник", pros: "Прокурор", adv: "
 // Роль в игре с учётом организации: вне Government всегда «Сотрудник»
 const gameRole = (p) => (p.org === GOV_ORG ? p.game_role : "off");
 const RANKS = { user: "Пользователь", leader: "Руководство", moderator: "Модератор памятки", owner: "Владелец" };
-const LEGAL_VERSION = "2026-10-21.1"; // версия Политики и Условий; должна совпадать с VERSION в app/auth.html и app/index.html
+const LEGAL_VERSION = "2026-10-21.2"; // версия Политики и Условий; должна совпадать с VERSION в app/auth.html и app/index.html
 const SYNC_KINDS = { thist: 1, dlog: 1, tests: 1, qstat: 1, xp: 1, daily: 1, streak: 1, favs: 1, notes: 1, labels: 1, folders: 1, favorder: 1 }; // что синхронизируется между компьютерами
 const SYNC_MAX_ITEMS = 300; // элементов за один запрос
 const SYNC_ITEM_BYTES = 65536; // размер одного элемента
@@ -124,6 +125,7 @@ async function cleanup() {
   await sql`delete from reset_requests where created_at < now() - interval '7 days'`;
   await sql`delete from bot_pending where expires_at < now()`;
   await sql`delete from ai_log where at < now() - interval '90 days'`;
+  await sql`delete from login_log where at < now() - interval '90 days'`;
   await sql`update profiles set banned = false, ban_reason = '', banned_at = null, banned_until = null where banned and banned_until is not null and banned_until <= now()`;
 }
 const maybeCleanup = () => (Math.random() < 0.05 ? cleanup().catch((e) => console.error("cleanup", e)) : null);
@@ -161,7 +163,7 @@ function card(p, viewer) {
     `Организация: ${esc(p.org)}`,
     `Роль в игре: ${GAME_ROLES[gameRole(p)] || gameRole(p)}`,
     `Дискорд: ${esc(p.discord)}`,
-    `Номер в игре: ${esc(p.phone)}`,
+    `Номер в игре: ${esc(p.phone || "—")}`,
   ];
   if (viewer === "owner") {
     L.push(`Телеграм: ${p.telegram ? esc(p.telegram) : "—"}`);
@@ -276,7 +278,7 @@ function checkFields(b) {
   if (telegram && !/^[A-Za-z0-9_]{5,32}$/.test(telegram)) return { error: "Телеграм: ник вида @name (5–32 символа) или оставьте поле пустым." };
   if (telegram) telegram = "@" + telegram;
   const phone = String(b.phone == null ? "" : b.phone).replace(/[\s()+-]/g, "");
-  if (!/^[0-9]{3,12}$/.test(phone)) return { error: "Номер в игре: только цифры (3–12 знаков)." };
+  if (phone && !/^[0-9]{3,12}$/.test(phone)) return { error: "Номер в игре: только цифры (3–12 знаков) или оставьте поле пустым." };
   return { nick, st, discord, telegram, phone };
 }
 function passError(pass) {
@@ -330,6 +332,7 @@ async function register(b, ip) {
     throw e;
   }
   const token = pend ? null : await newSession(p.id, !!b.remember);
+  await logIn(p.id, "register", b, ip);
   maybeCleanup();
   const ver = clean(b.ver, 20);
   if (ver) await sql`update profiles set app_version = ${ver} where id = ${p.id}`;
@@ -361,6 +364,77 @@ async function register(b, ip) {
 
 // ───────────── API: вход ─────────────
 const DUMMY_SALT = "$2a$10$abcdefghijklmnopqrstuv"; // чтобы время ответа не выдавало, существует ли логин
+// ───────────── Журнал входов (2.2) ─────────────
+// Пользователь видит его в кабинете. IP хранится только началом: 85.143.x.x
+function ipShort(ip) {
+  const v = String(ip || "");
+  const m = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(v);
+  if (m) return `${m[1]}.${m[2]}.x.x`;
+  if (v.includes(":")) return v.split(":").slice(0, 2).join(":") + ":…";
+  return "";
+}
+async function logIn(userId, kind, b, ip) {
+  try {
+    await db()`insert into login_log (user_id, kind, ver, os, ip) values (${userId}, ${kind}, ${clean(b && b.ver, 20)}, ${clean(b && b.os, 40)}, ${ipShort(ip)})`;
+  } catch (e) {
+    console.error("login_log", e);
+  }
+}
+async function loginsApi(b, ip) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const sql = db();
+  const th = await sha256(b.token);
+  if (b.op === "end_others") {
+    if (!(await hit(`eo:${p.id}`, 10, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const r = await sql`delete from sessions where user_id = ${p.id} and token_hash <> ${th} returning token_hash`;
+    await logIn(p.id, "logout_all", b, ip);
+    return { ok: true, ended: r.length };
+  }
+  const list = await sql`select at, kind, ver, os, ip from login_log where user_id = ${p.id} order by at desc limit 30`;
+  const [{ n }] = await sql`select count(*)::int as n from sessions where user_id = ${p.id} and expires_at > now() and token_hash <> ${th}`;
+  return { ok: true, list: list.map((r) => ({ at: new Date(r.at).getTime(), kind: r.kind, ver: r.ver, os: r.os, ip: r.ip })), others: n };
+}
+// ───────────── Смена пароля из личного кабинета (2.2) ─────────────
+async function changePassword(b, ip) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!(await hit(`cp:${p.id}`, 6, 900))) return fail(RATE_MSG, { code: "rate" });
+  const old = String(b.old == null ? "" : b.old);
+  const pass = String(b.password == null ? "" : b.password);
+  if (!old) return fail("Введите текущий пароль.");
+  const pe = passError(pass);
+  if (pe) return fail(pe);
+  if (old === pass) return fail("Новый пароль совпадает с текущим.");
+  const sql = db();
+  const [{ ok }] = await sql`select extensions.crypt(${old}, ${p.pass_hash}) = ${p.pass_hash} as ok`;
+  if (!ok) {
+    await logIn(p.id, "fail", b, ip);
+    return fail("Текущий пароль неверный.");
+  }
+  const th = await sha256(b.token);
+  await sql`update profiles set pass_hash = extensions.crypt(${pass}, extensions.gen_salt('bf', 10)) where id = ${p.id}`;
+  // остальные входы с этим паролем завершаются, этот компьютер остаётся в аккаунте
+  const r = await sql`delete from sessions where user_id = ${p.id} and token_hash <> ${th} returning token_hash`;
+  await logIn(p.id, "password", b, ip);
+  await audit(p.login, "password_change", p.login, { sessions: r.length });
+  if (p.tg_id) await tg("sendMessage", { chat_id: p.tg_id, text: "🔑 Пароль от Senko Assistant изменён. Если это были не вы, срочно напишите владельцу памятки." }).catch(() => null);
+  return { ok: true, ended: r.length };
+}
+
+// PIN при запуске забыт: программа спрашивает пароль от аккаунта и проверяет его здесь (2.2)
+async function verifyPassword(b, ip) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!(await hit(`vp:${p.id}`, 6, 900))) return fail(RATE_MSG, { code: "rate" });
+  const [{ ok }] = await db()`select extensions.crypt(${String(b.password == null ? "" : b.password)}, ${p.pass_hash}) = ${p.pass_hash} as ok`;
+  if (!ok) {
+    await logIn(p.id, "fail", b, ip);
+    return fail("Неверный пароль.");
+  }
+  return { ok: true };
+}
+
 async function login(b, ip) {
   const lc = clean(b.login, 24).toLowerCase();
   const pass = String(b.password == null ? "" : b.password);
@@ -383,6 +457,7 @@ async function login(b, ip) {
     // много неудачных попыток подряд — тихое уведомление владельцу (один раз на серию)
     const n = await hitN(`lf:${lc}`, 900);
     if (n === FAIL_ALERT) await quiet(`⚠️ ${n} неудачных попыток входа в <b>${esc(p.login)}</b> (${RANKS[p.rank]}) за 15 минут.`);
+    await logIn(p.id, "fail", b, ip);
     return fail("Неверный логин или пароль.");
   }
   if (p.banned) return fail(banMsg(p), { code: "banned" });
@@ -391,6 +466,7 @@ async function login(b, ip) {
   const token = await newSession(p.id, !!b.remember);
   await sql`update profiles set last_seen = now() where id = ${p.id}`;
   await noteClient(p, b);
+  await logIn(p.id, "login", b, ip);
   maybeCleanup();
   return { ok: true, token, user: pub(p), sys: await sysFor(p) };
 }
@@ -559,6 +635,8 @@ async function staffList(b) {
     : await db()`select * from profiles order by created_at`;
   const stats = await userStats();
   const wk = Object.fromEntries((await weekStats(scope)).map((x) => [x.id, x]));
+  const full = p.rank === "owner" || p.rank === "moderator";
+  const opened = (r, k) => Array.isArray(r.contacts_open) && r.contacts_open.includes(k);
   const list = rows.map((r) => {
     const st = stats[r.id] || {};
     const w = wk[r.id] || {};
@@ -570,8 +648,9 @@ async function staffList(b) {
       role: gameRole(r),
       rank: r.rank,
       created: r.created_at,
-      discord: r.discord,
-      phone: r.phone,
+      // руководство видит Discord, только если пользователь открыл его сам; номер и Telegram видят лишь владелец и модераторы
+      discord: full || opened(r, "discord") ? r.discord : null,
+      phone: full ? r.phone : null,
       last_seen: r.last_seen,
       // показатели работы видны всем, у кого есть доступ к панели
       det: st.det || 0,
@@ -708,6 +787,7 @@ async function resetComplete(b, ip) {
   });
   if (!res) return fail("Сброс недействителен или устарел. Запросите его заново.", { code: "gone" });
   await audit(res.r.decided_by || "?", "password_reset", res.p.login, { via: res.r.via });
+  await logIn(res.p.id, "reset", b, ip);
   try {
     if (OWNER_TG)
       await send(OWNER_TG, `🔑 Пароль сброшен: <b>${esc(res.p.login)}</b> (${res.r.via === "code" ? "по коду восстановления" : "подтвердил: " + esc(res.r.decided_by)}).`);
@@ -726,7 +806,7 @@ async function api(req) {
     return J(fail("Некорректный запрос."), 400);
   }
   if (!b || typeof b !== "object") return J(fail("Некорректный запрос."), 400);
-  if (b.action !== "sync" && raw.length > 8192) return J(fail("Слишком большой запрос."), 413);
+  if (b.action !== "sync" && b.action !== "xfer" && raw.length > 8192) return J(fail("Слишком большой запрос."), 413);
   const ip = req.headers.get("cf-connecting-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
   switch (b.action) {
     case "register":
@@ -751,6 +831,20 @@ async function api(req) {
       return J(await ctrlApi(b));
     case "reports":
       return J(await reportsApi(b));
+    case "share":
+      return J(await shareApi(b));
+    case "xfer":
+      return J(await xferApi(b));
+    case "misses":
+      return J(await missesApi(b));
+    case "contacts":
+      return J(await contactsApi(b));
+    case "logins":
+      return J(await loginsApi(b, ip));
+    case "change_password":
+      return J(await changePassword(b, ip));
+    case "verify_password":
+      return J(await verifyPassword(b, ip));
     case "ai_log":
       return J(await aiLog(b));
     case "ai_vote":
@@ -779,6 +873,146 @@ async function api(req) {
     default:
       return J(fail("Неизвестное действие."), 400);
   }
+}
+
+// ───────────── Этап 10: ссылки «Поделиться», перенос по коду, поиски без результата ─────────────
+const SHARE_DAYS = 30; // сколько живёт ссылка на расчёт или набор
+const SHARE_KINDS = { calc: "Расчёт", set: "Набор статей" };
+const SHARE_ID_RE = /^(uk|ak|dk)[0-9a-zа-яё.]{1,12}-[0-9a-zа-яё.]{0,6}$/i;
+const XFER_MIN = 15; // сколько действует код переноса
+const XFER_BYTES = 900000;
+const MISS_ALERT = 5; // после стольких поисков владельцу приходит уведомление
+function shortCode(n) {
+  const a = new Uint8Array(n);
+  crypto.getRandomValues(a);
+  return [...a].map((x) => CODE_ALPH[x & 31]).join("");
+}
+const shareCode = (c) => normCode(c).slice(0, 12);
+
+async function shareApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const sql = db();
+  const op = String(b.op || "");
+  if (op === "create") {
+    const kind = String(b.kind || "");
+    if (!SHARE_KINDS[kind]) return fail("Неизвестный вид ссылки.");
+    const ids = (Array.isArray(b.ids) ? b.ids : []).map((x) => clean(x, 30)).filter((x) => SHARE_ID_RE.test(x)).slice(0, 40);
+    if (!ids.length) return fail("Добавьте статьи, чтобы поделиться.");
+    const body = cleanText(b.text, 3000);
+    if (!(await hit(`sh:${p.id}`, 30, 3600))) return fail(RATE_MSG, { code: "rate" });
+    let code = "";
+    for (let i = 0; i < 5 && !code; i++) {
+      const c = shortCode(8);
+      const r = await sql`insert into shares (code, kind, user_id, author, title, ids, body)
+                          values (${c}, ${kind}, ${p.id}, ${p.nick || p.login}, ${clean(b.title, 80)}, ${sql.json(ids)}, ${body})
+                          on conflict (code) do nothing returning code`;
+      if (r.length) code = c;
+    }
+    if (!code) return fail("Не удалось создать ссылку. Попробуйте ещё раз.");
+    await sql`delete from shares where created_at < now() - make_interval(days => ${SHARE_DAYS})`;
+    return { ok: true, code, url: SELF_URL + "?s=" + code, days: SHARE_DAYS };
+  }
+  if (op === "get") {
+    if (!(await hit(`sg:${p.id}`, 60, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const code = shareCode(b.code);
+    const [r] = code.length === 8
+      ? await sql`select * from shares where code = ${code} and created_at > now() - make_interval(days => ${SHARE_DAYS})`
+      : [];
+    if (!r) return fail("Ссылка не найдена или устарела: ссылки действуют " + SHARE_DAYS + " дней.");
+    await sql`update shares set views = views + 1 where code = ${code}`;
+    return { ok: true, share: { code, kind: r.kind, title: r.title, ids: r.ids, author: r.author, at: new Date(r.created_at).getTime() } };
+  }
+  return fail("Неизвестное действие.");
+}
+
+// Ссылка, открытая в браузере (или с телефона по QR-коду): простой текст расчёта
+async function shareView(req, url) {
+  const ip = req.headers.get("cf-connecting-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
+  const head = { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" };
+  if (!(await hit(`sv:${ip}`, 120, 3600))) return new Response(RATE_MSG, { status: 429, headers: head });
+  const code = shareCode(url.searchParams.get("s"));
+  const [r] = code.length === 8
+    ? await db()`select * from shares where code = ${code} and created_at > now() - make_interval(days => ${SHARE_DAYS})`
+    : [];
+  if (!r) return new Response("Senko Assistant\n\nСсылка не найдена или устарела: ссылки действуют " + SHARE_DAYS + " дней.", { status: 404, headers: head });
+  await db()`update shares set views = views + 1 where code = ${code}`;
+  const t = `Senko Assistant · ${SHARE_KINDS[r.kind] || "Ссылка"}${r.title ? ": " + r.title : ""}\nОт: ${r.author} · ${fmtDate(r.created_at)}\n\n${r.body || ""}\n\n` +
+    `Открыть в программе: скопируйте эту ссылку и вставьте в строку поиска Senko Assistant.\nКод: ${code}`;
+  return new Response(t, { status: 200, headers: head });
+}
+
+// Перенос всех данных на другой компьютер того же аккаунта: код из 6 цифр, действует 15 минут, срабатывает один раз
+async function xferApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const sql = db();
+  const op = String(b.op || "");
+  if (op === "put") {
+    if (!(await hit(`xp:${p.id}`, 10, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const json = JSON.stringify(b.data === undefined ? null : b.data);
+    if (!b.data || typeof b.data !== "object" || Array.isArray(b.data)) return fail("Нет данных для переноса.");
+    if (json.length > XFER_BYTES) return fail("Данных слишком много для переноса по коду. Сохраните их в файл (Настройки → Данные).");
+    const a = new Uint32Array(1);
+    crypto.getRandomValues(a);
+    const code = String(100000 + (a[0] % 900000));
+    await sql`delete from transfers where expires_at < now()`;
+    await sql`insert into transfers (user_id, code, data, expires_at) values (${p.id}, ${code}, ${json}::text::jsonb, now() + make_interval(mins => ${XFER_MIN}))
+              on conflict (user_id) do update set code = excluded.code, data = excluded.data, created_at = now(), expires_at = excluded.expires_at`;
+    return { ok: true, code, min: XFER_MIN };
+  }
+  if (op === "get") {
+    if (!(await hit(`xg:${p.id}`, 10, 900))) return fail(RATE_MSG, { code: "rate" });
+    const code = String(b.code || "").replace(/\D/g, "");
+    if (code.length !== 6) return fail("Введите код из 6 цифр.");
+    const [r] = await sql`delete from transfers where user_id = ${p.id} and code = ${code} and expires_at > now() returning data, created_at`;
+    if (!r) return fail("Код не подошёл или устарел. Получите новый код на другом компьютере, войдя в тот же аккаунт.");
+    return { ok: true, data: r.data, at: new Date(r.created_at).getTime() };
+  }
+  if (op === "cancel") {
+    await sql`delete from transfers where user_id = ${p.id}`;
+    return { ok: true };
+  }
+  return fail("Неизвестное действие.");
+}
+
+// Поиски без результата: какие слова ищут и не находят (без логина и ника, только текст запроса и счётчик)
+async function missesApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!(await hit(`ms:${p.id}`, 6, 3600))) return { ok: true, accepted: 0 };
+  const sql = db();
+  let n = 0;
+  const alerts = [];
+  for (const it of (Array.isArray(b.items) ? b.items : []).slice(0, 30)) {
+    const q = clean(it && it.q, 60).toLowerCase();
+    const c = Math.min(50, Math.max(1, parseInt(it && it.n, 10) || 1));
+    if (q.length < 2) continue;
+    const [r] = await sql`insert into search_misses (q, n, sends, first_at, last_at) values (${q}, ${c}, 1, now(), now())
+                          on conflict (q) do update set n = search_misses.n + excluded.n, sends = search_misses.sends + 1, last_at = now()
+                          returning n`;
+    if (r && r.n >= MISS_ALERT && r.n - c < MISS_ALERT) alerts.push(`«${esc(q)}» (${r.n})`);
+    n++;
+  }
+  if (alerts.length) {
+    try {
+      await quiet(`🔎 Часто ищут и не находят: ${alerts.join(", ")}. Список: /misses`);
+    } catch (e) {}
+  }
+  return { ok: true, accepted: n };
+}
+
+// ───────────── 2.2: спецсвязи видны руководству только по желанию пользователя ─────────────
+const CONTACT_KEYS = ["discord"]; // руководству можно открыть только Discord
+async function contactsApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (b.op === "set") {
+    const open = (Array.isArray(b.open) ? b.open : []).map(String).filter((k, i, a) => CONTACT_KEYS.includes(k) && a.indexOf(k) === i);
+    await db()`update profiles set contacts_open = ${open} where id = ${p.id}`;
+    return { ok: true, open };
+  }
+  return { ok: true, open: Array.isArray(p.contacts_open) ? p.contacts_open : [] };
 }
 
 // ───────────── Этап 3: настройки, сообщения в программе, сервис ─────────────
@@ -868,11 +1102,15 @@ async function bugReport(b) {
   const text = String(b.text == null ? "" : b.text).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").trim().slice(0, 2000);
   if (text.length < 10) return fail("Опишите проблему подробнее (хотя бы 10 символов).");
   const ver = clean(b.ver, 20);
-  const [r] = await db()`insert into bug_reports (user_id, text, app_version) values (${p.id}, ${text}, ${ver}) returning id`;
-  if (OWNER_TG)
-    await send(OWNER_TG, `🐞 <b>Сообщение об ошибке #${r.id}</b>\nОт: <code>${esc(p.login)}</code> · ${esc(p.nick)} · ${esc(p.org)}\nВерсия: ${esc(ver || "—")}\n\n${esc(text)}`, {
+  // 2.2: журнал программы (версии, состояние, хвост updater.log) приходит владельцу отдельным файлом
+  const log = String(b.log == null ? "" : b.log).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ").slice(0, 60000);
+  const [r] = await db()`insert into bug_reports (user_id, text, app_version, log) values (${p.id}, ${text}, ${ver}, ${log}) returning id`;
+  if (OWNER_TG) {
+    await send(OWNER_TG, `🐞 <b>Сообщение об ошибке #${r.id}</b>\nОт: <code>${esc(p.login)}</code> · ${esc(p.nick)} · ${esc(p.org)}\nВерсия: ${esc(ver || "—")}${log ? "\n📎 Журнал во вложении" : ""}\n\n${esc(text)}`, {
       reply_markup: { inline_keyboard: [[{ text: "✉️ Ответить", callback_data: `bg:${r.id}` }]] },
     });
+    if (log) await sendFile(OWNER_TG, `bug-${r.id}-log.txt`, log, `📎 Журнал к сообщению #${r.id}`, "text/plain");
+  }
   return { ok: true, id: String(r.id) };
 }
 
@@ -930,7 +1168,9 @@ async function summaryText() {
   const [bg] = await sql`select count(*)::int n, count(*) filter (where not answered)::int open from bug_reports where at > now() - interval '1 day'`;
   const [ai] = await sql`select count(*)::int n, count(*) filter (where vote > 0)::int up, count(*) filter (where vote < 0)::int down from ai_log where at > now() - interval '1 day'`;
   const [pd] = await sql`select count(*)::int n from profiles where approval = 'pending'`;
-  return `🗓 <b>Сводка за сутки</b>\nРегистраций: ${t.reg}\nАктивных: ${t.active}\nЗаблокировано всего: ${t.banned}\nЗапросов на сброс пароля: ${r.n}${r.pending ? " (ждут: " + r.pending + ")" : ""}\nСообщений об ошибках: ${bg.n}${bg.open ? " (без ответа: " + bg.open + ")" : ""}\nВопросов к ИИ: ${ai.n}${ai.n ? " (👍 " + ai.up + ", 👎 " + ai.down + ")" : ""}${pd.n ? "\nЗаявок ждут подтверждения: " + pd.n + " (/pending)" : ""}\n\nВсего пользователей: ${t.total}`;
+  const ms = await sql`select q, n from search_misses where last_at > now() - interval '1 day' order by n desc limit 5`.catch(() => []);
+  const msTxt = ms.length ? "\nЧасто ищут без результата: " + ms.map((r) => `«${esc(r.q)}» (${r.n})`).join(", ") + " (/misses)" : "";
+  return `🗓 <b>Сводка за сутки</b>\nРегистраций: ${t.reg}\nАктивных: ${t.active}\nЗаблокировано всего: ${t.banned}\nЗапросов на сброс пароля: ${r.n}${r.pending ? " (ждут: " + r.pending + ")" : ""}\nСообщений об ошибках: ${bg.n}${bg.open ? " (без ответа: " + bg.open + ")" : ""}\nВопросов к ИИ: ${ai.n}${ai.n ? " (👍 " + ai.up + ", 👎 " + ai.down + ")" : ""}${pd.n ? "\nЗаявок ждут подтверждения: " + pd.n + " (/pending)" : ""}${msTxt}\n\nВсего пользователей: ${t.total}`;
 }
 
 // Зашифрованная резервная копия (AES-256-GCM, ключ из BACKUP_KEY через PBKDF2). Расшифровка: node tools/decrypt-backup.js
@@ -955,13 +1195,13 @@ async function backupFile() {
   const b64 = (u) => btoa(Array.from(u, (c) => String.fromCharCode(c)).join(""));
   return { counts: { profiles: data.profiles.length, sync: data.sync_items_24h.length }, json: JSON.stringify({ v: 1, alg: "AES-256-GCM/PBKDF2-SHA256-200000", salt: b64(salt), iv: b64(iv), data: b64(ct) }) };
 }
-async function sendFile(chat, name, text, caption) {
+async function sendFile(chat, name, text, caption, type = "application/json") {
   if (!BOT_TOKEN) return null;
   const fd = new FormData();
   fd.append("chat_id", String(chat));
   fd.append("caption", caption);
   fd.append("parse_mode", "HTML");
-  fd.append("document", new Blob([text], { type: "application/json" }), name);
+  fd.append("document", new Blob([text], { type }), name);
   try {
     const r = await fetch(`${TG_API}/bot${BOT_TOKEN}/sendDocument`, { method: "POST", body: fd, signal: AbortSignal.timeout(30000) });
     return await r.json();
@@ -1305,6 +1545,8 @@ const RP_KINDS = {
   force: "Рапорт о применении силы",
   incident: "Рапорт о происшествии",
   service: "Служебный рапорт",
+  sup: "Заключение прокурора",
+  def: "Жалоба адвоката",
 };
 const RP_STATUS = { new: "на рассмотрении", ok: "принят", no: "отклонён" };
 const RP_ICON = { new: "⏳", ok: "✅", no: "❌" };
@@ -1372,6 +1614,8 @@ async function reportsApi(b) {
     if (op === "create") {
       const kind = String(b.kind || "");
       if (!RP_KINDS[kind]) return fail("Неизвестный вид рапорта.");
+      // формы прокурора и адвоката только для Government, как и в программе
+      if ((kind === "sup" || kind === "def") && p.org !== GOV_ORG) return fail("Эта форма доступна только сотрудникам Government.");
       const body = cleanText(b.body, 5000);
       if (body.length < 20) return fail("Рапорт слишком короткий: заполните поля.");
       if (!(await hit(`rp:${p.id}`, 15, 3600))) return fail(RATE_MSG, { code: "rate" });
@@ -1621,7 +1865,8 @@ const HELP_LEADER =
 const HELP_SERVICE =
   "\n<b>Сервис</b>\n" +
   "/health — статус базы, функции, ИИ и законов\n" +
-  "/in &lt;срок&gt; &lt;команда&gt; — выполнить команду позже, например /in 2h unban cop1; /jobs — список\n";
+  "/in &lt;срок&gt; &lt;команда&gt; — выполнить команду позже, например /in 2h unban cop1; /jobs — список\n" +
+  "/misses [дней] — что ищут в программе и не находят (по умолчанию за 7 дней); /misses del &lt;запрос&gt;|all — очистить\n";
 const HELP_OWNER3 =
   "\n<b>Рассылки и режимы (владелец)</b>\n" +
   "/broadcast &lt;текст&gt; — сообщение всем в программе; /broadcast_org &lt;орг&gt; &lt;текст&gt;\n" +
@@ -2137,6 +2382,22 @@ async function onMessage(m, opts = {}) {
       return send(chat, v === "on"
         ? `🛠 Режим техработ включён. Пользователи увидят «Идут технические работы»${t ? ": " + esc(t) : ""}. Регистрация закрыта. Вы и модераторы работаете как обычно.`
         : "✅ Режим техработ выключен.");
+    }
+
+    case "misses": {
+      const v = String(args[0] || "").toLowerCase();
+      if (v === "del") {
+        if (!owner) return ownerOnly();
+        const q = clean(args.slice(1).join(" "), 60).toLowerCase();
+        if (!q) return send(chat, "Использование: /misses del &lt;запрос&gt; или /misses del all");
+        const r = q === "all" ? await sql`delete from search_misses returning 1` : await sql`delete from search_misses where q = ${q} returning 1`;
+        return send(chat, r.length ? `✅ Удалено записей: ${r.length}.` : "Такого запроса в списке нет.");
+      }
+      const days = Math.min(365, Math.max(1, parseInt(v, 10) || 7));
+      const rows = await sql`select q, n, sends, last_at from search_misses where last_at > now() - make_interval(days => ${days}) order by n desc, last_at desc limit 30`;
+      if (!rows.length) return send(chat, `За ${days} дн. поисков без результата нет.`);
+      return send(chat, `🔎 <b>Ищут и не находят</b> (за ${days} дн.)\n` + rows.map((r, i) => `${i + 1}. «${esc(r.q)}» — ${r.n} ${plural(r.n, "раз", "раза", "раз")}${r.sends > 1 ? ", из " + r.sends + " " + plural(r.sends, "программы", "программ", "программ") : ""}`).join("\n") +
+        "\n\nЧасто встречающиеся запросы стоит добавить в синонимы поиска.");
     }
 
     case "summary": {
@@ -2672,6 +2933,7 @@ async function setup(url) {
       { command: "reports", description: "Рапорты сотрудников" },
       { command: "report", description: "Открыть рапорт по номеру" },
       { command: "ailog", description: "Вопросы к ИИ" },
+      { command: "misses", description: "Поиски без результата" },
       { command: "in", description: "Отложенная команда" },
       { command: "jobs", description: "Отложенные команды" },
     ],
@@ -2685,6 +2947,7 @@ Deno.serve(async (req) => {
     if (req.method === "GET") {
       const url = new URL(req.url);
       if (url.searchParams.has("setup")) return await setup(url);
+      if (url.searchParams.has("s")) return await shareView(req, url);
       return J({ ok: true, service: "senko" });
     }
     if (req.method !== "POST") return J(fail("Метод не поддерживается."), 405);

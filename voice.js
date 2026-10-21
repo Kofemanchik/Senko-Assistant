@@ -313,4 +313,17 @@ function init(c) {
   ipcMain.handle("voice:ai", (e, q) => (fromOverlay(e) && typeof ctx.askAi === "function" ? ctx.askAi(String(q || "").slice(0, 500), { short: true }) : { ok: false, error: "Недоступно." }));
 }
 
-module.exports = { init, registerHotkey, destroy, applyOpts: sendOpts, hotkeyError: () => hotkeyError };
+// 2.2: для экрана «Состояние»: модель распознавания, состояние и клавиша
+function status() {
+  let model = { found: false, size: 0, path: "" };
+  try {
+    if (ctx) {
+      const f = fileMap()["model.tar.gz"];
+      model.path = f;
+      if (fs.existsSync(f)) model = { found: true, size: fs.statSync(f).size, path: f };
+    }
+  } catch (e) {}
+  return { inited: !!ctx, state, overlay: live(), model, hotkey: hotkeyActive || "", hotkeyError };
+}
+
+module.exports = { init, registerHotkey, destroy, applyOpts: sendOpts, hotkeyError: () => hotkeyError, status };

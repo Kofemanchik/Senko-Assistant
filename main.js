@@ -18,9 +18,46 @@ const COMPACT_W = 360;                      // ширина «узкого» о�
 
 app.setAppUserModelId("local.boston.pamyatka"); // нужен для системных уведомлений Windows
 
-// Имя программы теперь «Senko Assistant», но папку данных оставляем прежней («Boston»),
-// чтобы у тех, кто уже пользовался приложением, не пропали заметки и настройки.
-app.setPath("userData", path.join(app.getPath("appData"), "Boston"));
+// Папка данных: «%APPDATA%\Senko Assistant». До версии 2.2.0 она называлась «Boston»:
+// при первом запуске новой версии содержимое переносится, заметки и настройки сохраняются.
+const DATA_DIR = path.join(app.getPath("appData"), "Senko Assistant");
+const OLD_DATA_DIR = path.join(app.getPath("appData"), "Boston");
+// служебные папки Chromium: если такая уже есть в новой папке, старую копию можно просто удалить
+const CHROMIUM_CACHES = ["Crashpad", "Cache", "Code Cache", "GPUCache", "DawnCache", "DawnGraphiteCache", "DawnWebGPUCache", "GrShaderCache", "ShaderCache", "blob_storage", "Shared Dictionary"];
+function migrateDataDir() {
+  try {
+    if (!fs.existsSync(OLD_DATA_DIR)) return DATA_DIR;
+    // перенос уже был (или программой уже пользовались с новой папкой)
+    if (["app-settings.json", "session.json", "Local Storage"].some((f) => fs.existsSync(path.join(DATA_DIR, f)))) return DATA_DIR;
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const moved = [];
+    try {
+      for (const name of fs.readdirSync(OLD_DATA_DIR)) {
+        const to = path.join(DATA_DIR, name);
+        if (fs.existsSync(to)) {
+          if (CHROMIUM_CACHES.includes(name)) continue;
+          throw new Error("уже есть " + name);
+        }
+        fs.renameSync(path.join(OLD_DATA_DIR, name), to);
+        moved.push(name);
+      }
+    } catch (e) {
+      // файл занят (например, открыта старая версия) — возвращаем всё как было и работаем со старой папкой
+      for (const name of moved.reverse()) {
+        try { fs.renameSync(path.join(DATA_DIR, name), path.join(OLD_DATA_DIR, name)); } catch (e2) {}
+      }
+      return OLD_DATA_DIR;
+    }
+    for (const name of CHROMIUM_CACHES) {
+      try { fs.rmSync(path.join(OLD_DATA_DIR, name), { recursive: true, force: true }); } catch (e) {}
+    }
+    try { fs.rmdirSync(OLD_DATA_DIR); } catch (e) {}
+    return DATA_DIR;
+  } catch (e) {
+    return fs.existsSync(OLD_DATA_DIR) ? OLD_DATA_DIR : DATA_DIR;
+  }
+}
+app.setPath("userData", migrateDataDir());
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
@@ -30,6 +67,14 @@ let authWin = null;   // окно авторизации
 let staffWin = null;  // окно «Список сотрудников»
 let quitting = false; // true — программа действительно закрывается (а не прячется в трей)
 let startHidden = process.argv.includes("--hidden"); // запуск из автозагрузки
+// 2.2: ярлык «сразу на вкладке или статье»: Senko Assistant.exe --open=calc | --open=uk:12.8 | --open=field:f_radio
+const OPEN_RE = /^[a-z_]{2,12}(?::[0-9a-z_.]{1,16})?$/i;
+function openArg(argv) {
+  const a = (argv || []).find((x) => /^--open=/.test(String(x)));
+  const v = a ? String(a).slice(7).trim() : "";
+  return OPEN_RE.test(v) ? v : "";
+}
+let pendingOpen = openArg(process.argv);
 
 // ───────────── Автосохранение данных ─────────────
 // Файл виден пользователю: Документы\Senko Assistant\Автосохранение
@@ -133,6 +178,12 @@ const DEFAULTS = {
   ghost: false,              // «призрачный режим»: окно становится полупрозрачным, когда переключаешься в игру
   ghostOpacity: 55           // прозрачность окна в призрачном режиме, %
 };
+// 2.2: режимы окна (призрак по курсору, полоска, прилипание, профили, реакция на программу, поиск OBS и т. п.)
+const winx = require("./winx")({
+  win: () => win, cfg: () => cfg, save: () => saveCfg(), apply: () => applyWindowCfg(), push: () => pushState(),
+  setCompact: (on) => setCompact(on), visible: (b) => visibleBounds(b)
+});
+Object.assign(DEFAULTS, winx.defaults);
 let cfg = { ...DEFAULTS };
 const cfgFile = () => path.join(app.getPath("userData"), "app-settings.json");
 
@@ -148,6 +199,7 @@ function loadCfg() {
   if (cfg.voiceMode !== "ai") cfg.voiceMode = "search";
   cfg.opacity = Math.min(100, Math.max(30, Math.round(+cfg.opacity || 100)));
   if (!validHotkey(cfg.hotkey)) cfg.hotkey = DEFAULTS.hotkey;
+  winx.fix(cfg);
 }
 let cfgTimer = null;
 function saveCfg() {
@@ -166,6 +218,11 @@ const updDir = () => path.join(app.getPath("userData"), "app");
 const updIndex = () => path.join(updDir(), "index.html");
 const updMeta = () => path.join(updDir(), "meta.json");
 const bundledIndex = () => path.join(__dirname, "app", "index.html");
+const updPrev = () => path.join(updDir(), "index.prev.html");
+const updPrevMeta = () => path.join(updDir(), "meta.prev.json");
+const holdFile = () => path.join(app.getPath("userData"), "data-hold.json"); // 2.2: откат данных ставит автообновление на паузу
+const holdGet = () => readJson(holdFile()) || {};
+function holdSet(k, v) { const h = holdGet(); if (v) h[k] = v; else delete h[k]; try { writeAtomic(holdFile(), JSON.stringify(h)); } catch (e) {} }
 
 function cmpVer(a, b) {
   const pa = String(a).split(".").map((n) => parseInt(n, 10) || 0);
@@ -200,6 +257,7 @@ function box(opts) {
 
 async function checkForUpdate(manual) {
   if (UPDATE_BASE.includes("OWNER/REPO")) return; // заглушка не заменена — обновления выключены
+  if (holdGet().memo) return; // пользователь откатил данные: ждём, пока он сам вернёт обновления
   try {
     const t = Date.now();
     const res = await net.fetch(UPDATE_BASE + "version.json?t=" + t, { signal: AbortSignal.timeout(15000) });
@@ -221,6 +279,8 @@ async function checkForUpdate(manual) {
     if (!/^\s*<!doctype html/i.test(buf.subarray(0, 64).toString("utf8"))) return;
 
     fs.mkdirSync(updDir(), { recursive: true });
+    // прошлая скачанная версия остаётся для отката (Настройки → «Откат данных»)
+    try { if (fs.existsSync(updIndex()) && fs.existsSync(updMeta())) { fs.copyFileSync(updIndex(), updPrev()); fs.copyFileSync(updMeta(), updPrevMeta()); } } catch (e) {}
     fs.writeFileSync(updIndex() + ".tmp", buf);
     fs.renameSync(updIndex() + ".tmp", updIndex());
     fs.writeFileSync(updMeta(), JSON.stringify({ version: info.version, hash, at: new Date().toISOString() }));
@@ -246,7 +306,7 @@ async function checkForUpdate(manual) {
 // Работает через GitHub Releases: electron-updater читает latest.yml из последнего релиза,
 // скачивает новый установщик в фоне и предлагает перезапуск.
 // Каждое ручное нажатие «Проверить обновления» получает ответ: найдено / скачивается / готово / последняя версия / ошибка.
-// Всё, что делает обновлятор, пишется в «%APPDATA%\Senko Assistant\updater.log».
+// Всё, что делает обновлятор, пишется в «%APPDATA%\Senko Assistant\updater.log» (до 2.2.0 — «%APPDATA%\Boston\updater.log»).
 const RELEASES_URL = "https://github.com/Kofemanchik/Senko-Assistant/releases/latest";
 let updater = null;
 let manualCheck = false;
@@ -268,14 +328,36 @@ function endManual() {
   manualCheck = false;
   clearTimeout(manualTimer);
 }
+// 2.2: техническую ошибку переводим в понятную причину и совет, что делать
+const UPD_REASONS = [
+  [/ERR_INTERNET_DISCONNECTED|ENOTFOUND|ERR_NAME_NOT_RESOLVED|EAI_AGAIN|ERR_NETWORK_CHANGED/i, "Нет интернета или не открывается GitHub.", "Проверьте подключение к интернету и попробуйте ещё раз."],
+  [/ETIMEDOUT|ERR_TIMED_OUT|ERR_CONNECTION_TIMED_OUT|timeout|не ответила за/i, "GitHub не ответил вовремя.", "Скорее всего, медленный интернет или GitHub перегружен. Попробуйте через несколько минут."],
+  [/ECONNRESET|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED|socket hang up/i, "Соединение оборвалось во время загрузки.", "Повторите проверку. Если повторяется, мешает антивирус, VPN или прокси."],
+  [/ERR_PROXY|ERR_TUNNEL/i, "Не удалось пройти через прокси.", "Проверьте настройки прокси или VPN в Windows."],
+  [/CERT|certificate|self.signed|UNABLE_TO_VERIFY/i, "Ошибка сертификата защищённого соединения.", "Проверьте дату и время на компьютере. Иногда соединение подменяет антивирус."],
+  [/\b404\b|latest\.yml|Cannot find|No published versions|not found/i, "В релизе на GitHub нет нужных файлов обновления.", "Релиз ещё собирается или в нём нет latest.yml. Подождите или скачайте установщик вручную."],
+  [/\b403\b|rate limit|\b429\b/i, "GitHub временно ограничил запросы.", "Подождите час и попробуйте снова."],
+  [/sha512|checksum|mismatch/i, "Скачанный файл повреждён: контрольная сумма не совпала.", "Попробуйте ещё раз. Если повторяется, скачайте установщик вручную."],
+  [/ENOSPC|no space/i, "На диске не хватает места.", "Освободите место на диске C и повторите."],
+  [/EPERM|EACCES|EBUSY|operation not permitted|access is denied/i, "Нет доступа к папке обновлений или файл занят.", "Закройте другие копии программы. Иногда файл держит антивирус."],
+  [/not signed|publisherName|signature/i, "Подпись установщика не прошла проверку.", "Скачайте установщик вручную со страницы релизов."]
+];
+function updReason(err, message) {
+  const raw = err ? String((err && err.message) || err).split("\n")[0].slice(0, 300) : "";
+  const hay = raw + " " + (message || "");
+  for (const [re, why, tip] of UPD_REASONS) if (re.test(hay)) return { why, tip, raw };
+  return { why: raw || message || "Неизвестная ошибка.", tip: "Посмотрите журнал обновлений или скачайте установщик вручную.", raw };
+}
 // Ошибка или нет ответа: показать причину и дать скачать установщик вручную
 async function updFail(message, err) {
-  const why = err ? String((err && err.message) || err).split("\n")[0].slice(0, 300) : "";
+  const R = updReason(err, message);
+  upd.lastError = { at: Date.now(), message, why: R.why, raw: R.raw };
+  updLog("error", "fail:", message, "| причина:", R.why, R.raw ? "| " + R.raw : "");
   const r = await box({
     type: "warning",
     title: "Senko Assistant",
-    message,
-    detail: (why ? "Причина: " + why + "\n\n" : "") + "Новую версию можно скачать вручную со страницы релизов: установщик ставится поверх, данные сохранятся.",
+    message: message + " " + R.why,
+    detail: "Что делать: " + R.tip + (R.raw && R.raw !== R.why ? "\n\nТехнически: " + R.raw : "") + "\n\nНовую версию можно скачать вручную со страницы релизов: установщик ставится поверх, данные сохранятся. Подробности в журнале: " + updLogFile(),
     buttons: ["Скачать вручную", "Открыть журнал", "Закрыть"],
     defaultId: 0,
     cancelId: 2,
@@ -325,6 +407,7 @@ function initUpdater() {
     });
     autoUpdater.on("error", (err) => {
       updLog("error", "updater:", err);
+      upd.lastError = { at: Date.now(), message: "Фоновая проверка", why: updReason(err).why, raw: updReason(err).raw };
       if (upd.state !== "ready") upd.state = "idle";
       if (manualCheck) {
         endManual();
@@ -389,6 +472,7 @@ function visibleBounds(b) {
 }
 
 function saveBoundsNow() {
+  if (winx.stripped()) return; // свёрнутое в полоску окно не запоминаем
   if (!cfg.rememberBounds || !win || win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return;
   if (win.isMaximized()) {
     if (!cfg.compact) cfg.maximized = true;
@@ -421,10 +505,13 @@ function applyWindowCfg() {
   win.setAlwaysOnTop(cfg.alwaysOnTop, "screen-saver");
   win.setOpacity(windowOpacity() / 100);
 }
-// Призрачный режим: пока окно не в фокусе (вы в игре), оно полупрозрачное
+// Призрачный режим: пока окно не в фокусе (или курсор ушёл с окна), оно полупрозрачное.
+// Когда активна выбранная программа (например, игра), окно может стать ещё прозрачнее.
 function windowOpacity() {
-  const blurred = win && !win.isDestroyed() && win.isVisible() && !win.isFocused();
-  return cfg.ghost && blurred ? Math.min(cfg.opacity, cfg.ghostOpacity) : cfg.opacity;
+  let o = cfg.opacity;
+  if (cfg.ghost && winx.ghostNow()) o = Math.min(o, cfg.ghostOpacity);
+  if (winx.fadeNow()) o = Math.min(o, cfg.watchOpacity);
+  return o;
 }
 
 // ───────────── Своя строка заголовка (окно без системной рамки) ─────────────
@@ -434,7 +521,7 @@ function winState() {
     max: !!(w && w.isMaximized()), focused: !!(w && w.isFocused()),
     top: cfg.alwaysOnTop, compact: cfg.compact, ghost: cfg.ghost, opacity: cfg.opacity, ghostOpacity: cfg.ghostOpacity,
     tray: !!(cfg.tray && tray), hotkey: cfg.hotkeyEnabled ? cfg.hotkey : "", version: app.getVersion(),
-    staff: accounts.isStaff(), user: !!accounts.current()
+    staff: accounts.isStaff(), user: !!accounts.current(), ...winx.state()
   };
 }
 function pushWin() {
@@ -518,6 +605,7 @@ function updateTrayMenu() {
       { type: "separator" },
       { label: "Поверх всех окон", type: "checkbox", checked: cfg.alwaysOnTop, click: (m) => applySet("alwaysOnTop", m.checked) },
       { label: "Компактный режим", type: "checkbox", checked: cfg.compact, click: (m) => applySet("compact", m.checked) },
+      ...(cfg.winProfiles.game || cfg.winProfiles.desk ? [{ label: "Профиль окна", submenu: [["game", "В игре"], ["desk", "За столом"]].filter(([k]) => cfg.winProfiles[k]).map(([k, n]) => ({ label: n, type: "radio", checked: cfg.winProfile === k, click: () => { winx.profUse(k); updateTrayMenu(); } })) }] : []),
       { label: `Голосовой ввод (${cfg.voiceHotkey})`, type: "checkbox", checked: cfg.voiceEnabled, click: (m) => applySet("voiceEnabled", m.checked) },
       { type: "separator" },
       ...(accounts.isStaff() ? [{ label: "Список сотрудников", click: openStaff }] : []),
@@ -531,8 +619,38 @@ function updateTrayMenu() {
 }
 
 // ───────────── Автозапуск ─────────────
+// Запись в реестре (HKCU\...\Run) сравнивается вместе с аргументами, поэтому проверять её нужно с теми же
+// path и args, с какими она записана. Путь в кавычках: в нём есть пробелы («Senko Assistant.exe»).
+const LOGIN_ITEM = () => ({ path: `"${process.execPath}"`, args: ["--hidden"] });
 function getAutostart() {
-  try { return !!app.getLoginItemSettings().openAtLogin; } catch (e) { return false; }
+  try { return !!app.getLoginItemSettings(LOGIN_ITEM()).openAtLogin; } catch (e) { return false; }
+}
+function setAutostart(on, enabled = true) {
+  app.setLoginItemSettings({ openAtLogin: !!on, enabled, ...LOGIN_ITEM() });
+}
+// Если автозапуск был включён, но запись ведёт на старое место программы (папка «boston-pamyatka»)
+// или записана в старом формате (путь без кавычек), переписываем её на текущий exe.
+// Отключение в Диспетчере задач (StartupApproved) сохраняется.
+function refreshAutostart() {
+  if (!app.isPackaged || process.platform !== "win32") return;
+  const name = "local.boston.pamyatka"; // = AppUserModelId: под этим именем Electron пишет запись в Run
+  const KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion";
+  const { execFile } = require("child_process");
+  execFile("reg", ["query", KEY + "\\Run", "/v", name], { windowsHide: true }, (err, out) => {
+    if (err || !out || getAutostart()) return; // записи нет (автозапуск выключен) или она уже правильная
+    execFile("reg", ["query", KEY + "\\Explorer\\StartupApproved\\Run", "/v", name], { windowsHide: true }, (err2, out2) => {
+      const disabled = !err2 && /REG_BINARY\s+0[13]/i.test(out2 || "");
+      try { setAutostart(true, !disabled); } catch (e) {}
+    });
+  });
+}
+// До 2.2.0 программа стояла в «...\Programs\boston-pamyatka», а обновления качала в «boston-pamyatka-updater».
+// После переезда (см. build/installer.nsh) от них остаются пустая папка и старый кэш загрузки.
+function removeOldFolders() {
+  const base = process.env.LOCALAPPDATA;
+  if (!app.isPackaged || !base) return;
+  try { fs.rmSync(path.join(base, "boston-pamyatka-updater"), { recursive: true, force: true }); } catch (e) {}
+  try { fs.rmdirSync(path.join(path.dirname(path.dirname(process.execPath)), "boston-pamyatka")); } catch (e) {} // только если пустая
 }
 
 // ───────────── Состояние для окна памятки ─────────────
@@ -543,8 +661,11 @@ function getState() {
       alwaysOnTop: cfg.alwaysOnTop, hotkeyEnabled: cfg.hotkeyEnabled, hotkey: cfg.hotkey,
       compact: cfg.compact, rememberBounds: cfg.rememberBounds, opacity: cfg.opacity,
       tray: cfg.tray, notify: cfg.notify, ghost: cfg.ghost, ghostOpacity: cfg.ghostOpacity,
-      voiceEnabled: cfg.voiceEnabled, voiceHotkey: cfg.voiceHotkey, voiceOpacity: cfg.voiceOpacity, voiceMode: cfg.voiceMode
+      voiceEnabled: cfg.voiceEnabled, voiceHotkey: cfg.voiceHotkey, voiceOpacity: cfg.voiceOpacity, voiceMode: cfg.voiceMode,
+      ghostBy: cfg.ghostBy, strip: cfg.strip, snap: cfg.snap, watchApps: cfg.watchApps.slice(), watchMode: cfg.watchMode, watchOpacity: cfg.watchOpacity, streamAuto: cfg.streamAuto
     },
+    win: winx.state(),
+    platform: process.platform,
     autostart: getAutostart(),
     sync: sync.status(),
     hotkeyError,
@@ -552,6 +673,7 @@ function getState() {
     version: app.getVersion(),
     dataVersion: currentVersion(),
     depts: accounts.DEPTS,
+    shareUrl: require("./server-config").API_URL,
     sys: accounts.sys(),
     user: u ? { login: u.login, nick: u.nick, static: u.static, discord: u.discord, telegram: u.telegram, phone: u.phone, role: u.role, roleName: u.roleName, org: u.org, rank: u.rank, rankName: u.rankName, offline: !!u.offline } : null
   };
@@ -566,7 +688,7 @@ function applySet(key, val) {
   let result = { ok: true };
   if (key === "autostart") {
     if (!app.isPackaged) return { ok: false, error: "Автозапуск доступен только в установленной версии." };
-    app.setLoginItemSettings({ openAtLogin: !!val, args: ["--hidden"] });
+    setAutostart(val);
   } else if (bools.includes(key)) {
     val = !!val;
     if (key !== "compact") cfg[key] = val; // compact переключает setCompact (ему нужны границы прежнего режима)
@@ -615,14 +737,24 @@ function applySet(key, val) {
   } else if (key === "ghostOpacity") {
     cfg.ghostOpacity = Math.min(90, Math.max(20, Math.round(+val || DEFAULTS.ghostOpacity)));
     applyWindowCfg();
+  } else if (winx.keys.includes(key)) {
+    result = winx.set(key, val);
+    if (!result.ok) return result;
   } else {
     return { ok: false, error: "Неизвестная настройка." };
   }
   saveCfg();
+  // ползунки прозрачности шлют значение на каждом шаге: окно меняется сразу, а меню трея и страница обновляются после паузы
+  if (key === "opacity" || key === "ghostOpacity" || key === "voiceOpacity" || key === "watchOpacity") {
+    clearTimeout(slideTimer);
+    slideTimer = setTimeout(() => { updateTrayMenu(); pushState(); }, 250);
+    return result;
+  }
   updateTrayMenu();
   pushState();
   return result;
 }
+let slideTimer = null;
 
 // ───────────── О программе ─────────────
 function releaseDate() {
@@ -642,7 +774,7 @@ async function showAbout() {
     `Версия программы: ${app.getVersion()}`,
     `Версия данных памятки: ${dv}`,
     `Дата выпуска: ${releaseDate()}`,
-    `Автор: Boston`,
+    `Автор: Hanami Senko | Senko Corporation`,
     `Electron ${process.versions.electron} · Chromium ${process.versions.chrome}`
   ];
   if (u) lines.push("", `Вы вошли как: ${u.login} (${u.nick})`);
@@ -677,6 +809,8 @@ ipcMain.on("senko:win", (e, action, val) => {
     case "ghost": applySet("ghost", !cfg.ghost); break;
     case "opacity": applySet("opacity", val); break;
     case "dock": dockWindow(val === "left" ? "left" : "right"); break;
+    case "prof-save": winx.profSave(String(val)); updateTrayMenu(); break;
+    case "prof-use": winx.profUse(String(val)); updateTrayMenu(); break;
     case "reload": win.webContents.reload(); break;
     case "about": showAbout(); break;
     case "update": checkForAppUpdate(true); checkForUpdate(true); break;
@@ -762,6 +896,64 @@ ipcMain.handle("senko:import-data", async (e) => {
     return { ok: false, error: "Не удалось прочитать файл." };
   }
 });
+// Карточки задержанных (2.5): отдельный файл detainees.json в папке данных, не синхронизируется
+const detsFile = () => path.join(app.getPath("userData"), "detainees.json");
+ipcMain.on("senko:dets-load", (e) => {
+  if (!fromMain(e)) { e.returnValue = null; return; }
+  const j = readJson(detsFile());
+  e.returnValue = j && Array.isArray(j.list) ? j.list : [];
+});
+ipcMain.on("senko:dets-save", (e, list) => {
+  if (!fromMain(e) || !Array.isArray(list)) return;
+  try {
+    const text = JSON.stringify({ app: "Senko Assistant", savedAt: new Date().toISOString(), list: list.slice(0, 3000) });
+    if (text.length > 8 * 1024 * 1024) return;
+    writeAtomic(detsFile(), text);
+  } catch (err) {}
+});
+ipcMain.on("senko:dets-open", (e) => {
+  if (!fromMain(e)) return;
+  if (fs.existsSync(detsFile())) shell.showItemInFolder(detsFile());
+  else shell.openPath(app.getPath("userData"));
+});
+// Правка данных статей (срок, розыск, штраф): только на этом компьютере, отдельный файл в папке данных
+const artEditsFile = () => path.join(app.getPath("userData"), "article-edits.json");
+ipcMain.on("senko:artedit-load", (e) => {
+  if (!fromMain(e)) { e.returnValue = null; return; }
+  const j = readJson(artEditsFile());
+  e.returnValue = j && j.edits && typeof j.edits === "object" && !Array.isArray(j.edits) ? j.edits : {};
+});
+ipcMain.on("senko:artedit-save", (e, edits) => {
+  if (!fromMain(e) || !edits || typeof edits !== "object" || Array.isArray(edits)) return;
+  try {
+    const text = JSON.stringify({ app: "Senko Assistant", savedAt: new Date().toISOString(), edits }, null, 1);
+    if (text.length > 2 * 1024 * 1024) return;
+    writeAtomic(artEditsFile(), text);
+  } catch (err) {}
+});
+ipcMain.on("senko:artedit-open", (e) => {
+  if (!fromMain(e)) return;
+  if (fs.existsSync(artEditsFile())) shell.showItemInFolder(artEditsFile());
+  else shell.openPath(app.getPath("userData"));
+});
+// Ежедневные копии данных: список и заметки из выбранной копии (откат заметок)
+const BK_RE = /^senko-data-(\d{4}-\d{2}-\d{2})(-[\w-]+)?\.json$/;
+ipcMain.on("senko:bk-list", (e) => {
+  if (!fromMain(e)) { e.returnValue = []; return; }
+  try {
+    e.returnValue = fs.readdirSync(backupDir()).filter((f) => BK_RE.test(f)).sort().reverse().slice(0, 30).map((f) => {
+      let at = 0;
+      try { at = fs.statSync(path.join(backupDir(), f)).mtimeMs; } catch (err) {}
+      return { name: f, day: BK_RE.exec(f)[1], tag: (BK_RE.exec(f)[2] || "").slice(1), at };
+    });
+  } catch (err) { e.returnValue = []; }
+});
+ipcMain.on("senko:bk-key", (e, name, key) => {
+  if (!fromMain(e) || !BK_RE.test(String(name)) || !/^bos-[\w-]{1,40}$/.test(String(key))) { e.returnValue = null; return; }
+  const j = readJson(path.join(backupDir(), String(name)));
+  const v = j && j.data && j.data[key];
+  e.returnValue = typeof v === "string" ? v : null;
+});
 ipcMain.on("senko:open-backups", (e) => { if (fromMain(e)) { fs.mkdirSync(backupDir(), { recursive: true }); shell.openPath(backupDir()); } });
 // Сброс всех данных: автосохранение очищается (дневные копии остаются), по желанию — данные в аккаунте
 ipcMain.handle("senko:reset-data", async (e, d) => {
@@ -777,6 +969,19 @@ ipcMain.handle("senko:reset-data", async (e, d) => {
   try {
     writeAtomic(mainFile(), JSON.stringify({ app: "Senko Assistant", version: currentVersion(), savedAt: new Date().toISOString(), data: {} }, null, 2));
   } catch (err) {}
+  // карточки задержанных: копия уходит к резервным, сам файл очищается
+  try {
+    if (fs.existsSync(detsFile())) {
+      fs.mkdirSync(backupDir(), { recursive: true });
+      fs.copyFileSync(detsFile(), path.join(backupDir(), `detainees-${new Date().toISOString().slice(0, 10)}-before-reset.json`));
+      fs.rmSync(detsFile(), { force: true });
+    }
+    if (fs.existsSync(artEditsFile())) {
+      fs.mkdirSync(backupDir(), { recursive: true });
+      fs.copyFileSync(artEditsFile(), path.join(backupDir(), `article-edits-${new Date().toISOString().slice(0, 10)}-before-reset.json`));
+      fs.rmSync(artEditsFile(), { force: true });
+    }
+  } catch (err) {}
   await syncRebase(); // без галочки данные аккаунта вернутся на этот компьютер при перезагрузке страницы
   return { ok: true };
 });
@@ -787,7 +992,7 @@ ipcMain.handle("senko:sync-rebase", async (e) => {
 });
 
 // Прогресс, рейтинг недели, смены и контрольные тесты (этап 4): только перечисленные действия сервера
-const PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports"];
+const PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password"];
 ipcMain.handle("senko:api", async (e, action, data) => {
   if (!fromMain(e) || !PAGE_ACTIONS.includes(String(action))) return { ok: false, error: "Недоступно." };
   const r = await accounts.act(String(action), data && typeof data === "object" ? data : {});
@@ -795,7 +1000,7 @@ ipcMain.handle("senko:api", async (e, action, data) => {
   return r;
 });
 // Сообщение об ошибке (уходит владельцу в Telegram) и ручная сверка с сервером (кнопка «Проверить снова»)
-ipcMain.handle("senko:bug", async (e, text) => (fromMain(e) ? accounts.bugReport(text) : { ok: false, error: "Недоступно." }));
+ipcMain.handle("senko:bug", async (e, text, log) => (fromMain(e) ? accounts.bugReport(text, log) : { ok: false, error: "Недоступно." }));
 ipcMain.handle("senko:recheck", async (e) => {
   if (!fromMain(e)) return null;
   await verifySession();
@@ -810,6 +1015,117 @@ ipcMain.on("senko:restart", (e) => {
   Promise.race([sync.pushNow().catch(() => {}), new Promise((r) => setTimeout(r, 3000))]).then(go, go);
 });
 ipcMain.on("senko:copy", (e, text) => { if (fromMain(e)) clipboard.writeText(String(text).slice(0, 200)); });
+
+// ───────────── 2.2: ярлыки, откат данных, экран «Состояние», журнал для сообщения об ошибке ─────────────
+ipcMain.on("senko:open-arg", (e) => { e.returnValue = fromMain(e) ? pendingOpen : ""; if (fromMain(e)) pendingOpen = ""; });
+ipcMain.handle("senko:shortcut", (e, d) => {
+  if (!fromMain(e)) return { ok: false, error: "Недоступно." };
+  const target = String((d && d.target) || "");
+  if (!OPEN_RE.test(target)) return { ok: false, error: "Неверная цель ярлыка." };
+  if (process.platform !== "win32") return { ok: false, error: "Ярлыки создаются только в Windows." };
+  const name = String((d && d.name) || "Senko Assistant").replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60) || "Senko Assistant";
+  const file = path.join(app.getPath("desktop"), name + ".lnk");
+  const ok = shell.writeShortcutLink(file, fs.existsSync(file) ? "replace" : "create", {
+    target: process.execPath, args: `--open=${target}`, icon: process.execPath, iconIndex: 0, description: "Senko Assistant: " + name, appUserModelId: "local.boston.pamyatka"
+  });
+  return ok ? { ok: true, file } : { ok: false, error: "Windows не дала создать ярлык." };
+});
+function memoVersions() {
+  const cur = pickIndex(), m = readJson(updMeta()), pm = readJson(updPrevMeta());
+  return {
+    current: cur.version, bundled: app.getVersion(), usingDownloaded: cur.file === updIndex(),
+    downloaded: m && fs.existsSync(updIndex()) ? { version: m.version, at: m.at } : null,
+    prev: pm && fs.existsSync(updPrev()) ? { version: pm.version, at: pm.at } : null,
+    hold: !!holdGet().memo
+  };
+}
+// 2.2: размер данных и дата последнего автосохранения (для настроек)
+function fileSize(f) { try { return fs.statSync(f).size; } catch (e) { return 0; } }
+ipcMain.handle("senko:save-info", (e) => {
+  if (!fromMain(e)) return null;
+  let savedAt = 0, backups = 0, backupsSize = 0;
+  try { savedAt = fs.statSync(mainFile()).mtimeMs; } catch (err) {}
+  try { fs.readdirSync(backupDir()).filter((f) => f.endsWith(".json")).forEach((f) => { backups++; backupsSize += fileSize(path.join(backupDir(), f)); }); } catch (err) {}
+  const ud = app.getPath("userData");
+  return {
+    savedAt, size: fileSize(mainFile()), backups, backupsSize,
+    laws: fileSize(path.join(ud, "laws.json")) + (() => { let n = 0; try { fs.readdirSync(path.join(ud, "laws-history")).forEach((f) => { n += fileSize(path.join(ud, "laws-history", f)); }); } catch (err) {} return n; })(),
+    extra: fileSize(path.join(ud, "detainees.json")) + fileSize(path.join(ud, "article-edits.json")),
+    folder: saveDir().split(require("os").homedir()).join("~")
+  };
+});
+ipcMain.handle("senko:data-versions", (e) => (fromMain(e) ? { memo: memoVersions(), laws: laws.versions() } : null));
+ipcMain.handle("senko:data-rollback", (e, d) => {
+  if (!fromMain(e)) return { ok: false, error: "Недоступно." };
+  const kind = d && d.kind, id = String((d && d.id) || "");
+  try {
+    if (kind === "laws") {
+      const r = laws.restore(id);
+      if (!r.ok) return r;
+    } else if (kind === "memo") {
+      if (id === "prev") {
+        if (!fs.existsSync(updPrev()) || !fs.existsSync(updPrevMeta())) return { ok: false, error: "Прошлой версии данных нет." };
+        fs.copyFileSync(updPrev(), updIndex()); fs.copyFileSync(updPrevMeta(), updMeta());
+        fs.rmSync(updPrev(), { force: true }); fs.rmSync(updPrevMeta(), { force: true });
+      } else if (id === "bundled") {
+        if (fs.existsSync(updIndex())) { fs.copyFileSync(updIndex(), updPrev()); if (fs.existsSync(updMeta())) fs.copyFileSync(updMeta(), updPrevMeta()); }
+        fs.rmSync(updIndex(), { force: true }); fs.rmSync(updMeta(), { force: true });
+      } else return { ok: false, error: "Неизвестная версия." };
+      holdSet("memo", Date.now());
+    } else return { ok: false, error: "Неизвестный вид данных." };
+    updLog("info", "data rollback:", kind, id);
+    setTimeout(() => { if (win && !win.isDestroyed()) win.loadFile(pickIndex().file); }, 300);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: "Откат не удался: " + ((err && err.message) || err) };
+  }
+});
+ipcMain.handle("senko:data-resume", (e, d) => {
+  if (!fromMain(e)) return { ok: false };
+  const kind = d && d.kind;
+  if (kind === "memo") { holdSet("memo", 0); checkForUpdate(true); }
+  else if (kind === "laws") laws.resume();
+  return { ok: true };
+});
+function tailFile(f, n) {
+  try { const t = fs.readFileSync(f, "utf8"); return t.split("\n").slice(-n).join("\n"); } catch (e) { return ""; }
+}
+async function diagInfo() {
+  const v = voice.status ? voice.status() : {};
+  let lawsDiag = "";
+  try { lawsDiag = await laws.diagnose(); } catch (e) {}
+  return {
+    versions: { app: app.getVersion(), data: currentVersion(), electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node },
+    os: `${process.platform} ${require("os").release()} ${process.arch}`,
+    packaged: app.isPackaged,
+    userData: app.getPath("userData"),
+    voice: v,
+    hotkey: { enabled: cfg.hotkeyEnabled, key: cfg.hotkey, error: hotkeyError || "" },
+    updater: { state: upd.state, version: upd.version, percent: upd.percent, lastError: upd.lastError || null, module: !!updater },
+    memo: memoVersions(),
+    laws: lawsDiag,
+    sync: sync.status()
+  };
+}
+ipcMain.handle("senko:diag", async (e) => (fromMain(e) ? diagInfo() : null));
+// журнал для «Сообщить об ошибке»: версии, состояние и хвост updater.log (без токенов и паролей)
+ipcMain.handle("senko:diag-log", async (e) => {
+  if (!fromMain(e)) return "";
+  const d = await diagInfo();
+  const L = [
+    "Senko Assistant " + d.versions.app + " (данные " + d.versions.data + "), Electron " + d.versions.electron + ", " + d.os,
+    "Установлена: " + (d.packaged ? "да" : "нет (разработка)"),
+    "Горячая клавиша окна: " + (d.hotkey.enabled ? d.hotkey.key : "выключена") + (d.hotkey.error ? " (ошибка: " + d.hotkey.error + ")" : ""),
+    "Голос: " + JSON.stringify(d.voice),
+    "Обновления программы: " + JSON.stringify(d.updater),
+    "Данные памятки: " + JSON.stringify(d.memo),
+    "Синхронизация: " + JSON.stringify(d.sync),
+    "", "— Законы —", d.laws, "", "— updater.log (последние строки) —", tailFile(updLogFile(), 80)
+  ];
+  // папка пользователя Windows содержит его имя: в журнал она уходит как «~»
+  const home = require("os").homedir();
+  return L.join("\n").split(home).join("~").replace(/[0-9a-f]{64}/gi, "[скрыто]").slice(0, 60000);
+});
 
 // Синхронизация данных: слияние при запуске страницы, отправка изменений, ручной запуск
 ipcMain.on("sync:startup", (e, local) => { e.returnValue = fromMain(e) ? sync.startup(local || {}) : null; });
@@ -1062,7 +1378,7 @@ function createMainWindow() {
     minWidth: cfg.compact ? 300 : 380,
     minHeight: cfg.compact ? 400 : 600,
     show: false,
-    title: "Памятка Boston",
+    title: "Senko Assistant",
     frame: false, // системную серую рамку заменяет своя строка заголовка (её рисует preload.js)
     autoHideMenuBar: true,
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#0A0A0B" : "#F6F3EE",
@@ -1104,6 +1420,7 @@ function createMainWindow() {
   w.on("focus", () => { if (cfg.ghost) applyWindowCfg(); pushWin(); });
   w.on("blur", () => { if (cfg.ghost) applyWindowCfg(); pushWin(); });
   w.on("always-on-top-changed", pushWin);
+  winx.start();
   // правый клик по строке заголовка: вместо серого системного меню — своё
   w.on("system-context-menu", (e, point) => {
     e.preventDefault();
@@ -1112,6 +1429,7 @@ function createMainWindow() {
     w.webContents.send("senko:winmenu", point ? { x: point.x - cb.x, y: point.y - cb.y } : null);
   });
   w.on("close", (e) => {
+    winx.unstrip();
     saveBoundsNow();
     saveCfgNow();
     if (cfg.tray && tray && !quitting) { // «работает в фоне»: крестик прячет окно в трей
@@ -1134,7 +1452,10 @@ function createMainWindow() {
   });
 }
 
-app.on("second-instance", () => {
+app.on("second-instance", (_e, argv) => {
+  const o = openArg(argv);
+  if (o && win && !win.isDestroyed()) win.webContents.send("senko:open", o);
+  else if (o) pendingOpen = o;
   if (win && !win.isDestroyed()) showWindow();
   else if (authWin && !authWin.isDestroyed()) {
     if (authWin.isMinimized()) authWin.restore();
@@ -1142,13 +1463,14 @@ app.on("second-instance", () => {
   }
 });
 
-app.on("before-quit", () => { quitting = true; sync.pushNow().catch(() => {}); });
+app.on("before-quit", () => { quitting = true; winx.stop(); sync.pushNow().catch(() => {}); });
 app.on("will-quit", () => { try { globalShortcut.unregisterAll(); } catch (e) {} });
 app.on("window-all-closed", () => app.quit());
 
 app.whenReady().then(() => {
   if (!gotLock) return;
   loadCfg();
+  setTimeout(() => { refreshAutostart(); removeOldFolders(); }, 8000);
   voice.init({
     getWin: () => (win && !win.isDestroyed() ? win : null),
     getCfg: () => cfg,

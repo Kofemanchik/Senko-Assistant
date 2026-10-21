@@ -1,10 +1,10 @@
 {
-  "name": "boston-pamyatka",
+  "name": "senko-assistant",
   "productName": "Senko Assistant",
-  "version": "2.1.2",
-  "description": "Памятка Boston — законодательство (Senko Assistant)",
+  "version": "2.2.0",
+  "description": "Senko Assistant — памятка по законодательству Majestic RP Boston",
   "main": "main.js",
-  "author": "Boston",
+  "author": "Hanami Senko | Senko Corporation",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
@@ -23,6 +23,9 @@
   "build": {
     "appId": "local.boston.pamyatka",
     "productName": "Senko Assistant",
+    "extraMetadata": {
+      "name": "Senko Assistant"
+    },
     "directories": {
       "output": "dist"
     },
@@ -37,6 +40,7 @@
       "server-config.js",
       "voice-preload.js",
       "voice.js",
+      "winx.js",
       "ai.js",
       "laws-key.json",
       "ai-key.json",
@@ -62,7 +66,8 @@
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico",
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh"
     },
     "portable": {
       "artifactName": "Senko-Assistant-${version}.${ext}"
