@@ -74,9 +74,39 @@ async function vote(fid, v) {
   return r && r.ok ? { ok: true } : { ok: false, error: (r && r.error) || "Не удалось сохранить оценку." };
 }
 
+// Вопросы о создателе (Hanami Senko, Ханами, Kofemanchik и т. п.) не уходят в ИИ: на них свой ответ.
+// Проверка идёт в приложении, поэтому работает и в окне ИИ, и в голосовом помощнике, без сервера и без лимита.
+const CREATOR_ANSWERS = [
+  "Прости, о своём создателе я говорить не могу. 🦊 Давай лучше вернёмся к законам Majestic RP.",
+  "Это тайна, которую я хранить обязана: о своём создателе не рассказываю. Спроси меня лучше про статьи или штрафы.",
+  "О моём создателе ничего не скажу, даже не уговаривай. 🦊 Чем помочь по законам?"
+];
+// латинские буквы, похожие на русские, приводим к русским (xaнaми → ханами)
+const LOOKALIKE = { a: "а", c: "с", e: "е", o: "о", p: "р", x: "х", y: "у", k: "к", m: "м", t: "т", b: "в", h: "н" };
+const CREATOR_RE = [
+  /hanami|hanamy|hanamii|ханам[иіыуоа]|ханамк|ханамоч|ханамуш|ханамчик/,
+  /kofemanchik|kofemanch|кофеманчик/,
+  /(твой|твоего|твоему|твоим|твоем|твоя|твоей|программы|приложения|памятки|сенко|senko)\s+(создател|разработчик|автор|владел|хозя)/,
+  /(создател|разработчик|автор|владел|хозя)\S*\s+(программ|приложени|памятк|сенко|senko|бота|тебя)/
+];
+// «кто тебя создал», «кто сделал сенко»: в одном предложении «кто/чей» + «создал/сделал…» + «тебя/программу…»
+const WHO_MADE = [/(^|[^а-я])(кто|чей|чья|чье)([^а-я]|$)/, /созда|сдела|написа|разработа|придума/, /тебя|тебе|эт\S* (программ|приложени)|памятк|сенко|senko|бота|ассистент/];
+function aboutCreator(question) {
+  const low = String(question || "").toLowerCase().replace(/ё/g, "е");
+  const mixed = low.replace(/[a-z]/g, (ch) => LOOKALIKE[ch] || ch);
+  // «х а н а м и», «х.а.н.а.м.и» — склеиваем, если слово разбито на отдельные буквы
+  const glued = /(?:^|[^a-zа-я])[a-zа-я](?:[\s.\-_*]+[a-zа-я]){3,}/.test(low) ? low.replace(/[\s.\-_*]+/g, "") : "";
+  if ([low, mixed, glued, glued.replace(/[a-z]/g, (ch) => LOOKALIKE[ch] || ch)].some((t) => t && CREATOR_RE.some((re) => re.test(t)))) return true;
+  return low.split(/[.!?\n]+/).some((part) => WHO_MADE.every((re) => re.test(part)));
+}
+let creatorTurn = 0;
+
 async function ask(question, opts) {
   question = String(question || "").replace(/\s+/g, " ").trim().slice(0, 500);
   if (question.length < 3) return { ok: false, error: "Напишите вопрос подробнее." };
+  if (aboutCreator(question)) {
+    return { ok: true, answer: CREATOR_ANSWERS[creatorTurn++ % CREATOR_ANSWERS.length], left: null, cached: false, sources: [], fid: "" };
+  }
   if (!configured()) return { ok: false, error: "ИИ-помощник ещё не подключён: в ai.js не указан адрес сервиса." };
   const key = appKey();
   if (!key) return { ok: false, error: "В этой сборке нет ключа доступа к ИИ (файл ai-key.json) — установите последнюю версию с GitHub Releases." };
@@ -126,4 +156,4 @@ function init(c) {
   });
 }
 
-module.exports = { init, ask, configured };
+module.exports = { init, ask, configured, aboutCreator };

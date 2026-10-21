@@ -5936,7 +5936,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.1.1";
+var APP_VER="2.1.2";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6025,6 +6025,9 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.1.2",d:"21.10.2026",items:[
+  ["🦊","ИИ-помощник","У помощника появились свои ответы на вопросы о создателе программы. Такие вопросы не тратят дневной лимит."]
+ ]},
  {v:"2.1.1",d:"21.10.2026",items:[
   ["🔄","Проверка обновлений","Кнопка «Проверить обновления» теперь всегда отвечает: нашла новую версию, сколько уже скачано, что версия последняя или что пошло не так. Если обновиться не удалось, есть кнопка «Скачать вручную» и журнал обновлений."]
  ]},
