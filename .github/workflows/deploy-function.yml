@@ -37,6 +37,8 @@ jobs:
           jq -Rs '{query: .}' supabase/schema.sql > /tmp/q.json
           code=$(curl -sS -o /tmp/r.json -w '%{http_code}' -X POST "https://api.supabase.com/v1/projects/wcjspwailippjmyffkei/database/query" \
             -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" --data @/tmp/q.json)
+          # у токена без прав на базу (database_read/write) пропускаем шаг: функция сама создаёт новые таблицы (рекламу) при первом обращении
+          if [ "$code" = "401" ] || [ "$code" = "403" ]; then echo "::warning::Токену не хватает прав на базу, schema.sql пропущен: $(head -c 300 /tmp/r.json)"; exit 0; fi
           if [ "$code" -ge 300 ]; then echo "::error::База не обновилась (код $code): $(head -c 600 /tmp/r.json)"; exit 1; fi
           echo "База обновлена: schema.sql выполнен"
       - name: Залить функцию senko

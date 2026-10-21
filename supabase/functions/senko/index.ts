@@ -3448,6 +3448,49 @@ async function panelApi(b, ip, ua) {
 
 // ───────────── Реклама (2.3.0): баннеры на сайте и на главной в программе, правит владелец в панели ─────────────
 let adsCache = null; // { at, rows }
+// Если базу не обновили через schema.sql, таблица рекламы создаётся здесь при первом обращении (то же, что в schema.sql)
+const ADS_DDL = `create table if not exists public.ads (
+  id          bigserial primary key,
+  title       text not null,
+  srv         text not null default '',
+  body        text not null default '',
+  tag         text not null default 'Реклама',
+  style       text not null default 'wide' check (style in ('wide','square')),
+  image       text not null default '',
+  links       jsonb not null default '[]'::jsonb,
+  promo       text not null default '',
+  place       text not null default 'both' check (place in ('both','site','app')),
+  enabled     boolean not null default true,
+  sort        int not null default 0,
+  updated_at  timestamptz not null default now(),
+  updated_by  text not null default ''
+);
+insert into public.ads (title, srv, body, style, image, links, promo, sort)
+select * from (values
+  ('Senko Family', 'Majestic RP · Los Angeles',
+   'Семья на сервере Los Angeles. Заходите в Discord и Telegram: знакомство, набор и новости семьи.',
+   'wide', '/img/senko-family-820.webp',
+   '[{"label":"Discord семьи","url":"https://discord.gg/ZEz5kfG6W8"},{"label":"Telegram семьи","url":"https://t.me/senkofamq"}]'::jsonb, '', 10),
+  ('Docossum | Ассистент GTA 5RP', 'Программа-ассистент · GTA 5 RP',
+   'Помощник для игроков GTA 5 RP, похожий на наш, только умеет ещё больше. Загляните в Discord и Telegram, а с нашим промокодом будет приятнее.',
+   'square', '/img/docossum.webp',
+   '[{"label":"Discord","url":"https://discord.gg/Nnv9YjX3px"},{"label":"Telegram","url":"https://t.me/docossum"}]'::jsonb, 'Senko', 20)
+) v(title, srv, body, style, image, links, promo, sort)
+where not exists (select 1 from public.ads);
+alter table public.ads enable row level security;
+revoke all on table public.ads from anon, authenticated;
+`;
+let adsReady = false;
+async function adsQ(fn) {
+  try {
+    return await fn();
+  } catch (e) {
+    if (adsReady || !/relation .*ads.* does not exist/i.test(String(e && e.message))) throw e;
+    adsReady = true;
+    await db().unsafe(ADS_DDL);
+    return await fn();
+  }
+}
 const AD_HTTPS = /^https:\/\/[^\s"'<>]{4,500}$/i;
 function adPub(r) {
   return { id: r.id, title: r.title, srv: r.srv, text: r.body, tag: r.tag, style: r.style, image: r.image, links: Array.isArray(r.links) ? r.links : [], promo: r.promo };
@@ -3456,7 +3499,7 @@ async function adsPublic(b) {
   const place = b.place === "site" ? "site" : "app";
   if (!adsCache || Date.now() - adsCache.at > 60 * 1000) {
     try {
-      adsCache = { at: Date.now(), rows: await db()`select * from ads where enabled order by sort, id` };
+      adsCache = { at: Date.now(), rows: await adsQ(() => db()`select * from ads where enabled order by sort, id`) };
     } catch (e) {
       return fail("Реклама сейчас недоступна.", { code: "ads_off" });
     }
@@ -3499,7 +3542,7 @@ async function panelAds(b, a) {
   const sql = db();
   const id = parseInt(b.id, 10) || 0;
   try {
-    if (b.op === "ads_list") return { ok: true, rows: await sql`select * from ads order by sort, id` };
+    if (b.op === "ads_list") return { ok: true, rows: await adsQ(() => sql`select * from ads order by sort, id`) };
     if (b.op === "ads_save") {
       const { row, err } = adClean(b);
       if (err) return fail(err);
@@ -3535,7 +3578,7 @@ async function panelAds(b, a) {
     }
   } catch (e) {
     console.error("ads", e);
-    if (/relation .*ads.* does not exist/i.test(String(e && e.message))) return fail("Таблицы рекламы ещё нет: запустите «Deploy function» на GitHub (он обновит базу).");
+    if (/relation .*ads.* does not exist/i.test(String(e && e.message))) return fail("Таблицы рекламы ещё нет. Откройте раздел заново или запустите «Deploy function» на GitHub.");
     throw e;
   }
   return fail("Неизвестное действие панели.");
