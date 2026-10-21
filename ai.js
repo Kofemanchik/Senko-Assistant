@@ -14,9 +14,11 @@ const AI_URL = process.env.SENKO_AI_URL || "https://senko-ai.senko-assistant.wor
 const MIN_GAP_MS = 2500;      // не чаще одного вопроса в 2,5 секунды
 const TIMEOUT_MS = 35000;
 
-let ctx = null;               // { getWin, dataDir }
+let ctx = null;               // { getWin, dataDir, log, vote }
 let busy = false;
 let lastAt = 0;
+const logged = new Map();     // номер ответа в окне → Promise<номер записи на сервере | null>
+let fseq = 0;
 
 const configured = () => !/YOUR-SUBDOMAIN/.test(AI_URL);
 
@@ -50,6 +52,28 @@ async function retrieve(question) {
   }
 }
 
+// Вопрос вошедшего пользователя сохраняется на сервере (ai_log); без аккаунта сервер просто откажет.
+// Ответ не ждёт сервера: номер записи понадобится только для оценки 👍/👎.
+function track(question, sources, ok) {
+  if (!ctx || typeof ctx.log !== "function") return "";
+  const fid = String(++fseq);
+  const refs = sources.map((s) => String(s.ref || "")).filter(Boolean);
+  logged.set(fid, Promise.resolve()
+    .then(() => ctx.log({ q: question, refs, ok }))
+    .then((r) => (r && r.ok && r.id ? r.id : null), () => null));
+  if (logged.size > 50) logged.delete(logged.keys().next().value);
+  return fid;
+}
+async function vote(fid, v) {
+  v = v === 1 || v === -1 ? v : 0;
+  const p = logged.get(String(fid));
+  if (!v || !p || typeof ctx.vote !== "function") return { ok: false, error: "Оценка недоступна." };
+  const id = await p;
+  if (!id) return { ok: false, error: "Оценки сохраняются только для вошедших в аккаунт." };
+  const r = await ctx.vote(id, v);
+  return r && r.ok ? { ok: true } : { ok: false, error: (r && r.error) || "Не удалось сохранить оценку." };
+}
+
 async function ask(question, opts) {
   question = String(question || "").replace(/\s+/g, " ").trim().slice(0, 500);
   if (question.length < 3) return { ok: false, error: "Напишите вопрос подробнее." };
@@ -73,8 +97,12 @@ async function ask(question, opts) {
     let j = null;
     try { j = await res.json(); } catch (e) {}
     const sources = found.map((f) => ({ ref: f.ref, go: f.go || "", lw: f.lw || "" }));
-    if (!res.ok || !j || !j.ok) return { ok: false, error: (j && j.error) || "ИИ-сервис вернул ошибку (" + res.status + ").", limit: !!(j && j.limit), sources };
-    return { ok: true, answer: String(j.answer || ""), left: typeof j.left === "number" ? j.left : null, cached: !!j.cached, sources };
+    if (!res.ok || !j || !j.ok) {
+      if (!(j && j.limit)) track(question, sources, false);
+      return { ok: false, error: (j && j.error) || "ИИ-сервис вернул ошибку (" + res.status + ").", limit: !!(j && j.limit), sources };
+    }
+    const fid = track(question, sources, true);
+    return { ok: true, answer: String(j.answer || ""), left: typeof j.left === "number" ? j.left : null, cached: !!j.cached, sources, fid };
   } catch (e) {
     return { ok: false, error: "Не удалось связаться с ИИ-сервисом. Проверьте подключение к интернету." };
   } finally {
@@ -83,10 +111,14 @@ async function ask(question, opts) {
 }
 
 function init(c) {
-  ctx = c; // { getWin, dataDir }
+  ctx = c; // { getWin, dataDir, log, vote }
   ipcMain.handle("ai:ask", (e, q) => {
     const w = ctx.getWin();
     return w && e.sender === w.webContents ? ask(q) : { ok: false, error: "Недоступно." };
+  });
+  ipcMain.handle("ai:vote", (e, fid, v) => {
+    const w = ctx.getWin();
+    return w && e.sender === w.webContents ? vote(fid, v) : { ok: false, error: "Недоступно." };
   });
   ipcMain.on("ai:available", (e) => {
     const w = ctx.getWin();

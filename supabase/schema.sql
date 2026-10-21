@@ -188,6 +188,99 @@ create table if not exists public.bot_delayed (
 );
 create index if not exists bot_delayed_run_idx on public.bot_delayed (run_at);
 
+-- Этап 4: достижения, рейтинг, функции руководства ------------------------------
+-- Безопасное чтение чисел из данных синхронизации: мусор вместо числа даёт null, а не ошибку запроса
+create or replace function public.senko_num(t text) returns numeric language sql immutable as
+$$ select case when t ~ '^-?[0-9]{1,15}(\.[0-9]{1,6})?$' then t::numeric end $$;
+revoke all on function public.senko_num(text) from anon, authenticated;
+-- Приём новичков: ok — работает, pending — ждёт подтверждения руководства, rejected — отклонён
+alter table public.profiles add column if not exists approval text not null default 'ok';
+
+-- Опыт на начало недели (неделя с понедельника по МСК): опыт за неделю = текущий опыт − base
+create table if not exists public.xp_week (
+  user_id  uuid not null references public.profiles(id) on delete cascade,
+  week     text not null,                 -- дата понедельника, например 2026-10-19
+  base     integer not null,
+  primary key (user_id, week)
+);
+
+-- Полученные достижения
+create table if not exists public.achievements (
+  user_id  uuid not null references public.profiles(id) on delete cascade,
+  code     text not null,
+  at       timestamptz not null default now(),
+  primary key (user_id, code)
+);
+
+-- Журнал смен руководства
+create table if not exists public.shifts (
+  id           bigint generated always as identity primary key,
+  org          text not null,
+  leader_id    uuid references public.profiles(id) on delete set null,
+  leader       text not null default '',
+  started_at   timestamptz not null default now(),
+  ended_at     timestamptz,
+  summary      jsonb
+);
+create index if not exists shifts_org_idx on public.shifts (org, started_at desc);
+
+-- Контрольные тесты от руководства и их результаты
+create table if not exists public.control_tests (
+  id          bigint generated always as identity primary key,
+  org         text not null,
+  author_id   uuid references public.profiles(id) on delete set null,
+  author      text not null default '',
+  title       text not null,
+  topics      text[] not null,
+  n           integer not null,
+  due_at      timestamptz not null,
+  created_at  timestamptz not null default now(),
+  closed      boolean not null default false
+);
+create table if not exists public.control_results (
+  test_id  bigint not null references public.control_tests(id) on delete cascade,
+  user_id  uuid not null references public.profiles(id) on delete cascade,
+  s        integer not null,
+  n        integer not null,
+  p        integer not null,
+  at       timestamptz not null default now(),
+  primary key (test_id, user_id)
+);
+
+-- Вопросы к ИИ-помощнику и оценки ответов
+create table if not exists public.ai_log (
+  id       bigint generated always as identity primary key,
+  user_id  uuid references public.profiles(id) on delete cascade,
+  q        text not null,
+  refs     text[] not null default '{}',
+  ok       boolean not null default true,
+  vote     smallint not null default 0,      -- 1 👍, -1 👎, 0 без оценки
+  at       timestamptz not null default now()
+);
+create index if not exists ai_log_at_idx on public.ai_log (at desc);
+
+-- Рапорты сотрудников (обновление 5)
+create table if not exists public.reports (
+  id           bigint generated always as identity primary key,
+  user_id      uuid references public.profiles(id) on delete cascade,
+  org          text not null,
+  author       text not null default '',    -- ник, статик и отдел на момент подачи
+  login        text not null default '',
+  static_id    text not null default '',
+  dept         text not null default '',
+  kind         text not null,               -- arrest, force, incident, service
+  title        text not null,
+  fields       jsonb not null default '{}',
+  body         text not null,               -- готовый текст рапорта
+  status       text not null default 'new' check (status in ('new','ok','no')),
+  reviewer     text not null default '',
+  review_note  text not null default '',
+  reviewed_at  timestamptz,
+  created_at   timestamptz not null default now()
+);
+create index if not exists reports_org_idx  on public.reports (org, created_at desc);
+create index if not exists reports_user_idx on public.reports (user_id, created_at desc);
+
 -- Закрываем таблицы от публичного API ----------------------------------------
 alter table public.profiles       enable row level security;
 alter table public.sessions       enable row level security;
@@ -203,11 +296,20 @@ alter table public.bot_settings   enable row level security;
 alter table public.broadcasts     enable row level security;
 alter table public.bug_reports    enable row level security;
 alter table public.bot_delayed    enable row level security;
+alter table public.xp_week        enable row level security;
+alter table public.achievements   enable row level security;
+alter table public.shifts         enable row level security;
+alter table public.control_tests  enable row level security;
+alter table public.control_results enable row level security;
+alter table public.ai_log         enable row level security;
+alter table public.reports        enable row level security;
 
 revoke all on table public.profiles, public.sessions, public.recovery_codes,
                     public.reset_requests, public.audit_log, public.rate_limits, public.sync_items,
                     public.account_notes, public.account_warns, public.bot_pending,
-                    public.bot_settings, public.broadcasts, public.bug_reports, public.bot_delayed
+                    public.bot_settings, public.broadcasts, public.bug_reports, public.bot_delayed,
+                    public.xp_week, public.achievements, public.shifts, public.control_tests,
+                    public.control_results, public.ai_log, public.reports
   from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;
 

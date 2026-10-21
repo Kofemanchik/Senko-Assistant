@@ -26,10 +26,13 @@ function loadPrev() {
   return null;
 }
 
+const WAS_MAX = 6000; // сколько символов прошлой редакции статьи хранить для «было / стало»
 function artEvents(prevLaw, law, now) {
-  const a = core.unitHashes(core.parse(prevLaw.text)), b = core.unitHashes(core.parse(law.text));
+  const pa = core.parse(prevLaw.text);
+  const a = core.unitHashes(pa), b = core.unitHashes(core.parse(law.text));
+  const was = {}; pa.units.forEach((u) => { was[u.key] = String(u.text || "").slice(0, WAS_MAX); });
   const ev = [];
-  Object.keys(b).forEach((n) => { if (!(n in a)) ev.push({ n: n, k: "added", at: now }); else if (a[n] !== b[n]) ev.push({ n: n, k: "changed", at: now }); });
+  Object.keys(b).forEach((n) => { if (!(n in a)) ev.push({ n: n, k: "added", at: now }); else if (a[n] !== b[n]) ev.push({ n: n, k: "changed", at: now, was: was[n] }); });
   Object.keys(a).forEach((n) => { if (!(n in b)) ev.push({ n: n, k: "removed", at: now }); });
   return ev;
 }

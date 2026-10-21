@@ -1,4 +1,5 @@
-// Синхронизация данных работы между компьютерами (задержания, результаты тестов, статистика тренажёра).
+// Синхронизация данных между компьютерами: задержания, результаты тестов, статистика тренажёра,
+// а также избранное, заметки, цветные метки и папки статей.
 //
 // Как это работает:
 //  • Данные живут в localStorage страницы (ключи bos-*). Эта часть работает в главном процессе.
@@ -7,6 +8,8 @@
 //  • Во время работы preload сообщает об изменениях (noteLocal), через несколько секунд они уходят на сервер (pushNow).
 //  • Списки (задержания, тесты, журнал) синхронизируются по элементам: у каждого есть id, конфликт решает «последняя правка»,
 //    удаление передаётся отдельной записью. Счётчики (статистика, XP, серия) сливаются без потерь: берётся большее значение.
+//  • Словари (избранное, заметки, метки) синхронизируются по ключам так же, как списки, но без лимита и порядка.
+//  • Папки и порядок избранного — одно значение целиком: побеждает последняя правка, при первой синхронизации папки объединяются.
 //  • Чьи это данные: если на компьютере вошёл другой аккаунт, чужие локальные данные не передаются на сервер
 //    (копия сохраняется в папку foreign-backup), а загружаются данные нового аккаунта.
 const fs = require("fs");
@@ -20,8 +23,14 @@ const KEYS = {
   "bos-qstat": { kind: "qstat", merge: mergeQstat, def: { q: {}, tp: {} } },
   "bos-xp": { kind: "xp", merge: (a, b) => Math.max(+a || 0, +b || 0), def: 0 },
   "bos-daily": { kind: "daily", merge: mergeDaily, def: { d: "", s: 0, n: 0 } },
-  "bos-streak": { kind: "streak", merge: mergeStreak, def: { last: "", n: 0 } }
+  "bos-streak": { kind: "streak", merge: mergeStreak, def: { last: "", n: 0 } },
+  "bos-favs": { kind: "favs", map: true },
+  "bos-notes": { kind: "notes", map: true },
+  "bos-labels": { kind: "labels", map: true },
+  "bos-folders": { kind: "folders", lww: true, merge: mergeFolders, def: [] },
+  "bos-favorder": { kind: "favorder", lww: true, merge: (a, b) => (Array.isArray(a) && a.length ? a : b), def: [] }
 };
+const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 const KEY_LIST = Object.keys(KEYS);
 const KIND_KEY = {};
 KEY_LIST.forEach((k) => (KIND_KEY[KEYS[k].kind] = k));
@@ -52,6 +61,19 @@ function mergeStreak(a, b) {
   b = b && typeof b === "object" ? b : { last: "", n: 0 };
   if (String(a.last) !== String(b.last)) return String(a.last) > String(b.last) ? a : b;
   return (+b.n || 0) > (+a.n || 0) ? b : a;
+}
+
+// Папки: при первой встрече двух версий объединяем по id (статьи внутри папки тоже объединяются)
+function mergeFolders(a, b) {
+  const ok = (x) => (Array.isArray(x) ? x.filter((f) => f && typeof f.id === "string") : []);
+  const out = ok(a).map((f) => ({ ...f, a: Array.isArray(f.a) ? f.a.slice() : [] }));
+  const byId = new Map(out.map((f) => [f.id, f]));
+  for (const f of ok(b)) {
+    const cur = byId.get(f.id);
+    if (!cur) { const c = { ...f, a: Array.isArray(f.a) ? f.a.slice() : [] }; out.push(c); byId.set(f.id, c); continue; }
+    for (const k of Array.isArray(f.a) ? f.a : []) if (!cur.a.includes(k)) cur.a.push(k);
+  }
+  return out;
 }
 
 // ───────────── вспомогательное ─────────────
@@ -205,6 +227,23 @@ module.exports = function createSync({ dataDir, authed, now, onAuthLost, backupD
         if (res.length > cfg.cap) res.length = cfg.cap;
         out = res;
         if (!res.length && foreign) out = undefined;
+      } else if (cfg.map) {
+        const obj = isObj(loc[k]) ? { ...loc[k] } : {};
+        const modified = new Set();
+        for (const id of Object.keys(obj)) if (!snap[id] || snap[id].h !== hash(obj[id])) modified.add(id);
+        for (const id of Object.keys(rem)) {
+          const it = rem[id];
+          if (it.del) {
+            if (id in obj && !modified.has(id)) delete obj[id];
+            if (!(id in obj)) delete snap[id];
+            continue;
+          }
+          if (!isObj(it.data) || !("v" in it.data)) continue;
+          if (id in obj && modified.has(id)) continue; // локальная правка новее — отправим её
+          obj[id] = it.data.v;
+          snap[id] = { h: hash(it.data.v) };
+        }
+        out = Object.keys(obj).length || isObj(loc[k]) ? obj : undefined;
       } else {
         const r = rem[KV_ID];
         const serverVal = r && !r.del ? r.data : undefined;
@@ -212,6 +251,7 @@ module.exports = function createSync({ dataDir, authed, now, onAuthLost, backupD
         let merged;
         if (serverVal === undefined) merged = lv;
         else if (lv === undefined) merged = serverVal;
+        else if (cfg.lww && snap[KV_ID]) merged = hash(lv) === snap[KV_ID].h ? serverVal : lv; // локально не меняли — берём с сервера
         else merged = cfg.merge(lv, serverVal);
         if (serverVal !== undefined) snap[KV_ID] = { h: hash(serverVal) };
         out = merged;
@@ -270,6 +310,21 @@ module.exports = function createSync({ dataDir, authed, now, onAuthLost, backupD
           } else if (arr.length) {
             apply.push({ kind: cfg.kind, id, del: true, silent: true }); // выпал из лимита списка: на сервере остаётся
           }
+        }
+      } else if (cfg.map) {
+        if (!isObj(v)) continue;
+        for (const id of Object.keys(v)) {
+          if (String(id).length > 40) continue; // такой ключ сервер не примет
+          const h = hash(v[id]);
+          if (!snap[id] || snap[id].h !== h) {
+            items.push({ kind: cfg.kind, id, data: { v: v[id] }, u: t });
+            apply.push({ kind: cfg.kind, id, h });
+          }
+        }
+        for (const id of Object.keys(snap)) {
+          if (id in v) continue;
+          items.push({ kind: cfg.kind, id, u: t, del: true });
+          apply.push({ kind: cfg.kind, id, del: true });
         }
       } else if (v !== undefined) {
         const h = hash(v);
@@ -342,6 +397,21 @@ module.exports = function createSync({ dataDir, authed, now, onAuthLost, backupD
     timer = null;
   }
 
+  // После сброса данных на этом компьютере: забываем, что уже отправлено, и при следующем слиянии берём всё с сервера.
+  // Иначе пустой localStorage выглядел бы как «пользователь всё удалил» и удаления ушли бы на сервер.
+  function resetState() {
+    if (!state) return;
+    clearTimeout(timer);
+    timer = null;
+    state.device = crypto.randomBytes(8).toString("hex"); // свои прошлые записи сервер «своему» устройству не возвращает
+    state.cursor = 0;
+    state.snap = {};
+    remote = null;
+    latest = {};
+    liveKeys = new Set();
+    save();
+  }
+
   return {
     KEYS,
     KEY_LIST,
@@ -351,6 +421,7 @@ module.exports = function createSync({ dataDir, authed, now, onAuthLost, backupD
     noteLocal,
     pushNow,
     stop,
+    resetState,
     status: () => ({ ...status, pending: state ? buildItems().items.length : 0 }),
     hasState: () => !!state,
     _mergeQstat: mergeQstat

@@ -254,13 +254,18 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
         org: d.org, orgOther: d.orgOther, role: d.role,
         discord: d.discord, telegram: d.telegram, phone: d.phone,
         remember: !!d.remember, migrated: !!lg,
-        legal: d.legal
+        legal: d.legal, ...client()
       });
       if (!r.ok) return { ok: false, error: r.error || "Не удалось зарегистрироваться.", code: r.code };
       takeSys(r);
       if (lg) {
         if (lg.seeded) setSeeded(r.user.login);
         legacyRemove(r.user.login);
+      }
+      if (r.pending) {
+        // Включён приём новичков: аккаунт ждёт подтверждения руководства, входа пока нет
+        rememberLogin(r.user.login);
+        return { ok: true, pending: true, message: r.message || "", user: { ...r.user }, recoveryCode: r.recoveryCode };
       }
       setCurrent(r.user, r.token);
       remember = !!d.remember;
@@ -388,6 +393,12 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
     bugReport(text) {
       if (!current || !token) return Promise.resolve({ ok: false, error: "Нужно войти в аккаунт.", code: "auth" });
       return call({ action: "bug_report", token, text: String(text == null ? "" : text).slice(0, 2000), ver: String(version || "") });
+    },
+
+    // Действия этапа 4: прогресс, рейтинг, смены, контрольные тесты
+    act(action, data) {
+      if (!current || !token) return Promise.resolve({ ok: false, error: "Нужно войти в аккаунт.", code: "auth" });
+      return call({ ...(data && typeof data === "object" ? data : {}), action, token });
     },
 
     async staffList() {

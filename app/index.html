@@ -612,6 +612,7 @@ html.hc .chgb{border:1px solid var(--ink)}
   <div class="qtools noprint"><button type="button" class="pill" id="allBtn" aria-pressed="true">Все кодексы и законы</button><span class="hk">Ctrl+F — в строку поиска</span></div>
   <div id="qh" class="qhist noprint" hidden></div>
   <nav class="tabs" role="tablist" aria-label="Разделы">
+    <button class="tab" role="tab" data-tab="home" aria-selected="false">Главная</button>
     <button class="tab" role="tab" data-tab="uk" aria-selected="true">УК</button>
     <button class="tab" role="tab" data-tab="ak" aria-selected="false">АК</button>
     <button class="tab" role="tab" data-tab="dk" aria-selected="false">ДК</button>
@@ -1150,9 +1151,14 @@ function lawKindOf(t){
   return "";
 }
 function mskDay(ts){ try{ return new Date(ts).toLocaleDateString("ru-RU",{timeZone:"Europe/Moscow",day:"2-digit",month:"2-digit"}); }catch(e){ return ""; } }
+var CHGREG = {}, chgSeq = 0; // правки статей с прошлой редакцией: открываются окном «было / стало»
 function chgBadge(r){
   var c = r && r.chg; if(!c || Date.now() - c.at > BADGE_MS) return "";
   var add = c.k === "added";
+  if(!add && c.was && c.lid){
+    var id = "c" + (++chgSeq); CHGREG[id] = c;
+    return '<button type="button" class="chgb chgb-btn" data-chg="'+id+'" title="Текст статьи изменён '+mskDay(c.at)+'. Нажмите, чтобы увидеть, что было и что стало">Изменено · было / стало</button>';
+  }
   return '<span class="chgb'+(add?' add':'')+'" title="'+(add?"Статья добавлена":"Текст статьи изменён")+" "+mskDay(c.at)+'">Изменено</span>';
 }
 function lawNat(a,b){
@@ -1217,7 +1223,7 @@ function lawNat(a,b){
       LAWSYNC.skipped[kind] = "структура текста на форуме не совпала со справочником (" + hit + " из " + codes.length + " статей)";
       return;
     }
-    var ev = {}; (L.arts || []).forEach(function(e){ if(e.k !== "removed") ev[e.n] = e; });
+    var ev = {}; (L.arts || []).forEach(function(e){ if(e.k !== "removed"){ e.lid = L.id; e._L = L; ev[e.n] = e; } });
     var fm = {}; rows.forEach(function(f){ fm[f.code + "|" + pn(f.part)] = f; });
     var have = {}, upd = 0, added = 0;
     arr.forEach(function(r){
@@ -1353,7 +1359,7 @@ var expanded = {};
 var HAVE = {}; UK.concat(AK,DK,PK).forEach(function(r){ HAVE[r.k+"|"+r.code]=1; });
 var KN = {uk:"УК",ak:"АК",dk:"ДК",pk:"ПК"};
 var SRC = {uk:"majesticrules.fun, majestic-rp.wiki", ak:"majesticrules.fun, majestic-rp.wiki", dk:"присланный текст Дорожного кодекса", pk:"присланный текст Процессуального кодекса"};
-var SYNC = "17.10.2026";
+var SYNC = SYNC || "17.10.2026"; // дату свежих законов выставляет слияние выше по файлу
 var XREF_RE = /(^|[^а-яёА-ЯЁ])(ст(?:\.|атья|атьи|атье|атьей|атью)?\s*(?:ст\.\s*)?)(\d+(?:\.\d+)*)((?:\s*ч\.\s*\d+(?:\.\d+)?)?)(\s*(?:настоящего\s+Кодекса|ПК|УК(?:\s*СА)?|АК|ДК)?)/g;
 function linkify(s,ctx){
   return s.replace(XREF_RE,function(m,p0,pre,code,part,tail){
@@ -1665,7 +1671,7 @@ function listHtml(kind,data,Q){
     if(r.code!==lastCode){
       if(lastCode) h+='</article>';
       lastCode=r.code;
-      h+='<article class="art" id="a-'+kind+'-'+r.code.replace(/\./g,"_")+'" data-k="'+kind+'" data-c="'+r.code+'"><div class="art-h"><span class="num">'+r.code+'</span><h3>'+r.title+chgBadge(r)+'</h3>'+jurChip(r)+'</div>'+jurLine(r);
+      h+='<article class="art" id="a-'+kind+'-'+r.code.replace(/\./g,"_")+'" data-k="'+kind+'" data-c="'+r.code+'"><div class="art-h"><span class="num">'+r.code+'</span><h3>'+r.title+chgBadge(r)+'</h3>'+jurChip(r)+(window.senkoApp&&window.senkoApp.bug?'<button type="button" class="ic art-bug" data-art-bug="'+kind+'|'+r.code+'" aria-label="Сообщить об ошибке в статье" title="Сообщить об ошибке в статье">⚑</button>':'')+'</div>'+jurLine(r);
     }
     h+='<div class="part lv'+r.stars+'"><span class="pn">'+(r.part?"ч."+r.part:"")+'</span><div class="pb">'+noteHtml(r)+ptsHtml(r,Q)+'<div class="meta">'+(kind==="uk"?starsHtml(r.stars):"")+chips(r)+'</div>'+userNoteHtml(r.id)+'</div>'+
       '<div class="acts"><button class="ic'+(favs[r.id]?" on":"")+'" data-fav-id="'+r.id+'" aria-label="В избранное" title="В избранное">'+(favs[r.id]?"★":"☆")+'</button>'+
@@ -1744,7 +1750,7 @@ function renderGen(){
   var h = deptBar();
   h+='<div class="cards">'+items.map(function(g){return '<section class="card"><h3>'+g.t+'</h3><span class="ref">'+gref(g.r)+'</span>'+g.h+'</section>'}).join("")+'</div>';
   if(!items.length) h+='<div class="empty">В общей части ничего не нашлось.</div>';
-  h+='<p class="foot">Данные собраны из неофициальных справочников majesticrules.fun и majestic-rp.wiki по серверу Boston на '+SYNC+'. Дорожный и Процессуальный кодексы внесены из присланных текстов. ДК полный, 72 пункта. Названия глав и групп статей условные.'+syncNote()+' Перед оформлением спорных случаев сверяйтесь с текстом законов на форуме проекта. Заметки и избранное личные: они хранятся только в вашем браузере.</p>';
+  h+='<p class="foot">Данные собраны из неофициальных справочников majesticrules.fun и majestic-rp.wiki по серверу Boston на '+SYNC+'. Дорожный и Процессуальный кодексы внесены из присланных текстов. ДК полный, 72 пункта. Названия глав и групп статей условные.'+syncNote()+' Перед оформлением спорных случаев сверяйтесь с текстом законов на форуме проекта. Заметки и избранное личные, их видите только вы.</p>';
   view.innerHTML=h;
 }
 /* Наборы статей. Это типовые сочетания, а не готовая квалификация: лишнее убирайте в калькуляторе. */
@@ -1758,7 +1764,7 @@ var PRESETS = [
   {n:"Наркотики при обыске", ids:[["uk","13.2",""]],
    h:"До 3 г: изъятие без ответственности (ст. 5.13 ч.1). Свыше 25 г или сбыт — вместо 13.2 берите 13.2.1. Для госслужащих — 13.4 и 13.4.1. Вес считайте во вкладке калькулятора."}
 ];
-var repShort = false;
+var repShort = true;
 function labK(r){ return "ст. "+r.code+(r.part?" ч."+r.part:"")+" "+KN[r.k]; }
 function stX(n){ return Array(n+1).join("★"); }
 function rng(r){ return r.fmin&&r.fmin!==r.fmax ? money(r.fmin)+"–"+money(r.fmax) : (r.fmin ? money(r.fmin) : "до "+money(r.fmax)); }
@@ -1869,6 +1875,22 @@ function conflictWarns(items){
 }
 var chist=[];try{chist=JSON.parse(localStorage.getItem("bos-calchist")||"[]")||[]}catch(e){}
 function saveChist(){try{localStorage.setItem("bos-calchist",JSON.stringify(chist.slice(0,30)))}catch(e){}}
+/* Залог (ПК ст. 34): по статьям УК из калькулятора или по выбранному уровню розыска */
+var bailN = 0; // 0 — считать по статьям калькулятора
+function bailHtml(items){
+  var ss = items.filter(function(r){return r.k==="uk"}).map(function(r){return r.stars});
+  var auto = Math.max.apply(null, ss.concat([0])), n = bailN || auto;
+  var h='<section class="panel" id="bailBox"><h2>Залог</h2><p class="sub">ПК ст. 34: $25 000 за каждый уровень розыска. Берётся наибольший уровень из статей УК в калькуляторе, уровни не суммируются. Итоговую сумму определяет сотрудник.</p>';
+  h+='<div class="filters" style="padding-top:0"><span class="lab">Уровень</span><button class="pill" type="button" data-bailn="0" aria-pressed="'+(!bailN)+'">По статьям'+(auto?' · '+auto+'★':'')+'</button>'+
+    [1,2,3,4,5].map(function(k){return '<button class="pill" type="button" data-bailn="'+k+'" aria-pressed="'+(bailN===k)+'">'+k+'★</button>'}).join("")+'</div>';
+  if(!n) h+='<p class="hint">В калькуляторе нет статей УК с розыском. Добавьте их кнопкой «+» или выберите уровень вручную.</p>';
+  else h+='<div class="sumgrid"><div class="sum"><div class="k">Уровень розыска</div><div class="v lv'+n+'">'+starsHtml(n)+'</div></div><div class="sum"><div class="k">За 1 ★</div><div class="v">'+money(25000)+'</div></div><div class="sum"><div class="k">Залог не менее</div><div class="v">'+money(25000*n)+'</div></div></div>';
+  return h+'</section>';
+}
+view.addEventListener("click",function(e){
+  var b=e.target.closest("[data-bailn]"); if(!b||state.tab!=="calc") return;
+  bailN=+b.dataset.bailn||0; var y=window.scrollY; render(); window.scrollTo(0,y);
+});
 function renderCalc(){
   var ids = Object.keys(basket).filter(function(i){return BYID[i]});
   var items = ids.map(function(i){return BYID[i]});
@@ -1902,13 +1924,12 @@ function renderCalc(){
     h+='<p style="margin:12px 0 0"><button class="btn primary" id="saveCalc" type="button">Сохранить расчёт</button> <button class="btn" id="clearBasket" type="button">Очистить</button></p>';
   }
   h+='</section>';
+  h+=bailHtml(items);
   if(items.length){
-    h+='<section class="panel"><h2>Рапорт</h2><p class="sub">Текст собирается из выбранных статей и таймера. Поля имён сохраняются в браузере. Правки вручную пропадут при изменении полей.</p>'+
-      '<div class="fields"><label for="rpO">Сотрудник<input id="rpO" type="text" value="'+esc(rep.o||"")+'" autocomplete="off"></label>'+
-      '<label for="rpS">Задержанный<input id="rpS" type="text" value="'+esc(rep.s||"")+'" autocomplete="off"></label></div>'+
-      '<div class="filters" style="padding-top:0"><button class="pill" data-rpm="full" aria-pressed="'+(!repShort)+'">Полный рапорт</button><button class="pill" data-rpm="short" aria-pressed="'+repShort+'">Кратко для рации</button></div>'+
-      '<textarea class="repbox" id="rpT" aria-label="Текст рапорта"></textarea>'+
-      '<p style="margin:10px 0 0"><button class="btn primary" type="button" data-copy="rep">Скопировать</button></p></section>';
+    h+='<section class="panel"><h2>Рапорт</h2><p class="sub">Рапорт о задержании оформляется в отдельном окне: статьи, срок и данные таймера подставятся сами. Ниже короткий текст для доклада по рации.</p>'+
+      '<div class="fields"><label for="rpS">Задержанный<input id="rpS" type="text" value="'+esc(rep.s||"")+'" autocomplete="off" placeholder="Имя Фамилия"></label></div>'+
+      '<textarea class="repbox" id="rpT" aria-label="Текст для рации" style="min-height:72px"></textarea>'+
+      '<p class="rowbtn" style="margin:10px 0 0"><button class="btn primary" type="button" data-rpopen="calc">📝 Оформить рапорт</button><button class="btn" type="button" data-copy="rep">Скопировать для рации</button></p></section>';
   }
   if(chist.length) h+='<section class="panel"><h2>История расчётов</h2><p class="sub">Откройте прошлый расчёт, чтобы повторить его: набор статей вернётся в калькулятор.</p><ul class="basket">'+chist.map(function(e,i){return '<li><span class="t"><b>'+esc(e.d)+'</b>'+(e.s?esc(e.s)+" · ":"")+e.ids.length+' п.: '+esc(e.l)+'</span><button class="btn" type="button" data-chopen="'+i+'">Открыть</button><button class="ic" data-chdel="'+i+'" aria-label="Удалить">×</button></li>'}).join("")+'</ul><p style="margin:10px 0 0"><button class="btn" type="button" id="chClear">Очистить историю</button></p></section>';
   h+='<section class="panel"><h2>Вес наркотиков</h2><p class="sub">Один куст Green равен 5 г, одно семечко 2 г (ст. 5.13).</p>'+
@@ -1917,7 +1938,7 @@ function renderCalc(){
     '<label for="ds">Семена<input id="ds" type="number" min="0" inputmode="numeric" value="0"></label></div>'+
     '<div class="verdict" id="drugOut" aria-live="polite"></div>'+
     '<p class="hint">Если найдено несколько видов, вес складывается и применяется статья главы 13 УК.</p></section>';
-  h+='<section class="panel"><h2>Заметки и пометки: обмен</h2><p class="sub">Личные заметки, избранное лежат только в этом браузере. Чтобы передать их коллеге или перенести на другое устройство, нажмите «Экспорт», отправьте текст, а получатель вставит его и нажмёт «Импорт».</p>'+
+  h+='<section class="panel"><h2>Заметки и пометки: обмен</h2><p class="sub">Чтобы передать заметки и избранное коллеге, нажмите «Экспорт», отправьте текст, а получатель вставит его и нажмёт «Импорт». На свои компьютеры переносить не нужно: в программе они синхронизируются через аккаунт, а все данные целиком можно сохранить в файл в «Настройках».</p>'+
     '<textarea class="bkbox" id="bkT" aria-label="Данные для обмена" placeholder="Здесь появится экспорт или вставьте чужой"></textarea>'+
     '<div class="rowbtn"><button class="btn" type="button" id="exportBtn">Экспорт</button><button class="btn" type="button" data-copy="bk">Скопировать</button><button class="btn primary" type="button" id="importBtn">Импорт</button></div>'+
     '<p class="hint" id="bkMsg" aria-live="polite"></p></section></div>';
@@ -2128,6 +2149,7 @@ function renderTimer(){
       '<div class="rowbtn">'+
         (!decided?'<button class="btn primary" type="button" data-tm="decide">Мера избрана</button>':'')+
         (tm.paused?'<button class="btn" type="button" data-tm="resume">Продолжить</button>':'')+
+        (window.SA_RP?'<button class="btn" type="button" data-rpopen="tm">📝 Рапорт</button>':'')+
         '<button class="btn" type="button" data-tm="archive">В архив</button>'+
         '<button class="btn" type="button" data-tm="del">Удалить</button>'+
       '</div>';
@@ -2489,6 +2511,7 @@ function hlHtml(raw, hl){
 }
 function lawArtBadge(L, n){
   var e = (L.arts || []).filter(function(x){ return x.n === n && x.k !== "removed" && Date.now() - x.at < BADGE_MS; })[0];
+  if(e){ e.lid = L.id; e._L = L; }
   return e ? chgBadge({chg:e}) : "";
 }
 function appendLawHits(){
@@ -2635,16 +2658,16 @@ render();
 (function(){
 try{localStorage.removeItem("bos-flags")}catch(e){} flags={};
 var TABS={
- tools:["Проверки",[["legal","Законность"],["s17","Сверка ст. 17"],["force","Сила"],["bail","Залог"],["docs","Шаблоны"]]],
- sup:["Надзор",[["sup","Проверка"],["legal","Законность"],["docs","Шаблоны"]]],
- def:["Защита",[["def","Режим защиты"],["legal","Законность"],["docs","Шаблоны"]]],
+ tools:["Проверки",[["legal","Законность"],["s17","Сверка ст. 17"],["force","Сила"]]],
+ sup:["Надзор",[["sup","Проверка"],["legal","Законность"]]],
+ def:["Защита",[["def","Режим защиты"],["legal","Законность"]]],
 
  rules:["Правила",[["rg","Гос. структуры"],["rm","Общие"],["rz","Зоны"],["rl","Лидерам"],["rs","Поставки"],["rf","ФЗ и цеха"]]],
  learn:["Обучение",[["quiz","Тренажёр"],["scen","Что делать, если…"],["err","Частые ошибки"]]],
  more:["Сервис",[["cmp","Сравнение"],["diff","Изменения"],["print","Шпаргалка"]]]};
 var ROLES={off:["Сотрудник",["timer","calc","tools","rules","learn","more"]],pros:["Прокурор",["sup","rules","learn","more"]],adv:["Адвокат",["def","rules","learn","more"]]};
 var BASE=["uk","ak","dk","pk","gen","laws"];
-var X={sub:{tools:"legal",sup:"sup",def:"def",rules:"rg",learn:"quiz",more:"cmp"},bail:[],bm:"sum",quiz:null,doc:"claim",fs:"",c1:"uk|6.1",c2:"uk|10.1",role:"off",rq:""};
+var X={sub:{tools:"legal",sup:"sup",def:"def",rules:"rg",learn:"quiz",more:"cmp"},bm:"sum",quiz:null,fs:"",c1:"uk|6.1",c2:"uk|10.1",role:"off",rq:""};
 try{X.role=localStorage.getItem("bos-role")||"off"}catch(e){} if(!ROLES[X.role])X.role="off"; window.SA_X=X; window.SA_TABS=TABS;
 /* Режимы «Прокурор» и «Адвокат» доступны только организации Government */
 function allowedRoles(){var A=window.senkoApp,st=null;if(!A)return Object.keys(ROLES);try{st=A.state()}catch(e){}
@@ -2711,21 +2734,8 @@ var FS=[["Присутствие","Форма, жетон, рука на коб�
 P.force=function(){var s=X.fs,sk=s==="w"?3:(s==="d"?4:0);
  return '<section class="panel"><h2>Стадии применения силы</h2><p class="sub">ПК ст. 37: идти строго по порядку от 1 до 5. Выберите ситуацию, чтобы увидеть исключения.</p><div class="presets"><button class="pill" data-x="fs" data-v="w" aria-pressed="'+(s==="w")+'">Я свидетель правонарушения</button><button class="pill" data-x="fs" data-v="d" aria-pressed="'+(s==="d")+'">Угроза жизни или вооружённая толпа</button></div></section><div class="cards">'+FS.map(function(f,i){var skip=i<sk;return '<section class="card" style="'+(skip?'opacity:.55':'')+'"><span class="ref">ст. 37 '+f[2]+'</span><h3>'+(i+1)+'. '+f[0]+'</h3><p>'+f[1]+'</p>'+(skip?'<p><b>Можно пропустить</b> по исключению ст. 37 ч. 1.</p>':'')+'</section>'}).join("")+'</div>'};
 
-/* 4. Залог */
-P.bail=function(){var it=X.bail.map(function(id){return BYID[id]}).filter(Boolean),ss=it.map(function(r){return r.stars}),sum=Math.min(5,ss.reduce(function(a,b){return a+b},0)),mx=Math.max.apply(null,ss.concat([0])),n=mx;
- return '<section class="panel"><h2>Залог</h2><p class="sub">ПК ст. 34: $25 000 × уровень розыска (1★ — $25 000, 2★ — $50 000, 3★ — $75 000, 4★ — $100 000, 5★ — $125 000). Берётся наибольший уровень розыска из списка. Итоговую сумму определяет сотрудник.</p><div class="fields" style="grid-template-columns:1fr auto"><label>Статья УК<select data-d="bsel" class="notebox" style="margin:0">'+uniq(UK).map(function(r){return '<option value="uk'+r.code+'-'+(r.part||"")+'">'+r.code+' · '+esc(r.title)+'</option>'}).join("")+'</select></label><button class="btn primary" style="align-self:end" data-x="badd">Добавить</button></div><div class="rowbtn" style="margin:0 0 10px"><button class="btn" data-x="bcalc">Взять из калькулятора</button><button class="btn" data-x="bclr">Очистить</button></div><ul class="basket">'+it.map(function(r){return '<li><span class="t"><b>'+r.code+'</b>'+esc(r.title)+(r.part?' ч.'+r.part:'')+'</span>'+starsHtml(r.stars)+'<button class="ic" data-x="brm" data-v="'+r.id+'">×</button></li>'}).join("")+'</ul><p class="hint" style="margin-bottom:10px">Залог считается по статье с наибольшим уровнем розыска, уровни не суммируются.</p><div class="sumgrid"><div class="sum"><div class="k">Уровень розыска</div><div class="v">'+n+' ★</div></div><div class="sum"><div class="k">За 1 ★</div><div class="v">'+money(25000)+'</div></div><div class="sum"><div class="k">Залог не менее</div><div class="v">'+money(n?25000*n:0)+'</div></div></div></section>'};
+/* 4. Залог перенесён в «Калькулятор» (renderCalc) */
 
-/* 5. Шаблоны */
-var TP={claim:["Ходатайство","ПК ст. 22 ч. 1 п. «г»"],comp:["Жалоба на сотрудника","ПК ст. 9 ч. 3, 5"],ogp:["Обращение в ОГП","ПК ст. 9 ч. 4, ст. 19"],cmpt:["Запрос компетенции","ПК ст. 35 ч. 3–5"]};
-var DV={n:"",p:"",to:"",dt:"",s:""};
-P.docs=function(){return '<section class="panel"><h2>Шаблоны документов</h2><p class="sub">Заполните поля, текст соберётся сам. Жалобу на сотрудника подавайте в течение 72 часов (ст. 9 ч. 5).</p><div class="presets" style="margin-bottom:12px">'+Object.keys(TP).map(function(k){return '<button class="pill" data-x="doc" data-v="'+k+'" aria-pressed="'+(X.doc===k)+'">'+TP[k][0]+'</button>'}).join("")+'</div><div class="fields">'+fld("n","ФИО / ник",DV.n)+fld("p","Должность, ведомство",DV.p)+fld("to","Кому",DV.to)+fld("dt","Дата и время",DV.dt)+'</div><label class="fields" style="display:grid;gap:4px;font-size:13px;color:var(--muted)">Суть (что произошло, статьи, обстоятельства)<textarea class="notebox" data-d="s" rows="3">'+esc(DV.s)+'</textarea></label><textarea class="repbox" id="docT" style="margin-top:10px" readonly></textarea><div class="rowbtn"><button class="btn primary" data-x="copyd">Скопировать</button></div></section>'};
-function buildDoc(){var d=DV,k=X.doc,a="В "+(d.to||"[кому]")+"\nОт: "+(d.n||"[ФИО]")+(d.p?", "+d.p:"")+"\nДата: "+(d.dt||"[дата и время]")+"\n\n"+TP[k][0].toUpperCase()+"\n\n",s=d.s||"[опишите суть]";
- var b={claim:"На основании "+TP[k][1]+" ПК СА прошу рассмотреть ходатайство:\n"+s+"\n\nПриложения: видеофиксация, иные материалы.",
- comp:"Прошу провести проверку действий сотрудника в порядке ст. 9 ч. 3 ПК СА. Жалоба подаётся в течение 72 часов с момента задержания или наказания (ст. 9 ч. 5).\n\nОбстоятельства:\n"+s+"\n\nПрошу при необходимости отменить решения, вынесенные сотрудником.",
- ogp:"На основании ст. 9 ч. 4 ПК СА прошу инициировать прокурорскую проверку в отношении сотрудника.\n\nОбстоятельства:\n"+s+"\n\nПриложения: видеофиксация, свидетельские показания.",
- cmpt:"Прошу одобрить запрос на предоставление компетенции (ст. 35 ч. 3–5 ПК СА) для проведения процессуальных действий.\n\nОснование и объём полномочий:\n"+s+"\n\nУведомление об использовании компетенции будет направлено в установленном порядке."}[k];
- var t=$("#docT");if(t)t.value=a+b+"\n\nПодпись: "+(d.n||"________")}
-AF.docs=buildDoc;
 
 /* Юристы: защита */
 var VIOL=[["ст. 12 ч. 2 п. «в»","Обыск, досмотр или остановка без ордера и основания: улики аннулируются, освобождение"],["ст. 12 ч. 2 п. «а»","Допрос до зачтения прав"],["ст. 17 ч. 3","Нарушен порядок и состав правила Миранды: показания после него недопустимы"],["ст. 16 ч. 2","Нет основания для задержания"],["ст. 17 ч. 1","Нарушена последовательность действий при задержании"],["ст. 19","Госслужащий, WN или адвокат: не вызваны руководство и ОГП"],["ст. 23 ч. 1","Нет видеозаписи, не приобщены доказательства задержанного по боло"],["ст. 35 ч. 2, 5","Действия вне компетенции без одобренного запроса недопустимы"],["ст. 37","Превышена стадия силы или пропущены стадии без исключения"]];
@@ -2747,7 +2757,7 @@ AF.sup=function(){updSup();updDec()};
 /* Обучение: тренажёр (v2): режимы, статистика, карточки, аттестация, уровень, экспорт */
 var TOP={time:"Сроки",adv:"Адвокат и звонок",ogp:"ОГП и госслужащие",proc:"Процедура и права",force:"Сила и оружие",bail:"Залог",dk:"Дорожный кодекс",uk:"УК: розыск и сроки"};
 var TORD=["time","adv","ogp","proc","force","bail","dk","uk"];
-var MN={std:"Тест",daily:"Мини-тест дня",exam:"Аттестация",weak:"Повтор слабых",sec:"Тест по разделу",redo:"Работа над ошибками"};
+var MN={std:"Тест",daily:"Мини-тест дня",exam:"Аттестация",weak:"Повтор слабых",sec:"Тест по разделу",redo:"Работа над ошибками",ctrl:"Контрольный тест"};
 var SB=[
 ["s1","time","Сколько длится задержание до избрания меры?",["20 минут","1 час","2 часа","72 часа"],1,"Ст. 15 ч. 1, ст. 20 ч. 1 п. «г»","ПК ст. 15"],
 ["s2","adv","Максимальная длительность звонка задержанного?",["1 минута","3 минуты","5 минут","10 минут"],1,"Ст. 22 ч. 1, ст. 17 ч. 5","ПК ст. 22"],
@@ -2836,15 +2846,35 @@ function startQuiz(mode,arg){
  else if(mode==="weak"){ds=weakIds().slice(0,10).map(descById)}
  else if(mode==="redo"){ds=(arg||[]).map(descById).filter(Boolean)}
  else if(mode==="sec"){tp=arg;if(!TOP[tp])return;ds=shufR(SD.concat(ukDescs()).filter(function(d){return d.tp===tp}),rnd).slice(0,10);title=TOP[tp]}
+ else if(mode==="ctrl"){ds=ctrlSet(arg);ex=true;limit=ds.length*45000;title=arg.title||MN.ctrl}
  if(!ds.length){X.qv="menu";X.msg=mode==="weak"?"Слабых вопросов пока нет: ошибки появятся после первых тестов.":"Не нашлось вопросов для этого режима.";return}
  var qs=shufR(ds,rnd).map(function(d){return mkQ(d,rnd)});
- X.quiz={mode:mode,tp:tp,title:title,qs:qs,i:0,s:0,sel:-1,wrong:[],t0:Date.now(),dl:limit?Date.now()+limit:0,exam:ex,over:false};
+ X.quiz={mode:mode,tp:tp,title:title,qs:qs,i:0,s:0,sel:-1,wrong:[],t0:Date.now(),dl:limit?Date.now()+limit:0,exam:ex,over:false,cid:mode==="ctrl"?String(arg.id):""};
  X.qv="run";X.msg=""}
+/* контрольный тест руководства: вопросы поровну из выбранных тем, одна попытка, результат уходит на сервер */
+function ctrlSet(c){
+ var tps=(c&&c.topics||[]).filter(function(k){return TOP[k]}),n=Math.min(20,Math.max(1,+c.n||10)),rnd=Math.random;
+ var pools=tps.map(function(k){return shufR(SD.concat(ukDescs()).filter(function(d){return d.tp===k}),rnd)}),out=[],i=0;
+ while(out.length<n&&pools.some(function(p){return p.length})){var p=pools[i++%pools.length];if(p.length)out.push(p.shift())}
+ return out}
+var CDK="bos-ctrl-done";
+function ctrlDone(){try{var a=JSON.parse(localStorage.getItem(CDK)||"[]");return Array.isArray(a)?a:[]}catch(e){return []}}
+function ctrlMark(id){var a=ctrlDone();if(a.indexOf(id)<0){a.push(id);try{localStorage.setItem(CDK,JSON.stringify(a.slice(-40)))}catch(e){}}if(window.SA_np)try{window.SA_np()}catch(e){}}
+function ctrlSend(z){
+ var api=window.senkoApp&&window.senkoApp.api;
+ if(!api){z.send={st:"err",e:"Отправить результат можно только в программе."};return}
+ z.send={st:"wait"};
+ api("ctrl",{op:"submit",id:z.cid,s:z.s,n:z.qs.length}).then(function(r){
+  if(r&&r.ok){z.send={st:"ok",p:r.p};ctrlMark(z.cid)}
+  else{z.send={st:"err",e:(r&&r.error)||"Не удалось отправить результат."};if(r&&/уже прошли|истёк|не найден/i.test(r.error||""))ctrlMark(z.cid)}
+  if(X.quiz===z&&state.tab==="learn")render();
+ },function(){z.send={st:"err",e:"Ошибка связи с программой."};if(X.quiz===z&&state.tab==="learn")render()})}
 function pushWrong(q,mine){X.quiz.wrong.push({id:q.id,q:q.q,mine:mine,right:q.o[q.a],e:q.e,ref:q.ref})}
 function fin(z){
  if(z.over)return;z.over=true;z.end=Date.now();
  var n=z.qs.length,lv0=lvInfo().n,gain=z.s*10;
- if(z.exam&&z.s/n>=0.8){z.pass=true;gain+=50}
+ if(z.mode==="exam"&&z.s/n>=0.8){z.pass=true;gain+=50}
+ if(z.mode==="ctrl")ctrlSend(z);
  if(z.mode==="daily"&&DY.d!==today()){DY={d:today(),s:z.s,n:n};sg("bos-daily",DY);SKR=(SKR.last===yest())?{last:today(),n:SKR.n+1}:{last:today(),n:1};sg("bos-streak",SKR);gain+=20;z.firstDaily=true}
  z.gain=gain;addXp(gain);z.lvUp=lvInfo().n>lv0}
 function expire(z,timeout){
@@ -2894,7 +2924,15 @@ function doExport(kind,btn){
  if(kind==="copy"){copyText(expTxt(),btn);return ""}
  if(kind==="csv")return dlFile("senko-tests-"+d+".csv",expCsv(),"text/csv;charset=utf-8")?"Файл сохраняется…":"Не вышло, нажмите «Копировать»";
  return dlFile("senko-tests-"+d+".txt",expTxt(),"text/plain;charset=utf-8")?"Файл сохраняется…":"Не вышло, нажмите «Копировать»"}
-window.SA_TR={lvl:function(){return lvInfo()},exp:doExport,mn:function(m){return MN[m]||"Тест"}};
+function trGo(){state.tab="learn";state.stars=0;X.sub.learn="quiz";render();window.scrollTo(0,0)}
+window.SA_TR={lvl:function(){return lvInfo()},exp:doExport,mn:function(m){return MN[m]||"Тест"},topics:function(){return TOP},
+ // тест по разделу (из личного кабинета: «Стоит повторить»)
+ sec:function(tp){if(!TOP[tp])return;X.tsel=tp;startQuiz("sec",tp);trGo()},
+ // мини-тест дня (с главного экрана); dailyDone — пройден ли сегодня
+ daily:function(){startQuiz("daily");trGo()},dailyDone:function(){return DY.d===today()?{s:DY.s,n:DY.n}:null},streak:function(){return SKR.last===today()||SKR.last===yest()?SKR.n:0},
+ // контрольный тест руководства: {id,title,topics,n}
+ ctrl:function(c){var z=X.quiz;if(!(z&&z.mode==="ctrl"&&z.cid===String(c.id)&&!z.over)){if(ctrlDone().indexOf(String(c.id))>=0)return;startQuiz("ctrl",c)}trGo()},
+ ctrlDone:ctrlDone};
 
 /* экраны */
 var tmr=null;
@@ -2945,7 +2983,7 @@ function cardsHtml(){
  '<div class="rowbtn">'+(c.flip?'<button type="button" class="btn primary" data-x="t_know" data-v="1">Знаю</button><button type="button" class="btn" data-x="t_know" data-v="0">Повторить</button>':'<button type="button" class="btn primary" data-x="t_flip" data-v="1">Показать ответ</button>')+'</div></section>'}
 function runHtml(z){
  var q=z.qs[z.i],d=z.sel>-1;
- var head='<h2>'+(z.exam?'Аттестация · ':'')+'Вопрос '+(z.i+1)+' из '+z.qs.length+'</h2>';
+ var head='<h2>'+(z.exam?(z.mode==="ctrl"?'Контрольный тест · ':'Аттестация · '):'')+'Вопрос '+(z.i+1)+' из '+z.qs.length+'</h2>';
  var h='<section class="panel">'+head+(z.exam?'<div class="trtm"><span id="trTm">'+mmss(Math.max(0,z.dl-Date.now()))+'</span><span class="hint" style="margin:0">осталось времени, подсказок нет</span></div><div class="bar"><i id="trTb" style="width:'+(Math.max(0,z.dl-Date.now())/(z.dl-z.t0)*100)+'%"></i></div>':'<div class="bar"><i style="width:'+(z.i/z.qs.length*100)+'%"></i></div><span class="chip">'+esc(TOP[q.tp]||z.title)+'</span>')+
  '<p style="font-size:16px;font-weight:600">'+esc(q.q)+'</p><div class="basket">'+q.o.map(function(o,i){var c=d&&i===q.a?" ok":(d&&i===z.sel?" bad":"");return '<button class="btn qo'+c+'" data-x="t_ans" data-v="'+i+'"'+(d?' disabled':'')+'>'+esc(o)+'</button>'}).join("")+'</div>';
  if(d){var ok=z.sel===q.a;h+='<div class="verdict">'+(ok?'Верно. ':'Неверно. Правильный ответ: <b>'+esc(q.o[q.a])+'</b>. ')+(q.e?esc(q.e)+' · ':'')+'<span class="trref">Статья: '+gref(q.ref)+'</span></div><div class="rowbtn"><button type="button" class="btn primary" data-x="t_next" data-v="1">'+(z.i+1>=z.qs.length?'Показать результат':'Дальше')+'</button></div>'}
@@ -2953,9 +2991,10 @@ function runHtml(z){
  return h+'</section>'}
 function resHtml(z){
  var n=z.qs.length,p=pct(z.s,n),r=ratingOf(p),h='<section class="panel"><h2>Результат · '+esc(z.title)+'</h2><div class="clock" style="font-size:56px">'+z.s+' / '+n+'</div><p class="clocksub">'+p+'% · '+starsH(r)+' '+RNM[r]+'</p>';
- if(z.exam)h+=ban(z.pass?"done":"over","<b>"+(z.pass?"Зачёт.":"Не зачёт.")+"</b> Нужно не менее 80%, у вас "+p+"%."+(z.timeout?" Время вышло, неотвеченные вопросы засчитаны как ошибки.":""));
+ if(z.mode==="ctrl"){var sd=z.send||{};h+=sd.st==="ok"?ban("done","<b>Результат отправлен руководству:</b> "+sd.p+"%."+(z.timeout?" Время вышло, неотвеченные вопросы засчитаны как ошибки.":"")):sd.st==="err"?ban("over","<b>Результат не отправлен.</b> "+esc(sd.e)):ban("warn","Отправляем результат руководству…")}
+ else if(z.exam)h+=ban(z.pass?"done":"over","<b>"+(z.pass?"Зачёт.":"Не зачёт.")+"</b> Нужно не менее 80%, у вас "+p+"%."+(z.timeout?" Время вышло, неотвеченные вопросы засчитаны как ошибки.":""));
  h+='<p class="hint" style="text-align:center">'+(z.end?'Время: '+mmss(z.end-z.t0)+' · ':'')+'<b>+'+z.gain+' XP</b>'+(z.firstDaily?' (включая бонус дня)':'')+(z.lvUp?' · новый уровень: '+lvInfo().n+' «'+lvInfo().name+'»':'')+'</p>'+
- '<div class="rowbtn" style="justify-content:center"><button type="button" class="btn primary" data-x="t_again" data-v="1">'+(z.mode==="redo"?'Ещё раз':'Новый раунд')+'</button>'+(z.wrong.length&&z.mode!=="redo"?'<button type="button" class="btn" data-x="t_redo" data-v="1">Работа над ошибками</button>':'')+'<button type="button" class="btn" data-x="t_menu">В меню</button></div></section>';
+ '<div class="rowbtn" style="justify-content:center">'+(z.mode==="ctrl"?(z.send&&z.send.st==="err"&&ctrlDone().indexOf(z.cid)<0?'<button type="button" class="btn primary" data-x="t_csend" data-v="1">Отправить ещё раз</button>':''):'<button type="button" class="btn primary" data-x="t_again" data-v="1">'+(z.mode==="redo"?'Ещё раз':'Новый раунд')+'</button>')+(z.wrong.length&&z.mode!=="redo"?'<button type="button" class="btn" data-x="t_redo" data-v="1">Работа над ошибками</button>':'')+'<button type="button" class="btn" data-x="t_menu">В меню</button></div></section>';
  if(z.wrong.length)h+='<section class="panel"><h2>Разбор ошибок</h2><p class="sub">Вопросы с неверным ответом и статья, где написано правильно.</p><ul class="basket">'+z.wrong.map(function(w){return '<li><span class="t"><b>'+esc(w.q)+'</b><br>Ваш ответ: '+(w.mine==null?'<i>нет ответа</i>':esc(w.mine))+'<br>Верно: <b>'+esc(w.right)+'</b>'+(w.e?' · '+esc(w.e):'')+'<br>Статья: '+gref(w.ref)+'</span></li>'}).join("")+'</ul></section>';
  return h}
 P.quiz=function(){
@@ -2972,7 +3011,8 @@ function TRN(a,v,t){
  if(a==="ans"){onAnswer(+v);render();return}
  if(a==="next"){onNext();render();window.scrollTo(0,0);return}
  if(a==="giveup"){if(z&&!z.over){expire(z,false);render()}return}
- if(a==="again"){if(z){var m=z.mode;startQuiz(m,m==="sec"?z.tp:(m==="redo"?z.wrong.map(function(w){return w.id}):null))}render();window.scrollTo(0,0);return}
+ if(a==="csend"){if(z&&z.mode==="ctrl"&&z.over){ctrlSend(z);render()}return}
+ if(a==="again"){if(z&&z.mode==="ctrl")return;if(z){var m=z.mode;startQuiz(m,m==="sec"?z.tp:(m==="redo"?z.wrong.map(function(w){return w.id}):null))}render();window.scrollTo(0,0);return}
  if(a==="redo"){if(z){startQuiz("redo",z.wrong.map(function(w){return w.id}))}render();window.scrollTo(0,0);return}
  if(a==="menu"){X.quiz=null;X.qv="menu";X.msg="";render();window.scrollTo(0,0);return}
  if(a==="stats"){X.qv="stats";render();window.scrollTo(0,0);return}
@@ -3115,15 +3155,12 @@ view.addEventListener("click",function(e){var t=e.target.closest("button");if(!t
  if(t.dataset.xs){X.sub[state.tab]=t.dataset.xs;render();window.scrollTo(0,0);return}
  var a=t.dataset.x,v=t.dataset.v;if(!a)return;
  if(a==="s17")run17();else if(a==="fs"){X.fs=X.fs===v?"":v;render()}
- else if(a==="badd"){var id=$('[data-d="bsel"]').value;if(X.bail.indexOf(id)<0&&BYID[id])X.bail.push(id);render()}
- else if(a==="bcalc"){basketItems().filter(function(r){return r.k==="uk"}).forEach(function(r){if(X.bail.indexOf(r.id)<0)X.bail.push(r.id)});render()}
- else if(a==="bclr"){X.bail=[];render()}else if(a==="brm"){X.bail=X.bail.filter(function(i){return i!==v});render()}
- else if(a==="bm"){X.bm=v;render()}else if(a==="doc"){X.doc=v;render()}else if(a==="copyd")copyText($("#docT").value,t)
+ else if(a==="bm"){X.bm=v;render()}
  else if(a==="dres"){DEC.res=v;view.querySelectorAll("[data-x=dres]").forEach(function(b){b.setAttribute("aria-pressed",String(b.dataset.v===v))});updDec()}else if(a==="copyc")copyText($("#decT").value,t)
  else if(a.slice(0,2)==="t_"){TRN(a.slice(2),v,t)}
  else if(a==="dif")runDiff();else if(a==="prt")window.print()});
 view.addEventListener("input",function(e){var d=e.target.dataset.d;if(!d||!TABS[state.tab])return;
- if(d in DV){DV[d]=e.target.value;buildDoc()}else if(d==="dn"||d==="da"||d==="dm"){DEC[{dn:"n",da:"art",dm:"meas"}[d]]=e.target.value;updDec()}else if(d==="rq"){X.rq=e.target.value;rlOut()}});
+ if(d==="dn"||d==="da"||d==="dm"){DEC[{dn:"n",da:"art",dm:"meas"}[d]]=e.target.value;updDec()}else if(d==="rq"){X.rq=e.target.value;rlOut()}});
 view.addEventListener("change",function(e){var t=e.target;if(!TABS[state.tab])return;
  if(t.dataset.g==="lg")updLegal();else if(t.dataset.g==="sp")updSup();
  else if(t.dataset.d==="dsel")defOut();else if(t.dataset.d==="c1"||t.dataset.d==="c2"){X[t.dataset.d]=t.value;render()}});
@@ -3480,6 +3517,7 @@ function appSettingsHtml(){
     '<div class="fsctl"><button type="button" class="btn" data-ap="hotkeyRec" aria-label="Изменить сочетание клавиш">'+(recHot?"Нажмите сочетание… (Esc — отмена)":esc(c.hotkey))+'</button>'+asw("hotkeyEnabled",c.hotkeyEnabled,"Горячая клавиша")+'</div>');
   h+=row("Узкий компактный режим окна","Узкое окно, которое не закрывает игру.",asw("compact",c.compact,"Компактный режим окна"));
   h+=row("Запоминание размера и позиции окна","Окно открывается там же и того же размера.",asw("rememberBounds",c.rememberBounds,"Запоминать размер и позицию"));
+  h+=row("Призрачный режим","Когда вы переключаетесь в игру, окно становится полупрозрачным, а при возврате снова обычным.",asw("ghost",c.ghost,"Призрачный режим"));
   h+=row("Прозрачность окна","Полупрозрачное окно, сквозь которое видно игру.",
     '<div class="fsctl"><input type="range" min="30" max="100" step="5" value="'+c.opacity+'" data-ap-range="opacity" aria-label="Прозрачность окна"><output>'+c.opacity+'%</output></div>');
   h+=row("Значок в трее","Приложение работает в фоне и вызывается из панели. Крестик прячет окно в трей, полный выход — в меню значка.",asw("tray",c.tray,"Значок в трее"));
@@ -3494,7 +3532,7 @@ function appSettingsHtml(){
       '<div class="fsctl"><button type="button" class="btn" data-ap="logout">Выйти</button></div>');
     if(window.senkoApp&&window.senkoApp.bug) h+=row("Сообщить об ошибке","Сообщение уйдёт разработчику вместе с версией программы, ответ придёт в программу.",'<button type="button" class="btn" data-ap="bug">Написать</button>');
     if(st.sync&&window.senkoApp&&window.senkoApp.syncNow){
-      var sy=st.sync, syTxt="Задержания и результаты тестов хранятся в вашем аккаунте и одинаковы на всех ваших компьютерах.";
+      var sy=st.sync, syTxt="Задержания, результаты тестов, избранное, заметки и папки хранятся в вашем аккаунте и одинаковы на всех ваших компьютерах.";
       if(sy.offline) syTxt="Нет связи с сервером: изменения отправятся, когда появится интернет.";
       else if(sy.error) syTxt=esc(sy.error);
       else if(sy.at) syTxt="Синхронизировано в "+new Date(sy.at).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})+".";
@@ -3553,7 +3591,7 @@ function settingsHtml(){
   var i=fsIdx();
   var h='';
   h+='<div class="sgroup">Внешний вид</div>';
-  h+=row("Тема","Тема выбирается вручную, а не только по системе.",seg("theme",[["auto","Авто"],["light","Светлая"],["dark","Тёмная"]]));
+  h+=row("Тема","Тема выбирается вручную, а не только по системе.",seg("theme",[["auto","Авто"],["light","Светлая"],["dark","Чёрная"]]));
   h+=row("Масштаб шрифта","Увеличивайте шрифт для комфортного чтения.",
     '<div class="fsctl"><button type="button" class="btn" data-sk="fs" data-sv="-1" aria-label="Уменьшить шрифт"'+(i<=0?' disabled':'')+'>A−</button><output aria-live="polite">'+S.fs+'%</output><button type="button" class="btn" data-sk="fs" data-sv="1" aria-label="Увеличить шрифт"'+(i>=FS_STEPS.length-1?' disabled':'')+'>A+</button></div>');
   h+=row("Режим высокой контрастности","Яркие цвета и чёткие границы для читаемости.",sw("hc",S.hc,"Высокая контрастность"));
@@ -3567,6 +3605,7 @@ function settingsHtml(){
   h+=row("Кнопка «Наверх»","Быстрый возврат к началу длинных списков.",sw("totop",S.totop,"Кнопка «Наверх»"));
   h+=row("Запоминание позиции прокрутки","Страница открывается там, где вы её оставили.",sw("remember",S.remember,"Запоминать позицию"));
   h+=appSettingsHtml();
+  if(window.SA_dataRows) h+=window.SA_dataRows(row);
   h+='<div class="sgroup">Документы</div>';
   h+=row("Политика конфиденциальности","Какие данные хранит Senko Assistant и где они находятся.",'<button type="button" class="btn" data-legal="privacy">Читать</button>');
   h+=row("Условия пользования","Правила использования и ограничения ответственности.",'<button type="button" class="btn" data-legal="terms">Читать</button>');
@@ -3637,7 +3676,7 @@ function cabHtml(){
       fld("discord","Discord",acc.discord,40,"ник в Discord")+fld("telegram","Telegram",acc.telegram,33,"@name или пусто")+fld("phone","Номер в игре",acc.phone,12,"только цифры")+
       '<div class="sbtns" style="margin:0"><button type="button" class="btn" data-cab="accsave" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Сохранить</button></div>'+
       '<div id="accMsg" role="status" aria-live="polite" style="font-size:12.5px;color:var(--muted);min-height:1.2em"></div></div></div>';
-    ah+=detHtml()+testHtml();
+    ah+=(window.SA_PROG?window.SA_PROG.html():"")+(window.SA_RP?window.SA_RP.cabHtml():"")+detHtml()+testHtml();
     ah+='<p class="cab-foot">Данные кабинета хранятся в вашем аккаунте. После смены ведомства программу нужно перезапустить.</p>';
     return ah;
   }
@@ -3680,6 +3719,8 @@ function closeSheet(){
   sheetKind="";
   if(lastFocus&&lastFocus.focus&&document.contains(lastFocus)) try{lastFocus.focus()}catch(e){}
 }
+window.SA_closeSheet=closeSheet;
+window.SA_paintSheet=function(){ if(!ov.hidden&&sheetKind==="set") paintSheet(); };
 gearBtn.addEventListener("click",function(){openSheet("set")});
 cabBtn.addEventListener("click",function(){openSheet("cab")});
 
@@ -4616,43 +4657,48 @@ render();
   "use strict";
   if (window.SenkoLegal) return;
 
-  var VERSION = "2026-10-19.2";
+  var VERSION = "2026-10-21.1";
   var CONTACT = "Discord: hanamis1";
 
   var DOCS = {
     privacy: {
       title: "Политика конфиденциальности",
-      updated: "19 октября 2026, редакция 2",
+      updated: "21 октября 2026",
       sections: [
         ["1. Общие положения",
           ["Senko Assistant (далее — «Программа») — справочное приложение-памятка по законодательству игрового проекта Majestic RP Boston. Эта Политика объясняет, какие данные Программа хранит, где они находятся и кто может их видеть.",
            "Программа создана игроками и не является официальным продуктом Majestic RP или администрации проекта."]],
         ["2. Какие данные хранятся",
-          ["При регистрации: логин, пароль (только в виде хэша, открытого пароля не существует нигде), игровой ник, статик, организация, роль в игре, Discord, номер телефона в игре и, если вы его указали, Telegram. Также сохраняются версия и дата принятия этих документов, дата регистрации и дата последнего входа.",
+          ["При регистрации: логин, пароль (только в виде хэша, открытого пароля не существует нигде), игровой ник, статик, организация, роль в игре, Discord, номер телефона в игре и, если вы его указали, Telegram. Также сохраняются версия и дата принятия этих документов, дата регистрации, дата последнего входа и версия Программы, а если владелец включил приём новичков, ещё и статус заявки (ожидает, принята, отклонена).",
            "Служебные данные: права в Программе (пользователь, руководство, модератор памятки, владелец), отметка о блокировке и её причина, журнал административных действий (выдача прав, блокировки, сбросы паролей), хэш кода восстановления и хэши токенов входа. Если вы выбрали «Запомнить меня», на компьютере хранится зашифрованный токен входа.",
-           "Данные вашей работы, которые синхронизируются между вашими компьютерами и хранятся на сервере в вашем аккаунте: история задержаний из таймера (ник и статик задержанного, которые вы вводите, статьи, время и ход дела), журнал статей, результаты тестов из раздела «Обучение» и статистика тренажёра (ответы по вопросам, опыт, уровень, серия дней). Не вводите в Программу сведения, которые не относятся к игре.",
-           "Настройки интерфейса, заметки, избранное, история калькулятора и позиция прокрутки хранятся только на вашем компьютере."]],
+           "Данные вашей работы, которые синхронизируются между вашими компьютерами и хранятся на сервере в вашем аккаунте: история задержаний из таймера (ник и статик задержанного, которые вы вводите, статьи, время и ход дела), журнал статей, результаты тестов из раздела «Обучение», статистика тренажёра (ответы по вопросам, опыт, уровень, серия дней), а также избранные статьи, ваши заметки к статьям, цветные метки и папки избранного. Не вводите в Программу сведения, которые не относятся к игре.",
+           "Также на сервере в вашем аккаунте хранятся: полученные достижения, опыт на начало каждой недели (для рейтинга недели), результаты контрольных тестов, назначенных руководством, ваши вопросы ИИ-помощнику вместе со списком найденных статей и вашей оценкой ответа (👍/👎), а также рапорты, которые вы отправили руководству: текст рапорта, указанные в нём сведения (например, ник и паспорт задержанного), ваши ник, статик и должность, решение руководства и комментарий к нему. Для организации хранится журнал смен: кто и когда начал и закончил смену и сводка по ней.",
+           "Настройки интерфейса, фото профиля, история калькулятора и позиция прокрутки хранятся только на вашем компьютере."]],
         ["3. Где хранятся данные",
           ["Данные аккаунта (раздел 2, первый и второй абзацы) хранятся на сервере в облачной базе данных Supabase, доступ к которой есть у владельца Программы. На вашем компьютере остаются: зашифрованный токен входа (если выбрано «Запомнить меня»), копия вашего профиля для работы без интернета и файл профиля в папке «Документы\\Senko Assistant\\Пользователи».",
            "Синхронизируемые данные работы (раздел 2, второй абзац) также хранятся на сервере, а на компьютере остаётся их копия в локальном хранилище приложения и в папке «Документы\\Senko Assistant\\Автосохранение». Остальные данные работы хранятся только на компьютере: если вы удалите данные приложения или переустановите систему без переноса папки, они будут утрачены. Аккаунт и синхронизируемые данные при этом останутся на сервере, и войти в аккаунт можно с любого компьютера.",
-           "Если на компьютере входит другой аккаунт, локальные синхронизируемые данные предыдущего аккаунта на сервер не передаются: копия сохраняется в папке «Документы\\Senko Assistant\\Автосохранение\\Данные другого аккаунта»."]],
+           "Если на компьютере входит другой аккаунт, локальные синхронизируемые данные предыдущего аккаунта на сервер не передаются: копия сохраняется в папке «Документы\\Senko Assistant\\Автосохранение\\Данные другого аккаунта».",
+           "Вы можете сами сохранить все данные Программы в файл (Настройки → Данные → «Сохранить в файл»). Файл остаётся там, где вы его сохранили, Программа его никуда не отправляет. Перед сбросом данных и загрузкой из файла Программа сохраняет копию текущих данных в папку «Документы\\Senko Assistant\\Автосохранение\\Резервные копии»."]],
         ["4. Кто видит ваши данные",
-          ["Вы видите только свои данные. Другие пользователи не видят ваши данные.",
-           "Владелец Программы имеет доступ ко всем данным аккаунтов, включая историю задержаний и результаты тестов; в списке сотрудников ему показывается сводка (число задержаний и тестов, средний результат, опыт). Пароли не видит никто, в том числе владелец: хранится только необратимый хэш.",
-           "Модераторы памятки видят все данные, кроме Telegram. Руководство видит ник, статик, организацию, роль в игре, Discord и номер телефона в игре. Данные вашей работы (задержания, тесты, статистика) модераторам и руководству не показываются. Права руководства и модератора выдаёт и отзывает только владелец.",
+          ["Вы видите свои данные полностью. Сотрудники вашей организации видят в рейтинге недели (топ-10) ваш ник, звание и опыт, набранный за неделю. Остальные ваши данные другим пользователям не показываются.",
+           "Владелец Программы имеет доступ ко всем данным аккаунтов, включая историю задержаний, результаты тестов, заметки, избранное и вопросы к ИИ-помощнику. Пароли не видит никто, в том числе владелец: хранится только необратимый хэш.",
+           "Модераторы памятки видят все данные аккаунта, кроме Telegram. Руководство видит только сотрудников своей организации: ник, статик, организацию, роль в игре, Discord и номер телефона в игре. Модераторы и руководство также видят сводку вашей работы: число задержаний и тестов, средний результат, опыт, достижения, результаты контрольных тестов и то, были ли вы в сети во время смены. Подробности задержаний из таймера (данные задержанных, статьи, ход дела), ваши заметки и избранное, а также тексты ваших вопросов ИИ-помощнику им не показываются. Рапорты, которые вы отправили, видят руководство вашей организации, модераторы памятки и владелец, в Программе и в Telegram-боте; руководство может принять или отклонить рапорт и оставить комментарий. Права руководства и модератора выдаёт и отзывает только владелец.",
            "Данные не продаются, не передаются рекламным сервисам и не используются для профилирования."]],
         ["5. Telegram-бот",
-          ["При регистрации владельцу приходит уведомление в Telegram-бот Программы со всеми указанными вами данными. При запросе на сброс пароля владельцу и модераторам приходит запрос с данными вашего профиля в пределах их прав (модераторам Telegram не показывается). Telegram является сторонним сервисом и работает по собственным правилам."]],
+          ["При регистрации владельцу приходит уведомление в Telegram-бот Программы со всеми указанными вами данными. При запросе на сброс пароля владельцу и модераторам приходит запрос с данными вашего профиля в пределах их прав (модераторам Telegram не показывается). Telegram является сторонним сервисом и работает по собственным правилам.",
+           "Если вы вошли в аккаунт, каждый ваш вопрос ИИ-помощнику (текст вопроса, найденные статьи, ваш логин и организация) и оценки «не помогло» приходят владельцу в Telegram, чтобы он мог улучшать ответы. Владельцу также приходят уведомления о редких достижениях.",
+           "Руководство организации, привязавшее Telegram, получает от бота сводки смен (кто из сотрудников был в сети и сколько задержаний провёл), еженедельный отчёт по организации и, если владелец включил приём новичков, заявки новых сотрудников с данными профиля в пределах прав руководства. Ему же приходят рапорты сотрудников организации целиком, с кнопками «Принять» и «Отклонить»; эти уведомления руководство может отключить. Модераторы памятки и владелец могут открыть любой рапорт командой бота."]],
         ["6. Сетевые обращения",
           ["Программа обращается к интернету, чтобы войти в аккаунт и зарегистрироваться (сервер Программы), проверить и загрузить обновления (через GitHub) и, если вы включите соответствующие функции, получить актуальные тексты законодательства с форума проекта. В запросах к GitHub и форуму ваши логин, пароль, ник и иные личные данные не передаются.",
            "Голосовой ввод работает с помощью модели распознавания речи, встроенной в Программу. Аудио с микрофона обрабатывается на вашем устройстве и никуда не отправляется и не записывается.",
-           "Если вы пользуетесь ИИ-помощником, текст вашего вопроса и найденные в памятке выдержки из законов отправляются на сервер-посредник (Cloudflare) и далее внешнему ИИ-провайдеру (например, Google Gemini или Groq) для формирования ответа. Вместе с вопросом передаются только анонимный идентификатор установки и IP-адрес (для дневного лимита); логин, пароль, ник, статик и иные данные аккаунта не передаются. Не указывайте в вопросах личные данные. Провайдеры бесплатных тарифов могут хранить запросы и использовать их для улучшения своих сервисов согласно собственным условиям. Если вы задаёте вопрос голосом, на сервер уходит только уже распознанный текст, но не звук."]],
+           "Если вы пользуетесь ИИ-помощником, текст вашего вопроса и найденные в памятке выдержки из законов отправляются на сервер-посредник (Cloudflare) и далее внешнему ИИ-провайдеру (например, Google Gemini или Groq) для формирования ответа. Вместе с вопросом передаются только анонимный идентификатор установки и IP-адрес (для дневного лимита); логин, пароль, ник, статик и иные данные аккаунта не передаются. Не указывайте в вопросах личные данные. Провайдеры бесплатных тарифов могут хранить запросы и использовать их для улучшения своих сервисов согласно собственным условиям. Если вы задаёте вопрос голосом, на сервер уходит только уже распознанный текст, но не звук.",
+           "Если вы вошли в аккаунт, вопрос, список найденных статей и ваша оценка ответа дополнительно сохраняются на сервере Программы в вашем аккаунте (см. разделы 2 и 5). Сам ответ ИИ на сервере Программы не сохраняется."]],
         ["7. Безопасность и сброс пароля",
           ["Пароль хранится в виде хэша. Число попыток входа ограничено. Не используйте в Программе пароль, который вы применяете на других сайтах и сервисах.",
            "Забытый пароль можно сбросить: либо по коду восстановления, который показывается один раз при регистрации (нужно также указать логин, ник и статик), либо после подтверждения запроса владельцем или модератором. Храните код восстановления в надёжном месте: тот, кто знает ваш логин, ник, статик и код, может сменить пароль."]],
         ["8. Срок хранения и ваши права",
-          ["Данные аккаунта хранятся, пока существует аккаунт. Вы можете запросить исправление или удаление аккаунта и связанных с ним данных, написав владельцу (контакт в разделе 10). Записи журнала административных действий могут храниться дольше, чтобы разбирать спорные ситуации.",
-           "Историю задержаний и результаты тестов можно очистить в программе: содержимое удалённых записей сразу стирается и на сервере. Локальные данные можно удалить, удалив папку данных программы."]],
+          ["Данные аккаунта хранятся, пока существует аккаунт. Вы можете запросить исправление или удаление аккаунта и связанных с ним данных, написав владельцу (контакт в разделе 10). Записи журнала административных действий могут храниться дольше, чтобы разбирать спорные ситуации. Вопросы к ИИ-помощнику хранятся 90 дней, затем удаляются автоматически.",
+           "Историю задержаний, результаты тестов, заметки и избранное можно удалить в Программе: содержимое удалённых записей сразу стирается и на сервере. Кнопка «Сбросить все данные» (Настройки → Данные) удаляет все данные Программы на этом компьютере, а с отметкой «Удалить и в аккаунте» также задержания, тесты, заметки, избранное, метки и папки на сервере, на всех ваших компьютерах. Опыт, уровень, серия дней и достижения при этом сохраняются, их можно удалить вместе с аккаунтом по запросу владельцу. Отправленный рапорт можно удалить в Программе, пока руководство его не рассмотрело; рассмотренные рапорты хранятся, пока существует аккаунт, и сброс данных их не удаляет."]],
         ["9. Аналитика, реклама, cookie",
           ["Программа не содержит рекламы, счётчиков, аналитики и средств отслеживания."]],
         ["10. Изменения Политики и контакты",
@@ -5047,7 +5093,7 @@ render();
   /* Текст закона по уровням: часть → раздел → глава → статья → пункт → подпункт; наказание и примечания выделены отдельно */
   function lawBody(l, Q) {
     var P = lawParsed(l), now = Date.now(), ev = {}, hl = Q && Q.hl && !Q.nums ? Q.hl : null, h = "", toc = [];
-    (l.arts || []).forEach(function (e) { if (e.k !== "removed" && now - e.at < BADGE_MS) ev[e.n] = e; });
+    (l.arts || []).forEach(function (e) { if (e.k !== "removed" && now - e.at < BADGE_MS) { e.lid = l.id; e._L = l; ev[e.n] = e; } });
     var mk = function (s) { return hlHtml(s, hl).replace(/★+(?:\s*[–—-]\s*★+)?/g, '<span class="lt-st">$&</span>'); };
     var badge = function (u) { return u && ev[u.replace(/#\d+$/, "")] ? chgBadge({ chg: ev[u.replace(/#\d+$/, "")] }) : ""; };
     P.lines.forEach(function (x, i) {
@@ -5265,6 +5311,10 @@ render();
    ".ai-m .pill,.ai-m .xref{font:inherit;font-size:12.5px;cursor:pointer;border:1px solid var(--line,#D3D9E0);background:var(--surface,#fff);color:var(--ink,#172230);border-radius:999px;padding:2px 10px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" +
    ".ai-m .xref{border-radius:5px;padding:0 6px;font-weight:600;color:var(--accent,#1D4E89)}" +
    ".ai-hint{color:var(--muted,#5B6877);font-size:13px}" +
+   ".ai-vote{margin-top:8px;display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--muted,#5B6877)}" +
+   ".ai-vote button{font:inherit;font-size:14px;cursor:pointer;border:1px solid var(--line,#D3D9E0);background:var(--surface,#fff);border-radius:999px;padding:1px 10px;line-height:1.5}" +
+   ".ai-vote button[aria-pressed=true]{background:var(--accent,#1D4E89);border-color:var(--accent,#1D4E89)}" +
+   ".ai-vote button:disabled{opacity:.6;cursor:default}" +
    ".ai-warn{padding:6px 14px;font-size:12px;color:var(--muted,#5B6877);border-top:1px solid var(--line,#D3D9E0)}" +
    ".ai-form{display:flex;gap:8px;padding:10px 14px 14px}" +
    ".ai-form textarea{flex:1;resize:none;font:inherit;color:var(--ink,#172230);background:var(--bg,#EDF0F3);border:1px solid var(--line,#D3D9E0);border-radius:8px;padding:8px 10px}" +
@@ -5293,7 +5343,7 @@ render();
    '<div class="ai-box" role="dialog" aria-modal="true" aria-label="ИИ-помощник" tabindex="-1">' +
    '<div class="ai-head"><b>ИИ-помощник</b><small id="aiLeft"></small><button type="button" class="ai-x" aria-label="Закрыть">✕</button></div>' +
    '<div class="ai-log" id="aiLog" aria-live="polite"></div>' +
-   '<div class="ai-warn">ИИ может ошибаться — сверяйтесь с текстом статьи. Ваш вопрос и найденные статьи отправляются на сервер ИИ (см. Политику конфиденциальности).</div>' +
+   '<div class="ai-warn">ИИ может ошибаться — сверяйтесь с текстом статьи. Ваш вопрос и найденные статьи отправляются на сервер ИИ, а вопрос и оценка ответа сохраняются в вашем аккаунте (см. Политику конфиденциальности).</div>' +
    '<form class="ai-form" id="aiForm"><textarea id="aiQ" rows="2" maxlength="500" placeholder="Например: что будет за угон автомобиля?" aria-label="Вопрос ИИ"></textarea><button type="submit" id="aiGo">Спросить</button></form>' +
    '</div>';
   document.body.appendChild(ov);
@@ -5341,6 +5391,16 @@ render();
   }
   log.addEventListener("click", function(e){
     var b = e.target.closest ? e.target.closest("button") : null; if(!b) return;
+    if(b.dataset.aivote){
+      var row = b.parentNode, v = +b.dataset.aivote, msg = row.querySelector("small");
+      if(b.getAttribute("aria-pressed") === "true") return;
+      row.querySelectorAll("button").forEach(function(x){ x.disabled = true; });
+      A.vote(b.dataset.fid, v).then(function(r){
+        row.querySelectorAll("button").forEach(function(x){ x.disabled = false; x.setAttribute("aria-pressed", String(r && r.ok && x === b)); });
+        msg.textContent = r && r.ok ? (v > 0 ? "Спасибо!" : "Спасибо, передадим разработчику.") : ((r && r.error) || "Не удалось сохранить оценку.");
+      }, function(){ row.querySelectorAll("button").forEach(function(x){ x.disabled = false; }); msg.textContent = "Ошибка связи с программой."; });
+      return;
+    }
     if(b.dataset.aigo) nav("data-go", b.dataset.aigo);
     else if(b.dataset.ailw) nav("data-lwgo", b.dataset.ailw);
   });
@@ -5364,7 +5424,8 @@ render();
       busy = false; go.disabled = false;
       if(wait.parentNode) wait.parentNode.removeChild(wait);
       if(r && r.ok){
-        add("a", render(r.answer || "Пустой ответ.", r.sources));
+        var am = add("a", render(r.answer || "Пустой ответ.", r.sources));
+        if(r.fid && A.vote){ am.insertAdjacentHTML("beforeend", '<div class="ai-vote"><span>Ответ помог?</span><button type="button" data-aivote="1" data-fid="' + esc2(r.fid) + '" aria-pressed="false" aria-label="Ответ помог">👍</button><button type="button" data-aivote="-1" data-fid="' + esc2(r.fid) + '" aria-pressed="false" aria-label="Ответ не помог">👎</button><small role="status"></small></div>'); log.scrollTop = log.scrollHeight; }
         if(typeof r.left === "number") left.textContent = "Осталось сегодня: " + r.left;
       } else {
         add("e", esc2((r && r.error) || "Не удалось получить ответ."));
@@ -5421,6 +5482,7 @@ render();
 .bp-badge{display:inline-block;padding:1px 8px;border-radius:999px;border:1px solid var(--line);font-size:12px}
 .bp-foot{margin-top:8px;color:var(--muted);font-size:12.5px}
 .bp-err{border-left:4px solid #b3261e;padding:10px 14px;margin-bottom:12px}
+.bp-ok{border-left:4px solid #2e7d32;padding:8px 14px;margin:0 0 12px;background:var(--bg);border-radius:4px}
 </style>
 <script>
 /* ===== Панель руководителя: видна руководству, модераторам памятки и владельцу =====
@@ -5438,7 +5500,7 @@ var COLS=[
  {k:"discord",t:"Discord"},{k:"phone",t:"Номер"},
  {k:"telegram",t:"Telegram",f:function(v){return v||"—"}},{k:"tg_id",t:"TG ID",f:function(v){return v||"—"}},
  {k:"det7",t:"Задерж. за 7 дн."},{k:"det",t:"Задержаний"},{k:"tests",t:"Тестов"},
- {k:"avg_p",t:"Ср. тест",f:function(v){return v==null?"—":v+"%"}},{k:"xp",t:"Опыт"},
+ {k:"avg_p",t:"Ср. тест",f:function(v){return v==null?"—":v+"%"}},{k:"xp",t:"Опыт"},{k:"wxp",t:"Опыт за неделю"},{k:"ach",t:"Достижений"},
  {k:"last_seen",t:"Был в сети",f:dt,sv:ts},{k:"created",t:"Регистрация",f:dt,sv:ts}
 ];
 var B={sub:"sum",data:null,loading:false,err:"",org:"",q:"",sort:{k:"det7",dir:-1},viewer:"",scope:null,orgs:[]};
@@ -5524,8 +5586,65 @@ function pOrgs(){
  return h+'</tbody></table></div><p class="bp-foot">Нажмите на организацию в списке сверху, чтобы посмотреть её сводку.</p>';
 }
 
+/* Рейтинг недели, смены, контрольные тесты: данные по выбранной организации */
+var E={rate:{},shift:{},ctrl:{}}, CF={title:"",topics:{},n:10,days:3};
+function curOrg(){return B.scope||B.org||""}
+function eload(sub,op,extra,ok){
+ var e=E[sub], org=curOrg(), act=sub==="rate"?"week_board":sub;
+ if(sub!=="rate"&&!org){e.key="";e.data=null;return}
+ if(e.loading)return; e.loading=true; e.err=""; e.msg=""; e.key=org;
+ A.api(act,Object.assign({org:org},op?{op:op}:{},extra||{})).then(function(r){
+  e.loading=false;
+  if(r&&r.ok){e.data=r;e.msg=r.msg||"";if(ok)ok(e)}else{e.err=(r&&r.error)||"Не удалось загрузить данные.";if(!op)e.data=null}
+  if(state.tab==="boss"&&B.sub===sub)draw();
+ },function(){e.loading=false;e.err="Ошибка связи с программой.";if(state.tab==="boss"&&B.sub===sub)draw()});
+}
+function need(sub){var e=E[sub];if(!A.api)return '<p class="bp-empty">Обновите программу, чтобы открыть этот раздел.</p>';
+ if(sub!=="rate"&&!curOrg())return '<p class="bp-empty">Выберите организацию в списке сверху.</p>';
+ if(e.key!==curOrg()||(!e.data&&!e.loading&&!e.err)){setTimeout(function(){eload(sub)},0);return '<p class="bp-empty">Загружаем…</p>'}
+ if(!e.data)return e.loading?'<p class="bp-empty">Загружаем…</p>':'<div class="banner bp-err" role="alert">'+esc(e.err)+'</div>';
+ return ""}
+function emsg(e){return (e.err?'<div class="banner bp-err" role="alert">'+esc(e.err)+'</div>':'')+(e.msg?'<p class="bp-ok" role="status">'+esc(e.msg)+'</p>':'')}
+function pRate(){
+ var w=need("rate"); if(w)return w; var d=E.rate.data, L=d.list||[];
+ var h='<p class="sub">Неделя с понедельника '+new Date(d.from).toLocaleDateString("ru-RU",{timeZone:"Europe/Moscow"})+' (МСК). Опыт за неделю — сколько опыта сотрудник набрал в тренажёре с понедельника.</p>';
+ if(!L.length)return h+'<p class="bp-empty">В организации нет сотрудников.</p>';
+ h+='<div class="bp-wrap"><table><thead><tr><th>#</th><th>Ник</th><th>Логин</th>'+(d.org?'':'<th>Организация</th>')+'<th>Звание</th><th>Опыт за неделю</th><th>Опыт всего</th><th>Задерж. за неделю</th><th>Тестов за неделю</th><th>Ср. тест</th><th>Достижений</th></tr></thead><tbody>';
+ L.forEach(function(x){h+='<tr><td>'+(x.wxp>0?x.n:"—")+'</td><td><b>'+esc(x.nick)+'</b></td><td>'+esc(x.login)+'</td>'+(d.org?'':'<td>'+esc(x.org)+'</td>')+'<td>'+esc(x.lvl)+'</td><td>'+x.wxp+'</td><td>'+x.xp+'</td><td>'+x.det+'</td><td>'+x.tests+'</td><td>'+(x.avg_p==null?"—":x.avg_p+"%")+'</td><td>'+(x.ach||0)+'</td></tr>'});
+ return h+'</tbody></table></div><p class="bp-foot">Этот же рейтинг (топ-10) видят сотрудники в личном кабинете. В Telegram: /top.</p>'}
+function sumHtml(s){
+ if(!s)return '';
+ return '<div class="bp-tiles">'+tile(s.online.length+" из "+s.total,"Были в сети")+tile(s.det,"Задержаний")+tile(s.tests,"Тестов")+'</div>'+
+  (s.online.length?'<ol class="pg-list">'+s.online.map(function(x){return '<li>'+esc(x.nick)+' <small>'+esc(x.login)+(x.det?' · задержаний: '+x.det:'')+'</small></li>'}).join("")+'</ol>':'<p class="bp-empty">За смену никто не заходил.</p>')}
+function pShift(){
+ var w=need("shift"); if(w)return w; var e=E.shift, d=e.data, a=d.active;
+ var h='<p class="sub">Нажмите «Начало смены», когда организация выходит на смену, и «Конец смены» в конце. Бот пришлёт в Telegram сводку: кто был в сети и сколько задержаний провёл. Смена закрывается сама через 12 часов.</p>'+emsg(e);
+ h+='<div class="bp-box" style="margin-bottom:12px">'+(a?'<h3>🟢 Идёт смена с '+dt(a.start)+'</h3><p class="bp-empty" style="margin:0 0 8px">Начал(а): '+esc(a.by)+'</p><button type="button" class="btn" data-bp="shend"'+(e.loading?' disabled':'')+'>Конец смены</button>':
+  '<h3>Смена не идёт</h3><button type="button" class="btn" data-bp="shstart"'+(e.loading?' disabled':'')+' style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Начало смены</button>')+'</div>';
+ var H=d.history||[];
+ h+='<h3 style="font-size:14.5px;margin:0 0 8px">История смен</h3>';
+ if(!H.length)return h+'<p class="bp-empty">Завершённых смен пока нет.</p>';
+ return h+H.map(function(x){var s=x.summary;return '<details class="bp-box" style="margin-bottom:8px"><summary style="cursor:pointer"><b>'+dt(x.start)+' — '+dt(x.end).split(", ").pop()+'</b> · '+esc(x.by)+(s?' · в сети '+s.online.length+' · задержаний '+s.det:'')+'</summary><div style="margin-top:10px">'+sumHtml(s)+'</div></details>'}).join("")}
+function pCtrl(){
+ var w=need("ctrl"); if(w)return w; var e=E.ctrl, d=e.data, TP=d.topics||{};
+ var h='<p class="sub">Выберите темы и срок. Сотрудники организации увидят в программе кнопку «Пройти»: одна попытка, без подсказок, примерно 45 секунд на вопрос. Результаты появятся здесь и в Telegram по команде /results.</p>'+emsg(e);
+ h+='<div class="bp-box" style="margin-bottom:12px"><h3>Новый тест</h3><div class="bp-tools"><input id="ctTitle" maxlength="80" placeholder="Название, например «Процедура задержания»" value="'+esc(CF.title)+'" aria-label="Название теста" style="flex:1 1 240px"></div>'+
+  '<div class="presets" style="margin:0 0 10px">'+Object.keys(TP).map(function(k){return '<button type="button" class="pill" data-ctp="'+k+'" aria-pressed="'+!!CF.topics[k]+'">'+esc(TP[k])+'</button>'}).join("")+'</div>'+
+  '<div class="bp-tools"><label>Вопросов <select id="ctN">'+[5,10,15,20].map(function(n){return '<option'+(CF.n===n?' selected':'')+'>'+n+'</option>'}).join("")+'</select></label>'+
+  '<label>Срок <select id="ctD">'+[[1,"1 день"],[3,"3 дня"],[7,"7 дней"],[14,"14 дней"]].map(function(o){return '<option value="'+o[0]+'"'+(CF.days===o[0]?' selected':'')+'>'+o[1]+'</option>'}).join("")+'</select></label>'+
+  '<button type="button" class="btn" data-bp="ctcreate"'+(e.loading?' disabled':'')+' style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Назначить тест</button></div></div>';
+ var T=d.tests||[];
+ if(!T.length)return h+'<p class="bp-empty">Тестов пока не было.</p>';
+ return h+T.map(function(t){
+  return '<details class="bp-box" style="margin-bottom:8px"'+(t.active?' open':'')+'><summary style="cursor:pointer"><b>№'+esc(t.id)+' · '+esc(t.title)+'</b> · '+(t.active?'до '+dt(t.due):'завершён')+' · прошли '+t.results.length+' из '+(t.results.length+t.missingN)+(t.avg==null?'':' · средний '+t.avg+'%')+'</summary>'+
+   '<p class="bp-empty" style="margin:8px 0">Темы: '+esc(t.topics.map(function(k){return TP[k]||k}).join(", "))+' · вопросов: '+t.n+' · назначил(а) '+esc(t.by)+'</p>'+
+   (t.results.length?'<ol class="pg-list">'+t.results.map(function(r){return '<li>'+esc(r.nick)+' <small>'+esc(r.login)+' · '+r.p+'% ('+r.s+' из '+r.n+') · '+dt(r.at)+'</small></li>'}).join("")+'</ol>':'<p class="bp-empty">Пока никто не прошёл.</p>')+
+   (t.missingN?'<p style="margin:6px 0"><b>Не прошли ('+t.missingN+'):</b> '+t.missing.map(esc).join(", ")+(t.missingN>t.missing.length?" …":"")+'</p>':'')+
+   (t.active?'<button type="button" class="btn" data-bp="ctclose" data-id="'+esc(t.id)+'">Завершить досрочно</button>':'')+'</details>'}).join("")}
+
 function draw(){
- var subs=[["sum","Обзор"],["staff","Сотрудники"]]; if(!B.scope)subs.push(["orgs","Организации"]);
+ var rn=window.SA_RP?window.SA_RP.bossNew():0;
+ var subs=[["sum","Обзор"],["staff","Сотрудники"],["rate","Рейтинг"],["shift","Смены"],["ctrl","Контрольные тесты"]]; if(window.SA_RP)subs.push(["rep","Рапорты"+(rn?" · "+rn:"")]); if(!B.scope)subs.push(["orgs","Организации"]);
  if(!subs.some(function(s){return s[0]===B.sub}))B.sub="sum";
  var title=B.scope?"Панель руководителя · "+esc(B.scope):"Панель руководителя";
  var h='<div class="subnav noprint">'+subs.map(function(s){return '<button class="pill" data-bpsub="'+s[0]+'" aria-pressed="'+(s[0]===B.sub)+'">'+s[1]+'</button>'}).join("")+'</div>';
@@ -5535,16 +5654,24 @@ function draw(){
  if(B.viewer)h+='<p class="sub">Вы видите данные как: '+(RANKS[B.viewer]||B.viewer)+(B.scope?". Доступна только ваша организация.":".")+'</p>';
  if(B.err)h+='<div class="banner bp-err" role="alert">'+esc(B.err)+'</div>';
  if(!B.data)h+='<p class="bp-empty">'+(B.loading?"Загружаем данные…":"Данные недоступны.")+'</p>';
- else h+=B.sub==="staff"?pStaff():B.sub==="orgs"?pOrgs():pSum();
+ else h+=B.sub==="rep"?window.SA_RP.boss(curOrg(),draw):B.sub==="staff"?pStaff():B.sub==="orgs"?pOrgs():B.sub==="rate"?pRate():B.sub==="shift"?pShift():B.sub==="ctrl"?pCtrl():pSum();
  view.innerHTML=h+'</section>';
 }
 
 /* клики и ввод внутри панели */
 view.addEventListener("click",function(e){
  if(state.tab!=="boss")return;
- var t=e.target.closest("[data-bpsub],[data-bp],[data-bps],td[data-cp]"); if(!t)return;
+ var t=e.target.closest("[data-bpsub],[data-bp],[data-bps],[data-ctp],td[data-cp]"); if(!t)return;
+ if(t.dataset.ctp){var k=t.dataset.ctp;CF.topics[k]=!CF.topics[k];t.setAttribute("aria-pressed",String(!!CF.topics[k]));return}
+ if(t.dataset.bp==="shstart"||t.dataset.bp==="shend"){eload("shift",t.dataset.bp==="shstart"?"start":"end");draw();return}
+ if(t.dataset.bp==="ctclose"){if(!t.dataset.arm){t.dataset.arm="1";t.textContent="Точно завершить?";return}eload("ctrl","close",{id:t.dataset.id});draw();return}
+ if(t.dataset.bp==="ctcreate"){
+  var tps=Object.keys(CF.topics).filter(function(k){return CF.topics[k]});
+  if(!tps.length){E.ctrl.err="Выберите хотя бы одну тему.";E.ctrl.msg="";draw();return}
+  eload("ctrl","create",{title:CF.title,topics:tps,n:CF.n,days:CF.days},function(e){CF.title="";CF.topics={};e.msg="Тест назначен. Сотрудники увидят его в программе в течение 20 минут или после перезапуска."});
+  draw();return}
  if(t.dataset.bpsub){B.sub=t.dataset.bpsub;if(B.sub==="staff"&&B.sort.k==="det7"&&!B.touched)B.sort={k:"nick",dir:1};draw();return}
- if(t.dataset.bp==="reload"){load();return}
+ if(t.dataset.bp==="reload"){load();if(E[B.sub]){E[B.sub].key=null;E[B.sub].data=null}if(B.sub==="rep")window.SA_RP.bossReload();return}
  if(t.dataset.bp==="win"){if(A.staff)A.staff();return}
  if(t.dataset.bps){var k=t.dataset.bps;B.touched=1;B.sort=B.sort.k===k?{k:k,dir:-B.sort.dir}:{k:k,dir:1};draw();return}
  if(t.dataset.cp!=null){A.copy(t.dataset.cp);t.style.outline="2px solid var(--accent)";setTimeout(function(){t.style.outline=""},500)}
@@ -5554,7 +5681,11 @@ view.addEventListener("input",function(e){
  if(state.tab!=="boss"||e.target.id!=="bpQ")return; e.stopPropagation();
  B.q=e.target.value; var pos=e.target.selectionStart; draw(); var q=document.getElementById("bpQ"); if(q){q.focus();try{q.setSelectionRange(pos,pos)}catch(_){}}
 },true);
-view.addEventListener("change",function(e){if(state.tab!=="boss"||e.target.id!=="bpOrg")return;e.stopPropagation();B.org=e.target.value;draw()},true);
+view.addEventListener("change",function(e){if(state.tab!=="boss")return;var id=e.target.id;
+ if(id==="ctN"){e.stopPropagation();CF.n=+e.target.value;return}
+ if(id==="ctD"){e.stopPropagation();CF.days=+e.target.value;return}
+ if(id!=="bpOrg")return;e.stopPropagation();B.org=e.target.value;draw()},true);
+view.addEventListener("input",function(e){if(state.tab==="boss"&&e.target.id==="ctTitle"){e.stopPropagation();CF.title=e.target.value}},true);
 
 /* встраивание в render */
 var RB=render;
@@ -5621,15 +5752,20 @@ function setDis(a){try{localStorage.setItem(DK,JSON.stringify(a.slice(-50)))}cat
 function st(){try{return A.state()}catch(e){return null}}
 var box=document.createElement("div"); box.id="saNotices"; box.className="noprint";
 var top=document.querySelector("header.top"); if(top) top.insertAdjacentElement("afterend",box);
-var mt=null;
+var mt=null, CT={};
 function fmt(v){return v?new Date(v).toLocaleString("ru-RU",{dateStyle:"short",timeStyle:"short"}):""}
 function paint(){
  var s=st(), sys=s&&s.sys, d=dis();
  var h="";
  if(sys&&sys.maintenance&&sys.maintenance.on&&sys.maintenance.exempt) h+='<div class="sn sn-warn"><div class="sn-b"><b>🛠 Включён режим технических работ</b><p>Пользователи видят экран «Идут технические работы». Вы и модераторы работаете как обычно. Выключить: /maintenance off</p></div></div>';
  ((sys&&sys.notices)||[]).forEach(function(n){ if(d.indexOf(n.id)>=0) return;
-  var own=/^(⚠️|✅)/.test(n.title||""), w=/^⚠️/.test(n.title||"");
+  var own=/^\p{Extended_Pictographic}/u.test(n.title||""), w=/^⚠️/.test(n.title||"");
   h+='<div class="sn'+(w?' sn-warn':'')+'" role="'+(w?'alert':'status')+'"><div class="sn-b"><b>'+(own?'':'📣 ')+esc(n.title)+'</b><p>'+esc(n.text)+'</p><small>'+fmt(n.at)+'</small></div><button type="button" class="btn" data-ndis="'+esc(n.id)+'">Понятно</button></div>'; });
+ // контрольные тесты руководства, которые ещё не пройдены
+ var cd=window.SA_TR&&window.SA_TR.ctrlDone?window.SA_TR.ctrlDone():[], TP=window.SA_TR&&window.SA_TR.topics?window.SA_TR.topics():{};
+ CT={};
+ ((sys&&sys.controls)||[]).forEach(function(c){ if(cd.indexOf(c.id)>=0||!window.SA_TR) return; CT[c.id]=c;
+  h+='<div class="sn sn-ctrl" role="status"><div class="sn-b"><b>📋 Контрольный тест: '+esc(c.title)+'</b><p>Руководство организации назначило тест: '+c.n+' вопр. по темам: '+esc((c.topics||[]).map(function(k){return TP[k]||k}).join(", "))+'. Одна попытка, без подсказок, результат увидит руководство.</p><small>Пройти до '+fmt(c.due)+'</small></div><button type="button" class="btn" data-ctrl="'+esc(c.id)+'" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Пройти</button></div>'; });
  box.innerHTML=h; box.hidden=!h;
  var on=sys&&sys.maintenance&&sys.maintenance.on&&!sys.maintenance.exempt;
  if(on&&!mt){
@@ -5641,18 +5777,20 @@ function paint(){
  } else if(mt){ mt.remove(); mt=null }
 }
 document.addEventListener("click",function(e){
- var b=e.target.closest("[data-ndis],[data-mt]"); if(!b) return;
+ var b=e.target.closest("[data-ndis],[data-mt],[data-ctrl]"); if(!b) return;
+ if(b.dataset.ctrl){var c=CT[b.dataset.ctrl]; if(c&&window.SA_TR) window.SA_TR.ctrl(c); return}
  if(b.dataset.ndis){var d=dis(); d.push(b.dataset.ndis); setDis(d); paint(); return}
  if(b.dataset.mt==="re"&&A.recheck){b.disabled=true; b.textContent="Проверяем…"; A.recheck().then(paint,paint)}
 });
 paint();
+window.SA_np=paint;
 if(A.onChange) A.onChange(paint);
 
 /* окно «Сообщить об ошибке» */
 var bo=null;
 function closeBug(){if(bo){bo.remove();bo=null}}
-window.SA_bug=function(){
- if(!A.bug) return; closeBug();
+window.SA_bug=function(pre){
+ if(!A.bug) return; closeBug(); pre=typeof pre==="string"?pre:"";
  bo=document.createElement("div"); bo.className="sa-ov noprint"; bo.style.zIndex="2147470000";
  bo.innerHTML='<div class="sa-sheet" role="dialog" aria-modal="true" aria-labelledby="bugT" tabindex="-1"><div class="sa-head"><h2 id="bugT">Сообщить об ошибке</h2><button type="button" class="ic sa-x" data-bug="x" aria-label="Закрыть">×</button></div>'+
   '<div class="sa-body" style="padding:16px 18px"><p style="margin:0 0 10px;color:var(--muted)">Опишите, что случилось и что вы делали перед этим. Сообщение получит разработчик вместе с версией программы, ответ придёт сюда же, в программу.</p>'+
@@ -5665,7 +5803,7 @@ window.SA_bug=function(){
   var b=e.target.closest("[data-bug]"); if(!b) return;
   if(b.dataset.bug==="x"){closeBug();return}
   var t=document.getElementById("bugText").value.trim(), m=document.getElementById("bugMsg");
-  if(t.length<10){m.textContent="Опишите подробнее, хотя бы пару предложений.";return}
+  if(t.length<10||(pre&&t.length<pre.trim().length+6)){m.textContent="Опишите подробнее, хотя бы пару предложений.";return}
   b.disabled=true; b.textContent="Отправка…";
   A.bug(t).then(function(r){
    if(r&&r.ok){ bo.querySelector(".sa-body").innerHTML='<p style="margin:0 0 14px">✅ Спасибо! Сообщение №'+esc(r.id)+' отправлено разработчику.</p><div style="text-align:right"><button type="button" class="btn" data-bug="x">Закрыть</button></div>'; return }
@@ -5673,8 +5811,1202 @@ window.SA_bug=function(){
   },function(){b.disabled=false; b.textContent="Отправить"; m.textContent="Ошибка связи с программой."});
  });
  bo.addEventListener("keydown",function(e){if(e.key==="Escape")closeBug()});
- var ta=document.getElementById("bugText"); if(ta) ta.focus();
+ var ta=document.getElementById("bugText"); if(ta){ ta.value=pre; ta.focus(); ta.setSelectionRange(pre.length,pre.length); }
 };
+})();
+</script>
+<style>
+/* ===== Личный кабинет: «Мой прогресс» (уровень, рейтинг недели, достижения) ===== */
+.pg-ach{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin:0 0 10px}
+.pg-a{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12.5px;line-height:1.3;min-width:0}
+.pg-a i{font-style:normal;font-size:20px;flex:0 0 auto}
+.pg-a b{display:block;font-size:12.5px;overflow:hidden;text-overflow:ellipsis}
+.pg-a small{color:var(--muted);font-size:11.5px}
+.pg-a.off{opacity:.45;filter:grayscale(1)}
+.pg-a.rare{border-color:#c79a00}
+.pg-list{margin:0 0 10px;padding-left:22px;font-size:13.5px}
+.pg-list li{padding:2px 0}
+.pg-list li.me{font-weight:700;color:var(--accent)}
+.pg-list small{color:var(--muted)}
+.pg-row{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:5px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.pg-row:last-child{border-bottom:0}
+.pg-msg{color:var(--muted);font-size:13px;margin:0 0 10px}
+</style>
+<script>
+(function(){
+var A=window.senkoApp; if(!A||!A.api) return;
+var P={data:null,at:0,loading:false,err:""};
+function st(){try{return A.state()}catch(e){return null}}
+function fmt(v){return v?new Date(v).toLocaleString("ru-RU",{dateStyle:"short",timeStyle:"short"}):""}
+function day(v){return v?new Date(v).toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"Europe/Moscow"}):""}
+function sum(k,v,sub){return '<div class="sum"><div class="k">'+k+'</div><div class="v">'+v+'</div>'+(sub?'<div style="font-size:12.5px;color:var(--muted)">'+sub+'</div>':'')+'</div>'}
+function load(){
+ if(P.loading) return; P.loading=true; P.err="";
+ A.api("my_stats",{}).then(function(r){
+  P.loading=false;
+  if(r&&r.ok){P.data=r;P.at=Date.now()} else P.err=(r&&r.error)||"Не удалось загрузить прогресс.";
+  paint();
+ },function(){P.loading=false;P.err="Ошибка связи с программой.";paint()});
+}
+function paint(){var el=document.getElementById("saProg"); if(el) el.innerHTML=inner()}
+function inner(){
+ var h='<div class="cab-h">Мой прогресс<small>по данным аккаунта</small></div>', d=P.data;
+ if(!d) return h+'<p class="pg-msg">'+(P.err?esc(P.err)+' <button type="button" class="btn" data-prog="re">Повторить</button>':'Загружаем…')+'</p>';
+ var lv=d.level||{n:1,name:""}, w=d.week||{};
+ h+='<div class="dsum">'+sum("Уровень",lv.n,esc(lv.name))+sum("Опыт",d.xp,lv.to>lv.from?"до следующего: "+Math.max(0,lv.to-d.xp):"максимум")+
+  sum("Место за неделю",w.place?w.place+" из "+w.of:"—",(w.wxp||0)+" опыта с "+day(w.from))+
+  sum("Серия дней",d.streak||0,"мини-тест дня")+sum("Задержаний",d.det,"за 7 дней: "+d.det7)+
+  sum("Тестов",d.tests,d.avg_p==null?"":"средний "+d.avg_p+"%")+'</div>';
+ if(P.err) h+='<p class="pg-msg">'+esc(P.err)+'</p>';
+ if(d.weak&&d.weak.length){
+  h+='<div class="cab-h">Стоит повторить<small>темы с ошибками от 20%</small></div>';
+  h+=d.weak.map(function(x){return '<div class="pg-row"><span><b>'+esc(x.name)+'</b> · ошибок '+x.pct+'% ('+x.w+' из '+x.a+')</span><button type="button" class="btn" data-prog="sec" data-v="'+esc(x.tp)+'">Тренировать</button></div>'}).join("");
+ }
+ var ach=d.ach||[], got=ach.filter(function(a){return a.at});
+ h+='<div class="cab-h">Достижения<small>'+got.length+' из '+ach.length+'</small></div><div class="pg-ach">'+
+  ach.map(function(a){return '<div class="pg-a'+(a.at?'':' off')+(a.rare?' rare':'')+'" title="'+esc(a.desc+(a.at?" · получено "+fmt(a.at):" · ещё не получено"))+'"><i aria-hidden="true">'+a.icon+'</i><span><b>'+esc(a.name)+'</b><small>'+(a.at?(a.rare?"редкое · ":"")+day(a.at):esc(a.desc))+'</small></span></div>'}).join("")+'</div>';
+ var T=d.top||[];
+ h+='<div class="cab-h">Топ недели · '+esc(d.org||"")+'<small>по опыту с '+day(w.from)+'</small></div>';
+ h+=T.length?'<ol class="pg-list">'+T.map(function(x){return '<li'+(x.me?' class="me"':'')+'>'+esc(x.nick)+' <small>· '+esc(x.lvl)+' · '+x.wxp+' опыта</small></li>'}).join("")+'</ol>':'<p class="pg-msg">На этой неделе опыт ещё никто не набрал. Пройдите тест, чтобы попасть в рейтинг.</p>';
+ var C=d.controls||[];
+ if(C.length){
+  var done=window.SA_TR&&window.SA_TR.ctrlDone?window.SA_TR.ctrlDone():[];
+  h+='<div class="cab-h">Контрольные тесты<small>от руководства</small></div>'+C.map(function(c){
+   return '<div class="pg-row"><span>📋 <b>'+esc(c.title)+'</b> · '+(c.p!=null?c.p+'% · '+fmt(c.at):'до '+fmt(c.due))+'</span>'+(c.p==null&&done.indexOf(c.id)<0?'<button type="button" class="btn" data-prog="ctrl" data-v="'+esc(c.id)+'">Пройти</button>':'')+'</div>'}).join("");
+ }
+ return h+'<p class="pg-msg" style="margin-top:4px">Достижения и рейтинг считаются по синхронизированным данным, обновляются в течение минуты после теста или задержания.</p>';
+}
+window.SA_PROG={html:function(){
+ var s=st(); if(!s||!s.user) return "";
+ if(!P.loading&&Date.now()-P.at>60000) setTimeout(load,0);
+ return '<div id="saProg">'+inner()+'</div>';
+}};
+document.addEventListener("click",function(e){
+ var b=e.target.closest("[data-prog]"); if(!b) return;
+ var k=b.dataset.prog;
+ if(k==="re"){P.at=0;load();paint();return}
+ if(k==="sec"&&window.SA_TR){if(window.SA_closeSheet)window.SA_closeSheet();window.SA_TR.sec(b.dataset.v);return}
+ if(k==="ctrl"&&window.SA_TR){
+  var s=st(), c=((s&&s.sys&&s.sys.controls)||[]).filter(function(x){return x.id===b.dataset.v})[0];
+  if(!c){b.disabled=true;b.textContent="Обновите позже";return}
+  if(window.SA_closeSheet)window.SA_closeSheet(); window.SA_TR.ctrl(c);
+ }
+});
+})();
+</script>
+<style>
+/* ===== Данные и обновления: «было / стало», перенос в файл, сброс, «Что нового» ===== */
+.chgb-btn{border:0;cursor:pointer;font:700 11px/1.55 var(--f-body)}
+.chgb-btn:hover{filter:brightness(1.12)}
+.chgb-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sd-ov .sa-sheet{width:min(760px,100%)}
+.sd-note{margin:0 0 12px;color:var(--muted);font-size:13px;line-height:1.5}
+.df-leg{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:0 0 10px;font-size:12.5px;color:var(--muted)}
+.df-box{border:1px solid var(--line);border-radius:10px;padding:12px 14px;line-height:1.65;font-size:14px;background:var(--bg);white-space:normal;word-wrap:break-word}
+.df-del{background:rgba(214,48,49,.16);color:inherit;text-decoration:line-through;text-decoration-color:rgba(214,48,49,.8);border-radius:3px;padding:0 2px}
+.df-ins{background:rgba(31,157,85,.18);color:inherit;text-decoration:none;border-radius:3px;padding:0 2px}
+.df-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.df-cols h4{margin:0 0 6px;font:600 12px/1.3 var(--f-body);text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+@media (max-width:640px){.df-cols{grid-template-columns:1fr}}
+html.hc .df-del{outline:1px solid currentColor}
+html.hc .df-ins{outline:1px dashed currentColor}
+.sd-acts{display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap;margin-top:14px}
+.sd-acts .grow{margin-right:auto}
+.sd-danger{background:#c0392b!important;border-color:#c0392b!important;color:#fff!important;font-weight:600}
+.sd-danger:disabled{opacity:.45}
+.sd-in{width:100%;box-sizing:border-box;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);margin-top:6px}
+.sd-chk{display:flex;gap:10px;align-items:flex-start;margin:12px 0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:13.5px;line-height:1.45;cursor:pointer}
+.sd-chk input{margin-top:3px;flex:0 0 auto}
+.sd-chk small{display:block;color:var(--muted);margin-top:4px}
+.sd-msg{font-size:12.5px;color:var(--muted);min-height:1.2em}
+.wn-ver{margin:14px 0 6px;font:700 15px/1.3 var(--f-head);display:flex;gap:8px;align-items:center}
+.wn-ver small{font:400 12.5px var(--f-body);color:var(--muted)}
+.wn-new{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font:700 10.5px/1.6 var(--f-body);letter-spacing:.04em;text-transform:uppercase}
+.wn-list{margin:0;padding:0;list-style:none}
+.wn-list li{display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px;line-height:1.45}
+.wn-list li:last-child{border-bottom:0}
+.wn-list i{font-style:normal;flex:0 0 22px;text-align:center}
+.wn-list b{display:block}
+.wn-list span{color:var(--muted)}
+.art-h .art-bug{margin-left:auto;opacity:.35;font-size:14px;width:28px;height:28px}
+.art:hover .art-h .art-bug,.art-h .art-bug:focus-visible{opacity:1}
+@media (hover:none){.art-h .art-bug{opacity:.7}}
+@media print{.art-bug,.chgb-btn{display:none!important}}
+</style>
+<script>
+(function(){
+var A=window.senkoApp;
+var APP_VER="2.0.0";
+function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
+function ver(){var s=st();return (s&&s.version)||APP_VER}
+function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
+function lsKeys(){var o=[];try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf("bos-")===0)o.push(k)}}catch(e){}return o}
+function lsGet(k){try{return localStorage.getItem(k)}catch(e){return null}}
+function lsSet(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+function strip(s){return String(s||"").replace(/<[^>]*>/g,"").replace(/\s+/g," ").trim()}
+
+/* ---------- окно поверх всего ---------- */
+var cur=null;
+function closeM(){if(cur){var f=cur._f;cur.remove();cur=null;if(f&&f.focus&&document.contains(f))try{f.focus()}catch(e){}}}
+function modal(title,body,wide){
+ closeM();
+ var o=document.createElement("div"); o.className="sa-ov sd-ov noprint"; o.style.zIndex="2147469000"; o._f=document.activeElement;
+ o.innerHTML='<div class="sa-sheet" role="dialog" aria-modal="true" aria-labelledby="sdT" tabindex="-1"'+(wide?'':' style="width:min(580px,100%)"')+'><div class="sa-head"><h2 id="sdT">'+title+'</h2><button type="button" class="ic sa-x" data-sd="x" aria-label="Закрыть">×</button></div><div class="sa-body" style="padding:16px 18px">'+body+'</div></div>';
+ document.body.appendChild(o); cur=o;
+ o.addEventListener("click",function(e){ if(e.target===o||e.target.closest('[data-sd="x"]')) closeM(); });
+ o.addEventListener("keydown",function(e){ if(e.key==="Escape"){e.stopPropagation();closeM()} });
+ o.querySelector(".sa-sheet").focus();
+ return o;
+}
+window.SA_modal=modal; window.SA_modalClose=closeM;
+
+/* ---------- «было / стало» ---------- */
+function tok(s){return String(s||"").match(/\n|[^\s]+/g)||[]}
+function norm(w){return w.toLowerCase().replace(/ё/g,"е")}
+function diff(a,b){
+ // общее начало и конец отрезаем, середину сравниваем по словам (наибольшая общая подпоследовательность)
+ var p=0,sa=0,sb=0;
+ while(p<a.length&&p<b.length&&norm(a[p])===norm(b[p]))p++;
+ while(sa<a.length-p&&sb<b.length-p&&norm(a[a.length-1-sa])===norm(b[b.length-1-sb])){sa++;sb++}
+ var x=a.slice(p,a.length-sa), y=b.slice(p,b.length-sb), n=x.length, m=y.length, out=[];
+ a.slice(0,p).forEach(function(w){out.push([0,w])});
+ if(n*m>4e6){ x.forEach(function(w){out.push([-1,w])}); y.forEach(function(w){out.push([1,w])}); }
+ else{
+  var L=new Uint16Array((n+1)*(m+1)), W=m+1, i, j;
+  for(i=n-1;i>=0;i--) for(j=m-1;j>=0;j--) L[i*W+j]=norm(x[i])===norm(y[j])?L[(i+1)*W+j+1]+1:Math.max(L[(i+1)*W+j],L[i*W+j+1]);
+  i=0;j=0;
+  while(i<n&&j<m){ if(norm(x[i])===norm(y[j])){out.push([0,y[j]]);i++;j++} else if(L[(i+1)*W+j]>=L[i*W+j+1]) out.push([-1,x[i++]]); else out.push([1,y[j++]]); }
+  while(i<n) out.push([-1,x[i++]]); while(j<m) out.push([1,y[j++]]);
+ }
+ b.slice(b.length-sb).forEach(function(w){out.push([0,w])});
+ return out;
+}
+function render(ops){
+ var h="", run=null, buf=[];
+ function flush(){ if(!buf.length) return; var t=buf.join(" ").replace(/ ?\n ?/g,"\n"); var s=esc(t).replace(/\n/g,"<br>"); h+=run===-1?'<del class="df-del">'+s+'</del> ':run===1?'<ins class="df-ins">'+s+'</ins> ':s+" "; buf=[]; }
+ ops.forEach(function(o){ if(o[0]!==run){flush();run=o[0]} buf.push(o[1]); });
+ flush(); return h;
+}
+function plain(s){return esc(String(s||"")).replace(/\n/g,"<br>")}
+function curText(c){
+ var raw=window.LAWSYNC&&LAWSYNC.raw, L=c._L||null;
+ if(!L&&raw&&raw.laws) raw.laws.some(function(x){ if(x.id===c.lid){L=x;return true} });
+ if(!L||!window.LawCore) return null;
+ var P=lawParsed(L), u=null; P.units.some(function(x){ if(x.key===c.n){u=x;return true} });
+ return u?{law:L,text:u.text}:{law:L,text:null};
+}
+function showChg(c){
+ var r=curText(c);
+ var head=(r&&r.law?esc(r.law.title)+' · ':'')+'ст. '+esc(String(c.n).replace(/#\d+$/,""));
+ if(!r||r.text==null){ modal("Было / стало",'<p class="sd-note">'+head+'</p><p>Текущий текст статьи не найден: возможно, её перенесли или удалили. Прошлая редакция:</p><div class="df-box">'+plain(c.was)+'</div>',true); return; }
+ var ops=diff(tok(c.was),tok(r.text)), nd=0, ni=0;
+ ops.forEach(function(o){ if(o[0]<0)nd++; else if(o[0]>0)ni++; });
+ var body='<p class="sd-note">'+head+' · изменено '+esc(mskDay(c.at))+'</p>'+
+  '<div class="df-leg"><span><del class="df-del">зачёркнуто</del> было</span><span><ins class="df-ins">выделено</ins> стало</span><span>слов убрано: '+nd+', добавлено: '+ni+'</span>'+
+  '<button type="button" class="btn" data-sdv="cols" style="margin-left:auto">Показать рядом</button></div>'+
+  '<div class="df-box" id="dfOne">'+render(ops)+'</div>'+
+  '<div class="df-cols" id="dfTwo" hidden><div><h4>Было</h4><div class="df-box">'+render(ops.filter(function(o){return o[0]<=0}))+'</div></div><div><h4>Стало</h4><div class="df-box">'+render(ops.filter(function(o){return o[0]>=0}))+'</div></div></div>'+
+  '<p class="sd-note" style="margin:12px 0 0">Сравниваются слова, поэтому изменения регистра, пробелов и переносов строк не показываются.</p>';
+ var o=modal("Было / стало",body,true);
+ o.addEventListener("click",function(e){
+  var b=e.target.closest("[data-sdv]"); if(!b) return;
+  var two=o.querySelector("#dfTwo"), one=o.querySelector("#dfOne"), show=two.hidden;
+  two.hidden=!show; one.hidden=show; b.textContent=show?"Показать одним текстом":"Показать рядом";
+ });
+}
+document.addEventListener("click",function(e){
+ var b=e.target.closest&&e.target.closest("[data-chg],[data-art-bug]"); if(!b) return;
+ e.preventDefault(); e.stopPropagation();
+ if(b.dataset.chg){ var c=window.CHGREG&&CHGREG[b.dataset.chg]; if(c) showChg(c); return; }
+ var p=b.dataset.artBug.split("|"), k=p[0], code=p[1], r=null;
+ (window.BYID?Object.keys(BYID).map(function(i){return BYID[i]}):[]).some(function(x){ if(x.k===k&&x.code===code){r=x;return true} });
+ if(window.SA_bug) window.SA_bug("Ошибка в статье: "+(KN[k]||k)+" ст. "+code+(r&&r.title?" «"+strip(r.title)+"»":"")+".\nЧто не так: ");
+},true);
+
+/* ---------- «Что нового» ---------- */
+var NEWS=[
+ {v:"2.0.0",d:"21.10.2026",items:[
+  ["🧭","Новый дизайн","Меню слева с понятными разделами и подписями, главный экран с быстрыми действиями, новая палитра. Тёмная тема стала чёрной в том же стиле."],
+  ["📝","Рапорты","Меню → «Рапорты»: рапорт о задержании, применении силы, происшествии или служебный. Поля заполняются в окне, рядом сразу видна готовая «бумажка». Из таймера и калькулятора данные подставляются сами. Рапорт уходит руководству, решение приходит в программу, все рапорты есть в личном кабинете."],
+  ["🗂️","Шаблоны убраны","Раздел «Шаблоны» в «Проверках» удалён: вместо него рапорты. Калькулятор залога теперь в «Калькуляторе»."],
+  ["🪟","Новая строка окна","Вместо серой системной рамки: кнопки «Поверх всех окон» и «Призрачный режим», таймер задержания прямо в заголовке, меню с прозрачностью и кнопками «Прижать слева/справа»."],
+  ["🔄","Избранное и заметки на всех компьютерах","Избранное, заметки, цветные метки и папки теперь хранятся в аккаунте, как задержания и тесты."],
+  ["💾","Перенос данных в файл","Настройки → «Данные»: всё сохраняется в один файл и загружается обратно, в том числе из ежедневных резервных копий."],
+  ["🔍","Было / стало","У статей с меткой «Изменено» можно открыть сравнение: что убрали и что добавили."],
+  ["⚑","Ошибка в статье","Кнопка ⚑ у статьи открывает сообщение разработчику, номер статьи подставляется сам."],
+  ["🧹","Сброс всех данных","В настройках, с подтверждением и копией данных перед сбросом."],
+  ["📈","Мой прогресс","В личном кабинете: уровень, место в рейтинге недели, серия дней, темы для повторения и 12 достижений."],
+  ["📋","Контрольные тесты","Руководство может назначить тест: сверху появится плашка с кнопкой «Пройти»."],
+  ["👍","Оценка ответов ИИ","Под ответом ИИ-помощника появились кнопки 👍 и 👎."],
+  ["🛡️","Для руководства","Рейтинг сотрудников за неделю, смены со сводкой в Telegram, контрольные тесты и рапорты в панели руководителя."]]},
+ {v:"1.8.0",d:"20.10.2026",items:[
+  ["📣","Сообщения от разработчика","Важные объявления и режим «Идут технические работы» показываются прямо в программе."],
+  ["🐞","Сообщить об ошибке","Настройки → «Сообщить об ошибке», ответ приходит в программу."],
+  ["⚠️","Предупреждения","Предупреждения от модерации видны в программе, их можно обжаловать."]]}
+];
+function seenVer(){return lsGet("bos-seen-ver")}
+function newsHtml(since){
+ return NEWS.map(function(n){
+  var fresh=vcmp(n.v,since||"0")>0;
+  return '<div class="wn-ver">Версия '+n.v+' <small>'+n.d+'</small>'+(fresh?'<span class="wn-new">Новое</span>':'')+'</div><ul class="wn-list">'+
+   n.items.map(function(i){return '<li><i aria-hidden="true">'+i[0]+'</i><div><b>'+esc(i[1])+'</b><span>'+esc(i[2])+'</span></div></li>'}).join("")+'</ul>';
+ }).join("");
+}
+function markSeen(prev){ var v=ver(); if(seenVer()!==v){ lsSet("bos-seen-prev",prev||seenVer()||"0"); lsSet("bos-seen-ver",v); } }
+function showNews(since){
+ modal("Что нового",'<p class="sd-note">Senko Assistant '+esc(ver())+'. Здесь собраны изменения последних версий.</p>'+newsHtml(since)+
+  '<div class="sd-acts"><button type="button" class="btn primary" data-sd="x">Понятно</button></div>');
+ markSeen(since);
+}
+// «Новое» — всё, что вышло после версии, которой человек пользовался до обновления
+window.SA_news=function(){ var s=seenVer(); showNews(s&&vcmp(ver(),s)>0?s:(lsGet("bos-seen-prev")||"0")) };
+(function(){
+ var s=seenVer(), v=ver();
+ if(s&&vcmp(v,s)<=0) return;
+ var keys=lsKeys().filter(function(k){return k!=="bos-seen-ver"});
+ if(!s&&keys.length<3){ markSeen("0"); return; } // первый запуск: показывать нечего
+ setTimeout(function(){ if(!cur&&!document.querySelector(".sa-ov:not([hidden])")) showNews(s||"1.9.0"); else markSeen(s||"1.9.0"); },1200);
+})();
+
+/* ---------- версия программы и дата законов ---------- */
+window.SA_ver=function(){
+ var s=st();
+ return {app:(s&&s.version)||"", laws:(typeof SYNC==="string"?SYNC:""), lawsAt:(window.LAWSYNC&&LAWSYNC.at)||0};
+};
+
+/* ---------- перенос в файл ---------- */
+var msg="";
+function say(t){msg=t; var m=document.getElementById("sdMsg"); if(m) m.textContent=t; else if(window.SA_paintSheet) window.SA_paintSheet();}
+function dump(){
+ var data={}; lsKeys().forEach(function(k){var v=lsGet(k); if(v!=null) data[k]=v});
+ return JSON.stringify({app:"Senko Assistant",kind:"export",format:1,version:ver(),savedAt:new Date().toISOString(),data:data},null,1);
+}
+function doExport(){
+ var text=dump(), day=new Date().toISOString().slice(0,10);
+ if(A&&A.exportData){
+  A.exportData(text).then(function(r){ say(r&&r.ok?"Сохранено в файл "+r.file+".":(r&&r.canceled?"":(r&&r.error)||"Не удалось сохранить.")) },function(){say("Не удалось сохранить.")});
+  return;
+ }
+ try{ var a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([text],{type:"application/json"})); a.download="senko-export-"+day+".json"; document.body.appendChild(a); a.click(); setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1000); say("Файл сохранён в загрузки."); }catch(e){ say("Не удалось сохранить."); }
+}
+function parseFile(text){
+ var j; try{ j=JSON.parse(text) }catch(e){ return {error:"Это не файл данных Senko Assistant: не удалось прочитать JSON."} }
+ if(!j||typeof j!=="object"||j.app!=="Senko Assistant"||!j.data||typeof j.data!=="object") return {error:"Это не файл данных Senko Assistant."};
+ var data={}, n=0;
+ Object.keys(j.data).forEach(function(k){ if(k.indexOf("bos-")===0&&typeof j.data[k]==="string"&&k.length<64){ data[k]=j.data[k]; n++ } });
+ if(!n) return {error:"В файле нет данных."};
+ return {data:data,n:n,at:j.savedAt||"",version:j.version||""};
+}
+function count(d,k){ try{ var v=JSON.parse(d[k]||"null"); return Array.isArray(v)?v.length:(v&&typeof v==="object"?Object.keys(v).length:0) }catch(e){ return 0 } }
+function confirmImport(f){
+ var when=f.at?new Date(f.at).toLocaleString("ru-RU",{dateStyle:"short",timeStyle:"short"}):"неизвестно";
+ var acc=st()&&st().user;
+ var o=modal("Загрузить данные из файла",
+  '<p style="margin:0 0 10px">Файл от <b>'+esc(when)+'</b>'+(f.version?', версия программы '+esc(f.version):'')+'.</p>'+
+  '<ul class="wn-list" style="margin-bottom:10px"><li><i>★</i><div><b>Избранное: '+count(f.data,"bos-favs")+'</b></div></li><li><i>✎</i><div><b>Заметки: '+count(f.data,"bos-notes")+'</b></div></li><li><i>⏱</i><div><b>Задержания: '+count(f.data,"bos-thist")+', тесты: '+count(f.data,"bos-tests")+'</b></div></li></ul>'+
+  '<p class="sd-note">Текущие данные на этом компьютере заменятся данными из файла. Перед этим программа сохранит их копию в папку резервных копий.'+(acc?' Данные аккаунта не пропадут: они объединятся с данными из файла.':'')+'</p>'+
+  '<div class="sd-acts"><span class="sd-msg grow" id="sdIm"></span><button type="button" class="btn" data-sd="x">Отмена</button><button type="button" class="btn primary" data-sdi="go">Загрузить</button></div>');
+ o.addEventListener("click",function(e){
+  var b=e.target.closest("[data-sdi]"); if(!b) return;
+  b.disabled=true; b.textContent="Загружаем…";
+  var go=function(){
+   lsKeys().forEach(function(k){try{localStorage.removeItem(k)}catch(e){}});
+   Object.keys(f.data).forEach(function(k){lsSet(k,f.data[k])});
+   if(!lsGet("bos-seen-ver")) lsSet("bos-seen-ver",ver());
+   location.reload();
+  };
+  if(A&&A.syncRebase) A.syncRebase().then(go,go); else go();
+ });
+}
+function doImport(){
+ if(A&&A.importData){
+  A.importData().then(function(r){
+   if(!r||!r.ok){ if(r&&!r.canceled) say(r.error||"Не удалось открыть файл."); return }
+   var f=parseFile(r.text); if(f.error){ say(f.error); return } confirmImport(f);
+  },function(){say("Не удалось открыть файл.")});
+  return;
+ }
+ var inp=document.createElement("input"); inp.type="file"; inp.accept=".json,application/json";
+ inp.onchange=function(){ var file=inp.files&&inp.files[0]; if(!file) return; if(file.size>20*1024*1024){say("Файл слишком большой.");return}
+  var fr=new FileReader(); fr.onload=function(){ var f=parseFile(String(fr.result||"").replace(/^﻿/,"")); if(f.error) say(f.error); else confirmImport(f) }; fr.readAsText(file,"utf-8"); };
+ inp.click();
+}
+
+/* ---------- сброс всех данных ---------- */
+function doReset(){
+ var s=st(), acc=s&&s.user, app=!!(A&&A.resetData);
+ var o=modal("Сбросить все данные",
+  '<p style="margin:0 0 10px">На этом компьютере удалятся заметки, избранное, папки и метки, история задержаний и тестов, статистика тренажёра, настройки и фото профиля.</p>'+
+  (app?'<p class="sd-note">Перед сбросом программа сохранит копию данных в папку резервных копий. Ежедневные копии тоже останутся, любую из них можно загрузить через «Загрузить из файла».</p>':'<p class="sd-note">Данные удалятся из этого браузера без возможности восстановления. Если они нужны, сначала сохраните их в файл.</p>')+
+  (acc?'<label class="sd-chk"><input type="checkbox" id="sdAcc"><span>Удалить и в аккаунте, на всех моих компьютерах<small>Без галочки данные аккаунта (задержания, тесты, избранное, заметки, папки) вернутся на этот компьютер сразу после сброса. С галочкой они удалятся на сервере и пропадут на всех ваших компьютерах. Уровень, опыт, серия дней и достижения сохранятся в любом случае.</small></span></label>':'')+
+  '<label style="display:block;font-size:13.5px">Чтобы подтвердить, напишите <b>СБРОС</b><input class="sd-in" id="sdWord" autocomplete="off" spellcheck="false" aria-describedby="sdRs"></label>'+
+  '<div class="sd-acts">'+(app&&A.openBackups?'<button type="button" class="btn grow" data-sdr="bk">Открыть резервные копии</button>':'')+'<button type="button" class="btn" data-sd="x">Отмена</button><button type="button" class="btn sd-danger" data-sdr="go" disabled>Сбросить</button></div>'+
+  '<div class="sd-msg" id="sdRs" role="status" style="margin-top:8px"></div>');
+ var w=o.querySelector("#sdWord"), go=o.querySelector('[data-sdr="go"]');
+ w.addEventListener("input",function(){ go.disabled=w.value.trim().toUpperCase()!=="СБРОС" });
+ setTimeout(function(){w.focus()},50);
+ o.addEventListener("click",function(e){
+  var b=e.target.closest("[data-sdr]"); if(!b) return;
+  if(b.dataset.sdr==="bk"){ A.openBackups(); return }
+  if(go.disabled) return;
+  var all=!!(o.querySelector("#sdAcc")&&o.querySelector("#sdAcc").checked), m=o.querySelector("#sdRs");
+  go.disabled=true; go.textContent="Сбрасываем…";
+  var wipe=function(){
+   var clear=function(){ lsKeys().forEach(function(k){try{localStorage.removeItem(k)}catch(e){}}) };
+   clear(); window.addEventListener("pagehide",clear); window.addEventListener("beforeunload",clear);
+   try{sessionStorage.clear()}catch(e){}
+   location.reload();
+  };
+  if(!app){ wipe(); return }
+  A.resetData({account:all}).then(function(r){
+   if(r&&r.ok){ wipe(); return }
+   go.disabled=false; go.textContent="Сбросить"; m.textContent=(r&&r.error)||"Не удалось сбросить данные.";
+  },function(){ go.disabled=false; go.textContent="Сбросить"; m.textContent="Ошибка связи с программой." });
+ });
+}
+
+/* ---------- группа «Данные» в настройках ---------- */
+window.SA_dataRows=function(row){
+ var h='<div class="sgroup">Данные</div>';
+ h+=row("Перенос в файл","Заметки, избранное, папки, настройки и история в одном файле: для переноса на другой компьютер или как своя резервная копия.",
+  '<div class="fsctl"><button type="button" class="btn" data-sdd="exp">Сохранить в файл</button><button type="button" class="btn" data-sdd="imp">Загрузить из файла</button></div>');
+ if(A&&A.openBackups) h+=row("Резервные копии","Программа сама сохраняет копию данных каждый день и хранит несколько последних. Любую можно загрузить кнопкой «Загрузить из файла».",'<button type="button" class="btn" data-sdd="bk">Открыть папку</button>');
+ h+=row("Что нового","Изменения в последних версиях Senko Assistant.",'<button type="button" class="btn" data-sdd="news">Открыть</button>');
+ h+=row("Сброс всех данных","Удаляет все ваши данные на этом компьютере. Перед сбросом попросит подтверждение.",'<button type="button" class="btn" data-sdd="reset">Сбросить…</button>');
+ h+='<p class="apmsg" id="sdMsg" role="status" aria-live="polite"'+(msg?'':' style="display:none"')+'>'+esc(msg)+'</p>';
+ return h;
+};
+document.addEventListener("click",function(e){
+ var b=e.target.closest&&e.target.closest("[data-sdd]"); if(!b) return;
+ var k=b.dataset.sdd; msg=""; var m=document.getElementById("sdMsg"); if(m){m.textContent="";m.style.display=""}
+ if(k==="exp") doExport();
+ else if(k==="imp") doImport();
+ else if(k==="bk"&&A&&A.openBackups) A.openBackups();
+ else if(k==="news") window.SA_news();
+ else if(k==="reset") doReset();
+});
+})();
+</script>
+<style>
+/* ===== Рапорты: окно с формой и «бумажкой», мои рапорты, вкладка в панели руководителя ===== */
+.sd-ov .sa-sheet.rp-sheet{width:min(1100px,100%)}
+.rp-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px}
+.rp-kinds{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin:0 0 14px}
+.rp-k{display:flex;gap:10px;align-items:center;text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);cursor:pointer;font:inherit}
+.rp-k i{font-style:normal;font-size:20px}
+.rp-k b{display:block;font-size:13.5px}
+.rp-k small{color:var(--muted);font-size:12px}
+.rp-k[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:var(--soft,var(--chip))}
+.rp-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);gap:18px;align-items:start}
+@media (max-width:900px){.rp-grid{grid-template-columns:1fr}}
+.rp-form{display:grid;gap:10px}
+.rp-form label{display:grid;gap:4px;font-size:12.5px;color:var(--muted);font-weight:600}
+.rp-form label em{font-style:normal;color:var(--accent)}
+.rp-form input,.rp-form select,.rp-form textarea{font:inherit;font-weight:400;font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;box-sizing:border-box}
+.rp-form textarea{resize:vertical;min-height:64px;line-height:1.45}
+.rp-form .rp-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:520px){.rp-form .rp-two{grid-template-columns:1fr}}
+.rp-chips{display:flex;flex-wrap:wrap;gap:6px}
+.rp-chips .pill{font-weight:400}
+.rp-bad input,.rp-bad textarea,.rp-bad .rp-chips{outline:2px solid #c0392b;outline-offset:1px;border-radius:8px}
+.rp-side{position:sticky;top:0}
+.rp-cap{font-size:12px;color:var(--muted);margin:0 0 6px;display:flex;justify-content:space-between;gap:8px}
+/* бумажка: светлая в любой теме */
+.rp-paper{position:relative;background:#FFFDF7;color:#1E1B16;border:1px solid #E6DECF;border-radius:3px;box-shadow:0 1px 2px rgba(0,0,0,.06),0 10px 28px rgba(60,40,10,.14);padding:30px 34px 28px;font:14px/1.6 Georgia,"PT Serif","Times New Roman",serif;overflow:hidden;min-height:420px}
+html[data-eff="dark"] .rp-paper{filter:brightness(.93)}
+.rp-paper .rp-org{text-align:center;font:600 10.5px/1.4 var(--f-body);letter-spacing:.16em;text-transform:uppercase;color:#7C705E;border-bottom:1px solid #DCD2C0;padding-bottom:9px;margin-bottom:16px}
+.rp-paper .rp-to{margin:0 0 0 46%;font-size:13.5px;line-height:1.5}
+.rp-paper .rp-to div{overflow-wrap:anywhere}
+.rp-paper .rp-h{text-align:center;margin:22px 0 2px;font-weight:700;letter-spacing:.2em;font-size:17px}
+.rp-paper .rp-hs{text-align:center;margin:0 0 16px;font-style:italic}
+.rp-paper .rp-b p{margin:0 0 7px;text-indent:2em;text-align:justify;overflow-wrap:anywhere;white-space:pre-wrap}
+.rp-paper .rp-f{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-top:24px;font-size:13.5px}
+.rp-paper .rp-sign{text-align:center}
+.rp-paper .rp-sign b{display:block;font:400 21px/1.1 "Segoe Script","Brush Script MT","Lucida Handwriting",cursive;color:#23408E;padding:0 10px 2px;border-bottom:1px solid #8C8270;min-width:150px}
+.rp-paper .rp-sign small{font-size:11px;color:#7C705E}
+.rp-paper .gap{color:#A79C89}
+.rp-stamp{position:absolute;right:26px;top:84px;transform:rotate(-11deg);border:3px double currentColor;border-radius:6px;padding:5px 12px 4px;text-align:center;font:800 15px/1.15 var(--f-body);letter-spacing:.14em;text-transform:uppercase;opacity:.8;pointer-events:none}
+.rp-stamp small{display:block;font:600 9.5px/1.3 var(--f-body);letter-spacing:.04em;text-transform:none}
+.rp-stamp.ok{color:#1D7A3A}.rp-stamp.no{color:#B3261E}.rp-stamp.new{color:#8A6D1E}
+.rp-note{margin:10px 0 0;padding:8px 10px;border-left:3px solid #B3261E;background:#F8EFE6;font:13px/1.45 var(--f-body);color:#3A2F22}
+.rp-note.ok{border-color:#1D7A3A}
+.rp-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-end;margin-top:14px}
+.rp-acts .grow{margin-right:auto}
+.rp-acts .primary,.rp-go{background:var(--accent)!important;color:var(--accent-ink)!important;border-color:var(--accent)!important;font-weight:600}
+.rp-msg{font-size:13px;color:var(--muted);min-height:1.2em;margin-top:8px}
+.rp-msg.err{color:#c0392b}
+.rp-list{display:grid;gap:6px}
+.rp-row{display:flex;gap:10px;align-items:center;width:100%;text-align:left;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;font-size:13.5px;cursor:pointer}
+.rp-row:hover{border-color:var(--accent)}
+.rp-row>span:first-child{flex:1 1 auto;min-width:0}
+.rp-row b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-row small{color:var(--muted)}
+.rp-st{flex:0 0 auto;font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:999px;background:var(--chip);white-space:nowrap}
+.rp-st.ok{background:#DDF1E3;color:#1D6B36}.rp-st.no{background:#F8DEDB;color:#9E2219}.rp-st.new{background:#F6EBCB;color:#7A5B0E}
+html[data-eff="dark"] .rp-st.ok{background:#173A24;color:#8FE0A8}html[data-eff="dark"] .rp-st.no{background:#3D1A17;color:#FFA59B}html[data-eff="dark"] .rp-st.new{background:#3A2F12;color:#F2D27A}
+.rp-empty{color:var(--muted);font-size:13.5px;padding:10px 0}
+.rp-rev{margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:10px}
+.rp-rev textarea{width:100%;box-sizing:border-box;font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-height:54px;margin:6px 0 0}
+.rp-filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
+.rp-filters input{flex:1 1 200px;font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+.rp-filters select{font:inherit;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+.rp-view{max-width:820px;margin:0 auto}
+@media (max-width:640px){.rp-paper{padding:22px 18px 20px}.rp-paper .rp-b p{text-align:left}.rp-paper .rp-to{margin-left:18%}.rp-stamp{position:relative;right:auto;top:auto;display:table;margin:14px 0 0 auto;transform:rotate(-5deg)}}
+@media print{.rp-sheet{display:none}}
+</style>
+<script>
+(function(){
+var A=window.senkoApp;
+var KINDS={
+ arrest:{i:"🚓",t:"О задержании",d:"Кого, за что, какое решение",sub:"о задержании"},
+ force:{i:"✋",t:"О применении силы",d:"Сила, тайзер, оружие",sub:"о применении силы"},
+ incident:{i:"⚠️",t:"О происшествии",d:"ДТП, перестрелка, нападение",sub:"о происшествии"},
+ service:{i:"📄",t:"Служебный",d:"Отпуск, перевод, повышение",sub:""}
+};
+var SUBJ=[["Отпуск","о предоставлении отпуска","предоставить мне отпуск"],["Перевод","о переводе","перевести меня в отдел "],["Повышение","о повышении","рассмотреть мою кандидатуру на повышение в звании"],["Увольнение","об увольнении по собственному желанию","уволить меня по собственному желанию"],["Восстановление","о восстановлении в должности","восстановить меня в должности"],["Другое","",""]];
+var CHK={
+ arrest:[["mir","Права зачитаны","Права задержанному зачитаны"],["adv","Предоставлен адвокат","Задержанному предоставлен адвокат"],["srch","Проведён досмотр","Проведён личный досмотр"],["cam","Велась видеозапись","Велась видеофиксация на бодикамеру"]],
+ force:[["med","Оказана помощь","Пострадавшему оказана медицинская помощь"],["ems","Вызваны медики","На место вызваны медики"],["cam","Велась видеозапись","Велась видеофиксация на бодикамеру"]]
+};
+var MEANS=["Физическая сила","Наручники","Тайзер","Дубинка","Перцовый баллончик","Огнестрельное оружие"];
+var MEAS=["","Арест","Штраф","Освобождён","Передан другому органу"];
+/* поля форм: [ключ, подпись, тип, подсказка, обязательное] */
+var F={
+ arrest:[["suspect","Задержанный","text","Имя Фамилия",1],["sid","Паспорт задержанного","text","номер паспорта или статик"],["dt","Дата и время","text",""],["place","Место","text","например, Mission Row"],
+  ["arts","Статьи","area","ст. 12.8 УК «…»; ст. 6.1 АК «…»",1],["reason","Обстоятельства","area","Что произошло и почему задержали",1],["measure","Решение","sel"],["term","Срок или штраф","text","например, 12 мес. или $5 000"],
+  ["checks","Отметки","chk"],["seized","Изъято","text","оружие, наркотики, деньги…"],["partners","Напарники","text","ники через запятую"],["tmr","Время задержания","area","подставится из таймера"],["evidence","Доказательства","text","ссылка на видео или скриншоты"]],
+ force:[["dt","Дата и время","text",""],["place","Место","text",""],["target","В отношении кого","text","Имя Фамилия, паспорт",1],["means","Что применено","means","",1],
+  ["reason","Причина применения","area","Например: оказал вооружённое сопротивление при задержании",1],["result","Последствия","text","например, без телесных повреждений"],["checks","Отметки","chk"],["partners","Напарники","text",""],["evidence","Доказательства","text","ссылка на видео"]],
+ incident:[["dt","Дата и время","text",""],["place","Место","text",""],["what","Что произошло","area","Коротко и по порядку",1],["who","Участники","text","ники, паспорта, номера машин"],
+  ["damage","Пострадавшие и ущерб","text","например, пострадавших нет"],["actions","Принятые меры","area","Что сделали вы и другие сотрудники"],["evidence","Доказательства","text",""]],
+ service:[["subj","Тема","subj"],["text","Прошу","area","",1],["period","Период","text","например, с 22.10 по 29.10"],["reason","Обоснование","area","Причина или заслуги"]]
+};
+var R={tab:"new",kind:"arrest",f:{},mine:null,mineAt:0,loading:false,err:"",view:null,bad:{},msg:"",msgErr:false,sending:false};
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){return null}}
+function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
+function me(){var s=st();return s&&s.user||null}
+function online(){return !!(A&&A.api&&me())}
+function nowStr(t){return new Date(t||Date.now()).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})}
+function dayStr(t){return new Date(t||Date.now()).toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"})}
+function trim(s){return String(s==null?"":s).replace(/\s+$/,"").replace(/^\s+/,"")}
+function dot(s){s=trim(s);return !s||/[.!?…]$/.test(s)?s:s+"."}
+function lc1(s){s=trim(s);return s?s.charAt(0).toLowerCase()+s.slice(1):s}
+function uc1(s){s=trim(s);return s?s.charAt(0).toUpperCase()+s.slice(1):s}
+function gap(s){return s?s:"________"}
+function SUBO(n){for(var i=0;i<SUBJ.length;i++)if(SUBJ[i][0]===n)return SUBJ[i];return SUBJ[0]}
+
+/* ---------- черновики ---------- */
+function loadDraft(){var d=null;try{d=JSON.parse(ls("bos-rp-draft")||"null")}catch(e){}return d&&typeof d==="object"?d:{}}
+function saveDraft(){var d=loadDraft();d[R.kind]=R.f;d._k=R.kind;ls("bos-rp-draft",JSON.stringify(d))}
+function fresh(kind){var u=me(),f={to:"Руководству "+(u&&u.org||"организации"),pos:ls("bos-rp-pos")||""};if(kind!=="service")f.dt=nowStr();if(kind==="service")f.subj="Отпуск";return f}
+function useKind(kind,f){R.kind=kind;var d=loadDraft();R.f=f||d[kind]||fresh(kind);if(!R.f.to)R.f.to=fresh(kind).to;R.bad={};saveDraft()}
+
+/* ---------- текст рапорта ---------- */
+function bodyOf(kind,f){
+ var P=[], ch=function(list){return (list||[]).map(function(k){var c=(CHK[kind]||[]).filter(function(x){return x[0]===k})[0];return c?c[2]:""}).filter(Boolean).map(dot).join(" ")};
+ var where=(f.dt?" "+f.dt:"")+(f.place?" в районе "+f.place:"");
+ if(kind==="arrest"){
+  P.push("Докладываю, что"+(where||" ________")+" мною"+(f.partners?" совместно с "+f.partners:"")+" был задержан гражданин "+gap(f.suspect)+(f.sid?" (паспорт "+f.sid+")":"")+".");
+  P.push("Обстоятельства: "+dot(gap(lc1(f.reason))));
+  P.push("Квалификация: "+dot(gap(f.arts)));
+  if(f.measure||f.term) P.push("Принятое решение: "+dot([lc1(f.measure),f.term].filter(Boolean).join(", ")));
+  var c=ch(f.checks); if(c) P.push(c);
+  if(f.seized) P.push("Изъято: "+dot(f.seized));
+  if(f.tmr) P.push(dot(f.tmr));
+ } else if(kind==="force"){
+  var m=(f.means||[]).map(function(x,i){return i?lc1(x):lc1(x)}).join(", ");
+  P.push("Докладываю, что"+(where||" ________")+" мною"+(f.partners?" совместно с "+f.partners:"")+" в отношении "+gap(f.target)+" применено следующее: "+gap(m)+".");
+  P.push("Причина применения: "+dot(gap(lc1(f.reason))));
+  if(f.result) P.push("Последствия: "+dot(lc1(f.result)));
+  var c2=ch(f.checks); if(c2) P.push(c2);
+ } else if(kind==="incident"){
+  P.push("Докладываю, что"+(where||" ________")+" произошло происшествие.");
+  P.push("Обстоятельства: "+dot(gap(lc1(f.what))));
+  if(f.who) P.push("Участники: "+dot(f.who));
+  if(f.damage) P.push("Пострадавшие и ущерб: "+dot(lc1(f.damage)));
+  if(f.actions) P.push("Принятые меры: "+dot(lc1(f.actions)));
+ } else {
+  var t=trim(f.text).replace(/^прошу\s*/i,"");
+  P.push("Прошу "+(t?t.replace(/[.!?…]+$/,""):"________")+(f.period?" на период "+f.period:"")+".");
+  if(f.reason) P.push("Обоснование: "+dot(lc1(f.reason)));
+ }
+ if(kind!=="service"&&f.evidence) P.push("Доказательства: "+dot(f.evidence));
+ return P.join("\n");
+}
+function subOf(kind,f){return kind==="service"?(SUBO(f.subj)[1]||"служебный"):KINDS[kind].sub}
+function titleOf(kind,f){var s=subOf(kind,f);return s==="служебный"?"Служебный рапорт":"Рапорт "+s}
+function missing(kind,f){var bad={};F[kind].forEach(function(x){if(!x[4])return;var v=f[x[0]];if(Array.isArray(v)?!v.length:!trim(v))bad[x[0]]=1});return bad}
+
+/* ---------- бумажка ---------- */
+var ORGN={Government:"Правительство штата Сан-Андреас",LSPD:"Los Santos Police Department",LSCSD:"Los Santos County Sheriff's Department",FIB:"Federal Investigation Bureau",SANG:"San Andreas National Guard"};
+function paper(r){
+ // r: {org, to, pos, author, static, dept, kind, sub, body, id, created, status, reviewer, note, reviewed}
+ var org=r.org||"", head="Штат Сан-Андреас"+(org?" · "+(ORGN[org]||org):"");
+ var stamp=r.status&&r.id?'<div class="rp-stamp '+r.status+'">'+({ok:"Принят",no:"Отклонён",new:"На рассмотрении"})[r.status]+(r.status!=="new"&&r.reviewed?'<small>'+esc(r.reviewer||"")+' · '+dayStr(r.reviewed)+'</small>':'')+'</div>':'';
+ var from=[r.pos,r.author].filter(Boolean).join(", ");
+ return '<div class="rp-paper"><div class="rp-org">'+esc(head)+'</div>'+
+  '<div class="rp-to"><div>Кому: '+esc(r.to||"Руководству "+org)+'</div><div>От: '+(from?esc(from):'<span class="gap">________</span>')+'</div><div>Статик: '+esc(r.static||"—")+(r.dept&&r.dept!==org?' · '+esc(r.dept):'')+'</div></div>'+
+  '<div class="rp-h">РАПОРТ'+(r.id?' № '+esc(r.id):'')+'</div><div class="rp-hs">'+esc(r.sub||"")+'</div>'+
+  '<div class="rp-b">'+String(r.body||"").split("\n").filter(function(p){return trim(p)}).map(function(p){return '<p>'+esc(p).replace(/_{4,}/g,'<span class="gap">$&</span>')+'</p>'}).join("")+'</div>'+
+  '<div class="rp-f"><div>'+esc(r.created?nowStr(r.created):nowStr())+'</div><div class="rp-sign"><b>'+esc(r.author||"")+'</b><small>подпись</small></div></div>'+stamp+
+  (r.note?'<div class="rp-note'+(r.status==="ok"?" ok":"")+'"><b>Комментарий руководства:</b> '+esc(r.note)+'</div>':'')+
+ '</div>';
+}
+function plain(r){
+ var from=[r.pos,r.author].filter(Boolean).join(", ");
+ return "Кому: "+(r.to||"Руководству "+(r.org||""))+"\nОт: "+from+"\nСтатик: "+(r.static||"—")+"\n\nРАПОРТ"+(r.id?" № "+r.id:"")+"\n"+(r.sub||"")+"\n\n"+r.body+"\n\n"+(r.created?nowStr(r.created):nowStr())+"    "+(r.author||"");
+}
+function fromServer(x){var f=x.fields||{};return {id:x.id,org:x.org,to:f.to,pos:f.pos,author:x.author,static:x.static,dept:x.dept,kind:x.kind,sub:f.sub||KINDS[x.kind]&&KINDS[x.kind].sub||"",body:x.body,created:x.created,status:x.status,reviewer:x.reviewer,note:x.note,reviewed:x.reviewed,login:x.login,title:x.title}}
+function draftPaper(){var u=me()||{};return {org:u.org||"",to:R.f.to,pos:R.f.pos,author:u.nick||u.login||"",static:u.static||"",dept:u.dept||"",kind:R.kind,sub:subOf(R.kind,R.f),body:bodyOf(R.kind,R.f)}}
+
+/* ---------- окно ---------- */
+var ov=null;
+function sheet(){return ov&&document.contains(ov)?ov:null}
+function open(o){
+ o=o||{};
+ if(o.prefill){
+  // тот же таймер или расчёт: дополняем черновик; другой — начинаем новый рапорт
+  var cur=loadDraft().arrest, same=cur&&cur._src===o.prefill._src, f=same?cur:fresh("arrest");
+  for(var k in o.prefill){var v=o.prefill[k],e=f[k];if(v&&(!same||!(Array.isArray(e)?e.length:trim(e))))f[k]=v}
+  useKind("arrest",f);R.tab="new";R.view=null}
+ else if(o.view){R.tab="view";R.view=o.view}
+ else if(o.tab){R.tab=o.tab;R.view=null}
+ else{R.tab="new";R.view=null}
+ if(!R.f||!R.kind||!F[R.kind]){var d2=loadDraft();useKind(F[d2._k]?d2._k:"arrest")}
+ else if(!Object.keys(R.f).length)useKind(R.kind);
+ R.msg="";R.msgErr=false;
+ if(!window.SA_modal)return;
+ ov=window.SA_modal(o.view&&o.view.id?"Рапорт № "+esc(o.view.id):"Рапорты",'<div id="rpBox"></div>',true);
+ ov.querySelector(".sa-sheet").classList.add("rp-sheet");
+ ov.addEventListener("click",onClick); ov.addEventListener("input",onInput); ov.addEventListener("change",onInput);
+ paint();
+ if(R.tab==="mine"&&online())loadMine(Date.now()-R.mineAt>5000);
+}
+function tabsHtml(){
+ if(R.tab==="view"&&R.view&&R.view.staff)return "";
+ var n=R.mine?R.mine.length:0;
+ return '<div class="rp-tabs"><button type="button" class="pill" data-rp="tab" data-v="new" aria-pressed="'+(R.tab==="new")+'">Новый рапорт</button>'+
+  (online()?'<button type="button" class="pill" data-rp="tab" data-v="mine" aria-pressed="'+(R.tab!=="new")+'">Мои рапорты'+(n?' · '+n:'')+'</button>':'')+'</div>';
+}
+function fieldHtml(x){
+ var k=x[0],v=R.f[k],bad=R.bad[k]?' class="rp-bad"':'', lab='<span>'+x[1]+(x[4]?' <em>*</em>':'')+'</span>';
+ if(x[2]==="area")return '<label'+bad+'>'+lab+'<textarea data-rf="'+k+'" rows="'+(k==="tmr"?2:3)+'" maxlength="1500" placeholder="'+esc(R.kind==="service"&&k==="text"?SUBO(R.f.subj)[2]||"Опишите просьбу":x[3])+'">'+esc(v||"")+'</textarea></label>';
+ if(x[2]==="sel")return '<label>'+lab+'<select data-rf="'+k+'">'+MEAS.map(function(m){return '<option value="'+esc(m)+'"'+(m===(v||"")?' selected':'')+'>'+(m||"Не выбрано")+'</option>'}).join("")+'</select></label>';
+ if(x[2]==="subj")return '<label>'+lab+'<select data-rf="subj">'+SUBJ.map(function(s){return '<option'+(s[0]===v?' selected':'')+'>'+s[0]+'</option>'}).join("")+'</select></label>';
+ if(x[2]==="chk"||x[2]==="means"){var L=x[2]==="means"?MEANS.map(function(m){return [m,m]}):CHK[R.kind].map(function(c){return [c[0],c[1]]}),cur=v||[];
+  return '<div'+bad+'><label style="margin-bottom:4px">'+lab+'</label><div class="rp-chips">'+L.map(function(c){return '<button type="button" class="pill" data-rp="chk" data-k="'+k+'" data-v="'+esc(c[0])+'" aria-pressed="'+(cur.indexOf(c[0])>=0)+'">'+esc(c[1])+'</button>'}).join("")+'</div></div>'}
+ return '<label'+bad+'>'+lab+'<input data-rf="'+k+'" maxlength="'+(k==="evidence"?300:160)+'" autocomplete="off" value="'+esc(v||"")+'" placeholder="'+esc(x[3])+'"></label>';
+}
+function formHtml(){
+ var L=F[R.kind], h='<div class="rp-form">';
+ h+='<div class="rp-two"><label><span>Кому</span><input data-rf="to" maxlength="80" value="'+esc(R.f.to||"")+'"></label><label><span>Ваше звание или должность</span><input data-rf="pos" maxlength="60" value="'+esc(R.f.pos||"")+'" placeholder="например, Офицер II"></label></div>';
+ for(var i=0;i<L.length;i++){
+  var x=L[i], y=L[i+1];
+  if(x[2]==="text"&&y&&y[2]==="text"&&x[0]!=="evidence"&&y[0]!=="evidence"){h+='<div class="rp-two">'+fieldHtml(x)+fieldHtml(y)+'</div>';i++}
+  else h+=fieldHtml(x);
+ }
+ return h+'</div>';
+}
+function newHtml(){
+ var u=me();
+ var h='<div class="rp-kinds">'+Object.keys(KINDS).map(function(k){var K=KINDS[k];return '<button type="button" class="rp-k" data-rp="kind" data-v="'+k+'" aria-pressed="'+(R.kind===k)+'"><i aria-hidden="true">'+K.i+'</i><span><b>'+K.t+'</b><small>'+K.d+'</small></span></button>'}).join("")+'</div>';
+ h+='<div class="rp-grid"><div>'+formHtml()+'</div><div class="rp-side"><p class="rp-cap"><span>Так рапорт увидит руководство</span><span>* обязательные поля</span></p><div id="rpPaper">'+paper(draftPaper())+'</div></div></div>';
+ h+='<div class="rp-acts"><button type="button" class="btn grow" data-rp="clear">Очистить форму</button><button type="button" class="btn" data-rp="copy">Скопировать текст</button>'+
+  (online()?'<button type="button" class="btn primary" data-rp="send"'+(R.sending?' disabled':'')+'>'+(R.sending?'Отправляем…':'Отправить руководству')+'</button>':'')+'</div>';
+ h+='<div class="rp-msg'+(R.msgErr?' err':'')+'" role="status" aria-live="polite">'+esc(R.msg||(online()?"":(u?"":"Отправить рапорт можно в программе после входа в аккаунт. Здесь его можно составить и скопировать.")))+'</div>';
+ return h;
+}
+function rowHtml(r,staff){
+ var S={new:"На рассмотрении",ok:"Принят",no:"Отклонён"};
+ return '<button type="button" class="rp-row" data-rp="open" data-id="'+esc(r.id)+'"><span><b>№ '+esc(r.id)+' · '+esc(r.title)+'</b><small>'+nowStr(r.created)+(staff?' · '+esc(r.author)+' ('+esc(r.login)+')'+(staff==="all"?' · '+esc(r.org):''):'')+(r.note?' · есть комментарий':'')+'</small></span><span class="rp-st '+r.status+'">'+S[r.status]+'</span></button>';
+}
+function mineHtml(){
+ if(!R.mine)return '<p class="rp-empty">'+(R.err?esc(R.err)+' <button type="button" class="btn" data-rp="reload">Повторить</button>':'Загружаем…')+'</p>';
+ if(!R.mine.length)return '<p class="rp-empty">Вы ещё не отправляли рапортов. Откройте «Новый рапорт», заполните поля и нажмите «Отправить руководству».</p>';
+ return (R.err?'<p class="rp-msg err">'+esc(R.err)+'</p>':'')+'<div class="rp-list">'+R.mine.map(function(r){return rowHtml(r)}).join("")+'</div><p class="rp-msg">Удалить рапорт можно, пока руководство его не рассмотрело. Решение приходит уведомлением в программе.</p>';
+}
+function viewHtml(){
+ var v=R.view, p=fromServer(v), u=me(), mine=u&&u.login===v.login;
+ var h='<div class="rp-view">'+paper(p)+'<div class="rp-acts">'+(v.staff?'':'<button type="button" class="btn grow" data-rp="tab" data-v="mine">← Мои рапорты</button>')+'<button type="button" class="btn" data-rp="copyv">Скопировать текст</button>'+
+  (mine&&v.status==="new"&&!v.staff?'<button type="button" class="btn" data-rp="del">Удалить</button>':'')+'</div>';
+ if(v.staff){
+  h+='<div class="rp-rev"><b>'+(v.status==="new"?"Решение по рапорту":"Изменить решение")+'</b><textarea id="rpNote" maxlength="300" placeholder="Комментарий для сотрудника (необязательно)">'+esc(v.status==="new"?"":v.note||"")+'</textarea>'+
+   '<div class="rp-acts" style="margin-top:8px"><button type="button" class="btn" data-rp="rev" data-v="no"'+(R.sending?' disabled':'')+'>Отклонить</button><button type="button" class="btn primary" data-rp="rev" data-v="ok"'+(R.sending?' disabled':'')+'>Принять</button></div>'+
+   '<p class="rp-msg" style="margin:6px 0 0">Сотрудник увидит решение и комментарий в программе. Рапорт также можно открыть в Telegram: /report '+esc(v.id)+'</p></div>';
+ }
+ return h+'<div class="rp-msg'+(R.msgErr?' err':'')+'" role="status" aria-live="polite">'+esc(R.msg||"")+'</div></div>';
+}
+function paint(){
+ var o=sheet(); if(!o)return; var box=o.querySelector("#rpBox"); if(!box)return;
+ var ae=document.activeElement, key=ae&&ae.dataset?ae.dataset.rf:null, pos=null; try{pos=key?ae.selectionStart:null}catch(e){}
+ box.innerHTML=tabsHtml()+(R.tab==="new"?newHtml():R.tab==="view"&&R.view?viewHtml():mineHtml());
+ var t=o.querySelector("#sdT"); if(t)t.textContent=R.tab==="view"&&R.view?"Рапорт № "+R.view.id:"Рапорты";
+ if(key){var el=box.querySelector('[data-rf="'+key+'"]');if(el){el.focus();try{if(pos!=null)el.setSelectionRange(pos,pos)}catch(e){}}}
+}
+function tabsPaint(){var o=sheet();if(!o)return;if(R.tab==="mine"){paint();return}var t=o.querySelector(".rp-tabs");if(t)t.outerHTML=tabsHtml()}
+function paintPaper(){var p=sheet()&&sheet().querySelector("#rpPaper");if(p)p.innerHTML=paper(draftPaper())}
+function onInput(e){
+ var t=e.target, k=t.dataset&&t.dataset.rf; if(!k)return;
+ R.f[k]=t.value; if(k==="pos")ls("bos-rp-pos",t.value);
+ if(R.bad[k]&&trim(t.value)){delete R.bad[k];var l=t.closest(".rp-bad");if(l)l.classList.remove("rp-bad")}
+ saveDraft();
+ if(k==="subj"&&e.type==="change"){paint();return}
+ paintPaper();
+}
+function copy(txt,b){
+ var done=function(){if(!b)return;var o=b.dataset.l||b.textContent;b.dataset.l=o;b.textContent="Скопировано";setTimeout(function(){b.textContent=o},1600)};
+ if(A&&A.copy){try{A.copy(txt);done();return}catch(e){}}
+ if(typeof copyText==="function"){copyText(txt,b);return}
+ try{navigator.clipboard.writeText(txt).then(done)}catch(e){}
+}
+function say(m,err){R.msg=m;R.msgErr=!!err;paint()}
+function onClick(e){
+ var b=e.target.closest("[data-rp]"); if(!b)return;
+ var a=b.dataset.rp, v=b.dataset.v;
+ if(a==="tab"){R.tab=v;R.view=null;R.msg="";paint();if(v==="mine")loadMine(Date.now()-R.mineAt>5000);return}
+ if(a==="kind"){useKind(v);R.msg="";paint();return}
+ if(a==="chk"){var k=b.dataset.k,L=(R.f[k]||[]).slice(),i=L.indexOf(v);if(i<0)L.push(v);else L.splice(i,1);R.f[k]=L;if(L.length)delete R.bad[k];saveDraft();b.setAttribute("aria-pressed",String(i<0));var w=b.closest(".rp-bad");if(w&&L.length)w.classList.remove("rp-bad");paintPaper();return}
+ if(a==="clear"){if(!b.dataset.arm){b.dataset.arm="1";b.textContent="Точно очистить?";return}useKind(R.kind,fresh(R.kind));R.msg="";paint();return}
+ if(a==="copy"){var bad=missing(R.kind,R.f);if(Object.keys(bad).length){R.bad=bad;paint();say("Заполните поля, отмеченные красным.",true);return}copy(plain(draftPaper()),b);return}
+ if(a==="send"){send();return}
+ if(a==="reload"){R.err="";R.mine=null;paint();loadMine();return}
+ if(a==="open"){var r=(R.mine||[]).filter(function(x){return x.id===b.dataset.id})[0];if(r){R.view=r;R.tab="view";R.msg="";paint()}return}
+ if(a==="copyv"&&R.view){copy(plain(fromServer(R.view)),b);return}
+ if(a==="del"&&R.view){
+  if(!b.dataset.arm){b.dataset.arm="1";b.textContent="Точно удалить?";return}
+  b.disabled=true;
+  A.api("reports",{op:"del",id:R.view.id}).then(function(r){if(r&&r.ok){R.mine=r.list;R.mineAt=Date.now();R.view=null;R.tab="mine";paint();cabPaint()}else say((r&&r.error)||"Не удалось удалить.",true)},function(){say("Ошибка связи с программой.",true)});
+  return}
+ if(a==="rev"&&R.view&&R.view.staff){review(v==="ok");return}
+}
+function send(){
+ if(R.sending||!online())return;
+ var bad=missing(R.kind,R.f);
+ if(Object.keys(bad).length){R.bad=bad;R.msg="Заполните поля, отмеченные красным.";R.msgErr=true;paint();var f=sheet().querySelector(".rp-bad input,.rp-bad textarea");if(f)f.focus();return}
+ var f2={};Object.keys(R.f).forEach(function(k){if(k.charAt(0)!=="_")f2[k]=R.f[k]});f2.sub=subOf(R.kind,R.f);
+ R.sending=true;R.msg="";paint();
+ A.api("reports",{op:"create",kind:R.kind,title:titleOf(R.kind,R.f),body:bodyOf(R.kind,R.f),fields:f2}).then(function(r){
+  R.sending=false;
+  if(r&&r.ok){
+   var d=loadDraft();delete d[R.kind];ls("bos-rp-draft",JSON.stringify(d));R.f=fresh(R.kind);
+   R.mine=[r.report].concat(R.mine||[]);R.view=r.report;R.tab="view";
+   R.msg="Рапорт № "+r.report.id+" отправлен руководству "+r.report.org+". Решение придёт уведомлением в программе.";R.msgErr=false;
+   paint();cabPaint();loadMine(true);
+  } else {R.msg=(r&&r.error)||"Не удалось отправить рапорт.";R.msgErr=true;paint()}
+ },function(){R.sending=false;R.msg="Ошибка связи с программой. Рапорт сохранён как черновик.";R.msgErr=true;paint()});
+}
+function loadMine(force){
+ if(!online()||R.loading)return; if(!force&&R.mine&&Date.now()-R.mineAt<30000){paint();return}
+ R.loading=true;
+ A.api("reports",{op:"mine"}).then(function(r){R.loading=false;if(r&&r.ok){R.mine=r.list;R.mineAt=Date.now();R.err=""}else R.err=(r&&r.error)||"Не удалось загрузить рапорты.";tabsPaint();cabPaint()},
+  function(){R.loading=false;R.err="Ошибка связи с программой.";paint();cabPaint()});
+}
+
+/* ---------- данные из таймера и калькулятора ---------- */
+function prefill(src){
+ var p={_src:src}, t=(typeof tm!=="undefined"&&tm&&tm.start)?tm:null;
+ if(t){p._src=src+":"+t.id;p.suspect=t.nick||"";p.sid=t.st||"";p.arts=t.arts||"";p.dt=nowStr(t.start);if(t.result)p.measure=t.result;
+  try{p.tmr=timerSummary()}catch(e){}
+  var c=[];if(t.checks&&(t.checks["inv:mir"]||t.checks["war:mir"]))c.push("mir");if(c.length)p.checks=c}
+ if(src==="calc"&&typeof basketItems==="function"){
+  var items=basketItems();
+  if(items.length){
+   p.arts=items.map(function(r){return labK(r)+" «"+r.title+"»"}).join("; ");
+   var uk=items.filter(function(r){return r.k==="uk"}), S=Math.max.apply(null,uk.map(function(r){return r.stars}).concat([0])), M=Math.max.apply(null,uk.map(function(r){return r.m}).concat([0])), adm=items.filter(function(r){return r.k!=="uk"}).reduce(function(a,r){return a+r.fmax},0);
+   p.term=[M?"до "+M+" мес.":"",S?"розыск "+S+" из 5":"",adm?"штраф до "+money(adm):""].filter(Boolean).join(", ");
+  }
+  if(!p.suspect&&typeof rep!=="undefined"&&rep&&rep.s)p.suspect=rep.s;
+ }
+ return p;
+}
+document.addEventListener("click",function(e){
+ var b=e.target.closest&&e.target.closest("[data-rpopen]"); if(!b)return;
+ var s=b.dataset.rpopen;
+ if(s==="mine")open({tab:"mine"}); else if(s==="tm"||s==="calc")open({prefill:prefill(s)}); else open();
+});
+
+/* ---------- личный кабинет: «Мои рапорты» ---------- */
+function cabInner(){
+ var h='<div class="cab-h">Мои рапорты<small>'+(R.mine?R.mine.length+" всего":"")+'</small></div>';
+ if(!R.mine)h+='<p class="pg-msg">'+(R.err?esc(R.err):"Загружаем…")+'</p>';
+ else if(!R.mine.length)h+='<p class="pg-msg">Рапортов пока нет.</p>';
+ else h+='<div class="rp-list" style="margin-bottom:8px">'+R.mine.slice(0,5).map(function(r){return rowHtml(r).replace('data-rp="open"','data-rpcab="open"')}).join("")+'</div>';
+ return h+'<div class="sbtns" style="margin:0 0 10px"><button type="button" class="btn rp-go" data-rpopen="">Написать рапорт</button>'+(R.mine&&R.mine.length>5?'<button type="button" class="btn" data-rpopen="mine">Все рапорты</button>':'')+'</div>';
+}
+function cabPaint(){var el=document.getElementById("saRpCab");if(el)el.innerHTML=cabInner()}
+document.addEventListener("click",function(e){
+ var b=e.target.closest&&e.target.closest('[data-rpcab="open"]'); if(!b)return;
+ var r=(R.mine||[]).filter(function(x){return x.id===b.dataset.id})[0]; if(!r)return;
+ if(window.SA_closeSheet)window.SA_closeSheet(); open({view:r});
+});
+
+/* ---------- панель руководителя: вкладка «Рапорты» ---------- */
+var BQ={org:null,status:"",kind:"",q:"",data:null,loading:false,err:"",key:"",redraw:null,t:0};
+function bload(){
+ if(!A||!A.api||BQ.loading)return; BQ.loading=true; BQ.err="";
+ var key=[BQ.org,BQ.status,BQ.kind,BQ.q].join("|"); BQ.key=key;
+ A.api("reports",{op:"list",org:BQ.org||"",status:BQ.status,kind:BQ.kind,q:BQ.q}).then(function(r){
+  BQ.loading=false; if(r&&r.ok){BQ.data=r}else BQ.err=(r&&r.error)||"Не удалось загрузить рапорты.";
+  if(BQ.key!==[BQ.org,BQ.status,BQ.kind,BQ.q].join("|"))return bload();
+  bredraw();
+ },function(){BQ.loading=false;BQ.err="Ошибка связи с программой.";bredraw()});
+}
+// перерисовка панели с сохранением курсора в поиске
+function bredraw(){
+ if(!BQ.redraw||state.tab!=="boss")return;
+ var a=document.activeElement, q=a&&a.id==="rpbQ", pos=q?a.selectionStart:0;
+ BQ.redraw();
+ if(q){var el=document.getElementById("rpbQ");if(el){el.focus();try{el.setSelectionRange(pos,pos)}catch(e){}}}
+}
+function bossHtml(org,redraw){
+ BQ.redraw=redraw; org=org||"";
+ if(BQ.org!==org){BQ.org=org;BQ.data=null}
+ if(!BQ.data&&!BQ.loading&&!BQ.err)setTimeout(bload,0);
+ var d=BQ.data, S=[["","Все"],["new","На рассмотрении"],["ok","Принятые"],["no","Отклонённые"]];
+ var h='<p class="sub">Рапорты сотрудников'+(org?' '+esc(org):' всех организаций')+'. Нажмите на рапорт, чтобы открыть его, принять или отклонить. В Telegram: /reports и /report &lt;номер&gt;.</p>';
+ h+='<div class="rp-filters">'+S.map(function(s){return '<button type="button" class="pill" data-rpb="st" data-v="'+s[0]+'" aria-pressed="'+(BQ.status===s[0])+'">'+s[1]+(s[0]==="new"&&d&&d.newN?' · '+d.newN:'')+'</button>'}).join("")+
+  '<select id="rpbK" aria-label="Вид рапорта"><option value="">Все виды</option>'+Object.keys(KINDS).map(function(k){return '<option value="'+k+'"'+(BQ.kind===k?' selected':'')+'>'+(k==="service"?"Служебные":"Рапорт "+KINDS[k].sub)+'</option>'}).join("")+'</select>'+
+  '<input id="rpbQ" type="search" placeholder="Ник, логин, статик или номер" value="'+esc(BQ.q)+'" aria-label="Поиск рапортов"></div>';
+ if(BQ.err)h+='<div class="banner bp-err" role="alert">'+esc(BQ.err)+'</div>';
+ if(!d)return h+'<p class="bp-empty">'+(BQ.loading?"Загружаем…":"")+'</p>';
+ if(!d.list.length)return h+'<p class="bp-empty">'+(BQ.status||BQ.kind||BQ.q?"Под фильтр ничего не подходит.":"Рапортов пока нет. Сотрудники пишут их в программе: меню → «Рапорты».")+'</p>';
+ return h+'<div class="rp-list">'+d.list.map(function(r){return rowHtml(r,org?"one":"all").replace('data-rp="open"','data-rpb="open"')}).join("")+'</div>'+(d.list.length>=100?'<p class="bp-foot">Показаны последние 100. Уточните поиск, чтобы найти старые.</p>':'');
+}
+function bossNew(){return BQ.data&&BQ.data.newN||0}
+document.addEventListener("click",function(e){
+ var b=e.target.closest&&e.target.closest("[data-rpb]"); if(!b||state.tab!=="boss")return;
+ if(b.dataset.rpb==="st"){BQ.status=b.dataset.v;bload();bredraw();return}
+ if(b.dataset.rpb==="open"){var r=(BQ.data&&BQ.data.list||[]).filter(function(x){return x.id===b.dataset.id})[0];if(r)open({view:Object.assign({},r,{staff:true})})}
+});
+document.addEventListener("change",function(e){if(e.target.id==="rpbK"&&state.tab==="boss"){e.stopPropagation();BQ.kind=e.target.value;bload()}},true);
+document.addEventListener("input",function(e){
+ if(e.target.id!=="rpbQ"||state.tab!=="boss")return; e.stopPropagation();
+ BQ.q=e.target.value; clearTimeout(BQ.t); BQ.t=setTimeout(function(){bload()},350);
+},true);
+function review(ok){
+ var v=R.view, n=sheet()&&sheet().querySelector("#rpNote");
+ R.sending=true; R.msg=""; paint();
+ A.api("reports",{op:"review",id:v.id,ok:ok,note:n?n.value:"",org:BQ.org||""}).then(function(r){
+  R.sending=false;
+  if(r&&r.ok){BQ.data=r;var x=(r.list||[]).filter(function(y){return y.id===v.id})[0];R.view=Object.assign({},x||v,{staff:true});R.msg=ok?"Рапорт принят.":"Рапорт отклонён.";R.msgErr=false;paint();bredraw()}
+  else{R.msg=(r&&r.error)||"Не удалось сохранить решение.";R.msgErr=true;paint()}
+ },function(){R.sending=false;R.msg="Ошибка связи с программой.";R.msgErr=true;paint()});
+}
+
+window.SA_RP={open:open,cabHtml:function(){if(!online())return "";setTimeout(function(){loadMine()},0);return '<div id="saRpCab">'+cabInner()+'</div>'},boss:bossHtml,bossNew:bossNew,bossReload:function(){BQ.data=null;BQ.err="";bload()},paper:paper,body:bodyOf};
+})();
+</script>
+<style>
+/* ===== Новый дизайн (2.0): меню слева, главный экран, тёплая палитра ===== */
+:root{
+  --bg:#F6F3EE; --surface:#FFFFFF; --ink:#1F1A15; --muted:#6B625A; --line:#E5DED4; --accent:#C2530E; --accent-ink:#FFFFFF; --chip:#F1EBE3;
+  --side:#FBF9F6; --soft:#FCEFE5; --shadow:0 1px 2px rgba(60,40,20,.05),0 4px 14px rgba(60,40,20,.05);
+}
+/* чёрная тема: тот же стиль, что и светлая, на чистом чёрном */
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0A0A0B; --surface:#141416; --ink:#F2F2F3; --muted:#9B9BA4; --line:#26262B; --accent:#FF8A3D; --accent-ink:#140A03; --chip:#1E1E22;
+  --side:#0F0F11; --soft:#2B1A0F; --shadow:0 1px 2px rgba(0,0,0,.5);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0A0A0B; --surface:#141416; --ink:#F2F2F3; --muted:#9B9BA4; --line:#26262B; --accent:#FF8A3D; --accent-ink:#140A03; --chip:#1E1E22;
+  --side:#0F0F11; --soft:#2B1A0F; --shadow:0 1px 2px rgba(0,0,0,.5);color-scheme:dark}
+html.hc[data-eff]{--side:var(--bg);--soft:var(--chip);--shadow:none}
+/* окно программы без системной рамки: сверху своя строка заголовка (preload.js), всё прилипающее опускаем под неё */
+html.sa-framed header.top{top:calc(var(--tbar,0px) / var(--zoom,1))}
+html.sa-framed .side{top:calc(var(--tbar,0px) / var(--zoom,1));height:calc((100vh - var(--tbar,0px)) / var(--zoom,1))}
+
+html.sd2 .wrap{max-width:1480px;display:grid;grid-template-columns:248px minmax(0,1fr);column-gap:28px;align-items:start}
+html.sd2 .wrap>*:not(.side){grid-column:2}
+html.sd2 body{padding-left:0}
+html.sd2 header.top{border-bottom:0;padding-top:16px}
+html.sd2 header.top .brand{display:none}
+html.sd2 nav.tabs{display:none!important}
+html.sd2 .roles{display:none}
+html.sd2 .side .roles{display:grid;margin:0 0 14px}
+
+/* меню */
+.side{grid-column:1;grid-row:1/span 4;position:sticky;top:0;height:calc(100vh / var(--zoom,1));display:flex;flex-direction:column;background:var(--side);border-right:1px solid var(--line);padding:18px 14px 12px;overflow:hidden}
+.sd-brand{display:flex;align-items:center;gap:10px;padding:0 6px 14px}
+.sd-logo{width:36px;height:36px;border-radius:11px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;flex:0 0 auto}
+.sd-logo svg{width:24px;height:24px;fill:currentColor}
+.sd-brand b{display:block;font:700 17px/1.1 var(--f-head);letter-spacing:.01em}
+.sd-brand small{display:block;font-size:11.5px;color:var(--muted);margin-top:2px}
+.sd-scroll{flex:1;overflow-y:auto;margin:0 -6px;padding:0 6px;scrollbar-width:thin}
+.sd-g{font:600 11px/1 var(--f-body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:14px 10px 6px}
+.sd-g:first-child{margin-top:0}
+.sd-i{display:flex;align-items:center;gap:11px;width:100%;border:0;background:none;text-align:left;padding:6px 10px;border-radius:10px;color:var(--ink);line-height:1.2;position:relative}
+.sd-i:hover{background:var(--chip)}
+.sd-i[aria-current="page"]{background:var(--soft);color:var(--accent)}
+.sd-i[aria-current="page"]::before{content:"";position:absolute;left:-6px;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--accent)}
+.sd-i svg{width:19px;height:19px;flex:0 0 auto;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
+.sd-i span{min-width:0;flex:1}
+.sd-i b{display:block;font:600 14px/1.25 var(--f-body)}
+.sd-i small{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.sd-i[aria-current="page"] small{color:inherit;opacity:.75}
+.sd-i .cnt{font:600 11px var(--f-mono);background:var(--accent);color:var(--accent-ink);border-radius:9px;padding:1px 7px;flex:0 0 auto}
+.sd-foot{border-top:1px solid var(--line);margin:8px -14px 0;padding:10px 14px 0;display:flex;flex-direction:column;gap:8px}
+.sd-mer{display:flex;gap:4px;align-items:center}
+.sd-set{width:38px;height:38px;border:0;background:none;border-radius:10px;display:grid;place-items:center;color:var(--muted);flex:0 0 auto}
+.sd-set:hover{background:var(--chip);color:var(--ink)}
+.sd-set svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.sd-me{flex:1;min-width:0;display:flex;align-items:center;gap:10px;border:0;background:none;padding:6px;border-radius:10px;text-align:left;color:var(--ink)}
+.sd-me:hover{background:var(--chip)}
+.sd-av{width:34px;height:34px;border-radius:50%;overflow:hidden;background:var(--chip);display:grid;place-items:center;flex:0 0 auto;font:700 14px var(--f-head);color:var(--accent)}
+.sd-av img{width:100%;height:100%;object-fit:cover}
+.sd-av svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2}
+.sd-me>span:last-child{min-width:0;flex:1}
+.sd-me b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sd-me small{display:block;font-size:11.5px;color:var(--muted)}
+.sd-ver{font:500 11px/1.4 var(--f-mono);color:var(--muted);padding:0 6px;display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap}
+.sd-ver button{border:0;background:none;padding:0;color:inherit;font:inherit;text-decoration:underline;text-underline-offset:2px}
+
+/* заголовок раздела и строка поиска */
+.pg-top{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px}
+.pg-burger{display:none;width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--surface);place-items:center;padding:0;flex:0 0 auto}
+.pg-burger svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.pg-t{flex:1;min-width:0}
+.pg-t h2{margin:0;font:700 24px/1.15 var(--f-head);letter-spacing:.005em}
+.pg-t p{margin:3px 0 0;color:var(--muted);font-size:13.5px}
+html.sd2 .pg-top .hbtns{margin-left:auto}
+.srow{display:flex;gap:8px;align-items:stretch}
+.srow .search{flex:1;margin-top:0;min-width:0}
+html.sd2 .search input{border-radius:12px;padding:12px 40px 12px 42px;box-shadow:var(--shadow);background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23968b80' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 14px 50%/18px}
+html.sd2 .search input:disabled{opacity:.6}
+html.sd2 .srow .aibtn{width:auto;margin:0;min-height:0;border-radius:12px;padding:0 16px;font-size:14px;flex:0 0 auto;box-shadow:var(--shadow)}
+html.sd2 .srow .aibtn small{display:none}
+html.sd2 .qtools{margin-top:8px}
+html.sd2[data-tab="home"] .qtools,html.sd2[data-tab="home"] #qh{display:none!important}
+html.sd2 .tabs2{display:none!important}
+html.sd2 #view{padding-top:4px}
+
+/* общие карточки в новом стиле */
+html.sd2 .art,html.sd2 .panel,html.sd2 .card,html.sd2 .lwx{border-radius:14px;box-shadow:var(--shadow)}
+html.sd2 .pill{border-radius:999px}
+html.sd2 .pill[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+html.sd2 .btn.primary{border-radius:10px}
+html.sd2 .rbtn.cab{border-color:var(--accent);color:var(--accent)}
+html.sd2 .subnav{gap:6px}
+
+/* главный экран */
+.hm{padding:6px 0 10px}
+.hm-hi{background:linear-gradient(120deg,var(--soft),var(--surface));border:1px solid var(--line);border-radius:18px;padding:22px 24px;display:flex;gap:18px;align-items:center;box-shadow:var(--shadow)}
+.hm-hi h3{margin:0 0 4px;font:700 22px/1.2 var(--f-head)}
+.hm-hi p{margin:0;color:var(--muted);font-size:14px;max-width:62ch}
+.hm-fox{width:64px;height:64px;flex:0 0 auto;color:var(--accent)}
+.hm-fox svg{width:100%;height:100%;fill:currentColor}
+.hm-h{font:700 15px/1.2 var(--f-head);margin:22px 0 10px;display:flex;align-items:baseline;gap:10px}
+.hm-h small{font:400 12.5px var(--f-body);color:var(--muted)}
+.hm-q{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.hm-a{display:flex;gap:12px;align-items:flex-start;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:14px;box-shadow:var(--shadow);color:var(--ink);transition:transform .12s ease,border-color .12s ease}
+.hm-a:hover{border-color:var(--accent);transform:translateY(-1px)}
+.hm-a i{width:40px;height:40px;border-radius:12px;background:var(--soft);color:var(--accent);display:grid;place-items:center;flex:0 0 auto}
+.hm-a i svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.hm-a b{display:block;font-size:14.5px;margin-bottom:2px}
+.hm-a span{display:block;font-size:12.5px;color:var(--muted);line-height:1.4}
+.hm-a.main{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.hm-a.main i{background:rgba(255,255,255,.18);color:inherit}
+.hm-a.main span{color:inherit;opacity:.85}
+.hm-st{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.hm-s{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow)}
+.hm-s small{display:block;font-size:12px;color:var(--muted)}
+.hm-s b{display:block;font:700 22px/1.2 var(--f-head);margin-top:2px}
+.hm-s em{font-style:normal;font-size:12px;color:var(--muted)}
+.hm-bar{height:6px;border-radius:6px;background:var(--chip);overflow:hidden;margin-top:6px}
+.hm-bar i{display:block;height:100%;background:var(--accent);border-radius:6px}
+.hm-g{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.hm-c{display:flex;gap:12px;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:12px 14px;color:var(--ink);align-items:flex-start}
+.hm-c:hover{border-color:var(--accent)}
+.hm-c svg{width:20px;height:20px;flex:0 0 auto;margin-top:2px;stroke:var(--accent);fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.hm-c b{display:block;font-size:14px}
+.hm-c span{display:block;font-size:12.5px;color:var(--muted);line-height:1.45;margin-top:2px}
+.hm-tip{display:flex;gap:12px;align-items:center;border:1px dashed var(--line);border-radius:14px;padding:12px 14px;font-size:13.5px;background:var(--surface)}
+.hm-tip i{font-style:normal;font-size:20px}
+.hm-tip span{flex:1}
+.hm-tip kbd{font:600 12px var(--f-mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--bg)}
+.hm-tip .btn{flex:0 0 auto}
+
+/* узкое окно: меню выезжает слева */
+.sd-shade{display:none}
+@media (max-width:900px){
+  html.sd2 .wrap{display:block}
+  html.sd2 body{padding-left:max(16px,env(safe-area-inset-left,0px))}
+  .side,html.sa-framed .side{position:fixed;left:0;top:calc(var(--tbar,0px) / var(--zoom,1));bottom:0;width:min(300px,86vw);height:auto;z-index:2147468000;transform:translateX(-105%);transition:transform .2s ease;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+  html.sd-open .side{transform:none}
+  html.sd-open .sd-shade{display:block;position:fixed;inset:0;z-index:2147467999;background:rgba(10,8,6,.45)}
+  .pg-burger{display:grid}
+  .pg-t h2{font-size:20px}
+  .pg-t p{font-size:12.5px}
+  .hm-hi{padding:16px}
+  .hm-fox{display:none}
+}
+html.narrow.sd2 .wrap{display:block}
+html.narrow.sd2 body{padding-left:max(10px,env(safe-area-inset-left,0px))}
+html.narrow .side,html.narrow.sa-framed .side{position:fixed;left:0;top:calc(var(--tbar,0px) / var(--zoom,1));bottom:0;width:min(300px,86vw);height:auto;z-index:2147468000;transform:translateX(-105%);transition:transform .2s ease;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+html.narrow.sd-open .side{transform:none}
+html.narrow.sd-open .sd-shade{display:block;position:fixed;inset:0;z-index:2147467999;background:rgba(10,8,6,.45)}
+html.narrow .pg-burger{display:grid}
+html.narrow .pg-t p{display:none}
+html.narrow .srow .aibtn span,html.narrow .srow .aibtn .ai-new{display:none!important}
+html.narrow .srow .aibtn{padding:0 13px}
+@media (max-width:520px){html.sd2 .srow .aibtn span,html.sd2 .srow .aibtn .ai-new{display:none!important}html.sd2 .srow .aibtn{padding:0 13px}}
+html.noanim .side,html.noanim .hm-a{transition:none}
+@media (prefers-reduced-motion:reduce){.side,.hm-a{transition:none}}
+@media print{.side,.sd-shade,.pg-top,.srow .aibtn{display:none!important}html.sd2 .wrap{display:block}}
+</style>
+<script>
+(function(){
+var A=window.senkoApp, H=document.documentElement;
+var nav=document.querySelector("nav.tabs"), top=document.querySelector("header.top"), wrap=document.querySelector(".wrap");
+if(!nav||!top||!wrap) return;
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){}return null}
+function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
+
+/* значки (линейные, 24×24) */
+var I={
+ home:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-6h4v6"/>',
+ uk:'<path d="M12 3v18M7 21h10"/><path d="M5 7h14"/><path d="m5 7-3 6a3 3 0 0 0 6 0L5 7zM19 7l-3 6a3 3 0 0 0 6 0l-3-6z"/>',
+ ak:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+ dk:'<path d="M5 17h14v-5l-2-5H7l-2 5z"/><path d="M5 12h14"/><circle cx="8" cy="17" r="2"/><circle cx="16" cy="17" r="2"/>',
+ pk:'<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3"/>',
+ gen:'<path d="M2 5h7a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H2z"/><path d="M22 5h-7a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h8z"/>',
+ laws:'<path d="M3 21h18M5 21V10M10 21V10M14 21V10M19 21V10"/><path d="M2 10 12 3l10 7z"/>',
+ timer:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/>',
+ calc:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"/>',
+ tools:'<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/>',
+ rp:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
+ sup:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+ def:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18"/>',
+ rules:'<path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2"/>',
+ learn:'<path d="M2 9 12 4l10 5-10 5z"/><path d="M6 11v5c0 1.5 3 3 6 3s6-1.5 6-3v-5M22 9v6"/>',
+ more:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z"/>',
+ boss:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-3.5 3.200-5.5 6.500-5.5s6 2 6.500 5.5"/><path d="M16 4.5a3.500 3.500 0 0 1 0 7M18.500 14.800c1.700.8 2.800 2.600 3 5.200"/>',
+ search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+ ai:'<path d="M12 3l1.8 4.7 4.700 1.800-4.700 1.800L12 16l-1.800-4.700L5.500 9.500l4.700-1.800z"/><path d="M18 15l.9 2.100L21 18l-2.100.9L18 21l-.9-2.100L15 18l2.100-.9z"/>',
+ gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.700 1.700 0 0 0 .3 1.800l.1.1a2 2 0 1 1-2.800 2.800l-.1-.1a1.700 1.700 0 0 0-1.800-.3 1.700 1.700 0 0 0-1 1.500V21a2 2 0 1 1-4 0v-.1a1.700 1.700 0 0 0-1.100-1.500 1.700 1.700 0 0 0-1.800.3l-.1.1a2 2 0 1 1-2.800-2.800l.1-.1a1.700 1.700 0 0 0 .3-1.800 1.700 1.700 0 0 0-1.500-1H3a2 2 0 1 1 0-4h.1a1.700 1.700 0 0 0 1.500-1.100 1.700 1.700 0 0 0-.3-1.800l-.1-.1a2 2 0 1 1 2.800-2.800l.1.1a1.700 1.700 0 0 0 1.800.3H9a1.700 1.700 0 0 0 1-1.500V3a2 2 0 1 1 4 0v.1a1.700 1.700 0 0 0 1 1.500 1.700 1.700 0 0 0 1.800-.3l.1-.1a2 2 0 1 1 2.800 2.800l-.1.1a1.700 1.700 0 0 0-.3 1.800V9a1.700 1.700 0 0 0 1.500 1H21a2 2 0 1 1 0 4h-.1a1.700 1.700 0 0 0-1.500 1z"/>',
+ star:'<path d="m12 3 2.800 5.700 6.200.9-4.500 4.400 1.100 6.200L12 17.300 6.400 20.200l1.100-6.200L3 9.600l6.200-.9z"/>',
+ user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.500-6 8-6s7 2 8 6"/>',
+ menu:'<path d="M4 6h16M4 12h16M4 18h16"/>'
+};
+function ic(k){return '<svg viewBox="0 0 24 24" aria-hidden="true">'+(I[k]||"")+'</svg>'}
+var FOX='<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M7 6l15 13h20L57 6l-1 22c-1 5-4 9-9 12L32 58 17 40c-5-3-8-7-9-12z"/><path d="M19 31l7 3M45 31l-7 3" stroke="var(--accent-ink,#fff)" stroke-width="3.2" fill="none" stroke-linecap="round"/><path d="M28.5 46h7L32 50z" fill="var(--accent-ink,#fff)"/></svg>';
+
+/* описание разделов: название, подсказка в меню, заголовок и описание страницы */
+var D={
+ home:["Главная","С чего начать","Главная","Быстрые действия, ваш прогресс и подсказка по разделам."],
+ uk:["УК","Уголовный кодекс","Уголовный кодекс","Преступления и наказания: срок, штраф и звёзды розыска по каждой статье."],
+ ak:["АК","Административный кодекс","Административный кодекс","Правонарушения без уголовной ответственности и штрафы за них."],
+ dk:["ДК","Дорожный кодекс","Дорожный кодекс","Правила движения и штрафы за нарушения на дороге."],
+ pk:["ПК","Процессуальный кодекс","Процессуальный кодекс","Как задерживать, обыскивать и допрашивать, права граждан и сотрудников."],
+ gen:["Общая часть","Термины и принципы","Общая часть","Термины, принципы и общие нормы, которые действуют для всех кодексов."],
+ laws:["Законы","Все законы штата","Законы штата","Полные тексты законов с поиском и метками об изменениях."],
+ timer:["Задержание","Таймер и чек-лист","Задержание","Таймер на 1 час с паузами по ст. 20 ПК и чек-лист порядка по ст. 17 ПК."],
+ calc:["Калькулятор","Срок, штраф, залог","Калькулятор наказания","Добавьте статьи кнопкой «+» и получите итоговый срок, штраф, залог и текст для доклада."],
+ tools:["Проверки","Законность, ст. 17, сила","Проверки","Законно ли задержание, сверка ст. 17, стадии применения силы."],
+ sup:["Надзор","Проверка задержаний","Надзор","Проверка задержания для прокурора: что нарушено и чем это грозит."],
+ def:["Защита","Режим адвоката","Защита","Режим адвоката: нарушения при задержании и что заявить."],
+ rp:["Рапорты","Написать, мои рапорты","Рапорты","Рапорт о задержании, применении силы, происшествии или служебный."],
+ rules:["Правила","Правила сервера","Правила","Правила для госструктур, общие правила, зоны и поставки."],
+ learn:["Обучение","Тренажёр и мини-тест","Обучение","Тренажёр по кодексам, разбор ситуаций «Что делать, если…» и частые ошибки."],
+ more:["Сервис","Сравнение и шпаргалка","Сервис","Сравнение статей, журнал изменений и шпаргалка для печати."],
+ boss:["Руководство","Панель руководителя","Панель руководителя","Сотрудники организации, рейтинг недели, смены и контрольные тесты."]
+};
+var X=window.SA_X||{role:"off"};
+var WORK={off:["timer","calc","tools"],pros:["sup"],adv:["def"]};
+
+/* ---------- каркас ---------- */
+H.classList.add("sd2");
+var side=document.createElement("aside"); side.className="side noprint"; side.setAttribute("aria-label","Меню");
+side.innerHTML='<div class="sd-brand"><div class="sd-logo">'+FOX+'</div><div><b>Senko Assistant</b><small>Памятка Majestic RP · Boston</small></div></div><div class="sd-scroll" id="sdNav"></div><div class="sd-foot" id="sdFoot"></div>';
+wrap.insertBefore(side,wrap.firstChild);
+var shade=document.createElement("div"); shade.className="sd-shade"; document.body.appendChild(shade);
+var roles=document.querySelector(".roles"); if(roles) side.querySelector(".sd-scroll").insertAdjacentElement("beforebegin",roles);
+
+var pg=document.createElement("div"); pg.className="pg-top";
+pg.innerHTML='<button type="button" class="pg-burger noprint" aria-label="Открыть меню" aria-expanded="false">'+ic("menu")+'</button><div class="pg-t"><h2 id="pgT"></h2><p id="pgD"></p></div>';
+top.insertBefore(pg,top.firstChild);
+var hb=top.querySelector(".hbtns"); if(hb) pg.appendChild(hb);
+var srow=document.createElement("div"); srow.className="srow";
+var sb=top.querySelector(".search"); sb.insertAdjacentElement("beforebegin",srow); srow.appendChild(sb);
+function placeAi(){var ai=document.getElementById("aiBtn"); if(ai&&ai.parentNode!==srow){srow.appendChild(ai); var s=ai.querySelector("span"); if(s) s.textContent="Спросить ИИ"}}
+placeAi();
+
+/* ---------- меню ---------- */
+function tabBtn(t){return document.querySelector('.tab[data-tab="'+t+'"]')}
+function cntOf(t){var b=tabBtn(t),c=b&&b.querySelector(".cnt");return c&&!c.hidden&&c.textContent.trim()?c.textContent.trim():""}
+function bossOk(){var b=document.getElementById("bossBtn");return !!(b&&b.isConnected)}
+function item(t){
+ var d=D[t], c=cntOf(t);
+ return '<button type="button" class="sd-i" data-nav="'+t+'"'+(state.tab===t?' aria-current="page"':'')+' title="'+esc(d[3])+'">'+ic(t)+'<span><b>'+esc(d[0])+'</b><small>'+esc(d[1])+'</small></span>'+(c?'<em class="cnt">'+esc(c)+'</em>':'')+'</button>';
+}
+function navHtml(){
+ var r=X.role&&WORK[X.role]?X.role:"off", h="";
+ h+='<div class="sd-g">Начало</div>'+item("home");
+ h+='<div class="sd-g">Кодексы и законы</div>'+["uk","ak","dk","pk","gen","laws"].map(item).join("");
+ h+='<div class="sd-g">Работа</div>'+WORK[r].concat(window.SA_RP?["rp"]:[],["rules"]).map(item).join("");
+ h+='<div class="sd-g">Развитие</div>'+["learn","more"].map(item).join("");
+ if(bossOk()) h+='<div class="sd-g">Руководство</div>'+item("boss");
+ return h;
+}
+function avatar(){
+ var c=document.getElementById("cabBtn"); if(!c) return ic("user");
+ var img=c.querySelector("img"); if(img) return '<img alt="" src="'+esc(img.getAttribute("src"))+'">';
+ var ini=c.querySelector(".ini"); if(ini) return esc(ini.textContent);
+ return ic("user");
+}
+function footHtml(){
+ var s=st(), u=s&&s.user, v=window.SA_ver?window.SA_ver():{app:"",laws:""};
+ var who=u?'<b>'+esc(u.nick||u.login)+'</b><small>'+esc(u.org||"")+(u.rank&&u.rank!=="user"?" · "+esc(u.rankName||u.rank):"")+'</small>':'<b>Личный кабинет</b><small>Профиль, прогресс, история</small>';
+ return '<div class="sd-mer"><button type="button" class="sd-me" data-sdn="cab" title="Личный кабинет"><span class="sd-av">'+avatar()+'</span><span>'+who+'</span></button><button type="button" class="sd-set" data-sdn="set" aria-label="Настройки" title="Настройки: тема, шрифт, данные">'+ic("gear")+'</button></div>'+
+
+  '<div class="sd-ver"><span>'+(v.app?'Версия '+esc(v.app):'Senko Assistant')+'</span><span>'+(v.laws?'законы от '+esc(v.laws):'')+'</span><button type="button" data-sdn="news">Что нового</button></div>';
+}
+var lastNav="", lastFoot="";
+function paintSide(){
+ var n=navHtml(); if(n!==lastNav){ lastNav=n; var sc=side.querySelector("#sdNav"), y=sc.scrollTop; sc.innerHTML=n; sc.scrollTop=y; }
+ var f=footHtml(); if(f!==lastFoot){ lastFoot=f; side.querySelector("#sdFoot").innerHTML=f; }
+}
+function paintTitle(){
+ var d=D[state.tab]||["","","Senko Assistant",""];
+ document.getElementById("pgT").textContent=d[2]; document.getElementById("pgD").textContent=d[3];
+ H.setAttribute("data-tab",state.tab);
+}
+function openMenu(on){H.classList.toggle("sd-open",on); pg.querySelector(".pg-burger").setAttribute("aria-expanded",String(on)); if(on){var a=side.querySelector('[aria-current="page"]')||side.querySelector(".sd-i"); if(a) a.focus()}}
+pg.querySelector(".pg-burger").addEventListener("click",function(){openMenu(!H.classList.contains("sd-open"))});
+shade.addEventListener("click",function(){openMenu(false)});
+document.addEventListener("keydown",function(e){if(e.key==="Escape"&&H.classList.contains("sd-open")){openMenu(false);pg.querySelector(".pg-burger").focus()}});
+
+function go(t){
+ openMenu(false);
+ if(t==="boss"){ if(state.tab!=="boss"){var b=document.getElementById("bossBtn"); if(b) b.click()} return }
+ if(t==="home"){ state.tab="home"; state.stars=0; render(); window.scrollTo(0,0); return }
+ if(t==="rp"){ if(window.SA_RP) window.SA_RP.open(); return }
+ var b=tabBtn(t);
+ if(b){ b.click(); return }
+ state.tab=t; state.stars=0; render(); window.scrollTo(0,0);
+}
+window.SA_go=go;
+side.addEventListener("click",function(e){
+ var b=e.target.closest("[data-nav],[data-sdn]"); if(!b) return;
+ if(b.dataset.nav){ go(b.dataset.nav); return }
+ openMenu(false);
+ var k=b.dataset.sdn;
+ if(k==="cab"){var c=document.getElementById("cabBtn"); if(c) c.click()}
+ else if(k==="set"){var g=document.getElementById("gearBtn"); if(g) g.click()}
+ else if(k==="news"&&window.SA_news) window.SA_news();
+});
+
+/* ---------- главный экран ---------- */
+var PS={d:null,at:0,busy:false};
+function loadStats(){
+ var s=st(); if(!s||!s.user||!A.api||PS.busy||Date.now()-PS.at<60000) return;
+ PS.busy=true;
+ A.api("my_stats",{}).then(function(r){PS.busy=false;PS.at=Date.now();if(r&&r.ok){PS.d=r;if(state.tab==="home")paintHome()}},function(){PS.busy=false;PS.at=Date.now()});
+}
+function hour(){var h=new Date().getHours();return h<5?"Доброй ночи":h<12?"Доброе утро":h<18?"Добрый день":"Добрый вечер"}
+function act(k,icon,t,d,main){return '<button type="button" class="hm-a'+(main?' main':'')+'" data-hm="'+k+'"><i>'+ic(icon)+'</i><span><b>'+t+'</b><span>'+d+'</span></span></button>'}
+var TIPS=[
+ ["🔎","В поиске можно писать номер статьи (<kbd>12.8</kbd>, <kbd>12.2.б</kbd>) или обычные слова: «ствол», «тачка», «маска»."],
+ ["⌨️","<kbd>Ctrl</kbd>+<kbd>F</kbd> ставит курсор в поиск с любой вкладки, <kbd>Alt</kbd>+<kbd>T</kbd> запускает новый таймер задержания."],
+ ["☆","Звёздочка у статьи добавляет её в избранное, ✎ открывает заметку. Они синхронизируются между вашими компьютерами."],
+ ["＋","Кнопка «+» у статьи кладёт её в калькулятор: там сразу виден итоговый срок и штраф."],
+ ["⚑","Нашли ошибку в тексте статьи? Нажмите ⚑ рядом с её названием, и сообщение уйдёт разработчику."],
+ ["🎨","Тему, размер шрифта и компактный режим можно поменять в «Настройках». Там же сохранение данных в файл."]
+];
+function homeHtml(){
+ var s=st(), u=s&&s.user, r=X.role&&WORK[X.role]?X.role:"off", name=u?(u.nick||u.login||"").split(" ")[0]:"";
+ var h='<div class="hm">';
+ h+='<div class="hm-hi"><div class="hm-fox">'+FOX+'</div><div><h3>'+hour()+(name?', '+esc(name):'')+'!</h3><p>Senko Assistant подскажет статью, посчитает наказание, проведёт по порядку задержания и проверит знания. Начните с поиска или выберите действие ниже. Все разделы собраны в меню.</p></div></div>';
+ h+='<div class="hm-h">Быстрые действия</div><div class="hm-q">';
+ if(r==="off") h+=act("det","timer","Начать задержание","Запустит таймер на 1 час и откроет чек-лист",true);
+ else h+=act(r,r,r==="pros"?"Проверить задержание":"Режим защиты",r==="pros"?"Что нарушено и чем это грозит":"Нарушения и что заявить",true);
+ if(window.SA_RP) h+=act("rp","rp","Написать рапорт","О задержании, силе, происшествии или служебный");
+ h+=act("find","search","Найти статью","Номер или слово: 12.8, ствол, маска");
+ if(document.getElementById("aiBtn")) h+=act("ai","ai","Спросить ИИ","Опишите ситуацию обычными словами");
+ var dd=window.SA_TR&&SA_TR.dailyDone?SA_TR.dailyDone():null;
+ h+=act("daily","learn","Мини-тест дня",dd?"Сегодня пройден: "+dd.s+" из "+dd.n:"5 вопросов, +20 опыта и серия дней");
+ h+='</div>';
+ var d=PS.d;
+ if(u){
+  h+='<div class="hm-h">Мой прогресс <small><button type="button" class="more" data-hm="cab">Открыть кабинет</button></small></div><div class="hm-st">';
+  if(d){
+   var lv=d.level||{n:1,name:"",from:0,to:0}, pc=lv.to>lv.from?Math.max(0,Math.min(100,Math.round((d.xp-lv.from)/(lv.to-lv.from)*100))):100, w=d.week||{};
+   h+='<div class="hm-s"><small>Уровень</small><b>'+lv.n+' · '+esc(lv.name)+'</b><div class="hm-bar"><i style="width:'+pc+'%"></i></div><em>'+(lv.to>lv.from?"до следующего "+Math.max(0,lv.to-d.xp)+" опыта":"максимальный")+'</em></div>';
+   h+='<div class="hm-s"><small>Место за неделю</small><b>'+(w.place?w.place+' из '+w.of:'—')+'</b><em>'+(w.wxp||0)+' опыта за неделю</em></div>';
+   h+='<div class="hm-s"><small>Серия дней</small><b>'+(d.streak||0)+'</b><em>мини-тест каждый день</em></div>';
+   h+='<div class="hm-s"><small>Задержаний</small><b>'+(d.det||0)+'</b><em>за 7 дней: '+(d.det7||0)+'</em></div>';
+  } else h+='<div class="hm-s"><small>Загружаем…</small><b>—</b></div>';
+  h+='</div>';
+ }
+ h+='<div class="hm-h">Что где находится <small>нажмите, чтобы открыть</small></div><div class="hm-g">';
+ ["uk","ak","dk","pk","gen","laws"].concat(WORK[r],window.SA_RP?["rp"]:[],["rules","learn","more"],bossOk()?["boss"]:[]).forEach(function(t){
+  h+='<button type="button" class="hm-c" data-nav="'+t+'">'+ic(t)+'<span><b>'+esc(D[t][2])+'</b><span>'+esc(D[t][3])+'</span></span></button>';
+ });
+ h+='</div>';
+ if(ls("bos-tips-off")!=="1"){
+  var i=(+ls("bos-tip")||0)%TIPS.length, t=TIPS[i];
+  h+='<div class="hm-h">Совет</div><div class="hm-tip"><i aria-hidden="true">'+t[0]+'</i><span>'+t[1]+'</span><button type="button" class="btn" data-hm="tip">Следующий</button><button type="button" class="btn" data-hm="tipoff">Скрыть советы</button></div>';
+ }
+ return h+'</div>';
+}
+function paintHome(){ if(state.tab==="home"){ view.innerHTML=homeHtml(); } }
+view.addEventListener("click",function(e){
+ var b=e.target.closest("[data-hm],.hm-c[data-nav]"); if(!b) return;
+ if(b.dataset.nav){ go(b.dataset.nav); return }
+ var k=b.dataset.hm;
+ if(k==="det"){ if(typeof startTm==="function") startTm(); go("timer"); }
+ else if(k==="pros"||k==="adv") go(k==="pros"?"sup":"def");
+ else if(k==="rp") go("rp");
+ else if(k==="find"){ go("uk"); setTimeout(function(){qEl.focus()},0); }
+ else if(k==="ai"){ var a=document.getElementById("aiBtn"); if(a) a.click(); }
+ else if(k==="daily"){ if(window.SA_TR&&SA_TR.daily) SA_TR.daily(); else go("learn"); }
+ else if(k==="cab"){ var c=document.getElementById("cabBtn"); if(c) c.click(); }
+ else if(k==="tip"){ ls("bos-tip",String((+ls("bos-tip")||0)+1)); paintHome(); }
+ else if(k==="tipoff"){ ls("bos-tips-off","1"); paintHome(); }
+});
+// с главного экрана поиск сразу открывает УК
+qEl.addEventListener("input",function(){ if(state.tab==="home"&&qEl.value.trim()){ state.tab="uk"; } },true);
+
+/* ---------- таймер задержания и команды из строки заголовка окна (preload.js) ---------- */
+function tick(){
+ var t="", stt="";
+ try{
+  var run=tms.filter(function(x){return x.start&&!x.decidedAt});
+  if(run.length){
+   var left=run.map(function(x){return LIM-elapsed(x)}), m=Math.min.apply(null,left), i=left.indexOf(m), r=run[i];
+   t=(m<0?"+"+fmt(-m):fmt(m))+(run.length>1?" · ещё "+(run.length-1):"");
+   stt=m<0?"late":(r.paused?"pause":"");
+  }
+ }catch(e){}
+ if(H.getAttribute("data-sa-timer")!==t){ if(t) H.setAttribute("data-sa-timer",t); else H.removeAttribute("data-sa-timer"); }
+ if((H.getAttribute("data-sa-timer-st")||"")!==stt){ if(stt) H.setAttribute("data-sa-timer-st",stt); else H.removeAttribute("data-sa-timer-st"); }
+}
+if(A&&A.state){ tick(); setInterval(tick,1000); }
+new MutationObserver(function(){
+ var c=(H.getAttribute("data-sa-cmd")||"").split("|")[0]; if(!c) return;
+ H.removeAttribute("data-sa-cmd");
+ if(D[c]) go(c);
+}).observe(H,{attributes:true,attributeFilter:["data-sa-cmd"]});
+
+/* ---------- общий рендер (внешняя обёртка) ---------- */
+var R=render;
+render=function(){
+ if(state.tab==="home"){
+  document.querySelectorAll(".tab").forEach(function(t){t.setAttribute("aria-selected",String(t.dataset.tab==="home"))});
+  qEl.disabled=false; qc.hidden=!state.q; qEl.placeholder="Статья или слово: 12.8, 12.2.б, ствол, тачка…";
+  paintHome(); loadStats();
+  if(typeof updateBadge==="function") updateBadge();
+ } else R();
+ paintTitle(); paintSide(); placeAi();
+};
+// первый запуск нового дизайна — с главного экрана
+if(ls("bos-ui2")!=="1"){ ls("bos-ui2","1"); state.tab="home"; }
+render();
+// бейджи (таймер, калькулятор, законы), кнопка руководства и аватар меняются без render — следим за ними
+var mo=new MutationObserver(function(){ paintSide(); placeAi(); });
+mo.observe(nav,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:["hidden"]});
+var hbx=document.querySelector(".hbtns"); if(hbx) mo.observe(hbx,{subtree:true,childList:true,attributes:true,attributeFilter:["src"]});
+var n2=document.querySelector(".tabs2"); if(n2) mo.observe(n2,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:["hidden"]});
+if(A&&A.onChange) A.onChange(function(){ paintSide(); });
+document.addEventListener("click",function(e){ if(e.target.closest&&e.target.closest(".roles button")) setTimeout(function(){ paintSide(); if(state.tab==="home") paintHome(); },0); });
 })();
 </script>
 </body></html>

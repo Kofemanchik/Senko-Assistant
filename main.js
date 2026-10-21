@@ -129,7 +129,9 @@ const DEFAULTS = {
   voiceHotkey: "Ctrl+Alt+V", // горячая клавиша голосового ввода
   voiceOpacity: 80,          // непрозрачность оверлея, %
   voicePos: null,            // позиция оверлея на экране {x, y} (null — по центру сверху)
-  voiceMode: "search"        // режим оверлея: search — поиск по памятке, ai — вопрос ИИ
+  voiceMode: "search",       // режим оверлея: search — поиск по памятке, ai — вопрос ИИ
+  ghost: false,              // «призрачный режим»: окно становится полупрозрачным, когда переключаешься в игру
+  ghostOpacity: 55           // прозрачность окна в призрачном режиме, %
 };
 let cfg = { ...DEFAULTS };
 const cfgFile = () => path.join(app.getPath("userData"), "app-settings.json");
@@ -137,7 +139,8 @@ const cfgFile = () => path.join(app.getPath("userData"), "app-settings.json");
 function loadCfg() {
   const j = readJson(cfgFile()) || {};
   cfg = { ...DEFAULTS, ...j };
-  for (const k of ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "maximized", "voiceEnabled"]) cfg[k] = !!cfg[k];
+  for (const k of ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "maximized", "voiceEnabled", "ghost"]) cfg[k] = !!cfg[k];
+  cfg.ghostOpacity = Math.min(90, Math.max(20, Math.round(+cfg.ghostOpacity || DEFAULTS.ghostOpacity)));
   cfg.voiceOpacity = Math.min(100, Math.max(30, Math.round(+cfg.voiceOpacity || DEFAULTS.voiceOpacity)));
   const vp = cfg.voicePos;
   cfg.voicePos = vp && Number.isFinite(+vp.x) && Number.isFinite(+vp.y) ? { x: Math.round(+vp.x), y: Math.round(+vp.y) } : null;
@@ -346,7 +349,34 @@ function setCompact(on) {
 function applyWindowCfg() {
   if (!win || win.isDestroyed()) return;
   win.setAlwaysOnTop(cfg.alwaysOnTop, "screen-saver");
-  win.setOpacity(cfg.opacity / 100);
+  win.setOpacity(windowOpacity() / 100);
+}
+// Призрачный режим: пока окно не в фокусе (вы в игре), оно полупрозрачное
+function windowOpacity() {
+  const blurred = win && !win.isDestroyed() && win.isVisible() && !win.isFocused();
+  return cfg.ghost && blurred ? Math.min(cfg.opacity, cfg.ghostOpacity) : cfg.opacity;
+}
+
+// ───────────── Своя строка заголовка (окно без системной рамки) ─────────────
+function winState() {
+  const w = win && !win.isDestroyed() ? win : null;
+  return {
+    max: !!(w && w.isMaximized()), focused: !!(w && w.isFocused()),
+    top: cfg.alwaysOnTop, compact: cfg.compact, ghost: cfg.ghost, opacity: cfg.opacity, ghostOpacity: cfg.ghostOpacity,
+    tray: !!(cfg.tray && tray), hotkey: cfg.hotkeyEnabled ? cfg.hotkey : "", version: app.getVersion(),
+    staff: accounts.isStaff(), user: !!accounts.current()
+  };
+}
+function pushWin() {
+  if (win && !win.isDestroyed()) win.webContents.send("senko:winstate", winState());
+}
+// Прижать окно к краю экрана во всю высоту: удобно держать памятку рядом с игрой
+function dockWindow(side) {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMaximized()) win.unmaximize();
+  const area = screen.getDisplayMatching(win.getBounds()).workArea;
+  const width = Math.min(Math.max(win.getBounds().width, cfg.compact ? COMPACT_W : 420), Math.round(area.width / 2));
+  win.setBounds({ x: side === "left" ? area.x : area.x + area.width - width, y: area.y, width, height: area.height });
 }
 
 function showWindow() {
@@ -442,7 +472,7 @@ function getState() {
     cfg: {
       alwaysOnTop: cfg.alwaysOnTop, hotkeyEnabled: cfg.hotkeyEnabled, hotkey: cfg.hotkey,
       compact: cfg.compact, rememberBounds: cfg.rememberBounds, opacity: cfg.opacity,
-      tray: cfg.tray, notify: cfg.notify,
+      tray: cfg.tray, notify: cfg.notify, ghost: cfg.ghost, ghostOpacity: cfg.ghostOpacity,
       voiceEnabled: cfg.voiceEnabled, voiceHotkey: cfg.voiceHotkey, voiceOpacity: cfg.voiceOpacity, voiceMode: cfg.voiceMode
     },
     autostart: getAutostart(),
@@ -458,10 +488,11 @@ function getState() {
 }
 function pushState() {
   if (win && !win.isDestroyed()) win.webContents.send("senko:cfg", getState());
+  pushWin();
 }
 
 function applySet(key, val) {
-  const bools = ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "voiceEnabled"];
+  const bools = ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "voiceEnabled", "ghost"];
   let result = { ok: true };
   if (key === "autostart") {
     if (!app.isPackaged) return { ok: false, error: "Автозапуск доступен только в установленной версии." };
@@ -469,7 +500,7 @@ function applySet(key, val) {
   } else if (bools.includes(key)) {
     val = !!val;
     if (key !== "compact") cfg[key] = val; // compact переключает setCompact (ему нужны границы прежнего режима)
-    if (key === "alwaysOnTop") applyWindowCfg();
+    if (key === "alwaysOnTop" || key === "ghost") applyWindowCfg();
     if (key === "compact") setCompact(val);
     if (key === "rememberBounds" && val) saveBoundsNow();
     if (key === "tray") {
@@ -510,6 +541,9 @@ function applySet(key, val) {
     voice.applyOpts();
   } else if (key === "opacity") {
     cfg.opacity = Math.min(100, Math.max(30, Math.round(+val || 100)));
+    applyWindowCfg();
+  } else if (key === "ghostOpacity") {
+    cfg.ghostOpacity = Math.min(90, Math.max(20, Math.round(+val || DEFAULTS.ghostOpacity)));
     applyWindowCfg();
   } else {
     return { ok: false, error: "Неизвестная настройка." };
@@ -560,6 +594,26 @@ async function showAbout() {
 // ───────────── IPC главного окна ─────────────
 const fromMain = (e) => win && !win.isDestroyed() && e.sender === win.webContents;
 
+ipcMain.on("senko:win-state", (e) => { e.returnValue = fromMain(e) ? winState() : null; });
+ipcMain.on("senko:win", (e, action, val) => {
+  if (!fromMain(e) || !win || win.isDestroyed()) return;
+  switch (String(action)) {
+    case "min": win.minimize(); break;
+    case "max": if (win.isMaximized()) win.unmaximize(); else win.maximize(); break;
+    case "close": win.close(); break; // с треем крестик прячет окно (обработчик close)
+    case "hide": if (cfg.tray && tray) win.hide(); else win.minimize(); break;
+    case "top": applySet("alwaysOnTop", !cfg.alwaysOnTop); break;
+    case "compact": applySet("compact", !cfg.compact); break;
+    case "ghost": applySet("ghost", !cfg.ghost); break;
+    case "opacity": applySet("opacity", val); break;
+    case "dock": dockWindow(val === "left" ? "left" : "right"); break;
+    case "reload": win.webContents.reload(); break;
+    case "about": showAbout(); break;
+    case "update": checkForAppUpdate(true); checkForUpdate(true); break;
+    case "staff": openStaff(); break;
+    case "quit": quitting = true; app.quit(); break;
+  }
+});
 ipcMain.on("senko:get", (e) => { e.returnValue = fromMain(e) ? getState() : null; });
 ipcMain.on("senko:set", (e, key, val) => {
   e.returnValue = fromMain(e) ? { ...applySet(String(key), val), state: getState() } : { ok: false };
@@ -585,6 +639,89 @@ ipcMain.handle("senko:profile-update", async (e, d) => {
   const r = await accounts.updateProfile(d || {});
   if (r && (r.code === "auth" || r.code === "banned")) setTimeout(() => logout(r.error), 0);
   else if (r && r.ok) { updateTrayMenu(); pushState(); }
+  return r;
+});
+// Копия текущих данных перед сбросом или загрузкой из файла: дневная копия за сегодня потом перезапишется
+function safetyCopy(tag) {
+  try {
+    if (!fs.existsSync(mainFile())) return;
+    fs.mkdirSync(backupDir(), { recursive: true });
+    const day = new Date().toISOString().slice(0, 10);
+    fs.copyFileSync(mainFile(), path.join(backupDir(), `senko-data-${day}-${tag}.json`));
+  } catch (e) {}
+}
+// После сброса или загрузки из файла: забыть, что уже отправлено на сервер, и заново скачать данные аккаунта
+async function syncRebase() {
+  if (!sync.hasState()) return;
+  sync.resetState();
+  await Promise.race([sync.prefetch().catch(() => null), new Promise((res) => setTimeout(res, 4000))]);
+}
+// Перенос данных одним файлом: экспорт и импорт (заметки, избранное, папки, настройки, история)
+ipcMain.handle("senko:export-data", async (e, text) => {
+  if (!fromMain(e)) return { ok: false, error: "Недоступно." };
+  const day = new Date().toISOString().slice(0, 10);
+  const r = await dialog.showSaveDialog(win, {
+    title: "Сохранить данные Senko Assistant",
+    defaultPath: path.join(app.getPath("documents"), "Senko Assistant", `senko-export-${day}.json`),
+    filters: [{ name: "Данные Senko Assistant", extensions: ["json"] }]
+  });
+  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+  try {
+    fs.mkdirSync(path.dirname(r.filePath), { recursive: true });
+    fs.writeFileSync(r.filePath, String(text || ""), "utf8");
+    return { ok: true, file: path.basename(r.filePath) };
+  } catch (err) {
+    return { ok: false, error: "Не удалось записать файл." };
+  }
+});
+ipcMain.handle("senko:import-data", async (e) => {
+  if (!fromMain(e)) return { ok: false, error: "Недоступно." };
+  const r = await dialog.showOpenDialog(win, {
+    title: "Загрузить данные Senko Assistant",
+    defaultPath: path.join(app.getPath("documents"), "Senko Assistant"),
+    filters: [{ name: "Данные Senko Assistant", extensions: ["json"] }],
+    properties: ["openFile"]
+  });
+  if (r.canceled || !r.filePaths || !r.filePaths[0]) return { ok: false, canceled: true };
+  try {
+    const st = fs.statSync(r.filePaths[0]);
+    if (st.size > 20 * 1024 * 1024) return { ok: false, error: "Файл слишком большой." };
+    safetyCopy("before-import");
+    return { ok: true, text: fs.readFileSync(r.filePaths[0], "utf8").replace(/^\uFEFF/, "") };
+  } catch (err) {
+    return { ok: false, error: "Не удалось прочитать файл." };
+  }
+});
+ipcMain.on("senko:open-backups", (e) => { if (fromMain(e)) { fs.mkdirSync(backupDir(), { recursive: true }); shell.openPath(backupDir()); } });
+// Сброс всех данных: автосохранение очищается (дневные копии остаются), по желанию — данные в аккаунте
+ipcMain.handle("senko:reset-data", async (e, d) => {
+  if (!fromMain(e)) return { ok: false, error: "Недоступно." };
+  safetyCopy("before-reset");
+  if (d && d.account) {
+    const r = await accounts.act("sync_reset", {});
+    if (!r || !r.ok) {
+      if (r && (r.code === "auth" || r.code === "banned")) setTimeout(() => logout(r.error), 0);
+      return r || { ok: false, error: "Не удалось очистить данные в аккаунте." };
+    }
+  }
+  try {
+    writeAtomic(mainFile(), JSON.stringify({ app: "Senko Assistant", version: currentVersion(), savedAt: new Date().toISOString(), data: {} }, null, 2));
+  } catch (err) {}
+  await syncRebase(); // без галочки данные аккаунта вернутся на этот компьютер при перезагрузке страницы
+  return { ok: true };
+});
+ipcMain.handle("senko:sync-rebase", async (e) => {
+  if (!fromMain(e)) return { ok: false };
+  await syncRebase();
+  return { ok: true };
+});
+
+// Прогресс, рейтинг недели, смены и контрольные тесты (этап 4): только перечисленные действия сервера
+const PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports"];
+ipcMain.handle("senko:api", async (e, action, data) => {
+  if (!fromMain(e) || !PAGE_ACTIONS.includes(String(action))) return { ok: false, error: "Недоступно." };
+  const r = await accounts.act(String(action), data && typeof data === "object" ? data : {});
+  if (r && (r.code === "auth" || r.code === "banned")) setTimeout(() => logout(r.error), 0);
   return r;
 });
 // Сообщение об ошибке (уходит владельцу в Telegram) и ручная сверка с сервером (кнопка «Проверить снова»)
@@ -850,8 +987,9 @@ function createMainWindow() {
     minHeight: cfg.compact ? 400 : 600,
     show: false,
     title: "Памятка Boston",
+    frame: false, // системную серую рамку заменяет своя строка заголовка (её рисует preload.js)
     autoHideMenuBar: true,
-    backgroundColor: "#EDF0F3",
+    backgroundColor: "#F6F3EE",
     icon: iconPath(),
     webPreferences: {
       contextIsolation: true,
@@ -885,8 +1023,18 @@ function createMainWindow() {
 
   w.on("resize", saveBoundsSoon);
   w.on("move", saveBoundsSoon);
-  w.on("maximize", saveBoundsSoon);
-  w.on("unmaximize", saveBoundsSoon);
+  w.on("maximize", () => { saveBoundsSoon(); pushWin(); });
+  w.on("unmaximize", () => { saveBoundsSoon(); pushWin(); });
+  w.on("focus", () => { if (cfg.ghost) applyWindowCfg(); pushWin(); });
+  w.on("blur", () => { if (cfg.ghost) applyWindowCfg(); pushWin(); });
+  w.on("always-on-top-changed", pushWin);
+  // правый клик по строке заголовка: вместо серого системного меню — своё
+  w.on("system-context-menu", (e, point) => {
+    e.preventDefault();
+    if (w.isDestroyed()) return;
+    const cb = w.getContentBounds();
+    w.webContents.send("senko:winmenu", point ? { x: point.x - cb.x, y: point.y - cb.y } : null);
+  });
   w.on("close", (e) => {
     saveBoundsNow();
     saveCfgNow();
@@ -934,7 +1082,13 @@ app.whenReady().then(() => {
     askAi: ai.ask,               // вопрос ИИ из оверлея
     aiAvailable: ai.configured   // подключён ли ИИ-сервис (иначе переключатель режима неактивен)
   });
-  ai.init({ getWin: () => (win && !win.isDestroyed() ? win : null), dataDir: () => app.getPath("userData") });
+  ai.init({
+    getWin: () => (win && !win.isDestroyed() ? win : null),
+    dataDir: () => app.getPath("userData"),
+    // вопросы вошедшего пользователя и оценки 👍/👎 сохраняются в аккаунте (см. Политику, раздел 6)
+    log: (d) => accounts.act("ai_log", d),
+    vote: (id, v) => accounts.act("ai_vote", { id, vote: v })
+  });
   initUpdater();
   laws.start();
 

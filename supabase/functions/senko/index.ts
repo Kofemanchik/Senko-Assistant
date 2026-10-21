@@ -28,8 +28,8 @@ const GAME_ROLES = { off: "Сотрудник", pros: "Прокурор", adv: "
 // Роль в игре с учётом организации: вне Government всегда «Сотрудник»
 const gameRole = (p) => (p.org === GOV_ORG ? p.game_role : "off");
 const RANKS = { user: "Пользователь", leader: "Руководство", moderator: "Модератор памятки", owner: "Владелец" };
-const LEGAL_VERSION = "2026-10-19.2"; // версия Политики и Условий; должна совпадать с VERSION в app/auth.html и app/index.html
-const SYNC_KINDS = { thist: 1, dlog: 1, tests: 1, qstat: 1, xp: 1, daily: 1, streak: 1 }; // что синхронизируется между компьютерами
+const LEGAL_VERSION = "2026-10-21.1"; // версия Политики и Условий; должна совпадать с VERSION в app/auth.html и app/index.html
+const SYNC_KINDS = { thist: 1, dlog: 1, tests: 1, qstat: 1, xp: 1, daily: 1, streak: 1, favs: 1, notes: 1, labels: 1, folders: 1, favorder: 1 }; // что синхронизируется между компьютерами
 const SYNC_MAX_ITEMS = 300; // элементов за один запрос
 const SYNC_ITEM_BYTES = 65536; // размер одного элемента
 const SYNC_USER_ROWS = 5000; // элементов на пользователя
@@ -123,6 +123,7 @@ async function cleanup() {
   await sql`update reset_requests set status = 'expired' where status in ('pending','approved') and expires_at < now()`;
   await sql`delete from reset_requests where created_at < now() - interval '7 days'`;
   await sql`delete from bot_pending where expires_at < now()`;
+  await sql`delete from ai_log where at < now() - interval '90 days'`;
   await sql`update profiles set banned = false, ban_reason = '', banned_at = null, banned_until = null where banned and banned_until is not null and banned_until <= now()`;
 }
 const maybeCleanup = () => (Math.random() < 0.05 ? cleanup().catch((e) => console.error("cleanup", e)) : null);
@@ -167,6 +168,7 @@ function card(p, viewer) {
     L.push(`Telegram ID: ${p.tg_id == null ? "—" : p.tg_id}`);
     L.push(`Принял документы: ${p.legal_version || "—"}`);
   }
+  if (p.approval && p.approval !== "ok") L.push(p.approval === "pending" ? "⏳ Заявка ждёт подтверждения руководства" : "❌ Заявка отклонена руководством");
   L.push(`Регистрация: ${fmtDate(p.created_at)}`);
   L.push(`Был в сети: ${fmtDate(p.last_seen)}`);
   if (p.banned) L.push(`Причина блокировки: ${esc(p.ban_reason) || "—"}${p.banned_until ? " (до " + fmtDate(p.banned_until) + ")" : ""}`);
@@ -237,6 +239,8 @@ async function who(b, ranks) {
     await db()`delete from sessions where user_id = ${p.id}`;
     return { err: fail(banMsg(p), { code: "banned" }) };
   }
+  // заявка не подтверждена: для программы это как блокировка (выход с сообщением)
+  if (p.approval && p.approval !== "ok") return { err: fail(approvalMsg(p), { code: "banned" }) };
   if (ranks && !ranks.includes(p.rank)) return { err: fail("Недостаточно прав.", { code: "forbidden" }) };
   return { p };
 }
@@ -309,13 +313,14 @@ async function register(b, ip) {
   if (bad) return fail("Логин или ник содержит недопустимое слово. Выберите другой.");
   const code = newRecoveryCode();
   const codeHash = await sha256(normCode(code));
+  const pend = !!(await getSetting("approval", { on: false })).on; // приём новичков: аккаунт ждёт подтверждения руководства
   let p;
   try {
     p = await sql.begin(async (t) => {
       const [row] = await t`
-        insert into profiles (login, pass_hash, nick, static_id, org, dept, game_role, discord, telegram, phone, legal_version, legal_at)
+        insert into profiles (login, pass_hash, nick, static_id, org, dept, game_role, discord, telegram, phone, legal_version, legal_at, approval)
         values (${v.login}, extensions.crypt(${v.pass}, extensions.gen_salt('bf', 10)), ${v.nick}, ${v.st}, ${v.org}, ${v.dept},
-                ${v.role}, ${v.discord}, ${v.telegram}, ${v.phone}, ${clean(b.legal.version, 20)}, now())
+                ${v.role}, ${v.discord}, ${v.telegram}, ${v.phone}, ${clean(b.legal.version, 20)}, now(), ${pend ? "pending" : "ok"})
         returning *`;
       await t`insert into recovery_codes (user_id, code_hash) values (${row.id}, ${codeHash})`;
       return row;
@@ -324,7 +329,7 @@ async function register(b, ip) {
     if (e && e.code === "23505") return fail("Такой логин уже занят.");
     throw e;
   }
-  const token = await newSession(p.id, !!b.remember);
+  const token = pend ? null : await newSession(p.id, !!b.remember);
   maybeCleanup();
   const ver = clean(b.ver, 20);
   if (ver) await sql`update profiles set app_version = ${ver} where id = ${p.id}`;
@@ -334,7 +339,7 @@ async function register(b, ip) {
     if (OWNER_TG) {
       const dup = await sql`select login from profiles where lower(static_id) = lower(${p.static_id}) and id <> ${p.id}`;
       const [{ n }] = await sql`select count(*)::int as n from profiles`;
-      let text = `🆕 <b>Новая регистрация</b>${b.migrated ? " (перенос локального аккаунта)" : ""}\n\n${card(p, "owner")}`;
+      let text = `🆕 <b>Новая регистрация</b>${b.migrated ? " (перенос локального аккаунта)" : ""}${pend ? " · ждёт подтверждения руководства" : ""}\n\n${card(p, "owner")}`;
       if (dup.length) text += `\n\n⚠️ Этот статик уже указан у: ${dup.map((d) => esc(d.login)).join(", ")}`;
       text += `\n\nВсего пользователей: ${n}`;
       await send(OWNER_TG, text);
@@ -342,6 +347,14 @@ async function register(b, ip) {
     }
   } catch (e) {
     console.error("notify register", e);
+  }
+  if (pend) {
+    try {
+      await askApproval(p);
+    } catch (e) {
+      console.error("ask approval", e);
+    }
+    return { ok: true, pending: true, message: approvalMsg(p), user: pub(p), recoveryCode: code };
   }
   return { ok: true, token, user: pub(p), recoveryCode: code, sys: await sysFor(p) };
 }
@@ -373,6 +386,7 @@ async function login(b, ip) {
     return fail("Неверный логин или пароль.");
   }
   if (p.banned) return fail(banMsg(p), { code: "banned" });
+  if (p.approval && p.approval !== "ok") return fail(approvalMsg(p), { code: p.approval });
   await sql`delete from rate_limits where key = ${"lg:" + lc + ":" + ip} or key = ${"lf:" + lc}`;
   const token = await newSession(p.id, !!b.remember);
   await sql`update profiles set last_seen = now() where id = ${p.id}`;
@@ -451,6 +465,15 @@ async function syncApi(b) {
     const [{ n }] = await sql`select count(*)::int as n from sync_items where user_id = ${p.id}`;
     if (n >= SYNC_USER_ROWS) return fail("Достигнут предел объёма данных. Обратитесь к владельцу.");
   }
+  // опыт на начало недели — до того, как новый опыт запишется (для рейтинга недели)
+  const xpIt = items.find((it) => it && it.kind === "xp" && !it.del);
+  if (xpIt) {
+    const w = mskWeek();
+    await sql`insert into xp_week (user_id, week, base)
+              values (${p.id}, ${w.key}, coalesce((select max(senko_num(data#>>'{}'))::int from sync_items where user_id = ${p.id} and kind = 'xp' and not deleted),
+                                                  ${Math.max(0, Math.floor(+xpIt.data) || 0)}))
+              on conflict do nothing`;
+  }
   let accepted = 0;
   for (const it of items) {
     if (!it || typeof it !== "object") continue;
@@ -476,6 +499,8 @@ async function syncApi(b) {
                 where sync_items.u <= excluded.u`;
     accepted++;
   }
+  if (accepted && items.some((it) => it && ["thist", "tests", "xp", "streak"].includes(String(it.kind))) && (await hit(`ach:${p.id}`, 1, 60)))
+    await checkAch(p).catch((e) => console.error("ach", e));
   const out = { ok: true, accepted };
   if (b.pull) {
     const since = Number.isFinite(+b.since) ? Math.max(0, Math.floor(+b.since)) : 0;
@@ -492,6 +517,21 @@ async function syncApi(b) {
   return out;
 }
 
+// «Сбросить все данные» в программе: данные работы и избранное удаляются на всех компьютерах пользователя.
+// Записи помечаются удалёнными (а не стираются), чтобы другие компьютеры тоже убрали их у себя. Достижения остаются.
+const SYNC_RESET_KINDS = ["thist", "dlog", "tests", "favs", "notes", "labels", "folders", "favorder"];
+async function syncReset(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!(await hit(`sreset:${p.id}`, 3, 3600))) return fail(RATE_MSG, { code: "rate" });
+  const sql = db();
+  // опыт, серия, мини-тест дня и статистика тренажёра остаются: это прогресс (уровень, рейтинг, достижения)
+  const r = await sql`update sync_items set data = null, deleted = true, u = ${Date.now()}, device = 'reset', seq = nextval('sync_seq')
+                      where user_id = ${p.id} and not deleted and kind = any(${SYNC_RESET_KINDS}::text[]) returning 1`;
+  await audit(p.login, "sync_reset", p.login, { items: r.length });
+  return { ok: true, items: r.length };
+}
+
 // Сводка по данным пользователей (для владельца)
 async function userStats() {
   const rows = await db()`
@@ -499,8 +539,8 @@ async function userStats() {
            count(*) filter (where kind = 'thist' and not deleted)::int as det,
            count(*) filter (where kind = 'thist' and not deleted and u > (extract(epoch from now() - interval '7 days') * 1000))::int as det7,
            count(*) filter (where kind = 'tests' and not deleted)::int as tests,
-           round(avg((data->>'p')::numeric) filter (where kind = 'tests' and not deleted))::int as avg_p,
-           max((data#>>'{}')::int) filter (where kind = 'xp' and not deleted) as xp
+           round(avg(senko_num(data->>'p')) filter (where kind = 'tests' and not deleted))::int as avg_p,
+           max(senko_num(data#>>'{}')) filter (where kind = 'xp' and not deleted)::int as xp
     from sync_items group by user_id`;
   const m = {};
   for (const r of rows) m[r.user_id] = { det: r.det, det7: r.det7, tests: r.tests, avg_p: r.avg_p, xp: r.xp };
@@ -518,8 +558,10 @@ async function staffList(b) {
     ? await db()`select * from profiles where org = ${scope} order by created_at`
     : await db()`select * from profiles order by created_at`;
   const stats = await userStats();
+  const wk = Object.fromEntries((await weekStats(scope)).map((x) => [x.id, x]));
   const list = rows.map((r) => {
     const st = stats[r.id] || {};
+    const w = wk[r.id] || {};
     const o = {
       login: r.login,
       nick: r.nick,
@@ -537,6 +579,9 @@ async function staffList(b) {
       tests: st.tests || 0,
       avg_p: st.avg_p == null ? null : st.avg_p,
       xp: st.xp == null ? 0 : st.xp,
+      wxp: w.wxp || 0,
+      ach: w.ach || 0,
+      approval: r.approval,
     };
     if (p.rank === "owner" || p.rank === "moderator") {
       o.banned = r.banned;
@@ -696,6 +741,22 @@ async function api(req) {
     }
     case "bug_report":
       return J(await bugReport(b));
+    case "my_stats":
+      return J(await myStats(b));
+    case "week_board":
+      return J(await weekBoardApi(b));
+    case "shift":
+      return J(await shiftApi(b));
+    case "ctrl":
+      return J(await ctrlApi(b));
+    case "reports":
+      return J(await reportsApi(b));
+    case "ai_log":
+      return J(await aiLog(b));
+    case "ai_vote":
+      return J(await aiVote(b));
+    case "sync_reset":
+      return J(await syncReset(b));
     case "logout": {
       if (typeof b.token === "string" && /^[0-9a-f]{64}$/.test(b.token))
         await db()`delete from sessions where token_hash = ${await sha256(b.token)}`;
@@ -724,6 +785,9 @@ async function api(req) {
 const CRON_SECRET = Deno.env.get("CRON_SECRET") || ""; // общий секрет для расписания (pg_cron) и оповещений о законах
 const BACKUP_KEY = Deno.env.get("BACKUP_KEY") || ""; // пароль шифрования резервных копий (/backup)
 const AI_HEALTH_URL = Deno.env.get("AI_HEALTH_URL") || "https://senko-ai.senko-assistant.workers.dev/health";
+const GH_LAWS_TOKEN = Deno.env.get("GH_LAWS_TOKEN") || ""; // токен GitHub (Actions: Read and write) для /laws
+const GH_REPO = Deno.env.get("GH_REPO") || "Kofemanchik/Senko-Assistant";
+const LAWS_WORKFLOW = "sync-laws.yml";
 const LAWS_STATUS_URL = Deno.env.get("LAWS_STATUS_URL") || "https://raw.githubusercontent.com/Kofemanchik/Senko-Assistant/main/update/laws-status.json";
 const NOTICE_DAYS = 7; // сколько дней рассылка видна в программе
 const MILESTONES = [100, 250, 500, 1000, 2000, 5000, 10000];
@@ -766,7 +830,12 @@ async function sysFor(p) {
   const rows = await db()`select id, org, user_id, title, text, created_at from broadcasts
                           where expires_at > now() and ((org is null and user_id is null) or org = ${p.org} or user_id = ${p.id})
                           order by created_at desc limit 5`;
+  const ctrl = await db()`select t.id, t.title, t.topics, t.n, t.due_at from control_tests t
+                          where t.org = ${p.org} and not t.closed and t.due_at > now() and t.author_id is distinct from ${p.id}
+                            and not exists (select 1 from control_results r where r.test_id = t.id and r.user_id = ${p.id})
+                          order by t.due_at limit 5`;
   return {
+    controls: ctrl.map((t) => ({ id: String(t.id), title: t.title, topics: t.topics, n: t.n, due: t.due_at })),
     maintenance: m && m.on ? { on: true, text: m.text || "", exempt: p.rank === "owner" || p.rank === "moderator" } : { on: false },
     notices: rows.map((r) => ({
       id: String(r.id),
@@ -859,7 +928,9 @@ async function summaryText() {
   const [r] = await sql`select count(*)::int n, count(*) filter (where status = 'pending' and expires_at > now())::int pending
                         from reset_requests where created_at > now() - interval '1 day'`;
   const [bg] = await sql`select count(*)::int n, count(*) filter (where not answered)::int open from bug_reports where at > now() - interval '1 day'`;
-  return `🗓 <b>Сводка за сутки</b>\nРегистраций: ${t.reg}\nАктивных: ${t.active}\nЗаблокировано всего: ${t.banned}\nЗапросов на сброс пароля: ${r.n}${r.pending ? " (ждут: " + r.pending + ")" : ""}\nСообщений об ошибках: ${bg.n}${bg.open ? " (без ответа: " + bg.open + ")" : ""}\n\nВсего пользователей: ${t.total}`;
+  const [ai] = await sql`select count(*)::int n, count(*) filter (where vote > 0)::int up, count(*) filter (where vote < 0)::int down from ai_log where at > now() - interval '1 day'`;
+  const [pd] = await sql`select count(*)::int n from profiles where approval = 'pending'`;
+  return `🗓 <b>Сводка за сутки</b>\nРегистраций: ${t.reg}\nАктивных: ${t.active}\nЗаблокировано всего: ${t.banned}\nЗапросов на сброс пароля: ${r.n}${r.pending ? " (ждут: " + r.pending + ")" : ""}\nСообщений об ошибках: ${bg.n}${bg.open ? " (без ответа: " + bg.open + ")" : ""}\nВопросов к ИИ: ${ai.n}${ai.n ? " (👍 " + ai.up + ", 👎 " + ai.down + ")" : ""}${pd.n ? "\nЗаявок ждут подтверждения: " + pd.n + " (/pending)" : ""}\n\nВсего пользователей: ${t.total}`;
 }
 
 // Зашифрованная резервная копия (AES-256-GCM, ключ из BACKUP_KEY через PBKDF2). Расшифровка: node tools/decrypt-backup.js
@@ -874,6 +945,7 @@ async function backupFile() {
     bot_settings: await sql`select * from bot_settings`,
     audit_log_24h: await sql`select * from audit_log where at > now() - interval '1 day' order by id`,
     sync_items_24h: await sql`select * from sync_items where to_timestamp(u / 1000.0) > now() - interval '1 day'`,
+    reports_30d: await sql`select * from reports where created_at > now() - interval '30 days' order by id`,
   };
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -900,6 +972,571 @@ async function sendFile(chat, name, text, caption) {
 }
 
 // ───────────── Бот ─────────────
+// ───────────── Этап 4: рейтинг недели, достижения, смены, контрольные тесты, приём новичков, ИИ ─────────────
+// Уровни и темы — те же, что в тренажёре программы (app/index.html: LVN/LVT, TOP)
+const LVN = ["Стажёр", "Помощник", "Специалист", "Знаток", "Старший", "Мастер", "Наставник", "Легенда"];
+const LVT = [0, 100, 250, 450, 700, 1000, 1400, 1900];
+function lvOf(xp) {
+  let i = 0;
+  while (i < LVT.length - 1 && xp >= LVT[i + 1]) i++;
+  return { n: i + 1, name: LVN[i], from: LVT[i], to: i < LVT.length - 1 ? LVT[i + 1] : LVT[i] };
+}
+const TOPICS = {
+  time: "Сроки", adv: "Адвокат и звонок", ogp: "ОГП и госслужащие", proc: "Процедура и права",
+  force: "Сила и оружие", bail: "Залог", dk: "Дорожный кодекс", uk: "УК: розыск и сроки",
+};
+// Достижения. rare — о них владельцу приходит тихое сообщение
+const ACH = [
+  { code: "test1", icon: "📝", name: "Первый тест", desc: "Пройти любой тест в тренажёре", test: (s) => s.tests >= 1 },
+  { code: "perfect", icon: "💯", name: "Тест без ошибок", desc: "Пройти тест на 100%", test: (s) => s.perfect >= 1 },
+  { code: "perfect10", icon: "🎯", name: "Снайпер", desc: "10 тестов без ошибок", rare: true, test: (s) => s.perfect >= 10 },
+  { code: "exam", icon: "🎓", name: "Аттестация", desc: "Сдать аттестацию на 80% и выше", test: (s) => s.exam >= 1 },
+  { code: "ctrl100", icon: "✅", name: "Отличник", desc: "Контрольный тест руководства на 100%", test: (s) => s.ctrl100 >= 1 },
+  { code: "det10", icon: "🚓", name: "10 задержаний", desc: "Провести 10 задержаний с таймером", test: (s) => s.det >= 10 },
+  { code: "det50", icon: "🚔", name: "50 задержаний", desc: "Провести 50 задержаний с таймером", test: (s) => s.det >= 50 },
+  { code: "det100", icon: "🏅", name: "100 задержаний", desc: "Провести 100 задержаний с таймером", rare: true, test: (s) => s.det >= 100 },
+  { code: "streak7", icon: "🔥", name: "7 дней подряд", desc: "Проходить мини-тест дня 7 дней подряд", test: (s) => s.streak >= 7 },
+  { code: "streak30", icon: "☄️", name: "30 дней подряд", desc: "Проходить мини-тест дня 30 дней подряд", rare: true, test: (s) => s.streak >= 30 },
+  { code: "lvl5", icon: "⭐", name: "Звание «Старший»", desc: "Набрать 700 опыта", test: (s) => s.xp >= 700 },
+  { code: "lvl8", icon: "👑", name: "Звание «Легенда»", desc: "Набрать 1900 опыта", rare: true, test: (s) => s.xp >= 1900 },
+];
+const ACH_BY = Object.fromEntries(ACH.map((x) => [x.code, x]));
+
+// Неделя с понедельника 00:00 по МСК: key — дата понедельника, start — его начало в мс
+function mskWeek(d = new Date()) {
+  const m = new Date(d.getTime() + 3 * 3600e3);
+  const dow = (m.getUTCDay() + 6) % 7;
+  const mon = Date.UTC(m.getUTCFullYear(), m.getUTCMonth(), m.getUTCDate() - dow);
+  return { key: new Date(mon).toISOString().slice(0, 10), start: mon - 3 * 3600e3 };
+}
+const weekAfter = (w) => mskWeek(new Date(w.start + 8 * 864e5));
+const weekBefore = (w) => mskWeek(new Date(w.start - 864e5));
+const ddmm = (ms) => new Date(ms + 3 * 3600e3).toISOString().slice(5, 10).split("-").reverse().join(".");
+const tsOf = (d) => (d ? new Date(d).getTime() : 0);
+const plural = (n, one, few, many) => (n % 10 === 1 && n % 100 !== 11 ? one : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? few : many);
+
+// Опыт на начало недели: снимок для всех, у кого есть опыт (раз в неделю из расписания)
+async function snapshotWeek() {
+  const w = mskWeek();
+  const s = await getSetting("xpweek", null);
+  if (s && s.key === w.key) return;
+  await db()`insert into xp_week (user_id, week, base)
+             select user_id, ${w.key}, coalesce(max(senko_num(data#>>'{}')), 0)::int from sync_items
+             where kind = 'xp' and not deleted group by user_id
+             on conflict do nothing`;
+  await db()`delete from xp_week where week < ${weekBefore(weekBefore(weekBefore(w))).key}`;
+  await setSetting("xpweek", { key: w.key });
+}
+
+// Показатели сотрудников за неделю w. full=true — неделя целиком (для отчёта), иначе текущая неделя до сейчас
+async function weekStats(org, w = mskWeek(), full = false) {
+  const sql = db();
+  const people = org
+    ? await sql`select id, login, nick, org, rank, last_seen, created_at from profiles where org = ${org} and not banned and approval = 'ok'`
+    : await sql`select id, login, nick, org, rank, last_seen, created_at from profiles where not banned and approval = 'ok'`;
+  if (!people.length) return [];
+  const ids = people.map((p) => p.id);
+  const next = weekAfter(w);
+  const end = full ? next.start : Date.now() + 864e5;
+  const xs = await sql`select user_id, coalesce(max(senko_num(data#>>'{}')), 0)::int xp from sync_items
+                       where kind = 'xp' and not deleted and user_id = any(${ids}::uuid[]) group by user_id`;
+  const bs = await sql`select user_id, week, base from xp_week where user_id = any(${ids}::uuid[]) and week in (${w.key}, ${next.key})`;
+  const act = await sql`
+    select user_id,
+           count(*) filter (where kind = 'thist' and coalesce(senko_num(data->>'end'), u) >= ${w.start} and coalesce(senko_num(data->>'end'), u) < ${end})::int det,
+           count(*) filter (where kind = 'tests' and senko_num(data->>'t') >= ${w.start} and senko_num(data->>'t') < ${end})::int tests,
+           round(avg(senko_num(data->>'p')) filter (where kind = 'tests' and senko_num(data->>'t') >= ${w.start} and senko_num(data->>'t') < ${end}))::int avg_p
+    from sync_items where not deleted and kind in ('thist', 'tests') and user_id = any(${ids}::uuid[]) group by user_id`;
+  const ach = await sql`select user_id, count(*)::int n from achievements where user_id = any(${ids}::uuid[]) group by user_id`;
+  const X = {}, B0 = {}, B1 = {}, AC = {}, AN = {};
+  xs.forEach((r) => (X[r.user_id] = r.xp));
+  bs.forEach((r) => ((r.week === w.key ? B0 : B1)[r.user_id] = r.base));
+  act.forEach((r) => (AC[r.user_id] = r));
+  ach.forEach((r) => (AN[r.user_id] = r.n));
+  return people.map((p) => {
+    const xp = X[p.id] || 0;
+    const top = full ? (B1[p.id] != null ? B1[p.id] : xp) : xp;
+    const base = B0[p.id] != null ? B0[p.id] : top;
+    const a = AC[p.id] || {};
+    return { ...p, xp, wxp: Math.max(0, top - base), det: a.det || 0, tests: a.tests || 0, avg_p: a.avg_p == null ? null : a.avg_p, ach: AN[p.id] || 0, lvl: lvOf(xp) };
+  });
+}
+const byWxp = (a, b) => b.wxp - a.wxp || b.xp - a.xp || String(a.nick).localeCompare(String(b.nick));
+
+// Проверка достижений после синхронизации (и после контрольного теста)
+async function checkAch(p) {
+  const sql = db();
+  const [s] = await sql`
+    select count(*) filter (where kind = 'thist')::int det,
+           count(*) filter (where kind = 'tests')::int tests,
+           count(*) filter (where kind = 'tests' and senko_num(data->>'p') >= 100)::int perfect,
+           count(*) filter (where kind = 'tests' and data->>'m' = 'exam' and senko_num(data->>'p') >= 80)::int exam,
+           coalesce(max(senko_num(data->>'n')) filter (where kind = 'streak'), 0)::int streak,
+           coalesce(max(senko_num(data#>>'{}')) filter (where kind = 'xp'), 0)::int xp
+    from sync_items where user_id = ${p.id} and not deleted`;
+  const [c] = await sql`select count(*) filter (where p >= 100)::int ctrl100 from control_results where user_id = ${p.id}`;
+  const earned = ACH.filter((x) => x.test({ ...s, ...c })).map((x) => x.code);
+  if (!earned.length) return [];
+  const got = (await sql`insert into achievements (user_id, code) select ${p.id}, unnest(${earned}::text[])
+                         on conflict do nothing returning code`).map((r) => ACH_BY[r.code]).filter(Boolean);
+  if (!got.length) return [];
+  await sql`insert into broadcasts (user_id, title, author, text, expires_at)
+            values (${p.id}, ${got.length > 1 ? "🏆 Новые достижения" : "🏆 Новое достижение"}, 'system',
+                    ${got.map((x) => `${x.icon} ${x.name} — ${x.desc.toLowerCase()}`).join("\n") + "\nВсе достижения — в личном кабинете."},
+                    now() + interval '7 days')`;
+  const rare = got.filter((x) => x.rare);
+  if (rare.length) await quiet(`🏆 <b>${esc(p.login)}</b> (${esc(p.nick)}, ${esc(p.org)}) получил редкое достижение: ${rare.map((x) => x.icon + " " + x.name).join(", ")}`);
+  return got;
+}
+
+// ───────────── API: личная статистика и рейтинг недели ─────────────
+async function myStats(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const sql = db();
+  const rows = await sql`select kind, data, u from sync_items where user_id = ${p.id} and not deleted and kind in ('xp', 'streak', 'qstat', 'tests', 'thist')`;
+  let xp = 0, streak = 0, tp = {}, det = 0, det7 = 0;
+  const tests = [];
+  const wk = Date.now() - 7 * 864e5;
+  const day = mskDay(), yday = mskDay(new Date(Date.now() - 864e5));
+  for (const r of rows) {
+    const d = r.data;
+    if (r.kind === "xp") xp = Math.max(xp, Math.floor(+d) || 0);
+    else if (r.kind === "streak" && d && (d.last === day || d.last === yday)) streak = Math.max(streak, Math.floor(+d.n) || 0);
+    else if (r.kind === "qstat" && d && d.tp && typeof d.tp === "object") tp = d.tp;
+    else if (r.kind === "tests" && d) tests.push({ t: +d.t || 0, p: +d.p || 0 });
+    else if (r.kind === "thist") {
+      det++;
+      if (((d && +d.end) || Number(r.u)) >= wk) det7++;
+    }
+  }
+  tests.sort((a, c) => c.t - a.t);
+  const last = tests.slice(0, 10);
+  const weak = Object.keys(TOPICS)
+    .map((k) => ({ tp: k, name: TOPICS[k], a: Math.floor(+(tp[k] && tp[k].a)) || 0, w: Math.floor(+(tp[k] && tp[k].w)) || 0 }))
+    .filter((x) => x.a >= 5 && x.w / x.a >= 0.2)
+    .map((x) => ({ ...x, pct: Math.round((x.w / x.a) * 100) }))
+    .sort((a, c) => c.pct - a.pct)
+    .slice(0, 3);
+  const got = await sql`select code, at from achievements where user_id = ${p.id}`;
+  const G = Object.fromEntries(got.map((r) => [r.code, r.at]));
+  const w = mskWeek();
+  const board = (await weekStats(p.org, w)).sort(byWxp);
+  const place = board.findIndex((x) => x.id === p.id);
+  const ctrl = await sql`select t.id, t.title, t.n, t.due_at, r.p, r.at from control_tests t
+                         left join control_results r on r.test_id = t.id and r.user_id = ${p.id}
+                         where t.org = ${p.org} and (r.p is not null or (not t.closed and t.due_at > now()))
+                         order by t.created_at desc limit 10`;
+  return {
+    ok: true,
+    org: p.org,
+    xp, level: lvOf(xp), streak, det, det7,
+    tests: tests.length,
+    avg_p: last.length ? Math.round(last.reduce((s, t) => s + t.p, 0) / last.length) : null,
+    weak,
+    ach: ACH.map((x) => ({ code: x.code, icon: x.icon, name: x.name, desc: x.desc, rare: !!x.rare, at: G[x.code] || null })),
+    week: { from: w.start, wxp: place >= 0 ? board[place].wxp : 0, place: place >= 0 ? place + 1 : null, of: board.length },
+    top: board.slice(0, 10).map((x, i) => ({ n: i + 1, nick: x.nick, lvl: x.lvl.name, wxp: x.wxp, me: x.id === p.id })),
+    controls: ctrl.map((r) => ({ id: String(r.id), title: r.title, n: r.n, due: r.due_at, p: r.p, at: r.at })),
+  };
+}
+
+// Организация, с которой работает руководство: руководитель — только своя, модераторы и владелец — выбранная
+const staffOrg = (p, b) => (p.rank === "leader" ? p.org : DEPTS.find((d) => d === String(b.org || "")) || null);
+
+async function weekBoardApi(b) {
+  const { p, err } = await who(b, ["leader", "moderator", "owner"]);
+  if (err) return err;
+  const org = staffOrg(p, b);
+  const w = mskWeek();
+  const list = (await weekStats(org, w)).sort(byWxp);
+  return {
+    ok: true, org, from: w.start,
+    list: list.map((x, i) => ({ n: i + 1, login: x.login, nick: x.nick, org: x.org, lvl: x.lvl.name, xp: x.xp, wxp: x.wxp, det: x.det, tests: x.tests, avg_p: x.avg_p, ach: x.ach })),
+  };
+}
+
+// ───────────── API: журнал смены ─────────────
+async function shiftSummary(org, from, to) {
+  const sql = db();
+  const people = await sql`select id, login, nick, last_seen from profiles where org = ${org} and not banned and approval = 'ok'`;
+  if (!people.length) return { total: 0, online: [], det: 0, tests: 0 };
+  const ids = people.map((x) => x.id);
+  const act = await sql`
+    select user_id,
+           count(*) filter (where kind = 'thist' and coalesce(senko_num(data->>'end'), u) between ${from} and ${to})::int det,
+           count(*) filter (where kind = 'tests' and senko_num(data->>'t') between ${from} and ${to})::int tests
+    from sync_items where not deleted and kind in ('thist', 'tests') and user_id = any(${ids}::uuid[]) group by user_id`;
+  const A = Object.fromEntries(act.map((r) => [r.user_id, r]));
+  const online = people
+    .filter((x) => tsOf(x.last_seen) >= from || (A[x.id] && (A[x.id].det || A[x.id].tests)))
+    .map((x) => ({ nick: x.nick, login: x.login, det: (A[x.id] && A[x.id].det) || 0 }))
+    .sort((a, c) => c.det - a.det || String(a.nick).localeCompare(String(c.nick)));
+  return {
+    total: people.length,
+    online: online.slice(0, 60),
+    det: act.reduce((s, r) => s + r.det, 0),
+    tests: act.reduce((s, r) => s + r.tests, 0),
+  };
+}
+function shiftText(r, auto) {
+  const s = r.summary || { total: 0, online: [], det: 0, tests: 0 };
+  const from = tsOf(r.started_at), to = tsOf(r.ended_at) || Date.now();
+  const mins = Math.max(1, Math.round((to - from) / 60e3));
+  const dur = mins >= 60 ? `${Math.floor(mins / 60)} ч ${mins % 60} мин` : `${mins} мин`;
+  const top = s.online.filter((x) => x.det > 0).slice(0, 5);
+  return `🕐 <b>Смена ${esc(r.org)} завершена</b>${auto ? " (автоматически через 12 часов)" : ""}\n` +
+    `${fmtDate(r.started_at)} — ${fmtDate(r.ended_at || new Date())} (${dur}), начал: ${esc(r.leader)}\n\n` +
+    `Были в сети: ${s.online.length} из ${s.total}${s.online.length ? "\n" + s.online.slice(0, 30).map((x) => esc(x.nick)).join(", ") + (s.online.length > 30 ? " …" : "") : ""}\n` +
+    `Задержаний за смену: ${s.det}${top.length ? "\n" + top.map((x) => `• ${esc(x.nick)} — ${x.det}`).join("\n") : ""}\n` +
+    `Тестов пройдено: ${s.tests}`;
+}
+async function endShift(cur, by, auto = false) {
+  const sql = db();
+  const s = await shiftSummary(cur.org, tsOf(cur.started_at), Date.now());
+  const [r] = await sql`update shifts set ended_at = now(), summary = ${sql.json(s)} where id = ${cur.id} and ended_at is null returning *`;
+  if (!r) return null;
+  const chats = new Set();
+  if (r.leader_id) {
+    const [l] = await sql`select tg_id from profiles where id = ${r.leader_id}`;
+    if (l && l.tg_id != null) chats.add(String(l.tg_id));
+  }
+  if (by && by.tg_id != null) chats.add(String(by.tg_id));
+  const text = shiftText(r, auto);
+  for (const c of chats) await send(c, text);
+  return r;
+}
+const shiftOut = (r) => ({ id: String(r.id), by: r.leader, start: r.started_at, end: r.ended_at, summary: r.summary || null });
+async function shiftApi(b) {
+  const { p, err } = await who(b, ["leader", "moderator", "owner"]);
+  if (err) return err;
+  const org = staffOrg(p, b);
+  if (!org) return fail("Выберите организацию.");
+  const sql = db();
+  const op = String(b.op || "");
+  let msg = "";
+  if (op === "start") {
+    const [cur] = await sql`select * from shifts where org = ${org} and ended_at is null`;
+    if (cur) return fail(`Смена уже идёт с ${fmtDate(cur.started_at)}, её начал ${cur.leader}.`);
+    await sql`insert into shifts (org, leader_id, leader) values (${org}, ${p.id}, ${p.nick || p.login})`;
+    await audit(p.login, "shift_start", org, {});
+    msg = "Смена начата.";
+  } else if (op === "end") {
+    const [cur] = await sql`select * from shifts where org = ${org} and ended_at is null`;
+    if (!cur) return fail("Смена не начата.");
+    await endShift(cur, p);
+    await audit(p.login, "shift_end", org, {});
+    msg = p.tg_id != null ? "Смена завершена. Сводка отправлена вам в Telegram." : "Смена завершена.";
+  }
+  const [act] = await sql`select * from shifts where org = ${org} and ended_at is null`;
+  const hist = await sql`select * from shifts where org = ${org} and ended_at is not null order by started_at desc limit 10`;
+  return { ok: true, org, msg, active: act ? shiftOut(act) : null, history: hist.map(shiftOut) };
+}
+
+// ───────────── API: контрольные тесты ─────────────
+async function ctrlApi(b) {
+  const op = String(b.op || "list");
+  const sql = db();
+  if (op === "submit") {
+    const { p, err } = await who(b);
+    if (err) return err;
+    const id = parseInt(b.id, 10);
+    const [t] = id ? await sql`select * from control_tests where id = ${id}` : [];
+    if (!t || t.org !== p.org) return fail("Тест не найден.");
+    if (t.closed || tsOf(t.due_at) < Date.now() - 10 * 60e3) return fail("Срок теста истёк.");
+    const n = Math.floor(+b.n), s = Math.floor(+b.s);
+    if (!(n > 0 && n <= 50 && s >= 0 && s <= n)) return fail("Некорректный результат.");
+    const pc = Math.round((s / n) * 100);
+    const r = await sql`insert into control_results (test_id, user_id, s, n, p) values (${t.id}, ${p.id}, ${s}, ${n}, ${pc})
+                        on conflict do nothing returning p`;
+    if (!r.length) return fail("Вы уже прошли этот тест.");
+    await checkAch(p);
+    return { ok: true, p: pc };
+  }
+  const { p, err } = await who(b, ["leader", "moderator", "owner"]);
+  if (err) return err;
+  const org = staffOrg(p, b);
+  if (op === "create") {
+    if (!org) return fail("Выберите организацию.");
+    const topics = (Array.isArray(b.topics) ? b.topics : []).map(String).filter((k) => TOPICS[k]);
+    if (!topics.length) return fail("Выберите хотя бы одну тему.");
+    const n = Math.min(20, Math.max(5, Math.floor(+b.n) || 10));
+    const days = Math.min(14, Math.max(1, Math.floor(+b.days) || 3));
+    const title = clean(b.title, 80) || "Контрольный тест";
+    const [{ k }] = await sql`select count(*)::int k from control_tests where org = ${org} and not closed and due_at > now()`;
+    if (k >= 5) return fail("Активных тестов уже 5. Закройте один из них.");
+    if (!(await hit(`ct:${p.id}`, 20, 86400))) return fail(RATE_MSG, { code: "rate" });
+    const [t] = await sql`insert into control_tests (org, author_id, author, title, topics, n, due_at)
+                          values (${org}, ${p.id}, ${p.nick || p.login}, ${title}, ${topics}, ${n}, now() + make_interval(days => ${days})) returning id`;
+    await audit(p.login, "ctrl_create", org, { id: t.id, title, topics, n, days });
+  } else if (op === "close") {
+    const id = parseInt(b.id, 10);
+    const r = id ? await sql`update control_tests set closed = true where id = ${id} and (${org}::text is null or org = ${org}) returning id` : [];
+    if (!r.length) return fail("Тест не найден.");
+  }
+  const tests = org
+    ? await sql`select * from control_tests where org = ${org} order by created_at desc limit 10`
+    : await sql`select * from control_tests order by created_at desc limit 10`;
+  const out = [];
+  for (const t of tests) out.push(await ctrlDetails(t));
+  return { ok: true, org, topics: TOPICS, tests: out };
+}
+async function ctrlDetails(t) {
+  const sql = db();
+  const res = await sql`select r.p, r.s, r.n, r.at, p.nick, p.login from control_results r join profiles p on p.id = r.user_id
+                        where r.test_id = ${t.id} order by r.p desc, r.at`;
+  const done = new Set(res.map((r) => r.login));
+  // автор теста его не проходит
+  const all = await sql`select login, nick from profiles where org = ${t.org} and not banned and approval = 'ok' and created_at < ${t.due_at}
+                          and id is distinct from ${t.author_id} order by nick`;
+  const miss = all.filter((x) => !done.has(x.login));
+  return {
+    id: String(t.id), org: t.org, title: t.title, topics: t.topics, n: t.n, due: t.due_at, by: t.author, created: t.created_at,
+    active: !t.closed && tsOf(t.due_at) > Date.now(),
+    avg: res.length ? Math.round(res.reduce((s, r) => s + r.p, 0) / res.length) : null,
+    results: res.map((r) => ({ nick: r.nick, login: r.login, p: r.p, s: r.s, n: r.n, at: r.at })),
+    missing: miss.slice(0, 50).map((x) => x.nick), missingN: miss.length,
+  };
+}
+
+// ───────────── Рапорты ─────────────
+const RP_KINDS = {
+  arrest: "Рапорт о задержании",
+  force: "Рапорт о применении силы",
+  incident: "Рапорт о происшествии",
+  service: "Служебный рапорт",
+};
+const RP_STATUS = { new: "на рассмотрении", ok: "принят", no: "отклонён" };
+const RP_ICON = { new: "⏳", ok: "✅", no: "❌" };
+// Многострочный текст: управляющие символы убираются, переносы строк остаются
+const cleanText = (s, max) =>
+  String(s == null ? "" : s).replace(/\r\n?/g, "\n").replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, " ")
+    .split("\n").map((l) => l.replace(/\s+/g, " ").trim()).join("\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, max);
+function rpFields(f) {
+  const out = {};
+  if (!f || typeof f !== "object" || Array.isArray(f)) return out;
+  for (const k of Object.keys(f).slice(0, 30)) {
+    if (!/^[a-z_]{1,20}$/.test(k)) continue;
+    const v = f[k];
+    if (Array.isArray(v)) out[k] = v.slice(0, 20).map((x) => clean(x, 120)).filter(Boolean);
+    else if (v != null && v !== "") out[k] = cleanText(v, 2000);
+  }
+  return out;
+}
+const rpOut = (r, full = true) => ({
+  id: String(r.id), org: r.org, kind: r.kind, title: r.title, author: r.author, login: r.login, static: r.static_id, dept: r.dept,
+  status: r.status, reviewer: r.reviewer || "", note: r.review_note || "", reviewed: r.reviewed_at, created: r.created_at,
+  ...(full ? { fields: r.fields || {}, body: r.body } : {}),
+});
+// Текст рапорта для Telegram
+function rpText(r, max = 3500) {
+  const body = r.body.length > max ? r.body.slice(0, max) + " …" : r.body;
+  return `📝 <b>${esc(r.title)} №${r.id}</b> · ${esc(r.org)}\n` +
+    `От: ${esc(r.author)} <code>${esc(r.login)}</code>, статик ${esc(r.static_id)}${r.dept ? ", " + esc(r.dept) : ""}\n` +
+    `${fmtDate(r.created_at)} · ${RP_ICON[r.status]} ${RP_STATUS[r.status]}${r.reviewer ? " (" + esc(r.reviewer) + ")" : ""}` +
+    `${r.review_note ? "\nКомментарий: " + esc(r.review_note) : ""}\n\n${esc(body)}`;
+}
+const rpButtons = (r) =>
+  r.status === "new" ? { reply_markup: { inline_keyboard: [[{ text: "✅ Принять", callback_data: `rp:ok:${r.id}` }, { text: "❌ Отклонить", callback_data: `rp:no:${r.id}` }]] } } : {};
+// Новый рапорт: руководству организации (уведомления можно выключить: /reports off), модераторам и владельцу — если включили /reports on
+async function rpNotify(r) {
+  const sql = db();
+  const chats = new Set();
+  const leaders = await sql`select tg_id from profiles where rank = 'leader' and org = ${r.org} and tg_id is not null and not banned`;
+  for (const l of leaders) if ((await getSetting("rpn:" + l.tg_id, { on: true })).on) chats.add(String(l.tg_id));
+  const staff = (await moderatorChats()).concat(OWNER_TG ? [OWNER_TG] : []);
+  for (const c of staff) if ((await getSetting("rpn:" + c, { on: false })).on) chats.add(c);
+  for (const c of chats) await send(c, rpText(r, 1500) + (r.body.length > 1500 ? `\n\nПолностью: /report ${r.id}` : ""), { disable_notification: true, ...rpButtons(r) });
+}
+// Решение по рапорту. who: { label, name, org (null — любая организация) }
+async function rpReview(by, id, ok, note) {
+  const sql = db();
+  const [r0] = id ? await sql`select * from reports where id = ${id}` : [];
+  if (!r0 || (by.org && r0.org !== by.org)) return { err: "Рапорт не найден." };
+  const [r] = await sql`update reports set status = ${ok ? "ok" : "no"}, reviewer = ${by.name}, review_note = ${note || ""}, reviewed_at = now()
+                        where id = ${r0.id} returning *`;
+  await audit(by.label, "report_review", r.login, { id: String(r.id), org: r.org, status: r.status });
+  if (r.user_id && r0.status !== r.status)
+    await sql`insert into broadcasts (user_id, title, author, text, expires_at)
+              values (${r.user_id}, ${`${ok ? "✅" : "❌"} Рапорт №${r.id} ${ok ? "принят" : "отклонён"}`}, ${by.label},
+                      ${`${r.title} от ${new Date(r.created_at).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" })}: ${ok ? "принят" : "отклонён"} (${by.name}).${note ? " Комментарий: " + note.replace(/[.!?]?$/, (m) => m || ".") : ""} Рапорт есть в личном кабинете, раздел «Мои рапорты».`},
+                      now() + interval '7 days')`;
+  return { r };
+}
+async function reportsApi(b) {
+  const op = String(b.op || "mine");
+  const sql = db();
+  if (op === "create" || op === "mine" || op === "del") {
+    const { p, err } = await who(b);
+    if (err) return err;
+    if (op === "create") {
+      const kind = String(b.kind || "");
+      if (!RP_KINDS[kind]) return fail("Неизвестный вид рапорта.");
+      const body = cleanText(b.body, 5000);
+      if (body.length < 20) return fail("Рапорт слишком короткий: заполните поля.");
+      if (!(await hit(`rp:${p.id}`, 15, 3600))) return fail(RATE_MSG, { code: "rate" });
+      const title = clean(b.title, 120) || RP_KINDS[kind];
+      const [r] = await sql`insert into reports (user_id, org, author, login, static_id, dept, kind, title, fields, body)
+                            values (${p.id}, ${p.org}, ${p.nick || p.login}, ${p.login}, ${p.static_id}, ${p.dept || ""}, ${kind}, ${title},
+                                    ${sql.json(rpFields(b.fields))}, ${body}) returning *`;
+      await audit(p.login, "report_create", r.org, { id: String(r.id), kind });
+      try {
+        await rpNotify(r);
+      } catch (e) {
+        console.error("report notify", e);
+      }
+      return { ok: true, report: rpOut(r) };
+    }
+    if (op === "del") {
+      const id = parseInt(b.id, 10);
+      const r = id ? await sql`delete from reports where id = ${id} and user_id = ${p.id} and status = 'new' returning id` : [];
+      if (!r.length) return fail("Удалить можно только свой рапорт, пока его не рассмотрели.");
+      await audit(p.login, "report_delete", p.org, { id: String(id) });
+    }
+    const rows = await sql`select * from reports where user_id = ${p.id} order by created_at desc limit 50`;
+    return { ok: true, list: rows.map((r) => rpOut(r)) };
+  }
+  const { p, err } = await who(b, ["leader", "moderator", "owner"]);
+  if (err) return err;
+  const org = staffOrg(p, b);
+  if (op === "review") {
+    const x = await rpReview({ label: p.login, name: p.nick || p.login, org: p.rank === "leader" ? p.org : null }, parseInt(b.id, 10), !!b.ok, clean(b.note, 300));
+    if (x.err) return fail(x.err);
+  } else if (op !== "list") return fail("Неизвестное действие.");
+  const st = RP_STATUS[b.status] ? String(b.status) : null;
+  const kind = RP_KINDS[b.kind] ? String(b.kind) : null;
+  const q = clean(b.q, 40).toLowerCase();
+  const like = q ? "%" + likeEsc(q) + "%" : null;
+  const rows = await sql`
+    select * from reports
+    where (${org}::text is null or org = ${org}) and (${st}::text is null or status = ${st}) and (${kind}::text is null or kind = ${kind})
+      and (${like}::text is null or lower(author) like ${like} or lower(login) like ${like} or lower(title) like ${like} or static_id like ${like} or id::text = ${q})
+    order by created_at desc limit 100`;
+  const [{ n }] = await sql`select count(*)::int n from reports where status = 'new' and (${org}::text is null or org = ${org})`;
+  return { ok: true, org, kinds: RP_KINDS, newN: n, list: rows.map((r) => rpOut(r)) };
+}
+
+// ───────────── Приём новичков ─────────────
+const approvalMsg = (p) =>
+  p.approval === "rejected"
+    ? `Руководство организации ${p.org} отклонило заявку. Связь: ${CONTACT}`
+    : `Ваша заявка ждёт подтверждения руководства организации ${p.org}. Попробуйте войти позже.`;
+async function askApproval(p) {
+  const sql = db();
+  const leaders = await sql`select tg_id from profiles where org = ${p.org} and rank = 'leader' and tg_id is not null and not banned`;
+  const kb = { inline_keyboard: [[{ text: "✅ Принять", callback_data: `ap:ok:${p.id}` }, { text: "❌ Отклонить", callback_data: `ap:no:${p.id}` }]] };
+  const text = `🆕 <b>Заявка в ${esc(p.org)}</b>\n\n${card(p, "leader")}\n\nПринять сотрудника в программу?`;
+  const chats = new Set(leaders.map((l) => String(l.tg_id)));
+  if (!chats.size && OWNER_TG) chats.add(OWNER_TG); // у руководства нет Telegram — решает владелец
+  for (const c of chats) await send(c, text, { reply_markup: kb });
+  return chats.size;
+}
+async function decideApproval(a, id, ok) {
+  const sql = db();
+  const [p0] = await sql`select * from profiles where id = ${id}`;
+  if (!p0) return { err: "Аккаунт не найден." };
+  if (a.kind === "leader" && a.profile.org !== p0.org) return { err: "Это заявка другой организации." };
+  const [r] = await sql`update profiles set approval = ${ok ? "ok" : "rejected"} where id = ${id} and approval = 'pending' returning *`;
+  if (!r) return { err: `Заявка уже рассмотрена: ${p0.approval === "ok" ? "принята" : p0.approval === "rejected" ? "отклонена" : "нет заявки"}.` };
+  await audit(a.label, ok ? "approve" : "reject", r.login, { org: r.org });
+  if (ok)
+    await sql`insert into broadcasts (user_id, title, author, text, expires_at)
+              values (${r.id}, ${"✅ Заявка принята"}, ${a.label}, ${`Добро пожаловать в ${r.org}! Руководство подтвердило ваш аккаунт.`}, now() + interval '7 days')`;
+  if (a.kind !== "owner") await quiet(`${ok ? "✅" : "❌"} ${esc(a.profile.login)} ${ok ? "принял" : "отклонил"} заявку <b>${esc(r.login)}</b> в ${esc(r.org)}`);
+  return { text: `${ok ? "✅ Принят" : "❌ Отклонён"}: <b>${esc(r.login)}</b> (${esc(r.nick)}) в ${esc(r.org)}${ok ? "" : ".\nЕсли передумаете: /approve " + esc(r.login)}` };
+}
+
+// ───────────── Еженедельный отчёт руководству ─────────────
+async function orgReport(org) {
+  const cur = mskWeek(), w = weekBefore(cur);
+  const L = await weekStats(org, w, true);
+  if (!L.length) return null;
+  const sql = db();
+  const ids = L.map((x) => x.id);
+  const fresh = L.filter((x) => tsOf(x.created_at) >= w.start && tsOf(x.created_at) < cur.start).length;
+  const act = L.filter((x) => tsOf(x.last_seen) >= w.start).length;
+  const det = L.reduce((s, x) => s + x.det, 0), tests = L.reduce((s, x) => s + x.tests, 0);
+  const tp = L.filter((x) => x.avg_p != null);
+  const avg = tp.length ? Math.round(tp.reduce((s, x) => s + x.avg_p, 0) / tp.length) : null;
+  const topX = [...L].sort(byWxp).filter((x) => x.wxp > 0).slice(0, 3);
+  const topD = [...L].sort((a, c) => c.det - a.det).filter((x) => x.det > 0).slice(0, 3);
+  const idle = L.filter((x) => Date.now() - tsOf(x.last_seen) >= 14 * 864e5);
+  const ct = await sql`select * from control_tests where org = ${org} and created_at < ${new Date(cur.start)} and due_at >= ${new Date(w.start)} order by created_at`;
+  const ctl = [];
+  for (const t of ct) {
+    const [r] = await sql`select count(*)::int n, round(avg(p))::int a from control_results where test_id = ${t.id} and user_id = any(${ids}::uuid[])`;
+    ctl.push(`• «${esc(t.title)}» — прошли ${r.n} из ${L.length}${r.a == null ? "" : " (ср. " + r.a + "%)"}`);
+  }
+  let t = `📊 <b>Отчёт ${esc(org)} за неделю ${ddmm(w.start)}–${ddmm(cur.start - 864e5)}</b>\n` +
+    `Сотрудников: ${L.length}${fresh ? " (новых: " + fresh + ")" : ""}\nЗаходили за неделю: ${act}\n` +
+    `Задержаний: ${det} · тестов: ${tests}${avg == null ? "" : " (ср. " + avg + "%)"}`;
+  if (topX.length) t += `\n\n🏆 <b>Лучшие по опыту</b>\n` + topX.map((x, i) => `${i + 1}. ${esc(x.nick)} — ${x.wxp} опыта`).join("\n");
+  if (topD.length) t += `\n\n🚓 <b>Больше всего задержаний</b>\n` + topD.map((x, i) => `${i + 1}. ${esc(x.nick)} — ${x.det}`).join("\n");
+  if (ctl.length) t += `\n\n📋 <b>Контрольные тесты</b>\n` + ctl.join("\n");
+  if (idle.length) t += `\n\n💤 Не заходили 14+ дней (${idle.length}): ${idle.slice(0, 10).map((x) => esc(x.nick)).join(", ")}${idle.length > 10 ? " …" : ""}`;
+  return t;
+}
+async function sendOrgReports() {
+  const rows = await db()`select org, tg_id from profiles where rank = 'leader' and tg_id is not null and not banned`;
+  const by = {};
+  rows.forEach((r) => (by[r.org] = by[r.org] || []).push(String(r.tg_id)));
+  let n = 0;
+  for (const org of Object.keys(by)) {
+    const t = await orgReport(org);
+    if (!t) continue;
+    for (const c of by[org]) {
+      await send(c, t);
+      n++;
+    }
+  }
+  return n;
+}
+
+// ───────────── ИИ-помощник: лог вопросов и оценки ответов ─────────────
+async function aiChat() {
+  const s = await getSetting("ailog", { on: true });
+  return s && s.on === false ? null : (s && s.chat) || OWNER_TG || null;
+}
+async function aiLog(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!(await hit(`ai:${p.id}`, 80, 3600))) return fail(RATE_MSG, { code: "rate" });
+  const q = String(b.q == null ? "" : b.q).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 500);
+  if (!q) return fail("Пустой вопрос.");
+  const refs = (Array.isArray(b.refs) ? b.refs : []).slice(0, 10).map((r) => clean(r, 60)).filter(Boolean);
+  const ok = b.ok !== false;
+  const [r] = await db()`insert into ai_log (user_id, q, refs, ok) values (${p.id}, ${q}, ${refs}, ${ok}) returning id`;
+  const chat = await aiChat();
+  if (chat)
+    await send(chat, `🤖 <b>${esc(p.login)}</b> · ${esc(p.org)}${ok ? "" : " · ⚠️ ИИ не ответил"} · №${r.id}\n${esc(q)}${refs.length ? "\n<i>Статьи: " + esc(refs.join(", ")) + "</i>" : ""}`, { disable_notification: true });
+  return { ok: true, id: String(r.id) };
+}
+async function aiVote(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const id = parseInt(b.id, 10);
+  const v = b.vote === 1 || b.vote === "1" ? 1 : b.vote === -1 || b.vote === "-1" ? -1 : 0;
+  if (!id || !v) return fail("Некорректная оценка.");
+  const [r] = await db()`update ai_log set vote = ${v} where id = ${id} and user_id = ${p.id} and vote <> ${v} returning *`;
+  if (r && v < 0) {
+    const chat = await aiChat();
+    if (chat) await send(chat, `👎 <b>Ответ ИИ не помог</b> · №${r.id} · ${esc(p.login)}\n${esc(r.q)}${r.refs.length ? "\n<i>Статьи: " + esc(r.refs.join(", ")) + "</i>" : ""}`, { disable_notification: true });
+  }
+  return { ok: true };
+}
+async function aiStatsText(days = 7) {
+  const sql = db();
+  const [s] = await sql`select count(*)::int n, count(*) filter (where vote > 0)::int up, count(*) filter (where vote < 0)::int down,
+                               count(*) filter (where not ok)::int bad, count(distinct user_id)::int users
+                        from ai_log where at > now() - make_interval(days => ${days})`;
+  const refs = await sql`select r, count(*)::int n from ai_log, unnest(refs) r where vote < 0 and at > now() - make_interval(days => ${days})
+                         group by r order by n desc limit 5`;
+  const last = await sql`select l.*, p.login from ai_log l left join profiles p on p.id = l.user_id order by l.at desc limit 10`;
+  return `🤖 <b>ИИ-помощник за ${days} дн.</b>\nВопросов: ${s.n} от ${s.users} чел. · 👍 ${s.up} · 👎 ${s.down}${s.bad ? " · без ответа: " + s.bad : ""}` +
+    (refs.length ? `\n\n<b>Где ИИ чаще ошибается</b> (статьи в ответах с 👎)\n` + refs.map((r) => `• ${esc(r.r)} — ${r.n}`).join("\n") : "") +
+    (last.length ? `\n\n<b>Последние вопросы</b>\n` + last.map((l) => `${l.vote > 0 ? "👍" : l.vote < 0 ? "👎" : "•"} ${esc(l.login || "?")}: ${esc(l.q.slice(0, 120))}`).join("\n") : "");
+}
+
 async function actorOf(tgId) {
   const id = String(tgId);
   if (OWNER_TG && id === OWNER_TG) return { kind: "owner", tg: id, label: "owner" };
@@ -956,7 +1593,13 @@ const HELP_COMMON =
   "/kick &lt;логин&gt; — завершить все сессии без блокировки\n" +
   "/tag &lt;логин&gt; &lt;тег&gt; [тег…] — добавить теги; /untag &lt;логин&gt; &lt;тег&gt; — убрать\n" +
   "/setorg &lt;логин&gt; &lt;организация&gt; — сменить организацию (" + DEPTS.join(", ") + ")\n" +
-  "/resets — ожидающие запросы на сброс пароля\n";
+  "/resets — ожидающие запросы на сброс пароля\n" +
+  "\n<b>Рейтинг и руководство</b>\n" +
+  "/top [организация] [tests|det] — рейтинг недели\n" +
+  "/results [номер] — контрольные тесты руководства\n" +
+  "/pending — заявки новичков; /approve &lt;логин&gt; — принять\n" +
+  "/reports [организация|логин|new] — рапорты сотрудников; /report &lt;номер&gt; — открыть\n" +
+  "/reports on|off — присылать новые рапорты сюда\n";
 const HELP_OWNER =
   "\n<b>Только владелец</b>\n" +
   "/role &lt;логин&gt; &lt;user|leader|moderator|owner&gt; [telegram_id] — выдать роль\n" +
@@ -968,7 +1611,13 @@ const HELP_OWNER =
   "/audit [логин|действие] — журнал действий, например /audit ban\n";
 const HELP_LEADER =
   "<b>Команды руководства</b>\n" +
-  "/broadcast_org &lt;организация&gt; &lt;текст&gt; — сообщение сотрудникам вашей организации в программе\n";
+  "/broadcast_org &lt;организация&gt; &lt;текст&gt; — сообщение сотрудникам вашей организации в программе\n" +
+  "/top [tests|det] — рейтинг недели вашей организации\n" +
+  "/results [номер] — результаты контрольных тестов\n" +
+  "/pending — заявки новичков (если владелец включил приём); /approve &lt;логин&gt; — принять\n" +
+  "/reports [логин|new] — рапорты сотрудников; /report &lt;номер&gt; — открыть, принять или отклонить\n" +
+  "/reports on|off — уведомления о новых рапортах (по умолчанию включены)\n" +
+  "\nСмены, контрольные тесты и рапорты — в программе: панель руководителя. Сводка смены и отчёт по понедельникам приходят сюда.\n";
 const HELP_SERVICE =
   "\n<b>Сервис</b>\n" +
   "/health — статус базы, функции, ИИ и законов\n" +
@@ -983,11 +1632,17 @@ const HELP_OWNER3 =
   "/blacklist [add|del слово] — запрещённые слова в логинах и никах\n" +
   "/appeal &lt;текст&gt; — куда обжаловать предупреждения (видно пользователю)\n" +
   "/versions — версии программы у пользователей\n" +
-  "/backup — зашифрованная резервная копия\n";
+  "/laws — проверить законы сейчас; /laws status — последние проверки\n" +
+  "/backup — зашифрованная резервная копия\n" +
+  "/approval on|off — приём новичков с подтверждением руководства\n" +
+  "/orgreport [организация|on|off] — еженедельный отчёт руководству\n" +
+  "/ailog [дней|on|off] — вопросы к ИИ-помощнику и оценки ответов\n";
 const AUDIT_ACTIONS = [
   "ban", "unban", "tempban", "tempban_end", "autoban", "warn", "unwarn", "kick", "note", "tag", "untag",
   "role", "rename", "setstatic", "setorg", "delete", "profile_update", "password_reset", "reset_approve", "reset_reject",
-  "broadcast", "maintenance", "regs", "reglimit", "blacklist", "appeal", "delay", "backup",
+  "broadcast", "maintenance", "regs", "reglimit", "blacklist", "appeal", "delay", "backup", "laws",
+  "approve", "reject", "approval", "shift_start", "shift_end", "ctrl_create", "sync_reset",
+  "report_create", "report_delete", "report_review",
 ];
 
 async function findProfile(login) {
@@ -1032,6 +1687,8 @@ async function fullCard(p, viewer) {
   const notes = await sql`select * from account_notes where user_id = ${p.id} order by at desc limit 5`;
   if (notes.length) t += `\n\n📝 <b>Заметки</b>\n` + notes.map((x) => `• ${fmtDate(x.at)} · ${esc(x.author)}: ${esc(x.text)}`).join("\n");
   if (viewer === "owner") t += "\n" + statLine((await userStats())[p.id]);
+  const ach = await sql`select code from achievements where user_id = ${p.id} order by at`;
+  if (ach.length) t += `\n🏆 Достижения: ${ach.map((x) => ACH_BY[x.code]).filter(Boolean).map((x) => x.icon + " " + x.name).join(", ")}`;
   return t;
 }
 
@@ -1113,7 +1770,15 @@ async function runConfirmed(a, action, x) {
 }
 
 async function onMessage(m, opts = {}) {
-  if (!m.from || !m.chat || m.chat.type !== "private") return;
+  if (!m.from || !m.chat) return;
+  if (m.chat.type !== "private") {
+    // в группе бот понимает только /ailog here от владельца: лог вопросов ИИ будет приходить в эту группу
+    if (/^\/ailog(@\S+)?\s+here\b/i.test(String(m.text || "")) && OWNER_TG && String(m.from.id) === OWNER_TG) {
+      await setSetting("ailog", { on: true, chat: String(m.chat.id) });
+      await send(m.chat.id, "✅ Вопросы к ИИ-помощнику будут приходить в этот чат. Вернуть в личные сообщения: /ailog me (в личке с ботом).");
+    }
+    return;
+  }
   const text = String(m.text || "").trim();
   if (!text) return;
   if (!text.startsWith("/")) return onText(m, text);
@@ -1128,11 +1793,11 @@ async function onMessage(m, opts = {}) {
     return send(
       chat,
       `Senko Assistant.\nВаш Telegram ID: <code>${m.from.id}</code>\n` +
-        (a ? `Доступ: ${a.kind === "owner" ? "владелец" : "модератор памятки"}. Команды: /help` : "Команды вам недоступны. Если вы модератор, сообщите этот ID владельцу.")
+        (a ? `Доступ: ${a.kind === "owner" ? "владелец" : a.kind === "leader" ? "руководство " + esc(a.profile.org) : "модератор памятки"}. Команды: /help` : "Команды вам недоступны. Если вы модератор, сообщите этот ID владельцу.")
     );
   }
   if (!a) return send(chat, "Нет доступа.");
-  if (a.kind === "leader" && !["help", "broadcast_org"].includes(cmd)) return send(chat, "Руководству доступна команда /broadcast_org. Список: /help");
+  if (a.kind === "leader" && !["help", "broadcast_org", "top", "results", "pending", "approve", "reports", "report"].includes(cmd)) return send(chat, "Эта команда руководству недоступна. Список: /help");
   const owner = a.kind === "owner";
   const ownerOnly = () => send(chat, "Эта команда доступна только владельцу.");
   // цель команды: первый аргумент — логин
@@ -1580,6 +2245,156 @@ async function onMessage(m, opts = {}) {
       return;
     }
 
+    case "laws":
+      if (!owner) return ownerOnly();
+      return lawsCmd(chat, String(args[0] || "").toLowerCase());
+
+    case "top": {
+      // /top [организация] [xp|tests|det]; руководство видит только свою организацию
+      let org = null, by = "xp";
+      for (const x of args.map((v) => v.toLowerCase())) {
+        const o = DEPTS.find((d) => d.toLowerCase() === x);
+        if (o) org = o;
+        else if (["xp", "tests", "det", "опыт", "тесты", "задержания"].includes(x)) by = { опыт: "xp", тесты: "tests", задержания: "det" }[x] || x;
+      }
+      if (a.kind === "leader") org = a.profile.org;
+      const w = mskWeek();
+      let L = await weekStats(org, w);
+      if (by === "tests") L = L.filter((x) => x.tests > 0).sort((p1, p2) => p2.avg_p - p1.avg_p || p2.tests - p1.tests);
+      else if (by === "det") L = L.filter((x) => x.det > 0).sort((p1, p2) => p2.det - p1.det);
+      else L = L.filter((x) => x.wxp > 0).sort(byWxp);
+      const head = `🏆 <b>Рейтинг недели${org ? " · " + esc(org) : ""}</b> (с ${ddmm(w.start)}, ${by === "tests" ? "по тестам" : by === "det" ? "по задержаниям" : "по опыту"})`;
+      if (!L.length) return send(chat, head + "\nЗа эту неделю данных пока нет.");
+      const val = (x) => (by === "tests" ? `${x.avg_p}% (${x.tests} ${plural(x.tests, "тест", "теста", "тестов")})` : by === "det" ? `${x.det}` : `${x.wxp} опыта · ${x.lvl.name}`);
+      return send(chat, head + "\n" + L.slice(0, 10).map((x, i) => `${i + 1}. ${esc(x.nick)} <code>${esc(x.login)}</code>${org ? "" : " · " + esc(x.org)} — ${val(x)}`).join("\n") +
+        (a.kind === "leader" ? "" : "\n\n/top &lt;организация&gt; [tests|det]"));
+    }
+
+    case "results": {
+      const id = parseInt(args[0], 10);
+      const scope = a.kind === "leader" ? a.profile.org : null;
+      if (id) {
+        const [t] = await sql`select * from control_tests where id = ${id}`;
+        if (!t || (scope && t.org !== scope)) return send(chat, "Тест не найден.");
+        const d = await ctrlDetails(t);
+        return send(chat, `📋 <b>№${d.id} · ${esc(d.title)}</b> · ${esc(d.org)}\nТемы: ${d.topics.map((k) => TOPICS[k] || k).join(", ")} · вопросов: ${d.n}\nСрок: до ${fmtDate(d.due)}${d.active ? "" : " (завершён)"} · создал ${esc(d.by)}\n\n` +
+          `<b>Прошли: ${d.results.length}</b>${d.avg == null ? "" : " · средний результат " + d.avg + "%"}\n` +
+          (d.results.length ? d.results.map((r) => `• ${esc(r.nick)} — ${r.p}% (${r.s} из ${r.n})`).join("\n") : "пока никто") +
+          (d.missingN ? `\n\n<b>Не прошли: ${d.missingN}</b>\n${d.missing.map(esc).join(", ")}${d.missingN > d.missing.length ? " …" : ""}` : ""));
+      }
+      const rows = scope
+        ? await sql`select * from control_tests where org = ${scope} order by created_at desc limit 8`
+        : await sql`select * from control_tests order by created_at desc limit 8`;
+      if (!rows.length) return send(chat, "Контрольных тестов ещё не было. Создать тест можно в программе: панель руководителя → «Контрольные тесты».");
+      const L = [];
+      for (const t of rows) {
+        const d = await ctrlDetails(t);
+        L.push(`№${d.id} · ${esc(d.org)} · «${esc(d.title)}» · ${d.active ? "до " + fmtDate(d.due) : "завершён"}\n   прошли ${d.results.length} из ${d.results.length + d.missingN}${d.avg == null ? "" : ", ср. " + d.avg + "%"}`);
+      }
+      return send(chat, "📋 <b>Контрольные тесты</b>\n" + L.join("\n") + "\n\nПодробно: /results &lt;номер&gt;");
+    }
+
+    case "reports": {
+      const scope = a.kind === "leader" ? a.profile.org : null;
+      const arg = String(args[0] || "");
+      if (/^(on|off)$/i.test(arg)) {
+        const on = arg.toLowerCase() === "on";
+        await setSetting("rpn:" + a.tg, { on });
+        return send(chat, on ? `🔔 Новые рапорты${scope ? " " + esc(scope) : " всех организаций"} будут приходить сюда. Выключить: /reports off` : "🔕 Уведомления о новых рапортах выключены. Включить: /reports on");
+      }
+      let org = scope, login = null, st = null;
+      if (arg.toLowerCase() === "new") st = "new";
+      else if (arg) {
+        const d = DEPTS.find((x) => x.toLowerCase() === arg.toLowerCase());
+        if (d && !scope) org = d;
+        else if (!d) login = arg.toLowerCase();
+      }
+      const rows = await sql`select * from reports
+        where (${org}::text is null or org = ${org}) and (${login}::text is null or lower(login) = ${login}) and (${st}::text is null or status = ${st})
+        order by created_at desc limit 15`;
+      if (!rows.length) return send(chat, "Рапортов нет." + (arg ? "" : " Сотрудники пишут их в программе: «Работа» → «Рапорты»."));
+      const [{ n }] = await sql`select count(*)::int n from reports where status = 'new' and (${scope}::text is null or org = ${scope})`;
+      return send(chat, `📝 <b>Рапорты${org ? " · " + esc(org) : ""}${login ? " · " + esc(login) : ""}${st ? " · на рассмотрении" : ""}</b>\n` +
+        rows.map((r) => `${RP_ICON[r.status]} №${r.id} · ${fmtDate(r.created_at).replace(" МСК", "")}${org ? "" : " · " + esc(r.org)}\n   ${esc(r.title)} — ${esc(r.author)}`).join("\n") +
+        `\n\nНа рассмотрении: ${n}. Открыть: /report &lt;номер&gt;\n/reports new — только новые; /reports &lt;логин&gt;${scope ? "" : "; /reports &lt;организация&gt;"}\n/reports on|off — уведомления о новых`);
+    }
+
+    case "report": {
+      const id = parseInt(String(args[0] || "").replace(/^№/, ""), 10);
+      if (!id) return send(chat, "Использование: /report &lt;номер&gt;. Список: /reports");
+      const [r] = await sql`select * from reports where id = ${id}`;
+      if (!r || (a.kind === "leader" && r.org !== a.profile.org)) return send(chat, "Рапорт не найден.");
+      return send(chat, rpText(r), rpButtons(r));
+    }
+
+    case "pending": {
+      const scope = a.kind === "leader" ? a.profile.org : null;
+      const rows = scope
+        ? await sql`select * from profiles where approval = 'pending' and org = ${scope} order by created_at limit 10`
+        : await sql`select * from profiles where approval = 'pending' order by created_at limit 10`;
+      const st = await getSetting("approval", { on: false });
+      if (!rows.length) return send(chat, `Заявок нет. Приём новичков ${st.on ? "включён" : "выключен"}${owner ? " (/approval on|off)" : ""}.`);
+      for (const p of rows)
+        await send(chat, `🆕 <b>Заявка в ${esc(p.org)}</b> от ${fmtDate(p.created_at)}\n\n${card(p, a.kind === "owner" ? "owner" : "leader")}`, {
+          reply_markup: { inline_keyboard: [[{ text: "✅ Принять", callback_data: `ap:ok:${p.id}` }, { text: "❌ Отклонить", callback_data: `ap:no:${p.id}` }]] },
+        });
+      return;
+    }
+
+    case "approve": {
+      const p = await target("/approve &lt;логин&gt; — принять отклонённую или ожидающую заявку");
+      if (!p) return;
+      if (a.kind === "leader" && p.org !== a.profile.org) return send(chat, "Это сотрудник другой организации.");
+      if (p.approval === "ok") return send(chat, "Аккаунт уже подтверждён.");
+      await sql`update profiles set approval = 'pending' where id = ${p.id}`;
+      const r = await decideApproval(a, p.id, true);
+      return send(chat, r.err || r.text);
+    }
+
+    case "approval": {
+      if (!owner) return ownerOnly();
+      const v = String(args[0] || "").toLowerCase();
+      if (v !== "on" && v !== "off") {
+        const st = await getSetting("approval", { on: false });
+        return send(chat, `Приём новичков: ${st.on ? "включён" : "выключен"}.\nКогда включён, новый аккаунт ждёт, пока руководство его организации нажмёт «Принять» в боте (если у руководства нет Telegram — решаете вы).\n/approval on · /approval off · заявки: /pending`);
+      }
+      await setSetting("approval", { on: v === "on" });
+      await audit(a.label, "approval", v, {});
+      if (v === "off") {
+        const r = await sql`update profiles set approval = 'ok' where approval = 'pending' returning login`;
+        return send(chat, `✅ Приём новичков выключен.${r.length ? " Ожидавшие заявки приняты автоматически: " + r.map((x) => esc(x.login)).join(", ") + "." : ""}`);
+      }
+      return send(chat, "✅ Приём новичков включён. Новые аккаунты будут ждать подтверждения руководства своей организации.\nВажно: заявки корректно показываются только в программе 1.9 и новее (/versions).");
+    }
+
+    case "orgreport": {
+      if (!owner) return ownerOnly();
+      const v = String(args[0] || "").toLowerCase();
+      if (v === "on" || v === "off") {
+        const cur = await getSetting("orgreport", {});
+        await setSetting("orgreport", { ...cur, on: v === "on" });
+        return send(chat, v === "on" ? "✅ Еженедельный отчёт руководству включён: понедельник, 12:00 МСК." : "Еженедельный отчёт руководству выключен.");
+      }
+      const org = DEPTS.find((d) => d.toLowerCase() === v);
+      if (!org) {
+        const cur = await getSetting("orgreport", {});
+        return send(chat, `Еженедельный отчёт руководителям с Telegram: ${cur.on === false ? "выключен" : "включён (понедельник, 12:00 МСК)"}.\nПосмотреть отчёт сейчас: /orgreport &lt;${DEPTS.join("|")}&gt;\n/orgreport on|off`);
+      }
+      return send(chat, (await orgReport(org)) || "В организации нет сотрудников.");
+    }
+
+    case "ailog": {
+      if (!owner) return ownerOnly();
+      const v = String(args[0] || "").toLowerCase();
+      if (v === "on" || v === "off" || v === "me") {
+        const cur = await getSetting("ailog", { on: true });
+        await setSetting("ailog", v === "me" ? { on: true } : { ...cur, on: v === "on" });
+        return send(chat, v === "off" ? "Лог вопросов ИИ в Telegram выключен (вопросы по-прежнему видны в /ailog)." : "✅ Вопросы к ИИ будут приходить сюда, без звука.");
+      }
+      const days = Math.min(90, Math.max(1, parseInt(v, 10) || 7));
+      return send(chat, (await aiStatsText(days)) + "\n\n/ailog 30 — за 30 дней · /ailog off|on · в группу: добавьте бота в группу и напишите там /ailog here");
+    }
+
     case "health":
       return send(chat, await healthText());
 
@@ -1636,8 +2451,33 @@ async function onCallback(cb) {
     return;
   }
 
+  // Рапорт: «Принять» / «Отклонить»
+  const rp = /^rp:(ok|no):(\d+)$/.exec(data);
+  if (rp) {
+    const name = a.kind === "owner" ? "владелец" : a.profile.nick || a.profile.login;
+    const x = await rpReview({ label: a.label, name, org: a.kind === "leader" ? a.profile.org : null }, +rp[2], rp[1] === "ok", "");
+    if (x.err) return answer(x.err, true);
+    await clearButtons();
+    await answer(rp[1] === "ok" ? "Принят" : "Отклонён");
+    if (chat) await send(chat, `${rp[1] === "ok" ? "✅ Принят" : "❌ Отклонён"} рапорт №${x.r.id} (${esc(x.r.author)}). Автор увидит решение в программе.`);
+    return;
+  }
+
+  // Приём новичков: «Принять» / «Отклонить»
+  const ap = /^ap:(ok|no):([0-9a-f-]{36})$/i.exec(data);
+  if (ap) {
+    const r = await decideApproval(a, ap[2], ap[1] === "ok");
+    if (r.err && /другой организации/.test(r.err)) return answer(r.err, true);
+    await clearButtons();
+    if (r.err) return answer(r.err, true);
+    await answer(ap[1] === "ok" ? "Принят" : "Отклонён");
+    if (chat) await send(chat, r.text);
+    return;
+  }
+
   const m = /^rs:(ok|no):([0-9a-f-]{36})$/i.exec(data);
   if (!m) return answer("Неизвестное действие.");
+  if (a.kind === "leader") return answer("Нет доступа.", true);
   const approve = m[1] === "ok";
   let r;
   if (approve) {
@@ -1699,14 +2539,75 @@ async function tick() {
     await setSetting("summary", { ...s, last: mskDay() });
     if (OWNER_TG) await send(OWNER_TG, await summaryText());
   }
+  // опыт на начало недели, автозакрытие смен, еженедельный отчёт руководству (понедельник, 12:00 МСК)
+  await snapshotWeek();
+  const old = await sql`select * from shifts where ended_at is null and started_at < now() - interval '12 hours' limit 5`;
+  for (const sh of old) await endShift(sh, null, true);
+  const wk = mskWeek(), rep = await getSetting("orgreport", {});
+  if (rep.on !== false && wk.key === mskDay() && mskHM() >= "12:00" && rep.last !== wk.key) {
+    await setSetting("orgreport", { ...rep, last: wk.key });
+    await sendOrgReports();
+  }
   if (Math.random() < 0.05) await cleanup();
   return { ok: true, jobs: jobs.length };
+}
+
+// ───────────── /laws: ручной запуск проверки законов на GitHub ─────────────
+async function gh(path, opts = {}) {
+  const r = await fetch(`https://api.github.com/repos/${GH_REPO}${path}`, {
+    method: opts.method || "GET",
+    headers: {
+      authorization: `Bearer ${GH_LAWS_TOKEN}`,
+      accept: "application/vnd.github+json",
+      "x-github-api-version": "2022-11-28",
+      "user-agent": "senko-bot",
+      ...(opts.body ? { "content-type": "application/json" } : {}),
+    },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+    signal: AbortSignal.timeout(15000),
+  });
+  const text = await r.text();
+  let j = null;
+  try {
+    j = text ? JSON.parse(text) : null;
+  } catch (e) {}
+  return { status: r.status, ok: r.ok, j };
+}
+const RUN_STATE = { queued: "в очереди", in_progress: "идёт", waiting: "ждёт", pending: "ждёт", requested: "в очереди" };
+const RUN_END = { success: "✅ успешно", failure: "❌ ошибка", cancelled: "✖️ отменена", timed_out: "⌛ превышено время" };
+const runLine = (r) =>
+  `${r.status === "completed" ? RUN_END[r.conclusion] || r.conclusion : "⏳ " + (RUN_STATE[r.status] || r.status)} · ${fmtDate(r.created_at)} · ${r.event === "schedule" ? "по расписанию" : "вручную"}`;
+const ghError = (r) =>
+  r.status === 401 ? "GitHub не принял токен GH_LAWS_TOKEN: он неверный или истёк." :
+  r.status === 403 || r.status === 404 ? "У токена GH_LAWS_TOKEN нет доступа: нужен доступ к репозиторию " + GH_REPO + " с правом Actions: Read and write." :
+  "GitHub ответил ошибкой " + r.status + ".";
+
+async function lawsCmd(chat, arg) {
+  if (!GH_LAWS_TOKEN) return send(chat, "Не задан секрет GH_LAWS_TOKEN (токен GitHub). Добавьте его в Supabase → Edge Functions → Secrets.");
+  const runs = await gh(`/actions/workflows/${LAWS_WORKFLOW}/runs?per_page=3`);
+  if (!runs.ok) return send(chat, ghError(runs));
+  const list = (runs.j && runs.j.workflow_runs) || [];
+  const link = `https://github.com/${GH_REPO}/actions/workflows/${LAWS_WORKFLOW}`;
+  if (arg === "status") {
+    if (!list.length) return send(chat, "Проверок законов ещё не было.");
+    return send(chat, "⚖️ <b>Последние проверки законов</b>\n" + list.map(runLine).join("\n") + `\n\n<a href="${link}">Открыть на GitHub</a>`);
+  }
+  if (list[0] && list[0].status !== "completed")
+    return send(chat, `⏳ Проверка уже идёт (запущена ${fmtDate(list[0].created_at)}). Статус: /laws status`);
+  if (!(await hit("laws", 4, 3600))) return send(chat, "Можно запускать не больше 4 раз в час.");
+  const r = await gh(`/actions/workflows/${LAWS_WORKFLOW}/dispatches`, { method: "POST", body: { ref: "main" } });
+  if (r.status !== 204) return send(chat, ghError(r));
+  return send(chat, "🔄 Проверка законов запущена. Обычно занимает 3–10 минут. Когда закончится, я напишу, что изменилось (или что изменений нет).\nСтатус: /laws status");
 }
 
 // Вызов из GitHub Actions после обновления законов (scripts/publish-laws.js)
 async function lawsChanged(b) {
   const items = Array.isArray(b.items) ? b.items.slice(0, 25) : [];
-  if (!items.length) return { ok: true, sent: 0 };
+  if (!items.length) {
+    // ручной запуск без изменений — сообщаем только владельцу
+    if (b.manual && OWNER_TG) await send(OWNER_TG, `⚖️ Проверка законов завершена: изменений нет.${Number(b.count) ? " Законов: " + Number(b.count) + "." : ""}`);
+    return { ok: true, sent: b.manual ? 1 : 0 };
+  }
   const lines = items.map((it) =>
     `• ${it.type === "new" ? "🆕 Новый закон" : "✏️ Изменён"}: <b>${esc(clean(it.title, 150))}</b>${it.arts ? " — " + esc(clean(it.arts, 200)) : ""}`);
   const more = Array.isArray(b.items) && b.items.length > items.length ? `\n…и ещё ${b.items.length - items.length}` : "";
@@ -1727,6 +2628,12 @@ async function cron(req) {
     b = await req.json();
   } catch (e) {}
   if (b && b.action === "laws_changed") return J(await lawsChanged(b));
+  if (b && b.action === "laws_failed") {
+    const run = /^\d{1,20}$/.test(String(b.run || "")) ? String(b.run) : "";
+    if (OWNER_TG)
+      await send(OWNER_TG, `❌ <b>Обновление законов не удалось</b>${b.manual ? " (ручной запуск)" : ""}. В программе остались прошлые версии.${run ? `\n<a href="https://github.com/${GH_REPO}/actions/runs/${run}">Лог на GitHub</a>` : ""}`);
+    return J({ ok: true });
+  }
   return J(await tick());
 }
 
@@ -1758,6 +2665,13 @@ async function setup(url) {
       { command: "dups", description: "Похожие аккаунты" },
       { command: "setorg", description: "Сменить организацию" },
       { command: "health", description: "Статус сервисов" },
+      { command: "laws", description: "Проверить законы сейчас" },
+      { command: "top", description: "Рейтинг недели" },
+      { command: "results", description: "Контрольные тесты" },
+      { command: "pending", description: "Заявки новичков" },
+      { command: "reports", description: "Рапорты сотрудников" },
+      { command: "report", description: "Открыть рапорт по номеру" },
+      { command: "ailog", description: "Вопросы к ИИ" },
       { command: "in", description: "Отложенная команда" },
       { command: "jobs", description: "Отложенные команды" },
     ],
