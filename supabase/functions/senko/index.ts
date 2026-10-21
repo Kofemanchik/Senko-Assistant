@@ -808,7 +808,7 @@ async function api(req) {
     return J(fail("Некорректный запрос."), 400);
   }
   if (!b || typeof b !== "object") return J(fail("Некорректный запрос."), 400);
-  if (b.action !== "sync" && b.action !== "xfer" && !((b.action === "ai_ask" || b.action === "panel") && raw.length <= 40000) && raw.length > 8192) return J(fail("Слишком большой запрос."), 413);
+  if (b.action !== "sync" && b.action !== "xfer" && !((b.action === "ai_ask" || b.action === "panel") && raw.length <= 40000) && !(b.action === "panel" && b.op === "ads_save" && raw.length <= 700000) && raw.length > 8192) return J(fail("Слишком большой запрос."), 413);
   const ip = req.headers.get("cf-connecting-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
   switch (b.action) {
     case "register":
@@ -878,6 +878,8 @@ async function api(req) {
       return J(await resetStatus(b, ip));
     case "reset_complete":
       return J(await resetComplete(b, ip));
+    case "ads":
+      return J(await adsPublic(b));
     default:
       return J(fail("Неизвестное действие."), 400);
   }
@@ -1909,6 +1911,7 @@ const AUDIT_ACTIONS = [
   "approve", "reject", "approval", "shift_start", "shift_end", "ctrl_create", "sync_reset",
   "report_create", "report_delete", "report_review",
   "panel_login", "panel_key", "panel_revoke", "db_edit", "db_delete", "db_revert",
+  "ad_save", "ad_toggle", "ad_delete",
 ];
 
 async function findProfile(login) {
@@ -3346,7 +3349,7 @@ async function panelStaff(a) {
 async function panelApi(b, ip, ua) {
   const op = String(b.op || "");
   if (op === "login") return panelLogin(b, ip, ua);
-  const owners = ["audit", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert"];
+  const owners = ["audit", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert", "ads_list", "ads_save", "ads_toggle", "ads_delete"];
   const { p, a, th, err } = await pwho(b, owners.includes(op));
   if (err) return err;
   const sql = db();
@@ -3434,6 +3437,106 @@ async function panelApi(b, ip, ua) {
       return panelDb(b, a);
     case "db_revert":
       return panelRevert(b, a);
+    case "ads_list":
+    case "ads_save":
+    case "ads_toggle":
+    case "ads_delete":
+      return panelAds(b, a);
+  }
+  return fail("Неизвестное действие панели.");
+}
+
+// ───────────── Реклама (2.3.0): баннеры на сайте и на главной в программе, правит владелец в панели ─────────────
+let adsCache = null; // { at, rows }
+const AD_HTTPS = /^https:\/\/[^\s"'<>]{4,500}$/i;
+function adPub(r) {
+  return { id: r.id, title: r.title, srv: r.srv, text: r.body, tag: r.tag, style: r.style, image: r.image, links: Array.isArray(r.links) ? r.links : [], promo: r.promo };
+}
+async function adsPublic(b) {
+  const place = b.place === "site" ? "site" : "app";
+  if (!adsCache || Date.now() - adsCache.at > 60 * 1000) {
+    try {
+      adsCache = { at: Date.now(), rows: await db()`select * from ads where enabled order by sort, id` };
+    } catch (e) {
+      return fail("Реклама сейчас недоступна.", { code: "ads_off" });
+    }
+  }
+  return { ok: true, ads: adsCache.rows.filter((r) => r.place === "both" || r.place === place).map(adPub) };
+}
+function adClean(b) {
+  const t = (v, n) => clean(v, n);
+  const title = t(b.title, 80);
+  if (!title) return { err: "Укажите название баннера." };
+  const image = String(b.image == null ? "" : b.image).trim();
+  if (image && !/^\/img\/[\w.-]{1,80}$/.test(image) && !AD_HTTPS.test(image)) {
+    if (!/^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(image)) return { err: "Картинка: ссылка https://… или загруженный файл." };
+    if (image.length > 600000) return { err: "Картинка слишком большая: нужно до 400 КБ." };
+  }
+  const links = [];
+  for (const l of (Array.isArray(b.links) ? b.links : []).slice(0, 4)) {
+    const url = String((l && l.url) || "").trim();
+    if (!url) continue;
+    if (!AD_HTTPS.test(url)) return { err: "Ссылка должна начинаться с https://: " + url.slice(0, 60) };
+    links.push({ label: t(l.label, 40) || "Открыть", url });
+  }
+  return {
+    row: {
+      title,
+      srv: t(b.srv, 80),
+      body: String(b.text == null ? "" : b.text).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 400),
+      tag: t(b.tag, 24) || "Реклама",
+      style: b.style === "square" ? "square" : "wide",
+      image,
+      links,
+      promo: t(b.promo, 24),
+      place: ["both", "site", "app"].includes(b.place) ? b.place : "both",
+      enabled: b.enabled !== false,
+      sort: Math.max(-9999, Math.min(9999, parseInt(b.sort, 10) || 0)),
+    },
+  };
+}
+async function panelAds(b, a) {
+  const sql = db();
+  const id = parseInt(b.id, 10) || 0;
+  try {
+    if (b.op === "ads_list") return { ok: true, rows: await sql`select * from ads order by sort, id` };
+    if (b.op === "ads_save") {
+      const { row, err } = adClean(b);
+      if (err) return fail(err);
+      let saved;
+      if (id) {
+        [saved] = await sql`update ads set title = ${row.title}, srv = ${row.srv}, body = ${row.body}, tag = ${row.tag}, style = ${row.style}, image = ${row.image},
+                            links = ${sql.json(row.links)}, promo = ${row.promo}, place = ${row.place}, enabled = ${row.enabled}, sort = ${row.sort},
+                            updated_at = now(), updated_by = ${a.label} where id = ${id} returning *`;
+        if (!saved) return fail("Баннер не найден, обновите список.");
+      } else {
+        const [{ n }] = await sql`select count(*)::int as n from ads`;
+        if (n >= 30) return fail("Баннеров уже 30, удалите лишние.");
+        [saved] = await sql`insert into ads (title, srv, body, tag, style, image, links, promo, place, enabled, sort, updated_by)
+                            values (${row.title}, ${row.srv}, ${row.body}, ${row.tag}, ${row.style}, ${row.image}, ${sql.json(row.links)}, ${row.promo}, ${row.place}, ${row.enabled}, ${row.sort}, ${a.label}) returning *`;
+      }
+      adsCache = null;
+      await audit(a.label, "ad_save", saved.title, { id: saved.id, created: !id, enabled: saved.enabled, place: saved.place });
+      return { ok: true, row: saved };
+    }
+    if (b.op === "ads_toggle") {
+      const [r] = await sql`update ads set enabled = ${!!b.enabled}, updated_at = now(), updated_by = ${a.label} where id = ${id} returning *`;
+      if (!r) return fail("Баннер не найден, обновите список.");
+      adsCache = null;
+      await audit(a.label, "ad_toggle", r.title, { id, enabled: r.enabled });
+      return { ok: true, row: r };
+    }
+    if (b.op === "ads_delete") {
+      const [r] = await sql`delete from ads where id = ${id} returning id, title`;
+      if (!r) return fail("Баннер не найден, обновите список.");
+      adsCache = null;
+      await audit(a.label, "ad_delete", r.title, { id });
+      return { ok: true };
+    }
+  } catch (e) {
+    console.error("ads", e);
+    if (/relation .*ads.* does not exist/i.test(String(e && e.message))) return fail("Таблицы рекламы ещё нет: запустите «Deploy function» на GitHub (он обновит базу).");
+    throw e;
   }
   return fail("Неизвестное действие панели.");
 }

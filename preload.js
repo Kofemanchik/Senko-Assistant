@@ -101,6 +101,8 @@ ipcRenderer.on("senko:cfg", (_e, state) => {
 
 const openListeners = new Set();
 ipcRenderer.on("senko:open", (_e, target) => { openListeners.forEach((f) => { try { f(String(target || "")); } catch (e) {} }); });
+const levelListeners = new Set();
+ipcRenderer.on("senko:voice-level", (_e, v) => { levelListeners.forEach((f) => { try { f(v || {}); } catch (e) {} }); });
 const lawsListeners = new Set();
 ipcRenderer.on("laws:event", (_e, ev) => {
   lawsListeners.forEach((f) => {
@@ -157,6 +159,10 @@ contextBridge.exposeInMainWorld("senkoApp", {
   dataVersions: () => ipcRenderer.invoke("senko:data-versions"),
   dataRollback: (kind, id) => ipcRenderer.invoke("senko:data-rollback", { kind: String(kind || ""), id: String(id || "") }),
   dataResume: (kind) => ipcRenderer.invoke("senko:data-resume", { kind: String(kind || "") }),
+  // 2.3: голосовой ввод — микрофоны и проверка уровня звука (через окно оверлея)
+  voiceMics: () => ipcRenderer.invoke("senko:voice-mics"),
+  voiceTest: (on) => ipcRenderer.invoke("senko:voice-test", !!on),
+  onVoiceLevel: (f) => { if (typeof f === "function") levelListeners.add(f); },
   openArg: () => ipcRenderer.sendSync("senko:open-arg"),
   onOpen: (f) => { if (typeof f === "function") openListeners.add(f); },
   shortcut: (target, name) => ipcRenderer.invoke("senko:shortcut", { target: String(target || ""), name: String(name || "") }),

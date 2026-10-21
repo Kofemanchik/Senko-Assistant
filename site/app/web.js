@@ -175,6 +175,10 @@
     question = String(question || "").replace(/\s+/g, " ").trim().slice(0, 500);
     if (question.length < 3) return Promise.resolve({ ok: false, error: "Напишите вопрос подробнее." });
     if (aboutCreator(question)) return Promise.resolve({ ok: true, answer: CREATOR_ANSWERS[creatorTurn++ % CREATOR_ANSWERS.length], left: null, cached: false, sources: [], fid: "" });
+    // 2.3: номер статьи без кодекса и «какие законы знаешь» — ответ из памятки, без ИИ и без лимита
+    var loc = null;
+    try { loc = typeof window.__senkoAiLocal === "function" ? window.__senkoAiLocal(question) : null; } catch (e) { loc = null; }
+    if (loc && loc.answer) return Promise.resolve({ ok: true, answer: String(loc.answer), left: null, cached: false, local: true, sources: (loc.sources || []).slice(0, 10), fid: "" });
     if (!feat.ai) return Promise.resolve({ ok: false, error: "ИИ-помощник на сайте ещё не подключён. Он работает в программе для Windows." });
     if (aiBusy) return Promise.resolve({ ok: false, error: "Предыдущий вопрос ещё обрабатывается." });
     if (Date.now() - aiLast < 2500) return Promise.resolve({ ok: false, error: "Подождите пару секунд перед следующим вопросом." });
@@ -242,7 +246,7 @@
     del.forEach(function (k) { W.ls(k, null); });
   }
 
-  var PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password"];
+  var PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password", "ads"];
   function act(action, data) {
     return W.call(Object.assign({}, W.client(), data && typeof data === "object" ? data : {}, { action: action, token: (W.session() || {}).token })).then(function (r) {
       if (r && (r.code === "auth" || r.code === "banned")) setTimeout(function () { lost(r.code === "banned" ? r.error : ""); }, 0);

@@ -175,6 +175,11 @@ const DEFAULTS = {
   voiceOpacity: 80,          // непрозрачность оверлея, %
   voicePos: null,            // позиция оверлея на экране {x, y} (null — по центру сверху)
   voiceMode: "search",       // режим оверлея: search — поиск по памятке, ai — вопрос ИИ
+  voiceHide: 10,             // 2.3: через сколько секунд оверлей прячется после ответа (3–60)
+  voiceSize: "m",            // 2.3: размер окна оверлея s | m | l
+  voiceFont: 100,            // 2.3: размер шрифта оверлея, % (80–150)
+  voicePtt: false,           // 2.3: «нажал и держи» — запись, пока клавиша зажата
+  voiceMic: "",              // 2.3: выбранный микрофон (deviceId окна оверлея; пусто — как в Windows)
   ghost: false,              // «призрачный режим»: окно становится полупрозрачным, когда переключаешься в игру
   ghostOpacity: 55           // прозрачность окна в призрачном режиме, %
 };
@@ -190,13 +195,17 @@ const cfgFile = () => path.join(app.getPath("userData"), "app-settings.json");
 function loadCfg() {
   const j = readJson(cfgFile()) || {};
   cfg = { ...DEFAULTS, ...j };
-  for (const k of ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "maximized", "voiceEnabled", "ghost"]) cfg[k] = !!cfg[k];
+  for (const k of ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "maximized", "voiceEnabled", "ghost", "voicePtt"]) cfg[k] = !!cfg[k];
   cfg.ghostOpacity = Math.min(90, Math.max(20, Math.round(+cfg.ghostOpacity || DEFAULTS.ghostOpacity)));
   cfg.voiceOpacity = Math.min(100, Math.max(30, Math.round(+cfg.voiceOpacity || DEFAULTS.voiceOpacity)));
   const vp = cfg.voicePos;
   cfg.voicePos = vp && Number.isFinite(+vp.x) && Number.isFinite(+vp.y) ? { x: Math.round(+vp.x), y: Math.round(+vp.y) } : null;
   if (!validHotkey(cfg.voiceHotkey)) cfg.voiceHotkey = DEFAULTS.voiceHotkey;
   if (cfg.voiceMode !== "ai") cfg.voiceMode = "search";
+  cfg.voiceHide = Math.min(60, Math.max(3, Math.round(+cfg.voiceHide || DEFAULTS.voiceHide)));
+  if (!["s", "m", "l"].includes(cfg.voiceSize)) cfg.voiceSize = "m";
+  cfg.voiceFont = Math.min(150, Math.max(80, Math.round(+cfg.voiceFont || DEFAULTS.voiceFont)));
+  cfg.voiceMic = typeof cfg.voiceMic === "string" && cfg.voiceMic.length <= 200 ? cfg.voiceMic : "";
   cfg.opacity = Math.min(100, Math.max(30, Math.round(+cfg.opacity || 100)));
   if (!validHotkey(cfg.hotkey)) cfg.hotkey = DEFAULTS.hotkey;
   winx.fix(cfg);
@@ -662,6 +671,7 @@ function getState() {
       compact: cfg.compact, rememberBounds: cfg.rememberBounds, opacity: cfg.opacity,
       tray: cfg.tray, notify: cfg.notify, ghost: cfg.ghost, ghostOpacity: cfg.ghostOpacity,
       voiceEnabled: cfg.voiceEnabled, voiceHotkey: cfg.voiceHotkey, voiceOpacity: cfg.voiceOpacity, voiceMode: cfg.voiceMode,
+      voiceHide: cfg.voiceHide, voiceSize: cfg.voiceSize, voiceFont: cfg.voiceFont, voicePtt: cfg.voicePtt, voiceMic: cfg.voiceMic,
       ghostBy: cfg.ghostBy, strip: cfg.strip, snap: cfg.snap, watchApps: cfg.watchApps.slice(), watchMode: cfg.watchMode, watchOpacity: cfg.watchOpacity, streamAuto: cfg.streamAuto
     },
     win: winx.state(),
@@ -684,7 +694,7 @@ function pushState() {
 }
 
 function applySet(key, val) {
-  const bools = ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "voiceEnabled", "ghost"];
+  const bools = ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "voiceEnabled", "ghost", "voicePtt"];
   let result = { ok: true };
   if (key === "autostart") {
     if (!app.isPackaged) return { ok: false, error: "Автозапуск доступен только в установленной версии." };
@@ -706,7 +716,9 @@ function applySet(key, val) {
     if (key === "voiceEnabled") {
       result = voice.registerHotkey();
       if (!result.ok) { cfg.voiceEnabled = false; voice.registerHotkey(); }
+      voice.applyOpts();
     }
+    if (key === "voicePtt") voice.applyOpts();
   } else if (key === "hotkey") {
     if (!validHotkey(val)) return { ok: false, error: "Нужно сочетание с Ctrl, Alt или Win и обычной клавишей." };
     const old = cfg.hotkey;
@@ -731,6 +743,21 @@ function applySet(key, val) {
   } else if (key === "voiceOpacity") {
     cfg.voiceOpacity = Math.min(100, Math.max(30, Math.round(+val || DEFAULTS.voiceOpacity)));
     voice.applyOpts();
+  } else if (key === "voiceHide") {
+    cfg.voiceHide = Math.min(60, Math.max(3, Math.round(+val || DEFAULTS.voiceHide)));
+    voice.applyOpts();
+  } else if (key === "voiceSize") {
+    cfg.voiceSize = ["s", "m", "l"].includes(val) ? val : "m";
+    voice.applyOpts();
+  } else if (key === "voiceFont") {
+    cfg.voiceFont = Math.min(150, Math.max(80, Math.round(+val || DEFAULTS.voiceFont)));
+    voice.applyOpts();
+  } else if (key === "voiceMic") {
+    cfg.voiceMic = typeof val === "string" && val.length <= 200 ? val : "";
+    voice.applyOpts();
+  } else if (key === "voicePosReset") {
+    cfg.voicePos = null;
+    voice.resetPos();
   } else if (key === "opacity") {
     cfg.opacity = Math.min(100, Math.max(30, Math.round(+val || 100)));
     applyWindowCfg();
@@ -745,7 +772,7 @@ function applySet(key, val) {
   }
   saveCfg();
   // ползунки прозрачности шлют значение на каждом шаге: окно меняется сразу, а меню трея и страница обновляются после паузы
-  if (key === "opacity" || key === "ghostOpacity" || key === "voiceOpacity" || key === "watchOpacity") {
+  if (key === "opacity" || key === "ghostOpacity" || key === "voiceOpacity" || key === "watchOpacity" || key === "voiceHide" || key === "voiceFont") {
     clearTimeout(slideTimer);
     slideTimer = setTimeout(() => { updateTrayMenu(); pushState(); }, 250);
     return result;
@@ -992,7 +1019,10 @@ ipcMain.handle("senko:sync-rebase", async (e) => {
 });
 
 // Прогресс, рейтинг недели, смены и контрольные тесты (этап 4): только перечисленные действия сервера
-const PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password"];
+const PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password", "ads"];
+// 2.3: список микрофонов и проверка уровня для настроек (микрофон доступен только окну оверлея)
+ipcMain.handle("senko:voice-mics", async (e) => (fromMain(e) ? voice.mics() : { ok: false, error: "Недоступно." }));
+ipcMain.handle("senko:voice-test", async (e, on) => (fromMain(e) ? voice.test(!!on) : { ok: false, error: "Недоступно." }));
 ipcMain.handle("senko:api", async (e, action, data) => {
   if (!fromMain(e) || !PAGE_ACTIONS.includes(String(action))) return { ok: false, error: "Недоступно." };
   const r = await accounts.act(String(action), data && typeof data === "object" ? data : {});
@@ -1482,6 +1512,14 @@ app.whenReady().then(() => {
     applySet,  // оверлей переключает настройки через общий обработчик (трей и окно памятки обновятся сами)
     saveCfg,   // сохранить конфиг (позиция оверлея)
     askAi: ai.ask,               // вопрос ИИ из оверлея
+    // 2.3: клик по карточке или команда «открой…» — показать окно памятки на нужной статье или вкладке
+    openTarget: (t) => {
+      if (!win || win.isDestroyed()) return;
+      showWindow();
+      if (typeof t === "string" && (OPEN_RE.test(t) || /^law:[\w-]{1,40}(?::[\w.\-]{1,60})?$/.test(t))) win.webContents.send("senko:open", t);
+    },
+    showMain: () => { if (win && !win.isDestroyed()) showWindow(); },
+    sendMain: (ch, data) => { if (win && !win.isDestroyed()) win.webContents.send(ch, data); },
     aiAvailable: ai.configured   // подключён ли ИИ-сервис (иначе переключатель режима неактивен)
   });
   ai.init({

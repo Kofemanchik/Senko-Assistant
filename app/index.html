@@ -1736,13 +1736,15 @@ var DEPTS = {
   Government:"Свои: любые юрисдикции (R, F/R, M, F, E). Офис Генерального Прокурора и суд вправе привлекать по любым статьям (УК ст. 2.8)."
 };
 function deptList(d){ return Object.keys(DEPT_J[d]).join(", "); }
-function deptBar(){
-  var h='<div class="deptbar"><span class="lab">Мой департамент</span>';
-  Object.keys(DEPTS).forEach(function(d){ h+='<button class="pill" data-dept="'+d+'" aria-pressed="'+(dept===d)+'">'+d+'</button> '; });
-  if(dept){
-    h+='<p>'+esc(DEPTS[dept])+'</p><p>Статья вне вашей компетенции: запросите одобрение через рацию. Правило УК ст. 2.8 «нет ответа 15 минут, можно привлекать» в ПК ст. 35 ч.5 не повторяется, там отсутствие разрешения делает действия недопустимыми, поэтому уточняйте у руководства. Юрисдикции: R — региональная, F/R — регионально-федеральная, F — федеральная, M — военная, E — финансовая. Кнопка «Только мои статьи» в фильтре оставит статьи ваших юрисдикций ('+deptList(dept)+').</p>';
+/* 2.3: ведомство выбирается только в личном кабинете, пояснение тоже живёт там (deptInfo) */
+function deptBar(){ return ""; }
+function deptInfo(d){
+  if(d===undefined) d=dept;
+  var h='<div class="deptbar" id="cabDeptInfo"><span class="lab">Компетенция ведомства</span>';
+  if(d&&DEPTS[d]){
+    h+='<p><b>'+esc(d)+'.</b> '+esc(DEPTS[d])+'</p><p>Статья вне вашей компетенции: запросите одобрение через рацию. Правило УК ст. 2.8 «нет ответа 15 минут, можно привлекать» в ПК ст. 35 ч.5 не повторяется, там отсутствие разрешения делает действия недопустимыми, поэтому уточняйте у руководства. Юрисдикции: R — региональная, F/R — регионально-федеральная, F — федеральная, M — военная, E — финансовая. Кнопка «Только мои статьи» в фильтре кодексов оставит статьи ваших юрисдикций ('+deptList(d)+').</p>';
   } else {
-    h+='<p>Выберите ведомство, чтобы увидеть, по каким статьям вы вправе работать самостоятельно, и включить фильтр «Только мои статьи».</p>';
+    h+='<p>Выберите ведомство выше, чтобы увидеть, по каким статьям вы вправе работать самостоятельно, и включить в кодексах фильтр «Только мои статьи».</p>';
   }
   return h+'</div>';
 }
@@ -1828,7 +1830,7 @@ function renderList(kind){
   h += '<div class="filters"><span class="lab">Фильтр</span>';
   if(kind==="uk"){
     for(var s=1;s<=5;s++) h+='<button class="pill" data-star="'+s+'" aria-pressed="'+(state.stars===s)+'">'+s+'★</button>';
-    h+='<button class="pill" data-deptonly="1" aria-pressed="'+(!!state.deptOnly&&!!dept)+'"'+(dept?'':' disabled title="Сначала выберите свой департамент выше"')+'>Только мои статьи'+(dept?' · '+dept:'')+'</button>';
+    h+='<button class="pill" data-deptonly="1" aria-pressed="'+(!!state.deptOnly&&!!dept)+'"'+(dept?'':' disabled title="Сначала выберите ведомство в личном кабинете"')+'>Только мои статьи'+(dept?' · '+dept:'')+'</button>';
   }
   h+='<button class="pill" data-fine="1" aria-pressed="'+state.fineOnly+'">'+(kind==="pk"?"Есть наказание":"Есть штраф")+'</button>';
   h+='<button class="pill" data-fav="1" aria-pressed="'+state.favOnly+'">Избранное</button>';
@@ -2785,18 +2787,17 @@ var TABS={
  sup:["Надзор",[["sup","Проверка"],["legal","Законность"]]],
  def:["Защита",[["def","Режим защиты"],["legal","Законность"]]],
 
- rules:["Правила",[["rg","Гос. структуры"],["rm","Общие"],["rz","Зоны"],["rl","Лидерам"],["rs","Поставки"],["rf","ФЗ и цеха"]]],
  learn:["Обучение",[["quiz","Тренажёр"],["case","Ситуации"],["week","Отчёт за неделю"],["scen","Что делать, если…"],["err","Частые ошибки"],["app","Функции программы"]]],
  ref:["Справочник",[["print","Шпаргалка"],["imm","Неприкосновенные"],["zones","Охраняемые места"],["trans","Передача дел"],["cmp","Сравнение статей"],["chg","Изменения"]]]};
-var ROLES={off:["Сотрудник",["timer","calc","tools","rules","ref","learn"]],pros:["Прокурор",["sup","rules","ref","learn"]],adv:["Адвокат",["def","rules","ref","learn"]]};
+var ROLES={off:["Сотрудник",["timer","calc","tools","ref","learn"]],pros:["Прокурор",["sup","ref","learn"]],adv:["Адвокат",["def","ref","learn"]]};
 var BUILTIN=["off","pros","adv"];
 var BASE=["uk","ak","dk","pk","gen","laws"];
-var X={sub:{tools:"legal",field:"f_dk",sup:"sup",def:"def",rules:"rg",learn:"quiz",ref:"print"},bm:"sum",quiz:null,fs:"",role:"off",rq:""};
+var X={sub:{tools:"legal",field:"f_dk",sup:"sup",def:"def",learn:"quiz",ref:"print"},bm:"sum",quiz:null,fs:"",role:"off",rq:""};
 /* ---- Роли: свои роли, видимые разделы, формы рапортов и последний раздел каждой роли (localStorage bos-roles) ----
    {custom:[{id,name,tabs:[...],forms:[...]}], tabs:{off:[...]}, forms:{off:[...]}, last:{off:"calc"}} */
-var POOL=BASE.concat(["timer","calc","tools","field","sup","def","rp","dept","rules","apps","ref","learn"]);
+var POOL=BASE.concat(["timer","calc","tools","field","sup","def","rp","dept","apps","ref","learn"]);
 var GOVT={sup:1,def:1};                       // разделы и формы только для Government
-var DEFTABS={off:BASE.concat(["timer","calc","tools","field","rp","dept","rules","apps","ref","learn"]),pros:BASE.concat(["sup","field","rp","dept","rules","apps","ref","learn"]),adv:BASE.concat(["def","field","rp","dept","rules","apps","ref","learn"])};
+var DEFTABS={off:BASE.concat(["timer","calc","tools","field","rp","dept","apps","ref","learn"]),pros:BASE.concat(["sup","field","rp","dept","apps","ref","learn"]),adv:BASE.concat(["def","field","rp","dept","apps","ref","learn"])};
 var DEFFORMS={off:["arrest","force","incident","service"],pros:["sup","service"],adv:["def","service"]};
 var RC=loadRC();
 function loadRC(){var o=null;try{o=JSON.parse(localStorage.getItem("bos-roles")||"null")}catch(e){}
@@ -3903,7 +3904,7 @@ function cabHtml(){
       fld("discord","Discord",acc.discord,40,"ник в Discord")+fld("telegram","Telegram",acc.telegram,33,"@name или пусто")+fld("phone","Номер в игре",acc.phone,12,"только цифры или пусто")+
       '<div class="sbtns" style="margin:0"><button type="button" class="btn" data-cab="accsave" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Сохранить</button></div>'+
       '<div id="accMsg" role="status" aria-live="polite" style="font-size:12.5px;color:var(--muted);min-height:1.2em"></div></div></div>';
-    ah+=(window.SA_PROG?window.SA_PROG.html():"")+(window.SA_CAB11?window.SA_CAB11(true):"")+(window.SA_CAB13?window.SA_CAB13(true):"")+(window.SA_RP?window.SA_RP.cabHtml():"")+detHtml()+testHtml();
+    ah+=deptInfo(acc.org||dept)+(window.SA_PROG?window.SA_PROG.html():"")+(window.SA_CAB11?window.SA_CAB11(true):"")+(window.SA_CAB13?window.SA_CAB13(true):"")+(window.SA_RP?window.SA_RP.cabHtml():"")+detHtml()+testHtml();
     ah+='<p class="cab-foot">Данные кабинета хранятся в вашем аккаунте. После смены ведомства программу нужно перезапустить.</p>';
     return ah;
   }
@@ -3917,8 +3918,8 @@ function cabHtml(){
     '<label>Ник игрока<input data-prof="nick" maxlength="40" autocomplete="off" value="'+escA(PR.nick||"")+'" placeholder="Например, Senko"></label>'+
     '<label>Статик<input data-prof="st" maxlength="12" autocomplete="off" value="'+escA(PR.st||"")+'" placeholder="Ваш статик"></label>'+
     '<label>Ведомство<select data-prof="dept">'+opts+'</select></label></div></div>';
-  h+=(window.SA_CAB11?window.SA_CAB11(false):"")+(window.SA_CAB13?window.SA_CAB13(false):"")+detHtml()+testHtml();
-  h+='<p class="cab-foot">Личный кабинет локальный: данные хранятся только в этом браузере. Ведомство связано с фильтром «Мой департамент» в УК.</p>';
+  h+=deptInfo()+(window.SA_CAB11?window.SA_CAB11(false):"")+(window.SA_CAB13?window.SA_CAB13(false):"")+detHtml()+testHtml();
+  h+='<p class="cab-foot">Личный кабинет локальный: данные хранятся только в этом браузере. Ведомство связано с фильтром «Только мои статьи» в кодексах и с разделом «Моё ведомство».</p>';
   return h;
 }
 
@@ -3946,7 +3947,7 @@ function closeSheet(){
   sheetKind="";
   if(lastFocus&&lastFocus.focus&&document.contains(lastFocus)) try{lastFocus.focus()}catch(e){}
 }
-window.SA_closeSheet=closeSheet;
+window.SA_closeSheet=closeSheet; window.SA_openSheet=openSheet;
 window.SA_paintSheet=function(){ if(!ov.hidden&&sheetKind==="set") paintSheet(); };
 window.SA_cabRepaint=function(){ if(!ov.hidden&&sheetKind==="cab") paintSheet(); };
 gearBtn.addEventListener("click",function(){openSheet("set")});
@@ -4934,7 +4935,7 @@ render();
           ["Данные аккаунта хранятся, пока существует аккаунт. Вы можете запросить исправление или удаление аккаунта и связанных с ним данных, написав владельцу (контакт в разделе 10). Записи журнала административных действий могут храниться дольше, чтобы разбирать спорные ситуации. Вопросы к ИИ-помощнику хранятся 90 дней, затем удаляются автоматически.",
            "Историю задержаний, результаты тестов, заметки и избранное можно удалить в Программе: содержимое удалённых записей сразу стирается и на сервере. Кнопка «Сбросить все данные» (Настройки → Данные) удаляет все данные Программы на этом компьютере, а с отметкой «Удалить и в аккаунте» также задержания, тесты, заметки, избранное, метки и папки на сервере, на всех ваших компьютерах. Опыт, уровень, серия дней и достижения при этом сохраняются, их можно удалить вместе с аккаунтом по запросу владельцу. Отправленный рапорт можно удалить в Программе, пока руководство его не рассмотрело; рассмотренные рапорты хранятся, пока существует аккаунт, и сброс данных их не удаляет."]],
         ["9. Аналитика, реклама, cookie",
-          ["Программа не содержит рекламы, счётчиков, аналитики и средств отслеживания. Единственная статистика: поиски без результата (раздел 2), без привязки к аккаунту; её отправку можно выключить в настройках."]],
+          ["Программа не содержит счётчиков, аналитики и средств отслеживания. На главной странице есть рекламные баннеры партнёров: это картинки и ссылки, они ничего о вас не собирают и никуда не передают, а по ссылке вы переходите только сами. Единственная статистика: поиски без результата (раздел 2), без привязки к аккаунту; её отправку можно выключить в настройках."]],
         ["10. Изменения Политики и контакты",
           ["Текст Политики может обновляться вместе с версиями Программы. Актуальная редакция всегда доступна в Программе: Настройки → Документы. Вопросы и предложения по обработке данных: " + CONTACT + "."]]
       ]
@@ -6200,7 +6201,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.2.1";
+var APP_VER="2.3.0";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6289,6 +6290,19 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.3.0",d:"22.10.2026",items:[
+  ["🎙","Голосовой поиск удобнее","Ищет в открытом кодексе, клик по карточке открывает статью. В настройках: время скрытия, размер и шрифт окна, выбор микрофона с индикатором, режим «нажми и говори», кнопка выключения и прозрачность."],
+  ["🗣","Голосовые команды","«Открой калькулятор», «запусти таймер», «добавь в калькулятор 12.8 УК», «добавь в избранное 12.8» и переходы по разделам выполняются прямо из оверлея."],
+  ["🎭","РП ситуации","Обучение → «РП ситуации»: сценарии с выбором действий, разбором каждого шага и ссылками на статьи."],
+  ["↕️","Сортировка и фильтры","Одна кнопка «Фильтры» в кодексах: по номеру, звёздам, сроку и штрафу, диапазоны срока и штрафа, «открывал за неделю» и «ни разу не открывал», поиск по заметкам и меткам."],
+  ["🧩","Подбор статей по описанию","Калькулятор: опишите, что произошло, и программа предложит подходящие статьи."],
+  ["🔗","Ссылки на статьи","Из оверлея и из заметок («УК 12.8», #uk:12.8) сразу открывается нужная статья."],
+  ["🤖","ИИ-помощник точнее","«17.1» без кодекса показывает все акты с такой статьёй, понятны сокращения ТК, ПК и НПА, есть ответ на «какие законы знаешь», ответы полнее и без обрезанного пересказа."],
+  ["🏛","Ведомство в личном кабинете","Ведомство меняется только в личном кабинете, там же описана его компетенция."],
+  ["📣","Партнёры на главной","На главной появился блок рекламы партнёров, такой же, как на сайте."],
+  ["🧹","Без раздела «Правила»","Раздел «Правила» убран из меню и ролей."],
+  ["🔒","Ключи только на сервере","Законы и ИИ-помощник получаются через сервер Senko после входа, а лимит вопросов к ИИ общий для программы и сайта."]
+ ]},
  {v:"2.2.1",d:"21.10.2026",items:[
   ["🔒","Ключи только на сервере","Законы и ИИ-помощник теперь получаются через сервер Senko после входа в аккаунт. В программе больше нет ключей доступа."],
   ["🤖","Один лимит ИИ","Дневной лимит вопросов к ИИ теперь общий для аккаунта: вопросы из программы и с сайта считаются вместе."]
@@ -7039,9 +7053,9 @@ var R=window.SA_ROLES, A=window.senkoApp;
 if(!R) return;
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
-var NAMES={uk:"УК",ak:"АК",dk:"ДК",pk:"ПК",gen:"Общая часть",laws:"Законы",timer:"Задержание",calc:"Калькулятор",tools:"Проверки",field:"На месте",sup:"Надзор",def:"Защита",rp:"Рапорты",dept:"Моё ведомство",rules:"Правила",learn:"Обучение",apps:"Мои инструменты",ref:"Справочник"};
+var NAMES={uk:"УК",ak:"АК",dk:"ДК",pk:"ПК",gen:"Общая часть",laws:"Законы",timer:"Задержание",calc:"Калькулятор",tools:"Проверки",field:"На месте",sup:"Надзор",def:"Защита",rp:"Рапорты",dept:"Моё ведомство",learn:"Обучение",apps:"Мои инструменты",ref:"Справочник"};
 var FORMS={arrest:"О задержании",force:"О применении силы",incident:"О происшествии",service:"Служебный",sup:"Заключение прокурора",def:"Жалоба адвоката"};
-var GROUPS=[["Кодексы и законы",["uk","ak","dk","pk","gen","laws"]],["Работа",["timer","calc","tools","field","sup","def","rp","dept","rules","apps"]],["Развитие",["ref","learn"]]];
+var GROUPS=[["Кодексы и законы",["uk","ak","dk","pk","gen","laws"]],["Работа",["timer","calc","tools","field","sup","def","rp","dept","apps"]],["Развитие",["ref","learn"]]];
 var KNM={uk:"УК",ak:"АК",dk:"ДК",pk:"ПК"};
 
 /* ---------- всплывающая подсказка внизу ---------- */
@@ -7229,8 +7243,8 @@ function saveArts(d,L){var o=setsAll();if(L)o[d]=L;else delete o[d];ls("bos-dept
 function rowsOf(ref){var p=ref.split("|"),D=window.DATA&&DATA[p[0]];return D?D.filter(function(r){return r.code===p[1]}):[]}
 function titleRef(ref){var r=rowsOf(ref)[0];return r?r.title:""}
 function deptHtml(){
- var d=curDept(), h=typeof deptBar==="function"?deptBar():"";
- if(!d) return h+'<div class="dp-empty" style="margin-top:14px">Выберите ведомство выше: здесь появятся его частые статьи, компетенция и подсказки по закону. Ведомство из профиля выбирается само.</div>';
+ var d=curDept(), h='<div class="dp-cab"><span>'+(d?'Ваше ведомство: <b>'+e(d)+'</b>. ':'')+'Ведомство и пояснение о компетенции находятся в личном кабинете.</span><button type="button" class="btn" data-dpcab="1">'+(d?'Изменить в личном кабинете':'Выбрать в личном кабинете')+'</button></div>';
+ if(!d) return h+'<div class="dp-empty" style="margin-top:14px">Выберите ведомство в личном кабинете: здесь появятся его частые статьи, компетенция и подсказки по закону.</div>';
  var P=DP[d];
  h+='<ul class="dp-tips">'+P.tips.map(function(t){return '<li><i aria-hidden="true">'+t[0]+'</i><span>'+e(t[1])+'</span><button type="button" class="pill" data-go="'+t[2]+'" title="Открыть статью">'+e(t[3])+'</button></li>'}).join("")+
   '</ul>';
@@ -7979,7 +7993,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.2.1";
+var APP_VER="2.3.0";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
@@ -8040,7 +8054,7 @@ var ZONE_STEPS=[
 var ZRE=/охраняем(ая|ой|ую|ые|ых|ым|ыми|ое|ого|ом)\s+(территор|объект|зон|мест|помещ|здани)|режимн(ый|ого|ом|ые|ых|ая|ой|ую)\s+(объект|территор|зон)|закрыт(ая|ой|ую|ые|ых)\s+(территор|зон)|запретн(ая|ой|ую|ые|ых)\s+(зон|территор)|военн(ый|ого|ом|ые|ых|ая|ой|ую)\s+(объект|баз|территор|част)|территори[яиюей]\s+(военного|правительств|государственн)|правительственн(ый|ого|ые|ых|ая|ой)\s+(объект|здани|территор|квартал)/i;
 P.zones=function(){
  var h=sec("Охраняемые места","Где действуют особые правила: кто вправе задерживать и досматривать. Сначала Процессуальный кодекс, ниже законы штата.",
-  '<ol class="s9-steps">'+ZONE_STEPS.map(step).join("")+'</ol><div class="rowbtn"><button type="button" class="btn" data-s9="rz">Зелёные и красные зоны (правила проекта)</button></div>');
+  '<ol class="s9-steps">'+ZONE_STEPS.map(step).join("")+'</ol>');
  var L=LL();
  if(!L.length)return h+noLaws();
  var F=findUnits(ZRE),by={},ord=[];
@@ -8557,7 +8571,6 @@ document.addEventListener("click",function(ev){
  if(d.s9detnew){var dd=detById(d.s9detnew);if(!dd)return;var t=startTm();if(!t){SA_modalClose();go("timer");return}t.nick=dd.nick||"";t.st=dd.st||"";saveTm();SA_modalClose();go("timer");return}
  var a9=d.s9;
  if(a9==="laws"){go("laws");return}
- if(a9==="rz"){go("rules","rz");return}
  if(a9==="trcopy"){var tt=$("#s9trT");if(tt)copyText(tt.value,b);return}
  if(a9==="trfill"){var t2=$("#s9trT");if(t2)t2.value=transText();return}
  if(a9==="cmpadd"){cmpAdd();return}
@@ -9788,7 +9801,7 @@ P.f_map=function(){
  return sec("Зоны и места","Закрытые зоны, больницы, госучреждения и ведомства. Схема не в масштабе: места показаны примерно, как на карте GTA V. Если на сервере место другое, поправьте его кнопкой ✎ или добавьте своё.",
   flt+move+'<div class="s11-mapw">'+mapSvg(V,X.s11pin)+'<div class="s11-side">'+(ed?placeForm(ep||null):'')+'<ul class="s11-pls">'+V.map(placeLi).join("")+'</ul>'+
   '<div class="rowbtn"><button type="button" class="btn primary" data-s11m="add">+ Своё место</button>'+(ep&&!ep.bi||X.s11pin&&L.some(function(p){return p.id===X.s11pin&&!p.bi})?'<button type="button" class="btn" data-s11m="move" data-id="'+e(X.s11pin||ed)+'">Перенести на схеме</button>':'')+(MC.hide.length?'<button type="button" class="btn" data-s11m="unhide">Вернуть скрытые ('+MC.hide.length+')</button>':'')+'</div></div></div>'+
-  '<div class="rowbtn"><button type="button" class="btn" data-s11go="rules|rz">Зелёные и красные зоны (правила проекта)</button><button type="button" class="btn" data-s11go="ref|zones">Охраняемые места по законам</button></div>')};
+  '<div class="rowbtn"><button type="button" class="btn" data-s11go="ref|zones">Охраняемые места по законам</button></div>')};
 function mapClick(b){var a=b.dataset.s11m,id=b.dataset.id;
  if(a==="add"){if(MC.my.length>=40){toast("Не больше 40 своих мест");return}X.s11med="new";rerender();var n=document.querySelector('[data-s11mf="n"]');if(n)n.focus();return}
  if(a==="edit"){X.s11med=id;X.s11pin=id;rerender();var n2=document.querySelector('[data-s11mf="n"]');if(n2)n2.focus();return}
@@ -10220,7 +10233,7 @@ function diagPaint(){
  w.innerHTML=h}
 
 /* ================= ярлык, который открывает нужный раздел или статью ================= */
-var TN={home:"Главная",uk:"УК",ak:"АК",dk:"ДК",pk:"ПК",gen:"Общая часть",laws:"Законы",timer:"Задержание",calc:"Калькулятор",tools:"Проверки",field:"На месте",sup:"Надзор",def:"Защита",rp:"Рапорты",dept:"Моё ведомство",rules:"Правила",learn:"Обучение",apps:"Мои инструменты",ref:"Справочник"};
+var TN={home:"Главная",uk:"УК",ak:"АК",dk:"ДК",pk:"ПК",gen:"Общая часть",laws:"Законы",timer:"Задержание",calc:"Калькулятор",tools:"Проверки",field:"На месте",sup:"Надзор",def:"Защита",rp:"Рапорты",dept:"Моё ведомство",learn:"Обучение",apps:"Мои инструменты",ref:"Справочник"};
 function gov(){try{var s=A&&A.state?A.state():null;return ((s&&s.user&&s.user.org)||dept)==="Government"}catch(x){return false}}
 function targets(){var L=[];Object.keys(TN).forEach(function(t){if((t==="sup"||t==="def")&&!gov())return;L.push([t,TN[t]]);var T=TABS[t];if(T&&T[1])T[1].forEach(function(s){L.push([t+":"+s[0],TN[t]+" → "+s[1]])})});return L}
 var KC={"ук":"uk","ак":"ak","дк":"dk","пк":"pk",uk:"uk",ak:"ak",dk:"dk",pk:"pk"};
@@ -10456,8 +10469,8 @@ document.addEventListener("keydown",function(ev){
 });
 
 /* ================= порядок разделов для роли ================= */
-var GR=[["Кодексы и законы",["uk","ak","dk","pk","gen","laws"]],["Работа",["timer","calc","tools","field","sup","def","rp","dept","rules","apps"]],["Развитие",["ref","learn"]]];
-var TN={uk:"УК",ak:"АК",dk:"ДК",pk:"ПК",gen:"Общая часть",laws:"Законы",timer:"Задержание",calc:"Калькулятор",tools:"Проверки",field:"На месте",sup:"Надзор",def:"Защита",rp:"Рапорты",dept:"Моё ведомство",rules:"Правила",apps:"Мои инструменты",ref:"Справочник",learn:"Обучение"};
+var GR=[["Кодексы и законы",["uk","ak","dk","pk","gen","laws"]],["Работа",["timer","calc","tools","field","sup","def","rp","dept","apps"]],["Развитие",["ref","learn"]]];
+var TN={uk:"УК",ak:"АК",dk:"ДК",pk:"ПК",gen:"Общая часть",laws:"Законы",timer:"Задержание",calc:"Калькулятор",tools:"Проверки",field:"На месте",sup:"Надзор",def:"Защита",rp:"Рапорты",dept:"Моё ведомство",apps:"Мои инструменты",ref:"Справочник",learn:"Обучение"};
 function role(){var R=window.SA_ROLES;return R?R.cur():(X.role||"off")}
 window.SA_tabOrder=function(){var O=obj(jget("bos-taborder",{}));return Array.isArray(O[role()])?O[role()]:null};
 function visTabs(){var R=window.SA_ROLES;return R?R.visible(role()):[]}
@@ -10608,6 +10621,652 @@ new MutationObserver(function(M){for(var i=0;i<M.length;i++){var m=M[i];
 walk(document.body);
 if(document.title)document.title=tr(document.title)||document.title;
 window.SA_i18n={tr:tr,dict:DICT,lang:"en"};
+})();
+</script>
+<style id="s23-style">
+/* ===== 2.3: фильтры и сортировка, РП ситуации, подбор статей, ссылки из заметок, реклама, голосовой ввод ===== */
+.filters .f23-tog{font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.filters .f23-tog[aria-expanded="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.filters .f23-tog svg{width:14px;height:14px}
+.f23-act{display:inline-flex;flex-wrap:wrap;gap:5px;align-items:center}
+.f23-act .chip{cursor:pointer}
+.f23-panel{flex:1 1 100%;display:grid;gap:12px;margin-top:6px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.f23-panel[hidden]{display:none}
+.f23-g{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.f23-g>b{flex:0 0 140px;font:500 12px var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.f23-g input{width:96px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
+.f23-g .dash{color:var(--muted)}
+.f23-foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;font-size:12.5px;color:var(--muted)}
+@media (max-width:640px){.f23-g>b{flex-basis:100%}}
+.n23-refs{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+.n23-refs .pill{font-size:12px;padding:2px 9px}
+/* РП ситуации */
+.rps-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:10px}
+.rps-card{display:flex;gap:12px;align-items:flex-start;text-align:left;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font:inherit;cursor:pointer}
+.rps-card:hover{border-color:var(--accent)}
+.rps-card i{font-style:normal;font-size:26px;line-height:1}
+.rps-card b{display:block;font-size:15px;margin-bottom:3px}
+.rps-card span{font-size:13px;color:var(--muted)}
+.rps-card em{display:block;margin-top:6px;font-style:normal;font-size:12px;color:var(--accent);font-weight:600}
+.rps-step{margin-top:6px;font-size:12px;color:var(--muted);font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.05em}
+.rps-q{font-size:15.5px;line-height:1.55;margin:8px 0 12px;padding:12px 14px;border-left:3px solid var(--accent);background:var(--bg);border-radius:0 8px 8px 0}
+.rps-o{display:grid;gap:8px}
+.rps-o button{text-align:left;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;cursor:pointer}
+.rps-o button:hover:not([disabled]){border-color:var(--accent)}
+.rps-o button.ok{border-color:#2e9e62;background:color-mix(in srgb,#2e9e62 12%,var(--surface))}
+.rps-o button.half{border-color:#c98a12;background:color-mix(in srgb,#c98a12 12%,var(--surface))}
+.rps-o button.bad{border-color:#c94a3a;background:color-mix(in srgb,#c94a3a 10%,var(--surface))}
+.rps-o button[disabled]{cursor:default}
+.rps-fb{margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--bg);font-size:14px;line-height:1.5}
+.rps-fb b{display:block;margin-bottom:4px}
+.rps-fb .pill{margin-top:8px}
+.rps-end{text-align:center;padding:10px 0}
+.rps-end .s10-score,.rps-big{font:700 44px/1 var(--f-head,inherit);color:var(--accent)}
+/* подбор статей по описанию */
+.pk23 textarea{width:100%;min-height:70px;resize:vertical;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px}
+.pk23-list{display:grid;gap:8px;margin-top:10px}
+.pk23-a{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.pk23-a h4{margin:0 0 4px;font-size:14px}
+.pk23-a h4 small{color:var(--muted);font-weight:500}
+.pk23-p{display:flex;gap:8px;align-items:flex-start;margin-top:6px;font-size:13px;color:var(--muted)}
+.pk23-p button{flex:0 0 auto}
+.pk23-p span{flex:1}
+/* реклама на главной */
+.hm-ads{display:grid;gap:12px}
+.ad23{position:relative;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);border-radius:16px;overflow:hidden;background:#0E0709;color:#F7EAF0;border:1px solid #3A1B28}
+.ad23.sq{grid-template-columns:150px minmax(0,1fr);background:linear-gradient(110deg,#788979 0%,#788979 26%,#56675A 100%);color:#F5F1E6;border-color:#5F7062}
+.ad23-img{position:relative;min-height:170px;background:#00000022}
+.ad23-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.ad23.sq .ad23-img{min-height:150px}
+.ad23-b{padding:16px 18px;display:flex;flex-direction:column;gap:7px;justify-content:center}
+.ad23-tag{align-self:flex-start;font:600 10.5px var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:#FF9CC9;border:1px solid #6B2A48;background:#2A0F1C;border-radius:99px;padding:3px 9px}
+.ad23.sq .ad23-tag{color:#FFF6DE;border-color:rgba(255,246,222,.35);background:rgba(0,0,0,.14)}
+.ad23-srv{font:600 12px var(--f-mono);color:#FF9CC9}
+.ad23.sq .ad23-srv{color:#FFE9B8}
+.ad23-b h4{margin:0;font-size:20px;color:#fff}
+.ad23-b p{margin:0;font-size:13.5px;opacity:.88}
+.ad23-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.ad23-row a,.ad23-row button{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;border:0;font:600 13px inherit;cursor:pointer;text-decoration:none;color:#fff;background:rgba(255,255,255,.14)}
+.ad23-row a.dc{background:#5865F2}.ad23-row a.tg{background:#229ED9}
+.ad23-row .promo b{letter-spacing:.06em}
+.ad23-x{position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(0,0,0,.35);color:#fff;cursor:pointer;font-size:15px;line-height:1}
+@media (max-width:700px){.ad23,.ad23.sq{grid-template-columns:1fr}.ad23-img{min-height:150px}}
+/* настройки голосового ввода */
+.v23-mic{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.v23-mic select{max-width:260px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
+.v23-lvl{width:150px;height:8px;border-radius:4px;background:var(--chip);overflow:hidden}
+.v23-lvl i{display:block;height:100%;width:0;background:#2e9e62;transition:width .08s}
+.v23-seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.v23-seg button{border:0;border-right:1px solid var(--line);background:var(--surface);color:var(--ink);padding:6px 11px;font:inherit;font-size:13px;cursor:pointer}
+.v23-seg button:last-child{border-right:0}
+.v23-seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.dp-cab{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-top:14px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-size:13.5px;color:var(--muted)}
+</style>
+<script>
+/* ===== 2.3 =====
+   «Правила» убраны, ведомство только в кабинете, «РП ситуации» в обучении, фильтры и сортировка кодексов,
+   поиск по меткам, переходы по ссылкам (#uk:12.8) из заметок и оверлея, голосовые команды, подбор статей по описанию,
+   поиск оверлея по всем кодексам и законам, локальные ответы ИИ, реклама на главной, настройки голосового ввода. */
+(function(){
+"use strict";
+var A=window.senkoApp, X=window.SA_X, P=window.SA_P, TABS=window.SA_TABS;
+var CODE={uk:1,ak:1,dk:1,pk:1}, CALCK={uk:1,ak:1,dk:1};
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(x){return d}}
+function jset(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(x){}}
+function toast(t){if(window.SA_toast)SA_toast(t)}
+function goTab(t,sub){if(sub&&X&&X.sub)X.sub[t]=sub;if(window.SA_modalClose)SA_modalClose();if(window.SA_closeSheet)SA_closeSheet();if(window.SA_go)SA_go(t);else{state.tab=t;render()}window.scrollTo(0,0)}
+function rerender(){var y=window.pageYOffset;render();window.scrollTo(0,y)}
+
+/* ---------- 1. «Правила» убраны: сохранённая вкладка и последний раздел ролей ---------- */
+if(state.tab==="rules")state.tab="home";
+(function(){var o=jget("bos-roles",null),ch=0;if(!o||typeof o!=="object")return;
+ if(o.last)Object.keys(o.last).forEach(function(k){if(o.last[k]==="rules"){delete o.last[k];ch=1}});
+ var cut=function(L){var i=Array.isArray(L)?L.indexOf("rules"):-1;if(i>=0){L.splice(i,1);ch=1}};
+ (o.custom||[]).forEach(function(c){cut(c&&c.tabs)});if(o.tabs)Object.keys(o.tabs).forEach(function(k){cut(o.tabs[k])});
+ if(ch)jset("bos-roles",o)})();
+
+/* ---------- 2. Ведомство: только в личном кабинете ---------- */
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-dpcab]");if(!b)return;if(window.SA_openSheet)SA_openSheet("cab")});
+document.addEventListener("change",function(ev){var t=ev.target;if(!t||!t.matches||!t.matches('select[data-acc="org"],select[data-prof="dept"]'))return;
+ var box=document.getElementById("cabDeptInfo");if(!box||typeof deptInfo!=="function")return;
+ var w=document.createElement("div");w.innerHTML=deptInfo(t.value);if(w.firstChild)box.replaceWith(w.firstChild)});
+
+/* ---------- 3. Обучение → «РП ситуации» ---------- */
+/* Ситуации с выбором действия. Оценка: 1 — по закону, 0.5 — допустимо, но есть лучше, 0 — нарушение.
+   Ссылки на ПК штата (ст. 4, 12, 16, 17, 20, 22, 35, 37) и УК ст. 2.8; тексты сверены с кодексами в программе. */
+var RPS=[
+ {id:"mask",i:"🎭",t:"Кофе и маска",d:"Гражданин в маске у кофейни не хочет показывать лицо.",s:[
+  {q:"Вы патрулируете у кофейни. Мужчина в маске клоуна с картонным стаканчиком смотрит на вас подозрительно долго. На него жаловались: «пугает бариста». Что делаете?",o:[
+   ["Представляюсь, показываю жетон и прошу снять маску, чтобы установить личность",1,"Верно. Сотрудник вправе потребовать снять маску, капюшон или шлем, чтобы визуально установить личность. Идентификационный знак показывают при первом обращении.","pk|16","ПК ст. 16 ч. 3"],
+   ["Сразу применяю тайзер: клоуны подозрительны по определению",0,"Стадии силы идут строго по порядку: присутствие, требование, физическая сила, спецсредства. Тайзер без попытки договориться — превышение.","pk|37","ПК ст. 37"],
+   ["Покупаю себе латте и делаю вид, что ничего не видел",0.5,"Латте хороший, но жалоба осталась без внимания. Ситуация спокойная, разобраться стоило.","",""]]},
+  {q:"«Маску не сниму, документы не покажу, у меня творческий образ». Он делает глоток кофе прямо через прорезь в маске.",o:[
+   ["Надеваю наручники, объясняю основания и начинаю установление личности: базы данных, документы, сверка с фото",1,"Так и есть. Отказ снять маску или показать документы запускает процедуру установления личности: наручники, разъяснение оснований, законные меры по базам и документам, сверка с фото.","pk|16","ПК ст. 16 ч. 3"],
+   ["Срываю маску и сразу отпускаю, раз уж увидел лицо",0.5,"Лицо вы увидели, но порядок другой: сначала наручники и разъяснение оснований, затем установление личности. Самовольно срывать маску без процедуры не стоит.","pk|16","ПК ст. 16 ч. 3"],
+   ["Объявляю его в розыск за творческий образ",0,"Розыск за образ не предусмотрен. Закон даёт другой путь: процедуру установления личности.","pk|16","ПК ст. 16 ч. 3"]]},
+  {q:"По базе это Джерри Л., ордеров и розыска нет. Он уже не шутит и просит отпустить его допить кофе.",o:[
+   ["Снимаю наручники и отпускаю: личность установлена, нарушений нет",1,"Верно. Подозрение не подтвердилось, оснований держать человека нет. Незаконно задержанного обязаны освободить немедленно.","pk|20","ПК ст. 20 ч. 1 п. «а»"],
+   ["Везу в участок «для профилактики»",0,"Задержание без основания незаконно, такого человека освобождают. «Профилактики» в кодексе нет.","pk|8","ПК ст. 8 ч. 3"],
+   ["Отпускаю, но кофе конфискую",0,"Изъятие должно иметь основание. Кофе к делу не относится, оставьте человеку латте.","",""]]}]},
+ {id:"miranda",i:"📜",t:"Миранда на скорости",d:"Задержание вора из магазина по горячим следам.",s:[
+  {q:"Продавец кричит «держите вора!». Вы догоняете парня с тремя пачками чипсов под курткой. Он остановился, тяжело дышит. С чего начинаете задержание?",o:[
+   ["Наручники, затем жетон, потом квалификация и правило Миранды",1,"Порядок задержания: наручники, предъявить идентификационный знак, по желанию первичный обыск, затем квалификация и Миранда.","pk|17","ПК ст. 17 ч. 1"],
+   ["Сначала спрашиваю: «Где остальные чипсы? Кто сообщник?»",0,"Всё, что задержанный сказал на допросе до зачтения прав, недопустимо как доказательство, даже с записью.","pk|12","ПК ст. 12 ч. 2 п. «а»"],
+   ["Зачитываю Миранду, а наручники надену потом",0.5,"Миранда нужна, но по порядку она идёт после наручников и предъявления жетона. Нарушение последовательности могут оспорить.","pk|17","ПК ст. 17 ч. 1"]]},
+  {q:"Вы зачитали права и спросили «Вам ясны ваши права?». Парень отвечает: «Ну… типа… чипсы со сметаной».",o:[
+   ["Разъясняю права второй раз и добиваюсь чёткого ответа",1,"Верно. Если нет чёткого подтверждения (молчание, уклончивый ответ), права разъясняют повторно и предупреждают о дальнейших действиях.","pk|17","ПК ст. 17 ч. 3"],
+   ["Считаю, что он всё понял: про сметану же сказал",0,"Уклончивый ответ не считается подтверждением. Без повторного разъяснения защита может оспорить процедуру.","pk|17","ПК ст. 17 ч. 3"],
+   ["Зачитываю права громче и медленнее, но не спрашиваю, понял ли",0.5,"Громкость не главное. Нужно удостовериться, что права поняты, и получить ответ.","pk|17","ПК ст. 17 ч. 3"]]},
+  {q:"«Дайте позвонить маме! Она скажет, что я хороший!»",o:[
+   ["Объясняю, что звонок до 3 минут предназначен для связи с его частным адвокатом, и стою рядом во время звонка",1,"Так и есть. Звонок даётся для связи с частным адвокатом, сотрудник находится рядом и контролирует разговор.","pk|17","ПК ст. 17 ч. 5"],
+   ["Даю позвонить маме на 10 минут, пусть успокоится",0,"Звонок длится не более 3 минут и предназначен для связи с частным адвокатом.","pk|17","ПК ст. 17 ч. 5"],
+   ["Отказываю в любом звонке: «Никаких звонков!»",0,"Право на один телефонный звонок у подозреваемого есть, отказывать в нём нельзя.","pk|22","ПК ст. 22 ч. 1 п. «а»"]]},
+  {q:"«Тогда мне нужен государственный адвокат!»",o:[
+   ["Звоню на горячую линию Правительства; если адвокат принял вызов, процессуальный час замораживается до его приезда",1,"Верно. Не приехал за 10 минут — задержание продолжается, право на адвоката считается реализованным.","pk|17","ПК ст. 17 ч. 4"],
+   ["Говорю, что адвокатов сегодня нет, у них выходной",0,"Право на адвоката есть всегда. Государственного адвоката вызывают звонком на горячую линию Правительства.","pk|22","ПК ст. 22 ч. 1 п. «б»"],
+   ["Ждём адвоката сколько угодно, хоть до утра",0.5,"Ждать нужно, но не бесконечно: если адвокат не приехал за 10 минут, процедура продолжается.","pk|17","ПК ст. 17 ч. 4"]]}]},
+ {id:"force",i:"🏃",t:"Бегущий по Vinewood",d:"Подозреваемый не останавливается. Стадии применения силы.",s:[
+  {q:"Подозреваемый в угоне выходит из машины и быстрым шагом уходит от вас по Vinewood Blvd. Вы рядом, в форме.",o:[
+   ["Громко называю себя и требую остановиться",1,"Присутствие и требование — первые стадии. Требование должно быть законным и исполнимым, можно предупредить о последствиях.","pk|37","ПК ст. 37 ч. 3–4"],
+   ["Стреляю в воздух, чтобы он точно услышал",0,"Предупредительные выстрелы запрещены, а угроза оружием уже считается применением огнестрельного оружия.","pk|37","ПК ст. 37 ч. 7"],
+   ["Догоняю на машине и аккуратно подталкиваю бампером",0,"Автомобиль как оружие относится к пятой стадии. Перескакивать стадии без исключения нельзя.","pk|37","ПК ст. 37 ч. 7"]]},
+  {q:"Он оборачивается: «Отстань, я спешу на кастинг!» и отталкивает вас плечом.",o:[
+   ["Применяю физическую силу: удержание, заламывание руки",1,"Требования не хватило, сотрудник может перейти к третьей стадии: физической силе.","pk|37","ПК ст. 37 ч. 5"],
+   ["Сразу достаю пистолет",0,"Из второй стадии сразу в пятую нельзя: стадии соблюдаются по порядку.","pk|37","ПК ст. 37 ч. 1"],
+   ["Отпускаю: кастинг важнее",0,"Подозреваемый в угоне уходит, а законное требование не исполнено. Нужно продолжать по стадиям.","",""]]},
+  {q:"Он вырывается и бежит к площади, где толпа туристов фотографирует звёзды на тротуаре.",o:[
+   ["Применяю электрошокер: спецсредства — следующая стадия",1,"Четвёртая стадия: наручники, электрошокер, резиновые пули. Огонь при скоплении граждан запрещён.","pk|37","ПК ст. 37 ч. 6"],
+   ["Стреляю по ногам, пока он не добежал до толпы",0,"Огнестрел при значительном скоплении граждан, если могут пострадать посторонние, запрещён.","pk|37","ПК ст. 37 ч. 7"],
+   ["Делаю предупредительный разряд тайзером в воздух",0,"Спецсредства нельзя применять как меру предупреждения: предупредительные выстрелы и удары запрещены.","pk|37","ПК ст. 37 ч. 6"]]}]},
+ {id:"hour",i:"⏳",t:"Час на исходе",d:"Процессуальный час, паузы и неожиданный статус задержанного.",s:[
+  {q:"Задержанный сидит в участке 55 минут. Из них 12 минут ждали медика EMS для освидетельствования. Напарник говорит: «Час почти вышел, отпускаем».",o:[
+   ["Время с EMS не считается, у нас ещё есть время на оформление",1,"Верно. Вызов, ожидание и освидетельствование сотрудником EMS приостанавливают течение часа.","pk|20","ПК ст. 20 ч. 2 п. «г»"],
+   ["Отпускаем: 55 минут — это почти час",0,"Паузы по закону в час не входят. С учётом 12 минут EMS время ещё есть.","pk|20","ПК ст. 20 ч. 2"],
+   ["Час не важен, оформим, когда освободимся",0,"Прошёл час без избранной меры — человека освобождают.","pk|20","ПК ст. 20 ч. 1 п. «г»"]]},
+  {q:"Пока оформляете, выясняется: задержали по описанию «высокий в зелёной куртке». Никто не видел нарушения, записи нет, ордера и ориентировки тоже.",o:[
+   ["Освобождаю: основания задержания нет, задержание незаконно",1,"Задержание без одного из оснований незаконно, подозреваемый подлежит освобождению.","pk|20","ПК ст. 20 ч. 1 п. «в»"],
+   ["Ищу основание задним числом: кто-нибудь точно что-то видел",0,"Основание должно быть в момент задержания. Подгонка задним числом делает процедуру незаконной.","pk|16","ПК ст. 16 ч. 2"],
+   ["Держу до конца часа: вдруг найдётся",0,"Незаконно задержанного обязаны освободить немедленно, ждать конца часа нельзя.","pk|8","ПК ст. 8 ч. 3"]]},
+  {q:"Новый задержанный заявляет: «Я сотрудник государственной организации, позовите моё руководство!»",o:[
+   ["Вызываю его руководство и Офис Генерального прокурора, время ожидания на паузе",1,"Для госслужащего, сотрудника Weazel News или частного адвоката вызывают руководство и ОГП. Время разбирательства в час не входит.","pk|20","ПК ст. 20 ч. 2 п. «в»"],
+   ["Отвечаю, что тут все равны, и оформляю как обычно",0,"Для госслужащих порядок особый: без вызова руководства и ОГП процедуру легко оспорить.","pk|19","ПК ст. 19"],
+   ["Отпускаю сразу, раз госслужащий",0.5,"Статус сам по себе не освобождает. Проверьте статус и вызовите руководство и ОГП. Освобождают при неприкосновенности, кроме исключений.","pk|20","ПК ст. 20 ч. 1 п. «д»"]]}]},
+ {id:"search",i:"🔎",t:"Обыск без повода",d:"Красивая машина — не основание. Улики и ордера.",s:[
+  {q:"Мимо проезжает блестящий спорткар. Ничего не нарушает, но выглядит «слишком дорого для честного человека». Напарник хочет остановить и обыскать.",o:[
+   ["Нет: для остановки и обыска нужно законное основание или ордер",1,"Обыск транспорта или личный досмотр без ордера и основания делает улики недопустимыми, а задержанного освобождают.","pk|12","ПК ст. 12 ч. 2 п. «в»"],
+   ["Останавливаем и обыскиваем: богатство подозрительно",0,"Красота машины не основание. Всё найденное будет недопустимо.","pk|12","ПК ст. 12 ч. 2 п. «в»"],
+   ["Останавливаем «проверить документы», а там посмотрим",0.5,"Проверка документов возможна в случаях, предусмотренных законом, но превращать её в обыск без основания нельзя.","dk|2","ДК ст. 2"]]},
+  {q:"Пока вы спорили, напарник уже обыскал багажник без основания и гордо машет найденной винтовкой.",o:[
+   ["Улика недопустима, водителя освобождаем, о нарушении докладываю",1,"Если нарушение сотрудника — первичное основание действий, улики недопустимы, а задержанный подлежит немедленному освобождению.","pk|12","ПК ст. 12 ч. 2 п. «в»"],
+   ["Оформляем: винтовка же настоящая",0,"Доказательства, полученные с нарушением, не имеют юридической силы и не могут лечь в основу обвинения.","pk|12","ПК ст. 12 ч. 1"],
+   ["Возвращаем винтовку в багажник и делаем вид, что ничего не было",0,"Скрывать нарушение — плохая идея. Освободите человека и доложите руководству.","",""]]},
+  {q:"Позже появляются реальные данные, что в доме владельца хранят оружие. Ждать ордер некогда: вот-вот всё вывезут.",o:[
+   ["В исключительном случае обыскиваю без ордера и не позднее 10 часов уведомляю прокурора",1,"Если обыск жилища не терпит отлагательства, его проводят по решению сотрудника, а прокурора уведомляют не позднее 10 часов.","pk|4","ПК ст. 4 ч. 2"],
+   ["Обыскиваю и никому не говорю",0,"Без уведомления прокурора обыск жилища без ордера незаконен.","pk|4","ПК ст. 4 ч. 2"],
+   ["Жду ордер, даже если всё вывезут",0.5,"Ордер — основной путь, но закон допускает исключение, когда обыск не терпит отлагательства.","pk|4","ПК ст. 4 ч. 2"]]}]},
+ {id:"comp",i:"🧭",t:"Чужая компетенция",d:"Статья не вашего ведомства: запросы и одобрение.",s:[
+  {q:"Вы офицер регионального ведомства. На вызове выясняется: гражданин подделывал финансовые документы. Это статья финансовой компетенции, не вашей.",o:[
+   ["Направляю запрос старшему составу ведомства с этой компетенцией и жду одобрения",1,"Статьи чужой компетенции отрабатывают только по одобрению запроса старшим составом нужного ведомства.","pk|35","ПК ст. 35 ч. 3–4"],
+   ["Отрабатываю сам: преступник есть преступник",0,"Процессуальные действия вне компетенции запрещены, если нет одобренного запроса.","pk|35","ПК ст. 35 ч. 2"],
+   ["Ничего не делаю: не моё дело",0.5,"Самому действовать нельзя, но направить запрос в уполномоченный орган вы обязаны.","pk|35","ПК ст. 35 ч. 4"]]},
+  {q:"Прошло 15 минут, ответа на запрос нет. Коллега вспоминает: «В УК же есть правило: нет ответа 15 минут — можно привлекать!»",o:[
+   ["Это правило в ПК не повторяется: без разрешения действия по статье недопустимы, уточняю у руководства",1,"Отсутствие предварительного или последующего разрешения исключает процессуальные действия по статье вне компетенции.","pk|35","ПК ст. 35 ч. 5"],
+   ["Привлекаем по правилу 15 минут",0.5,"В УК такое правило есть, но ПК ст. 35 ч. 5 прямо говорит: без разрешения действия недопустимы. Спорно, лучше уточнить у руководства.","uk|2.8","УК ст. 2.8"],
+   ["Отпускаем и забываем о запросе",0,"Запрос можно получить и в процессе, при уведомлении. Бросать дело без ответа не нужно.","pk|35","ПК ст. 35 ч. 5"]]},
+  {q:"На место приезжает сотрудник Офиса Генерального прокурора и говорит, что берёт дело.",o:[
+   ["Передаю: ОГП вправе вести действия по любым статьям по всему штату",1,"Сотрудники ОГП вправе проводить следственные и процессуальные действия вне зависимости от категории статьи.","pk|35","ПК ст. 35 ч. 6"],
+   ["Не отдаю: это моё задержание",0,"Компетенция ОГП шире вашей: передайте дело и окажите содействие.","pk|35","ПК ст. 35 ч. 6"],
+   ["Отдаю и прошу прокурора самому надеть наручники",0.5,"Дело отдаёте правильно, но сотрудникам ОГП нельзя использовать наручники и спецсредства. Это остаётся на вас.","pk|35","ПК ст. 35 ч. 6"]]}]}
+];
+var RS=null; // {id,i,pts,pick,log}
+function rpsBest(){var o=jget("bos-rps",{});return o&&typeof o==="object"?o:{}}
+function rpsHtml(){
+ var B=rpsBest();
+ if(!RS){
+  return '<section class="panel"><h2>РП ситуации</h2><p class="sub">Короткие истории с выбором действия. После каждого шага видно, что говорит закон и где это написано. За прохождение начисляется опыт.</p><div class="rps-list">'+
+   RPS.map(function(s){var b=B[s.id];return '<button type="button" class="rps-card" data-rps="'+s.id+'"><i aria-hidden="true">'+s.i+'</i><span><b>'+e(s.t)+'</b><span>'+e(s.d)+'</span><em>'+(b!=null?'Лучший результат: '+b+'%':'Шагов: '+s.s.length)+'</em></span></button>'}).join("")+'</div></section>';
+ }
+ var S=rpsById(RS.id), h='<section class="panel"><h2>'+S.i+' '+e(S.t)+'</h2>';
+ if(RS.i>=S.s.length){
+  var p=Math.round(RS.pts/S.s.length*100);
+  h+='<div class="rps-end"><div class="rps-big">'+p+'%</div><p class="sub">'+(p>=90?"Образцовая работа, хоть в учебник.":p>=60?"Неплохо, но адвокат нашёл бы к чему придраться.":"Прокурор уже открывает дело. Попробуйте ещё раз.")+(RS.xp?' +'+RS.xp+' опыта':'')+'</p></div>';
+  h+='<ul class="s10-res">'+RS.log.map(function(x){return '<li class="'+(x.v===1?"ok":x.v>0?"half":"bad")+'"><b>'+(x.v===1?"✓ ":x.v>0?"≈ ":"✕ ")+e(x.a)+'</b>'+e(x.f)+'</li>'}).join("")+'</ul>';
+  return h+'<div class="rowbtn"><button type="button" class="btn primary" data-rps="'+S.id+'">Пройти заново</button><button type="button" class="btn" data-rps="list">Другие ситуации</button></div></section>';
+ }
+ var st=S.s[RS.i];
+ h+='<div class="rps-step">Шаг '+(RS.i+1)+' из '+S.s.length+'</div><div class="rps-q">'+e(st.q)+'</div><div class="rps-o">';
+ st.o.forEach(function(o,n){var cls="";if(RS.pick!=null){if(n===RS.pick||o[1]===1)cls=o[1]===1?"ok":o[1]>0?"half":"bad"}
+  h+='<button type="button" class="'+cls+'" data-rpso="'+n+'"'+(RS.pick!=null?' disabled':'')+'>'+e(o[0])+'</button>'});
+ h+='</div>';
+ if(RS.pick!=null){var o=st.o[RS.pick];
+  h+='<div class="rps-fb"><b>'+(o[1]===1?"✓ По закону":o[1]>0?"≈ Допустимо, но есть лучше":"✕ Так нельзя")+'</b>'+e(o[2])+(o[3]?'<br><button type="button" class="pill" data-go="'+o[3]+'">'+e(o[4])+'</button>':'')+'</div>'+
+   '<div class="rowbtn"><button type="button" class="btn primary" data-rps="next">'+(RS.i+1<S.s.length?"Дальше":"Итог")+'</button></div>';
+ }
+ return h+'<div class="rowbtn"><button type="button" class="btn" data-rps="list">Ко всем ситуациям</button></div></section>';
+}
+function rpsById(id){for(var i=0;i<RPS.length;i++)if(RPS[i].id===id)return RPS[i];return RPS[0]}
+function rpsPaint(){var y=window.pageYOffset;if(state.tab==="learn")render();window.scrollTo(0,y)}
+if(TABS&&TABS.learn){var LL=TABS.learn[1];if(!LL.some(function(x){return x[0]==="rps"})){var ci=-1;LL.forEach(function(x,i){if(x[0]==="case")ci=i});LL.splice(ci>=0?ci+1:LL.length,0,["rps","РП ситуации"])}}
+if(P)P.rps=rpsHtml;
+document.addEventListener("click",function(ev){
+ var b=ev.target.closest&&ev.target.closest("[data-rps],[data-rpso]");if(!b||state.tab!=="learn")return;
+ if(b.dataset.rpso!=null){if(!RS||RS.pick!=null)return;var S=rpsById(RS.id),o=S.s[RS.i].o[+b.dataset.rpso];if(!o)return;
+  RS.pick=+b.dataset.rpso;RS.pts+=o[1];RS.log.push({a:o[0],f:o[2],v:o[1]});rpsPaint();return}
+ var k=b.dataset.rps;
+ if(k==="list"){RS=null;rpsPaint();return}
+ if(k==="next"){if(!RS)return;RS.i++;RS.pick=null;var S2=rpsById(RS.id);
+  if(RS.i>=S2.s.length){var p=Math.round(RS.pts/S2.s.length*100),B=rpsBest();if(B[S2.id]==null||p>B[S2.id]){B[S2.id]=p;jset("bos-rps",B)}
+   RS.xp=Math.round(p/20);if(RS.xp&&window.SA_TRX&&SA_TRX.xp)try{SA_TRX.xp(RS.xp)}catch(x){}}
+  rpsPaint();return}
+ RS={id:k,i:0,pts:0,pick:null,log:[]};rpsPaint();window.scrollTo(0,0);
+});
+
+/* ---------- 4. Фильтры и сортировка кодексов: одна кнопка, диапазоны срока и штрафа, «открывал / не открывал» ---------- */
+var F=jget("bos-f23",{});if(!F||typeof F!=="object")F={};
+function fnum(v){var n=parseInt(String(v==null?"":v).replace(/[^\d]/g,""),10);return isFinite(n)?n:null}
+["tmin","tmax","fmin","fmax"].forEach(function(k){F[k]=fnum(F[k])});
+if(["","num","stars","term","fine"].indexOf(F.sort||"")<0)F.sort="";
+if(F.op!=="week"&&F.op!=="never")F.op="";
+F.dir=F.dir===1?1:-1;F.note=!!F.note;
+function fSave(){jset("bos-f23",F)}
+var fOpen=false;
+/* когда открывали статьи: bos-opened {"uk|12.8": время}; недавние до 2.3 считаем открытыми давно */
+var OPN=jget("bos-opened",{});if(!OPN||typeof OPN!=="object"||Array.isArray(OPN))OPN={};
+(recent||[]).forEach(function(x){if(x&&x.k&&!OPN[x.k+"|"+x.c])OPN[x.k+"|"+x.c]=1});
+var opT=null;function opSave(){clearTimeout(opT);opT=setTimeout(function(){jset("bos-opened",OPN)},400)}
+var PR0=pushRecent;
+pushRecent=function(k,c){if(CODE[k]&&c){OPN[k+"|"+c]=Date.now();opSave()}return PR0.apply(this,arguments)};
+var WEEK=7*864e5;
+function fActive(){var n=0;if(F.tmin!=null||F.tmax!=null)n++;if(F.fmin!=null||F.fmax!=null)n++;if(F.op)n++;if(F.note)n++;return n}
+function fOk(r){
+ if(!CODE[r.k])return true;
+ var Q=curQ();if(Q.nums)return true; // поиск по номеру показывает статью всегда
+ if((F.tmin!=null||F.tmax!=null)&&r.k==="uk"){var m=+r.m||0;if(F.tmin!=null&&m<F.tmin)return false;if(F.tmax!=null&&m>F.tmax)return false}
+ if((F.fmin!=null||F.fmax!=null)&&r.k!=="pk"){var lo=+r.fmin||+r.fmax||0,hi=+r.fmax||lo;if(!hi)return false;if(F.fmin!=null&&hi<F.fmin)return false;if(F.fmax!=null&&lo>F.fmax)return false}
+ if(F.op){var t=OPN[r.k+"|"+r.code];if(F.op==="week"&&!(t>1&&Date.now()-t<WEEK))return false;if(F.op==="never"&&t)return false}
+ if(F.note&&!(notes[r.id]&&String(notes[r.id]).trim()))return false;
+ return true}
+var M0=matches;
+matches=function(r){return M0.apply(this,arguments)&&fOk(r)};
+/* сортировка: статьи целиком, без деления на главы */
+var SN={num:"по номеру",stars:"по розыску",term:"по сроку",fine:"по штрафу"};
+function cmpCode(a,b){var x=String(a).split("."),y=String(b).split(".");for(var i=0;i<Math.max(x.length,y.length);i++){var p=+x[i]||0,q=+y[i]||0;if(p!==q)return p-q}return 0}
+var LH0=listHtml;
+listHtml=function(kind,data,Q){
+ if(!F.sort||!CODE[kind]||state.tab!==kind&&!state.all||!Array.isArray(data)||data.length<2||Q&&Q.nums)return LH0.apply(this,arguments);
+ var by={},order=[];data.forEach(function(r){if(!by[r.code]){by[r.code]=[];order.push(r.code)}by[r.code].push(r)});
+ var key=function(c){var L=by[c];if(F.sort==="stars")return Math.max.apply(null,L.map(function(r){return +r.stars||0}));
+  if(F.sort==="term")return Math.max.apply(null,L.map(function(r){return +r.m||0}));
+  if(F.sort==="fine")return Math.max.apply(null,L.map(function(r){return +r.fmax||+r.fmin||0}));return 0};
+ order.sort(function(a,b){if(F.sort==="num")return F.dir*cmpCode(a,b)*-1;var d=(key(b)-key(a))*(F.dir===-1?1:-1);return d||cmpCode(a,b)});
+ var flat=[];order.forEach(function(c){flat=flat.concat(by[c])});
+ var ck=chapKey,cl=chapLabel;
+ chapKey=function(){return "§23"};chapLabel=function(){return "Сортировка "+SN[F.sort]+(F.sort==="num"?(F.dir===-1?", по возрастанию":", по убыванию"):(F.dir===-1?", сначала большие":", сначала меньшие"))};
+ try{return LH0.call(this,kind,flat,Q)}finally{chapKey=ck;chapLabel=cl}};
+function fRange(id,lab,a,b,ph){return '<div class="f23-g"><b>'+lab+'</b><input type="text" inputmode="numeric" data-f23r="'+id+'min" value="'+(a==null?"":a)+'" placeholder="от" aria-label="'+lab+' от"><span class="dash">—</span><input type="text" inputmode="numeric" data-f23r="'+id+'max" value="'+(b==null?"":b)+'" placeholder="до'+(ph?" "+ph:"")+'" aria-label="'+lab+' до"></div>'}
+function fChip(t,k){return '<span class="chip" data-f23x="'+k+'" title="Убрать фильтр">'+e(t)+' ×</span>'}
+function fbar(){
+ var k=state.tab;if(!CODE[k])return;
+ var fl=view.querySelector(".filters");if(!fl||fl.dataset.f23)return;fl.dataset.f23="1";
+ var lab=fl.querySelector(".lab"),moved=[].slice.call(fl.children).filter(function(n){return n!==lab&&!n.classList.contains("my-add")});
+ var on=moved.filter(function(n){return n.getAttribute("aria-pressed")==="true"}).length+fActive()+(F.sort?1:0);
+ var act=[];
+ moved.forEach(function(n){if(n.getAttribute("aria-pressed")==="true")act.push('<span class="chip" data-f23c="'+moved.indexOf(n)+'" title="Убрать фильтр">'+e(n.textContent.trim())+' ×</span>')});
+ if(F.sort)act.push(fChip("Сортировка "+SN[F.sort],"sort"));
+ if(F.tmin!=null||F.tmax!=null)act.push(fChip("Срок "+(F.tmin!=null?"от "+F.tmin+" ":"")+(F.tmax!=null?"до "+F.tmax+" ":"")+"мес.","t"));
+ if(F.fmin!=null||F.fmax!=null)act.push(fChip("Штраф "+(F.fmin!=null?"от $"+F.fmin+" ":"")+(F.fmax!=null?"до $"+F.fmax:""),"f"));
+ if(F.op)act.push(fChip(F.op==="week"?"Открывал за неделю":"Ни разу не открывал","op"));
+ if(F.note)act.push(fChip("С заметкой","note"));
+ var tog=document.createElement("button");tog.type="button";tog.className="pill f23-tog";tog.setAttribute("aria-expanded",String(fOpen));
+ tog.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>Фильтры и сортировка'+(on?' · '+on:'');
+ var sum=document.createElement("span");sum.className="f23-act";sum.innerHTML=act.join("");
+ var pn=document.createElement("div");pn.className="f23-panel";pn.hidden=!fOpen;pn.id="f23p";
+ var sorts=[["","По главам"],["num","По номеру"]].concat(k==="uk"?[["stars","По розыску"],["term","По сроку"]]:[]).concat(k!=="pk"?[["fine","По штрафу"]]:[]);
+ if(sorts.every(function(s){return s[0]!==F.sort})&&F.sort)sorts.push([F.sort,"Сортировка "+SN[F.sort]]);
+ var h='<div class="f23-g f23-pills"><b>Показать</b></div>';
+ h+='<div class="f23-g"><b>Сортировка</b>'+sorts.map(function(s){return '<button type="button" class="pill" data-f23s="'+s[0]+'" aria-pressed="'+(F.sort===s[0])+'">'+s[1]+'</button>'}).join("")+
+  (F.sort?'<button type="button" class="pill" data-f23dir="1" title="Поменять направление">'+(F.dir===-1?"↓ сначала "+(F.sort==="num"?"меньшие":"большие"):"↑ сначала "+(F.sort==="num"?"большие":"меньшие"))+'</button>':'')+'</div>';
+ if(k==="uk")h+=fRange("t","Срок, мес.",F.tmin,F.tmax,"50");
+ if(k!=="pk")h+=fRange("f","Штраф, $",F.fmin,F.fmax);
+ h+='<div class="f23-g"><b>Просмотр</b><button type="button" class="pill" data-f23op="week" aria-pressed="'+(F.op==="week")+'">Открывал за неделю</button><button type="button" class="pill" data-f23op="never" aria-pressed="'+(F.op==="never")+'">Ни разу не открывал</button><button type="button" class="pill" data-f23note="1" aria-pressed="'+F.note+'">С заметкой</button></div>';
+ h+='<div class="f23-foot"><span>Поиск в строке сверху находит и текст ваших заметок, и цвет метки: «красная», «синяя».</span>'+(on?'<button type="button" class="btn" data-f23reset="1">Сбросить всё</button>':'')+'</div>';
+ pn.innerHTML=h;
+ var pills=pn.querySelector(".f23-pills");moved.forEach(function(n){pills.appendChild(n)});
+ if(lab)lab.replaceWith(tog);else fl.insertBefore(tog,fl.firstChild);
+ tog.insertAdjacentElement("afterend",sum);var add=fl.querySelector(".my-add");if(add)sum.insertAdjacentElement("afterend",add);fl.appendChild(pn);
+}
+function fApplyRange(inp){var id=inp.dataset.f23r,v=fnum(inp.value);
+ if(id==="tmin"||id==="tmax"){if(v!=null)v=Math.min(1000,v)}
+ if(F[id]===v)return;F[id]=v;fSave();rerender()}
+view.addEventListener("change",function(ev){var t=ev.target;if(t&&t.dataset&&t.dataset.f23r)fApplyRange(t)});
+view.addEventListener("keydown",function(ev){var t=ev.target;if(ev.key==="Enter"&&t&&t.dataset&&t.dataset.f23r){ev.preventDefault();fApplyRange(t)}});
+view.addEventListener("click",function(ev){
+ var b=ev.target.closest&&ev.target.closest(".f23-tog,[data-f23s],[data-f23dir],[data-f23op],[data-f23note],[data-f23reset],[data-f23x],[data-f23c]");if(!b)return;
+ if(b.classList.contains("f23-tog")){fOpen=!fOpen;b.setAttribute("aria-expanded",String(fOpen));var p=document.getElementById("f23p");if(p)p.hidden=!fOpen;return}
+ var d=b.dataset;
+ if(d.f23c!=null){var p2=document.getElementById("f23p"),L=p2?p2.querySelectorAll(".f23-pills > *"):[],n=L[+d.f23c];if(n)n.click();return}
+ if(d.f23s!=null){F.sort=d.f23s;F.dir=-1;}
+ else if(d.f23dir)F.dir=F.dir===-1?1:-1;
+ else if(d.f23op)F.op=F.op===d.f23op?"":d.f23op;
+ else if(d.f23note)F.note=!F.note;
+ else if(d.f23x){var x=d.f23x;if(x==="sort")F.sort="";if(x==="t"){F.tmin=null;F.tmax=null}if(x==="f"){F.fmin=null;F.fmax=null}if(x==="op")F.op="";if(x==="note")F.note=false}
+ else if(d.f23reset){F={sort:"",dir:-1,tmin:null,tmax:null,fmin:null,fmax:null,op:"",note:false};state.stars=0;state.fineOnly=false;state.favOnly=false;state.deptOnly=false;state.myOnly=false;state.lmF="";
+  if(typeof persist==="function")try{persist()}catch(x){}}
+ fSave();rerender()});
+
+/* ---------- 5. Поиск по цвету метки (заметки ищутся с 1.x) ---------- */
+var LBN={red:"красная красный",orange:"оранжевая оранжевый",yellow:"желтая желтый",green:"зеленая зеленый",blue:"синяя синий",purple:"фиолетовая фиолетовый",pink:"розовая розовый",teal:"бирюзовая бирюзовый",sky:"голубая голубой",lime:"салатовая салатовый",brown:"коричневая коричневый",gray:"серая серый"};
+var LBL={};function lblLoad(){var o=jget("bos-labels",{});LBL=o&&typeof o==="object"?o:{}}lblLoad();
+var RH0=rowHay;
+rowHay=function(r){var h=RH0.apply(this,arguments),c=LBL[r.k+"|"+r.code];return c&&LBN[c]?h+" метка "+LBN[c]:h};
+
+/* ---------- 6. Переходы по ссылкам: #uk:12.8, #learn:quiz, «УК 12.8» в заметках ---------- */
+var KW={"ук":"uk","ак":"ak","дк":"dk","пк":"pk","uk":"uk","ak":"ak","dk":"dk","pk":"pk"};
+function refTarget(s){
+ s=String(s||"").trim().replace(/^#\/?/,"");
+ var m=/^(uk|ak|dk|pk|ук|ак|дк|пк)\s*[:\/\-\s]\s*(?:ст\.?\s*)?(\d{1,3}(?:\.\d{1,3}){0,3})$/i.exec(s);
+ if(m)return KW[m[1].toLowerCase()]+":"+m[2];
+ m=/^(?:ст\.?\s*)?(\d{1,3}(?:\.\d{1,3}){0,3})\s*(ук|ак|дк|пк)$/i.exec(s);if(m)return KW[m[2].toLowerCase()]+":"+m[1];
+ m=/^(law|закон)\s*[:\/]\s*([\w-]{1,40})(?:[:\/]([\w.-]{1,40}))?$/i.exec(s);if(m)return "law:"+m[2]+(m[3]?":"+m[3]:"");
+ m=/^([a-z_]{2,12})(?:[:\/]([a-z0-9_]{1,16}))?$/i.exec(s);if(m)return m[1].toLowerCase()+(m[2]?":"+m[2]:"");
+ return ""}
+function openRef(t){
+ if(!t)return false;
+ if(/^law:/.test(t)){var p=t.split(":");if(window.SenkoLaws){goTab("laws");setTimeout(function(){try{SenkoLaws.open(p[1],p[2]||"","")}catch(x){}},60);return true}return false}
+ if(window.SA_open){SA_open(t);return true}return false}
+window.SA_ref=function(s){var t=refTarget(s);return openRef(t)?t:""};
+if(A&&A.onOpen)A.onOpen(function(t){t=String(t||"");if(/^law:/.test(t))openRef(t)}); // законы из оверлея (вкладки и статьи кодексов открывает обработчик 2.2)
+function hashGo(){var h="";try{h=decodeURIComponent(location.hash||"")}catch(x){h=location.hash||""}if(!h||h.length<3)return;
+ var t=refTarget(h);if(!t)return;try{history.replaceState(null,"",location.pathname+location.search)}catch(x){}setTimeout(function(){openRef(t)},0)}
+window.addEventListener("hashchange",hashGo);
+setTimeout(hashGo,400);
+/* ссылки в тексте заметки становятся кнопками перехода под заметкой */
+var REF_RE=/(?:^|[^\wа-яё#])(?:(ук|ак|дк|пк)\s*(?:ст\.?|статья|статьи)?\s*(\d{1,3}(?:\.\d{1,3}){0,3})|(?:ст\.?|статья|статьи)?\s*(\d{1,3}(?:\.\d{1,3}){1,3})\s*(ук|ак|дк|пк))(?![\wа-яё])|#([a-z_]{2,12}(?::[\w.]{1,16})?)/gi;
+function noteRefs(txt){var out=[],seen={},m;REF_RE.lastIndex=0;
+ while((m=REF_RE.exec(String(txt||"")))&&out.length<8){var t="",lab="";
+  if(m[1]){t=KW[m[1].toLowerCase()]+":"+m[2];lab=m[1].toUpperCase()+" "+m[2]}
+  else if(m[4]){t=KW[m[4].toLowerCase()]+":"+m[3];lab=m[4].toUpperCase()+" "+m[3]}
+  else if(m[5]){t=refTarget(m[5]);lab="#"+m[5]}
+  if(t&&!seen[t]){seen[t]=1;out.push([t,lab])}}
+ return out}
+function notesDecor(){
+ view.querySelectorAll(".mynote").forEach(function(n){if(n.nextElementSibling&&n.nextElementSibling.classList.contains("n23-refs"))return;
+  var L=noteRefs(n.textContent.replace(/^Заметка:\s*/,""));if(!L.length)return;
+  n.insertAdjacentHTML("afterend",'<div class="n23-refs">'+L.map(function(x){return '<button type="button" class="pill" data-n23go="'+e(x[0])+'" title="Открыть">↗ '+e(x[1])+'</button>'}).join("")+'</div>')})}
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-n23go]");if(!b)return;ev.preventDefault();ev.stopPropagation();openRef(b.dataset.n23go)},true);
+
+/* встраивание в render: метки перечитываются, панель фильтров, ссылки в заметках, подбор статей в калькуляторе */
+var R0=render;
+render=function(){lblLoad();R0.apply(this,arguments);
+ try{fbar()}catch(x){console.error(x)}
+ try{if(CODE[state.tab]||state.tab==="dept")notesDecor()}catch(x){}
+ try{if(state.tab==="calc")pickMount()}catch(x){console.error(x)}};
+
+/* ---------- 7. Голосовой оверлей: поиск по всем кодексам и законам, без смены вкладки и строки поиска ---------- */
+var KRE=/(?:^|\s)(ук|ак|дк|пк|уголовн\S*|административн\S*|коап|дорожн\S*|пдд|процессуальн\S*|упк)(?=\s|$)/g;
+var KMAP=function(w){w=w.toLowerCase();if(/^ук|^уголовн/.test(w))return "uk";if(/^ак|^административн|^коап/.test(w))return "ak";if(/^дк|^дорожн|^пдд/.test(w))return "dk";if(/^пк|^процессуальн|^упк/.test(w))return "pk";return ""};
+function splitKinds(s){var kinds=[],rest=norm(String(s||"")).replace(KRE,function(m,w){var k=KMAP(w);if(k&&kinds.indexOf(k)<0)kinds.push(k);return " "}).replace(/\s+/g," ").trim();
+ rest=rest.replace(/(^|\s)(кодекс\S*|статья|статью|статьи|ст)(?=\s|$)/g," ").replace(/\s+/g," ").trim();return {kinds:kinds,rest:rest}}
+function chipTexts(r){var out=[];if(r.k==="uk"&&r.stars)out.push(r.stars+"★");
+ String(typeof chips==="function"?chips(r):"").replace(/<span class="chip[^"]*"[^>]*>([\s\S]*?)<\/span>/g,function(m,t){t=t.replace(/<[^>]+>/g,"").replace(/&nbsp;/g," ").replace(/&amp;/g,"&").trim();if(t)out.push(t);return m});
+ return out.slice(0,5)}
+function strip(h){var d=document.createElement("div");d.innerHTML=h;return (d.textContent||"").replace(/\s+/g," ").trim()}
+function searchOne(c){
+ var sp=splitKinds(c);if(!sp.rest)return null;
+ var Q=buildQ(sp.rest);if(Q.empty)return null;
+ var kinds=sp.kinds.length?sp.kinds:["uk","ak","dk","pk"],res={},arts=[];
+ kinds.forEach(function(k){res[k]=(DATA[k]||[]).filter(function(r){return rowQ(r,Q)})});
+ kinds.forEach(function(k){var by={};res[k].forEach(function(r){if(!by[r.code]){by[r.code]={k:k,code:r.code,rows:[],s:0};arts.push(by[r.code])}by[r.code].rows.push(r)})});
+ arts.forEach(function(a,i){var r0=a.rows[0],ti=norm(r0.title||"");
+  a.s=(Q.nums?(a.code===Q.nums.join(".")?10:5):(Q.groups.every(function(g){return g.some(function(x){return ti.indexOf(x)>-1})})?3:1))+(a.k==="uk"?0.3:a.k==="ak"?0.2:a.k==="dk"?0.1:0)-i*1e-4});
+ arts.sort(function(a,b){return b.s-a.s});
+ var items=arts.slice(0,3).map(function(a){return {kind:KN[a.k],code:a.code,title:String(a.rows[0].title||"").slice(0,120),target:a.k+":"+a.code,
+  parts:a.rows.slice(0,2).map(function(r){var pt=typeof ptsOf==="function"?ptsOf(r):null;var tx=String(r.note||"").replace(/\s+/g," ").trim();if(!tx&&pt&&pt.length)tx=pt.map(function(x){return x[0]+") "+x[1]}).join(" ");return {pn:r.part?"ч."+r.part:"",text:tx.slice(0,320),chips:chipTexts(r)}}),more:Math.max(0,a.rows.length-2)}});
+ var lawTotal=0;
+ if(!Q.nums&&!sp.kinds.length&&typeof lawHits==="function"){try{var LH=lawHits(Q);LH.forEach(function(r){lawTotal+=r.hits.length||1});
+  LH.forEach(function(r){r.hits.slice(0,2).forEach(function(x){if(items.length>=3)return;items.push({kind:lawShort(r.L).slice(0,44),code:x.u.n,title:String(x.u.title||"").slice(0,120),target:"law:"+r.L.id+":"+x.u.key,parts:[{pn:"",text:lawSnip(x.u,Q,320),chips:[]}],more:0})})})}catch(x){}}
+ if(!arts.length&&!lawTotal)return null;
+ var ref="";try{if(Q.nums&&typeof refBar==="function")ref=strip(refBar(Q,res)).slice(0,400)}catch(x){}
+ return {ok:true,query:c,total:arts.length+lawTotal,ref:ref,items:items}}
+window.__senkoVoiceSearch=function(cands){
+ try{var L=(Array.isArray(cands)?cands:[cands]).map(String).filter(Boolean).slice(0,4);
+  for(var i=0;i<L.length;i++){var r=searchOne(L[i]);if(r)return r}
+  return {ok:true,query:L[0]||"",total:0,items:[]}}catch(x){return {ok:false,error:"Ошибка поиска."}}};
+
+/* ---------- 8. Голосовые команды: калькулятор, избранное, таймер, переходы ---------- */
+function findRows(q,prefer){
+ var sp=splitKinds(q),m=/(\d{1,3}(?:\.\d{1,3}){0,3})(?:\.([а-е]))?/.exec(sp.rest);if(!m)return null;
+ var nums=m[1].split("."),kinds=sp.kinds.length?sp.kinds:(prefer||["uk","ak","dk","pk"]);
+ for(var i=0;i<kinds.length;i++){var k=kinds[i],D=DATA[k]||[];
+  for(var n=nums.length;n>=1;n--){var code=nums.slice(0,n).join("."),part=nums[n]||"",R=D.filter(function(r){return r.code===code});
+   if(!R.length||nums.length-n>1)continue;
+   if(part){var P2=R.filter(function(r){return part==="1"?(r.part===""||r.part==="1"):r.part===part});if(P2.length)R=P2}
+   return {k:k,code:code,rows:R,label:KN[k]+" "+code+(part?" ч."+part:"")}}}
+ return null}
+var NAV=[[/калькулятор|расч[её]т/,"calc"],[/таймер|задержани/,"timer"],[/главн|домой/,"home"],[/обучени|тренажер|тест/,"learn"],[/справочник|шпаргалк/,"ref"],[/закон/,"laws"],[/рапорт/,"rp"],[/на месте/,"field"],[/проверк/,"tools"],[/общ\S* част/,"gen"]];
+window.SA_voiceCmd=function(o){
+ o=o||{};var t=norm(String(o.text||"")).replace(/[.,!?]/g," ").replace(/\s+/g," ").trim(),q=norm(String(o.query||o.text||""));
+ if(!t)return {handled:false};
+ var say=function(ok,text,show){return {handled:true,ok:ok,text:text,show:!!show}};
+ if(/(запуст|начн|начат|старт|включ|засек)\S*\s+(\S+\s+)?(таймер|задержани)/.test(t)||/^(новое\s+)?задержание$/.test(t)){
+  if(typeof startTm!=="function")return say(false,"Таймер недоступен.");var tm0=startTm();goTab("timer");return say(!!tm0,tm0?"Таймер задержания запущен на 1 час.":"Слишком много задержаний сразу: отправьте одно в архив.",true)}
+ if(/(очист|сброс|обнул)\S*\s+(\S+\s+)?калькулятор/.test(t)){basket={};save();if(typeof updateBadge==="function")updateBadge();if(state.tab==="calc")rerender();return say(true,"Калькулятор очищен.")}
+ var addCalc=/(добав|внес|закин|кинь|положи|посчита)\S*/.test(t)&&/калькулятор|расч[её]т|посчита/.test(t);
+ var fav=/избранн/.test(t),unfav=fav&&/(убер|удал|убра)/.test(t);
+ if(addCalc||fav){
+  var f=findRows(q,addCalc?["uk","ak","dk"]:null);
+  if(!f)return say(false,"Не расслышал номер статьи. Пример: «добавь в калькулятор 12.8 УК».");
+  if(addCalc){if(f.k==="pk")return say(false,"Статьи ПК в калькулятор не добавляются.");var r=f.rows[0];basket[r.id]=1;save();if(typeof updateBadge==="function")updateBadge();if(state.tab==="calc"||CODE[state.tab])rerender();
+   return say(true,"Добавлено в калькулятор: "+KN[r.k]+" "+r.code+(r.part?" ч."+r.part:"")+" · "+String(r.title||"").slice(0,60)+".")}
+  f.rows.forEach(function(r){if(unfav)delete favs[r.id];else favs[r.id]=1});save();if(CODE[state.tab])rerender();
+  return say(true,(unfav?"Убрано из избранного: ":"В избранном: ")+f.label+" · "+String(f.rows[0].title||"").slice(0,60)+".")}
+ if(/^(открой|покажи|перейди|открыть|показать|перейти|найди)\s/.test(t)){
+  var f2=findRows(q);if(f2){openRef(f2.k+":"+f2.code);return say(true,"Открываю "+f2.label+".",true)}
+  var rest=t.replace(/^\S+\s+/,"");
+  if(/избранн/.test(rest)){goTab(state.tab&&CODE[state.tab]?state.tab:"uk");state.favOnly=true;rerender();return say(true,"Показываю избранное.",true)}
+  for(var i=0;i<NAV.length;i++)if(NAV[i][0].test(rest)){goTab(NAV[i][1]);return say(true,"Открываю раздел.",true)}
+  var tg=refTarget(rest.replace(/\s+/g,""));if(tg&&/:/.test(tg)&&openRef(tg))return say(true,"Открываю.",true)}
+ return {handled:false}};
+
+/* ---------- 9. Калькулятор: подбор статей по описанию ситуации ---------- */
+var PKS={q:"",res:null,msg:""};
+function pickRun(){
+ var q=String(PKS.q||"").trim();PKS.msg="";PKS.res=[];
+ if(q.length<5){PKS.msg="Опишите ситуацию подробнее: что сделал человек, где и чем.";return}
+ PKS.res=pickScore(q);
+ if(!PKS.res.length)PKS.msg="Подходящих статей не нашлось. Попробуйте другие слова: «стрелял в полицейского», «ехал без прав», «в маске».";}
+/* оценка: редкие слова весят больше (как в поиске по смыслу), совпадение в названии — вдвое, несколько слов сразу — бонус */
+var PSTOP={"что":1,"как":1,"это":1,"если":1,"или":1,"для":1,"при":1,"был":1,"была":1,"были":1,"его":1,"она":1,"они":1,"без":1,"над":1,"под":1,"после":1,"перед":1,"чтобы":1,"тот":1,"эта":1,"этот":1,"когда":1,"потом":1,"затем":1,"который":1,"которая":1,"также":1,"еще":1,"уже":1,"очень":1,"человек":1,"человека":1,"людей":1,"кого":1,"кто":1,"гражданин":1,"гражданина":1,"игрок":1,"игрока":1,"сотрудник":1};
+/* разговорные слова → слова из названий статей */
+var PSYN=[[/^(избил|избива|ударил|удари|побил|побои|драк|подрал|избиени|пинал|бил$)/,"побои вред здоровью насилие"],[/^(убил|убий|застрелил|зарезал|прикончил)/,"убийство"],
+ [/^(стрелял|стрельб|выстрел|пальб|обстрел|подстрелил)/,"оружие посягательство"],[/^(ограб|граб)/,"грабеж разбой"],[/^(украл|кража|крад|ворова|своровал|стащил|спер)/,"кража"],
+ [/^(угнал|угон)/,"завладение транспортом"],[/^(похитил|похищ)/,"похищение"],[/^(пистолет|автомат|ствол|винтовк|дробовик|оружи|огнестрел)/,"оружия оборот"],
+ [/^(нож|бита|битой|дубин|кастет|монтировк)/,"холодное оружие инвентарь"],[/^(наркот|травк|кокаин|меф|закладк|нарко)/,"наркотиков"],[/^(продава|продал|сбыт|торгова|барыж)/,"оборот"],
+ [/^(взятк|подкуп|откат)/,"взятки"],[/^(оскорб|обматер|нахамил|хамил|хами|матери|обозвал)/,"оскорбление"],[/^(полицейск|полици|офицер|коп$|копа|копу|копов|копам|шериф|агент|fib|lspd|lscsd|госслуж)/,"сотрудника представителя власти"],
+ [/^(скрыл|убежал|убега|сбежал|удрал|погон|уклон)/,"уклонение неповиновение"],[/^(неподчин|подчин|отказал|игнорир)/,"неповиновение"],[/^(маск|балаклав)/,"маски"],
+ [/^(пьян|бухой|нетрезв|алкогол|выпивш)/,"опьянение"],[/^(паспорт|удостоверени)/,"документы"],[/^(прав|права)$/,"водительского удостоверения"],[/^(встречк)/,"встречная полоса"],
+ [/^(светофор|красный)/,"сигнал светофора"],[/^(скорост|гнал|разогнал|превысил)/,"скорости"],[/^(сбил|наехал|задавил)/,"вред здоровью"],[/^(сломал|разбил|повредил|поджег|поджог|сжег|испортил)/,"повреждение имущества"],
+ [/^(заложник)/,"похищение лишение свободы"],[/^(теракт|терракт|взорвал|взрыв|бомб)/,"терроризм взрывчатки"],[/^(беспоряд|бунт)/,"массовые беспорядки"],[/^(проник|залез|вломил)/,"проникновение"],
+ [/^(угрож|угроз)/,"угроза"],[/^(шантаж|вымога)/,"вымогательство"],[/^(обман|мошен|развел|кинул)/,"мошенничество"],[/^(рыбач|охоти|браконь)/,"браконьерство рыбалка охота"],
+ [/^(ложн|фейк)/,"ложный вызов"],[/^(свидетел)/,"показания"],[/^(парков|припарк|стоянк)/,"остановки стоянки"]];
+function pickScore(q){
+ // понятия: слово игрока + его «переводы» из PSYN; статья набирает очки за каждое понятие (по лучшему слову)
+ var cons=[],seen={};
+ norm(q).replace(/[^а-яa-z0-9\s-]/g," ").split(/\s+/).forEach(function(w){if(w.length<3||PSTOP[w]||/^\d+$/.test(w)||seen[w])return;seen[w]=1;
+  var L=[];PSYN.forEach(function(x){if(x[0].test(w))x[1].split(" ").forEach(function(y){if(L.indexOf(y)<0)L.push(y)})});if(!L.length)L=[w]; // разговорное слово заменяем словами закона
+  var Qs=L.map(function(y){return buildQ(y)}).filter(function(Q){return !Q.empty&&!Q.nums&&Q.groups.length});if(Qs.length)cons.push(Qs)});
+ cons=cons.slice(0,12);if(!cons.length)return [];
+ var rows=[];["uk","ak","dk"].forEach(function(k){rows=rows.concat(DATA[k]||[])});
+ var arts={},list=[];rows.forEach(function(r){var key=r.k+"|"+r.code;if(!arts[key]){arts[key]={k:r.k,code:r.code,rows:[],ti:norm(r.title||""),hay:""};list.push(arts[key])}arts[key].rows.push(r);arts[key].hay+=" "+rowHay(r)});
+ var hit=function(Q,h){return Q.groups.every(function(g){return g.some(function(x){return h.indexOf(x)>-1})})};
+ var idf=cons.map(function(Qs){return Qs.map(function(Q){var df=0;list.forEach(function(a){if(hit(Q,a.hay))df++});return df?Math.log(1+list.length/df):0})});
+ list.forEach(function(a){a.s=0;a.n=0;a.c=[];cons.forEach(function(Qs,ci){var b=0,t=false;Qs.forEach(function(Q,qi){var w=idf[ci][qi];if(!w)return;if(hit(Q,a.ti)){if(2*w>b){b=2*w;t=true}}else if(hit(Q,a.hay)&&w>b){b=w}});
+  if(b){a.s+=b;a.n++;if(t)a.c.push(ci)}});a.s=a.n?a.s*(1+0.6*(a.n-1)):0});
+ var top=list.filter(function(a){return a.s>0}).sort(function(x,y){return y.s-x.s||(x.k==="uk"?-1:1)});
+ if(!top.length)return [];
+ var pick=[],has=function(a){return pick.indexOf(a)>=0};
+ cons.forEach(function(Qs,ci){top.filter(function(a){return a.c.indexOf(ci)>=0}).slice(0,2).forEach(function(a){if(!has(a))pick.push(a)})});
+ var lim=top[0].s*0.25;top.forEach(function(a){if(pick.length<8&&a.s>=lim&&!has(a))pick.push(a)});
+ pick.sort(function(x,y){return y.s-x.s});
+ return pick.slice(0,8).map(function(a){return {k:a.k,code:a.code,rows:a.rows}})}
+function pickHtml(){
+ var h='<section class="panel pk23" id="pk23"><h2>Подбор статей по описанию</h2><p class="sub">Опишите ситуацию обычными словами: Senko Assistant подберёт статьи УК, АК и ДК, а вы добавите нужные части в расчёт. Проверяйте подбор: это подсказка, а не решение.</p>'+
+  '<textarea id="pk23q" maxlength="500" placeholder="Например: водитель без прав скрылся от полиции и сбил пешехода">'+e(PKS.q)+'</textarea>'+
+  '<div class="rowbtn"><button type="button" class="btn primary" data-pk23="go">Подобрать статьи</button>'+(PKS.res&&PKS.res.length?'<button type="button" class="btn" data-pk23="clr">Очистить</button>':'')+'</div>';
+ if(PKS.msg)h+='<p class="hint">'+e(PKS.msg)+'</p>';
+ if(PKS.res&&PKS.res.length){h+='<div class="pk23-list">'+PKS.res.map(function(a){var r0=a.rows[0];
+  return '<div class="pk23-a"><h4>'+KN[a.k]+' ст. '+e(a.code)+' · '+e(r0.title)+' <small><button type="button" class="pill" data-go="'+a.k+'|'+e(a.code)+'">открыть</button></small></h4>'+
+   a.rows.slice(0,6).map(function(r){var on=!!basket[r.id],ch=chipTexts(r).join(" · ");
+    return '<div class="pk23-p"><button type="button" class="ic'+(on?' added':'')+'" data-pk23add="'+e(r.id)+'" title="'+(on?"Убрать из калькулятора":"В калькулятор")+'" aria-label="'+(on?"Убрать из калькулятора":"В калькулятор")+'">'+(on?"✓":"+")+'</button><span><b>'+(r.part?"ч."+e(r.part):"Статья")+'</b> '+e(String(r.note||"").slice(0,170))+(ch?' <small>· '+e(ch)+'</small>':'')+'</span></div>'}).join("")+'</div>'}).join("")+'</div>'}
+ return h+'</section>'}
+function pickMount(){var old=document.getElementById("pk23");if(old)old.remove();view.insertAdjacentHTML("beforeend",pickHtml())}
+view.addEventListener("input",function(ev){if(ev.target&&ev.target.id==="pk23q")PKS.q=ev.target.value});
+view.addEventListener("keydown",function(ev){if(ev.target&&ev.target.id==="pk23q"&&ev.key==="Enter"&&(ev.ctrlKey||ev.metaKey)){ev.preventDefault();pickRun();rerender()}});
+view.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-pk23],[data-pk23add]");if(!b)return;
+ if(b.dataset.pk23add){var id=b.dataset.pk23add;if(basket[id])delete basket[id];else basket[id]=1;save();if(typeof updateBadge==="function")updateBadge();rerender();return}
+ if(b.dataset.pk23==="go"){var ta=document.getElementById("pk23q");if(ta)PKS.q=ta.value;pickRun();rerender();return}
+ if(b.dataset.pk23==="clr"){PKS={q:"",res:null,msg:""};rerender()}});
+
+/* ---------- 10. ИИ-помощник: ответы без ИИ (номер статьи без кодекса, «какие законы знаешь») и сокращения ---------- */
+function lawList(){try{return typeof lawIndex==="function"?lawIndex():[]}catch(x){return []}}
+function lawUnitsByNum(num){var out=[];lawList().forEach(function(en){en.units.forEach(function(x){var n=String(x.u.n||"");if(n===num||num.indexOf(n+".")===0&&num.split(".").length===2&&n===num.split(".")[0])out.push({L:en.L,u:x.u})})});return out}
+function lawRef(L,u){return lawShort(L).slice(0,60)+" ст. "+u.n}
+function lawItem(L,u){var body=String(u.text||"").split("\n").slice(1).join(" ").replace(/\s+/g," ").replace(/[​]/g,"").trim();
+ return {ref:lawRef(L,u),text:(String(u.title||"")+". "+body).slice(0,1400),lw:L.id+"|"+u.key}}
+window.__senkoAiLocal=function(question){
+ try{
+  var s=norm(String(question||"")).replace(/ё/g,"е").replace(/\s+/g," ").trim();
+  // «какие законы знаешь», «список НПА», «какие кодексы есть»
+  if(/(как(ие|ой|ая)|что за|список|перечисл|назови|назов)\S*\s.{0,40}(закон|кодекс|нпа|акт)/.test(s)&&/(знаешь|знаеш|есть|бывают|существ|имеют|у тебя|доступн|в базе|в памятке|список|перечисл|назови|назов|умеешь)/.test(s)&&!/\d/.test(s)){
+   var L=lawList(),n={uk:0,ak:0,dk:0,pk:0};["uk","ak","dk","pk"].forEach(function(k){var c={};(DATA[k]||[]).forEach(function(r){c[r.code]=1});n[k]=Object.keys(c).length});
+   var t="Я отвечаю по законам, которые есть в Senko Assistant.\n\nКодексы:\n• Уголовный кодекс (УК): статей "+n.uk+"\n• Административный кодекс (АК): статей "+n.ak+"\n• Дорожный кодекс (ДК): статей "+n.dk+"\n• Процессуальный кодекс (ПК): статей "+n.pk;
+   if(L.length)t+="\n\nДругие законы ("+L.length+"):\n"+L.map(function(en){return "• "+lawShort(en.L)}).join("\n");
+   else t+="\n\nОстальные законы штата появятся после загрузки законов (раздел «Законы»).";
+   t+="\n\nСпросите, например: «штраф за маску по АК», «ТК 12» или «что такое правило Миранды».";
+   return {answer:t,sources:[]}}
+  // голый номер статьи без кодекса: «17.1», «ст. 17», «статья 12.8?»
+  var m=/^(?:ст(?:атья|атью|\.)?\s*)?(\d{1,3}(?:[.,]\d{1,3}){0,3})\s*[?!.]*$/.exec(s);
+  if(m){var code=m[1].replace(/,/g,"."),Q=buildQ(code),src=[],lines=[];
+   ["uk","ak","dk","pk"].forEach(function(k){var by={};(DATA[k]||[]).forEach(function(r){if(rowQ(r,Q)){if(!by[r.code])by[r.code]=[];by[r.code].push(r)}});
+    Object.keys(by).slice(0,3).forEach(function(c){var R=by[c],res=Q.nums?resolveRef(Q,k):null,part=res&&res.code===c&&res.part?" ч. "+res.part:"";
+     lines.push("• "+KN[k]+" ст. "+c+part+": «"+String(R[0].title||"").replace(/\s+/g," ").slice(0,90)+"»");src.push({ref:KN[k]+" ст. "+c+" — "+String(R[0].title||"").slice(0,80),go:k+"|"+c})})});
+   lawUnitsByNum(code).slice(0,8).forEach(function(x){lines.push("• "+lawRef(x.L,x.u)+(x.u.title?": «"+String(x.u.title).replace(/\s+/g," ").slice(0,80)+"»":""));src.push({ref:lawRef(x.L,x.u),lw:x.L.id+"|"+x.u.key})});
+   if(!lines.length)return {answer:"Статьи "+code+" нет ни в кодексах, ни в загруженных законах. Проверьте номер.",sources:[]};
+   if(lines.length===1)return null; // одна статья — пусть ответит ИИ по её тексту
+   return {answer:"Статья "+code+" есть в нескольких актах:\n"+lines.join("\n")+"\n\nУточните, какой нужен, например «"+(src[0]&&src[0].go?KN[src[0].go.split("|")[0]]:"УК")+" "+code+"» или «ТК "+code+"».",sources:src}}
+ }catch(x){}
+ return null};
+/* сокращения: УК/АК/ДК/ПК, ТК, ГК, СК, ВК, НК, кодекс этики, ОРД и др.; НПА = все законы */
+var LAW_AL=[[/^тк$|^трудов/,/трудов/],[/^гк$|^гражданск/,/гражданск/],[/^ск$|^семейн/,/семейн/],[/^вк$|^воздушн/,/воздушн/],[/^нк$|^налогов|^налог$|^налогообложен/,/налогообложен/],
+ [/^кэ$|^кэсп$|^этик/,/этики/],[/^орд$|^оперативно/,/оперативно-розыскн/],[/^огп$/,/генерального прокурора/],[/^фиб$|^fib$/,/federal investigation/],[/^sang$|^нацгвард|^гвард/,/national guard/],
+ [/^ems$|^емс$|^медик/,/emergency medical/],[/^wn$|^weazel$|^визел/,/weazel/],[/^конституц/,/^конституция/],[/^сенат/,/сената/],[/^адвокат/,/коллегии адвокатов/],[/^неприкосновен/,/неприкосновенности/],
+ [/^оруж/,/оборота оружия/],[/^маск/,/ношении масок/],[/^митинг|^собрани/,/собраниях/],[/^гостайн|^тайн/,/государственной тайне/],[/^habeas|^хабеас/,/habeas/],[/^юрисдикц/,/юрисдикции/]];
+function aliasScan(q){var w=norm(String(q||"")).replace(/[^a-zа-я0-9.\s-]/g," ").split(/\s+/).filter(Boolean),kinds=[],laws=[],all=false,L=lawList();
+ w.forEach(function(x){var k=/^(ук|ак|дк|пк|уголовн\S*|административн\S*|коап|дорожн\S*|пдд|процессуальн\S*|упк)$/.test(x)?KMAP(x):"";if(k&&kinds.indexOf(k)<0)kinds.push(k);
+  if(x==="нпа")all=true;
+  LAW_AL.forEach(function(a){if(a[0].test(x))L.forEach(function(en){if(a[1].test(norm(en.L.title))&&laws.indexOf(en)<0)laws.push(en)})})});
+ return {kinds:kinds,laws:laws,all:all,words:w}}
+var C0=window.__senkoAiContext;
+if(typeof C0==="function")window.__senkoAiContext=function(question){
+ var out=C0.apply(this,arguments)||[];
+ try{
+  var a=aliasScan(question);if(!a.kinds.length&&!a.laws.length)return out;
+  var codex=out.filter(function(x){return x.go&&(!a.kinds.length||a.kinds.indexOf(x.go.split("|")[0])>=0)});
+  if(a.laws.length&&!a.kinds.length)codex=[];
+  var lawsOut=[];
+  if(a.laws.length){
+   var nums=(String(question).match(/\d{1,3}(?:[.,]\d{1,3}){0,3}/g)||[]).slice(0,3).map(function(x){return x.replace(",",".")});
+   var kw=a.words.filter(function(x){return x.length>=4&&!/^\d/.test(x)}).slice(0,8).map(function(x){return buildQ(x)}).filter(function(Q){return !Q.empty&&!Q.nums&&Q.groups.length});
+   var best=[];
+   a.laws.forEach(function(en){en.units.forEach(function(x){var s=0,n=String(x.u.n||"");
+    nums.forEach(function(c){if(n===c)s+=100;else if(c.split(".")[0]===n&&c.indexOf(".")>0)s+=60});
+    kw.forEach(function(Q){if(qHit(Q,x.hay))s+=1});
+    if(s)best.push({L:en.L,u:x.u,s:s})})});
+   best.sort(function(p,q){return q.s-p.s});
+   if(!best.length&&!nums.length)a.laws.forEach(function(en){en.units.slice(0,2).forEach(function(x){best.push({L:en.L,u:x.u,s:0})})});
+   lawsOut=best.slice(0,6).map(function(b){return lawItem(b.L,b.u)});
+  }
+  var res=lawsOut.concat(codex).slice(0,8);
+  return res.length?res:out;
+ }catch(x){return out}};
+
+/* ---------- 11. Настройки: голосовой ввод и оверлей (только программа для Windows) ---------- */
+var VT={on:false,lvl:0,msg:"",mics:null,busy:false};
+function vsw(k,on,label){return '<button type="button" class="sw" role="switch" data-ap="'+k+'" aria-checked="'+(!!on)+'" aria-label="'+label+'"></button>'}
+function vrange(k,min,max,step,val,unit,label){return '<div class="fsctl"><input type="range" min="'+min+'" max="'+max+'" step="'+step+'" value="'+val+'" data-v23r="'+k+'" data-u="'+unit+'" aria-label="'+label+'"><output>'+val+unit+'</output></div>'}
+function voiceRows(st){
+ var c=st.cfg||{};if(c.voiceHotkey==null)return "";
+ var h='<div class="sgroup" id="v23set">Голосовой ввод и оверлей</div>';
+ h+=row("Голосовой ввод","Оверлей поверх игры: скажите номер статьи или вопрос. Сочетание "+e(c.voiceHotkey)+".",vsw("voiceEnabled",c.voiceEnabled,"Голосовой ввод"));
+ h+=row("Горячая клавиша оверлея","Сейчас "+e(c.voiceHotkey)+". Меняется в списке «Горячие клавиши».",'<div class="fsctl"><button type="button" class="btn" data-v23="hk">Изменить</button></div>');
+ h+=row("Нажал и держи","Запись идёт, пока клавиша зажата; отпустили — поиск. Короткое нажатие работает как раньше: запись до паузы.",vsw("voicePtt",c.voicePtt,"Нажал и держи"));
+ h+=row("Режим оверлея","Поиск по памятке или вопрос ИИ-помощнику. Переключается и кнопкой в самом оверлее.",'<div class="v23-seg"><button type="button" data-v23mode="search" aria-pressed="'+(c.voiceMode!=="ai")+'">Поиск</button><button type="button" data-v23mode="ai" aria-pressed="'+(c.voiceMode==="ai")+'">ИИ</button></div>');
+ var mic=c.voiceMic||"",ml=VT.mics;
+ var opts='<option value="">Как в Windows (по умолчанию)</option>'+(ml||[]).map(function(m){return '<option value="'+e(m.id)+'"'+(m.id===mic?' selected':'')+'>'+e(m.label||"Микрофон")+'</option>'}).join("")+(mic&&!(ml||[]).some(function(m){return m.id===mic})?'<option value="'+e(mic)+'" selected>Выбранный ранее микрофон</option>':'');
+ h+=row("Микрофон",VT.msg?e(VT.msg):(ml?"Найдено микрофонов: "+ml.length+". Нажмите «Проверить» и скажите пару слов.":"Нажмите «Найти», чтобы увидеть список микрофонов."),
+  '<div class="v23-mic"><select data-v23mic="1" aria-label="Микрофон">'+opts+'</select><button type="button" class="btn" data-v23="mics"'+(VT.busy?' disabled':'')+'>'+(ml?"Обновить":"Найти")+'</button><button type="button" class="btn" data-v23="test">'+(VT.on?"Остановить":"Проверить")+'</button><span class="v23-lvl" title="Уровень звука"><i id="v23lvl"></i></span></div>');
+ h+=row("Прозрачность оверлея","Фон окна оверлея.",vrange("voiceOpacity",30,100,5,c.voiceOpacity||80,"%","Прозрачность оверлея"));
+ h+=row("Автоскрытие","Через сколько секунд оверлей прячется после ответа.",vrange("voiceHide",3,60,1,c.voiceHide||10," с","Автоскрытие"));
+ var sz=c.voiceSize||"m";
+ h+=row("Размер окна оверлея","",'<div class="v23-seg">'+[["s","Маленький"],["m","Средний"],["l","Большой"]].map(function(x){return '<button type="button" data-v23size="'+x[0]+'" aria-pressed="'+(sz===x[0])+'">'+x[1]+'</button>'}).join("")+'</div>');
+ h+=row("Шрифт оверлея","Размер текста в оверлее.",vrange("voiceFont",80,150,5,c.voiceFont||100,"%","Шрифт оверлея"));
+ h+=row("Положение оверлея","Перетаскивается мышкой за верхнюю полоску. Двойной щелчок по ней тоже возвращает на место.",'<div class="fsctl"><button type="button" class="btn" data-v23="pos">Вернуть по центру сверху</button></div>');
+ return h}
+if(typeof appSettingsHtml==="function"){var AS0=appSettingsHtml;
+ appSettingsHtml=function(){var h=AS0.apply(this,arguments);try{var A2=window.senkoApp,st=A2&&!A2.web&&A2.state?A2.state():null;if(st&&h)h+=voiceRows(st)}catch(x){}return h}}
+function vset(k,v){var A2=window.senkoApp;if(!A2||!A2.set)return null;var r=A2.set(k,v);if(r&&r.ok===false&&r.error)toast(r.error);return r}
+function vrepaint(){if(window.SA_paintSheet)SA_paintSheet()}
+document.addEventListener("input",function(ev){var t=ev.target;if(!t||!t.dataset||!t.dataset.v23r)return;var v=+t.value,o=t.parentNode.querySelector("output");if(o)o.textContent=v+(t.dataset.u||"");vset(t.dataset.v23r,v)});
+document.addEventListener("change",function(ev){var t=ev.target;if(!t||!t.dataset||!t.dataset.v23mic)return;vset("voiceMic",t.value);if(VT.on)vtest(true)});
+function vtest(on){var A2=window.senkoApp;if(!A2||!A2.voiceTest)return;VT.on=on;
+ A2.voiceTest(on).then(function(r){if(on&&r&&r.ok===false){VT.on=false;VT.msg=r.error||"Микрофон недоступен.";vrepaint()}},function(){VT.on=false;vrepaint()})}
+if(A&&A.onVoiceLevel)A.onVoiceLevel(function(v){var i=document.getElementById("v23lvl");
+ if(v&&v.error){VT.on=false;VT.msg=v.error;vrepaint();return}
+ if(v&&v.end){VT.on=false;vrepaint();return}
+ if(i)i.style.width=Math.round(Math.min(1,Math.max(0,+v.level||0))*100)+"%"});
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-v23],[data-v23mode],[data-v23size]");if(!b)return;var A2=window.senkoApp;if(!A2)return;
+ if(b.dataset.v23mode){vset("voiceMode",b.dataset.v23mode);vrepaint();return}
+ if(b.dataset.v23size){vset("voiceSize",b.dataset.v23size);vrepaint();return}
+ var k=b.dataset.v23;
+ if(k==="hk"){var x=document.querySelector('[data-s10hk="_voice"]');if(x){x.scrollIntoView({block:"center"});x.click()}else toast("Список горячих клавиш ниже в настройках");return}
+ if(k==="pos"){vset("voicePosReset",true);toast("Оверлей появится по центру сверху");return}
+ if(k==="mics"){if(!A2.voiceMics)return;VT.busy=true;VT.msg="Ищу микрофоны…";vrepaint();
+  A2.voiceMics().then(function(r){VT.busy=false;if(r&&r.ok){VT.mics=r.list||[];VT.msg=VT.mics.length?"":"Микрофоны не найдены. Проверьте подключение и доступ к микрофону в Windows."}else VT.msg=(r&&r.error)||"Не удалось получить список микрофонов.";vrepaint()},function(){VT.busy=false;VT.msg="Не удалось получить список микрофонов.";vrepaint()});return}
+ if(k==="test"){vtest(!VT.on);vrepaint();return}});
+
+/* ---------- 12. Реклама на главной: те же баннеры, что на сайте; список приходит с сервера (панель владельца) ---------- */
+var IMG=A&&A.web?"/img/":"img/";
+var ADS_DEF=[
+ {id:"d1",style:"wide",srv:"Majestic RP · Los Angeles",title:"Senko Family",text:"Семья на сервере Los Angeles. Заходите в Discord и Telegram: знакомство, набор и новости семьи.",image:IMG+(A&&A.web?"senko-family-820.webp":"ad-senko-family.webp"),
+  links:[{label:"Discord семьи",url:"https://discord.gg/ZEz5kfG6W8"},{label:"Telegram семьи",url:"https://t.me/senkofamq"}],promo:""},
+ {id:"d2",style:"square",srv:"Программа-ассистент · GTA 5 RP",title:"Docossum | Ассистент GTA 5RP",text:"Помощник для игроков GTA 5 RP, похожий на наш, только умеет ещё больше. Загляните в Discord и Telegram, а с нашим промокодом будет приятнее.",image:IMG+(A&&A.web?"docossum.webp":"ad-docossum.webp"),
+  links:[{label:"Discord",url:"https://discord.gg/Nnv9YjX3px"},{label:"Telegram",url:"https://t.me/docossum"}],promo:"Senko"}];
+var ADS=jget("bos-ads",null);
+function adsList(){return ADS&&Array.isArray(ADS.list)?ADS.list:ADS_DEF}
+function safeUrl(u){u=String(u||"");return /^https:\/\/[^\s"'<>]+$/i.test(u)?u:""}
+var AD_LOCAL={"/img/senko-family-820.webp":"img/ad-senko-family.webp","/img/senko-family.webp":"img/ad-senko-family.webp","/img/docossum.webp":"img/ad-docossum.webp"};
+function safeImg(u){u=String(u||"");if(/^data:image\/(png|jpe?g|webp|gif);base64,[a-z0-9+\/=]+$/i.test(u))return u;
+ if(/^\/img\/[\w.-]+$/.test(u))return A&&A.web?u:(AD_LOCAL[u]||"https://senko-assistant.pages.dev"+u); /* в программе картинки сайта берём из своих файлов или с сайта */
+ if(/^img\/[\w.-]+$/.test(u))return A&&A.web?"/"+u:u;return safeUrl(u)}
+function adHtml(a){
+ var img=safeImg(a.image),sq=a.style==="square";
+ var links=(a.links||[]).map(function(l){var u=safeUrl(l&&l.url);if(!u)return "";var cls=/discord\.(gg|com)/i.test(u)?"dc":/t\.me\//i.test(u)?"tg":"";
+  return '<a class="'+cls+'" href="'+e(u)+'" target="_blank" rel="noopener sponsored">'+e(l.label||"Открыть")+'</a>'}).join("");
+ if(a.promo)links='<button type="button" class="promo" data-ad23promo="'+e(a.promo)+'" title="Скопировать промокод">Промокод <b>'+e(a.promo)+'</b></button>'+links;
+ return '<div class="ad23'+(sq?' sq':'')+'">'+(img?'<div class="ad23-img"><img src="'+e(img)+'" alt="" loading="lazy" onerror="this.parentNode.remove()"></div>':'')+
+  '<div class="ad23-b"><span class="ad23-tag">'+e(a.tag||"Реклама")+'</span>'+(a.srv?'<span class="ad23-srv">'+e(a.srv)+'</span>':'')+'<h4>'+e(a.title||"")+'</h4>'+(a.text?'<p>'+e(a.text)+'</p>':'')+(links?'<div class="ad23-row">'+links+'</div>':'')+'</div></div>'}
+function adsPaint(){var hm=view.querySelector(".hm");if(!hm||state.tab!=="home")return;var old=hm.querySelector(".hm-adsw");if(old)old.remove();
+ var L=adsList().filter(function(a){return a&&a.title});if(!L.length)return;
+ var w=document.createElement("div");w.className="hm-adsw";w.innerHTML='<div class="hm-h">Реклама <small>партнёры Senko Assistant</small></div><div class="hm-ads">'+L.slice(0,4).map(adHtml).join("")+'</div>';hm.appendChild(w)}
+var adsBusy=false;
+function adsLoad(){var A2=window.senkoApp;if(adsBusy||!A2||!A2.api)return;if(ADS&&ADS.at&&Date.now()-ADS.at<10*60*1000)return;adsBusy=true;
+ A2.api("ads",{place:"app"}).then(function(r){adsBusy=false;if(r&&r.ok&&Array.isArray(r.ads)){ADS={at:Date.now(),list:r.ads};jset("bos-ads",ADS);adsPaint()}else{ADS={at:Date.now(),list:ADS&&ADS.list}}},function(){adsBusy=false})}
+var HX0=window.SA_homeExtra;
+window.SA_homeExtra=function(){if(HX0)HX0.apply(this,arguments);try{adsPaint();adsLoad()}catch(x){}};
+view.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-ad23promo]");if(!b)return;if(typeof copyText==="function")copyText(b.dataset.ad23promo,b);else toast("Промокод: "+b.dataset.ad23promo)});
+
+window.SA_S23={rps:RPS,f:function(){return F},opened:function(){return OPN},ref:refTarget,pick:pickScore};
 })();
 </script>
 <style>
@@ -10826,16 +11485,15 @@ var D={
  def:["Защита","Режим адвоката","Защита","Режим адвоката: нарушения при задержании и что заявить."],
  rp:["Рапорты","Написать, мои рапорты","Рапорты","Рапорт о задержании, применении силы, происшествии или служебный."],
  dept:["Моё ведомство","Статьи и подсказки","Моё ведомство","Частые статьи вашего ведомства, его компетенция и подсказки по закону."],
- rules:["Правила","Правила сервера","Правила","Правила для госструктур, общие правила, зоны и поставки."],
  learn:["Обучение","Тренажёр и карточки","Обучение","Тренажёр и карточки по кодексам, разбор ситуаций «Что делать, если…», частые ошибки и обучение по программе."],
  apps:["Мои инструменты","Свои калькуляторы и памятки","Мои инструменты","Свои калькуляторы по формуле, памятки и наборы статей. Создаются за минуту и хранятся у вас."],
  ref:["Справочник","Шпаргалка, неприкосновенные","Справочник","Шпаргалка, неприкосновенные лица, охраняемые места и регламент передачи дел."],
  boss:["Руководство","Панель руководителя","Панель руководителя","Сотрудники организации, рейтинг недели, смены и контрольные тесты."]
 };
 var X=window.SA_X||{role:"off"};
-var CODES=["uk","ak","dk","pk","gen","laws"], WORKS=["timer","calc","tools","field","sup","def","rp","dept","rules","apps"], DEV=["ref","learn"];
+var CODES=["uk","ak","dk","pk","gen","laws"], WORKS=["timer","calc","tools","field","sup","def","rp","dept","apps"], DEV=["ref","learn"];
 // разделы текущей роли (свои роли и скрытые разделы: SA_ROLES в блоке «Проверки, юристы…»)
-function vis(){var R=window.SA_ROLES;var L=R?R.visible(R.cur()):CODES.concat(["timer","calc","tools","field","rp","rules","apps","ref","learn"]);
+function vis(){var R=window.SA_ROLES;var L=R?R.visible(R.cur()):CODES.concat(["timer","calc","tools","field","rp","apps","ref","learn"]);
  return L.filter(function(t){return D[t]&&(t!=="rp"||window.SA_RP)&&(t!=="dept"||window.SA_DEPT)&&(t!=="apps"||window.SA_APPS)})}
 
 /* ---------- каркас ---------- */

@@ -269,7 +269,7 @@
     ["Обзор", [["dash", "i-home", "Сводка", "Цифры и режимы"], ["health", "i-pulse", "Состояние", "Сервисы, версии, поиск"]]],
     ["Люди", [["users", "i-users", "Пользователи", "Поиск и действия"], ["staff", "i-key", "Роли и доступ", "Модераторы и руководство"], ["queue", "i-inbox", "Заявки и сбросы", "Новички и пароли", "queue"]]],
     ["Работа", [["reports", "i-file", "Рапорты", "Рапорты сотрудников", "reports"], ["rating", "i-trophy", "Рейтинг", "Неделя и контрольные"], ["news", "i-mega", "Рассылки", "Сообщения в программе", null, 1], ["bugs", "i-bug", "Ошибки", "Сообщения пользователей", "bugs", 1]]],
-    ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1]]],
+    ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1]]],
     ["Сервис", [["console", "i-term", "Консоль бота", "Любая команда"]]],
   ];
   function buildNav() {
@@ -753,6 +753,144 @@
     });
   };
 
+  // Реклама: баннеры на сайте и на главной в программе. Картинку можно загрузить (сжимается здесь в webp) или дать ссылкой https://
+  var AD_PLACE = { both: "сайт и программа", site: "только сайт", app: "только программа" };
+  function adPreview(a) {
+    var sq = a.style === "square";
+    var img = a.image || "";
+    return h("div", { class: "adp" + (sq ? " sq" : "") },
+      img ? h("div", { class: "adp-img" }, h("img", { src: img, alt: "", loading: "lazy" })) : null,
+      h("div", { class: "adp-b" },
+        h("div", { class: "row", style: "gap:6px" }, pill(a.tag || "Реклама", "acc"), a.srv ? h("span", { class: "muted small", text: a.srv }) : null),
+        h("h3", { text: a.title || "Без названия" }),
+        a.body || a.text ? h("p", { class: "small", text: a.body || a.text }) : null,
+        h("div", { class: "row", style: "gap:6px;margin-top:8px" },
+          a.promo ? pill("Промокод " + a.promo, "warn") : null,
+          (a.links || []).map(function (l) { return h("a", { class: "btn btn-sm", href: l.url, target: "_blank", rel: "noopener noreferrer", text: l.label || "Открыть" }); }))));
+  }
+  // Сжимаем картинку в webp, пока строка не станет меньше ~420 КБ
+  function adImage(file, square) {
+    return new Promise(function (ok, bad) {
+      if (!file || !/^image\//.test(file.type)) return bad("Нужна картинка: PNG, JPG, WEBP или GIF.");
+      if (file.size > 15 * 1024 * 1024) return bad("Файл больше 15 МБ.");
+      var url = URL.createObjectURL(file), im = new Image();
+      im.onload = function () {
+        URL.revokeObjectURL(url);
+        var max = square ? 640 : 1200, w = im.naturalWidth, hh = im.naturalHeight;
+        if (!w || !hh) return bad("Не удалось прочитать картинку.");
+        for (var step = 0; step < 6; step++) {
+          var k = Math.min(1, max / Math.max(w, hh)), c = document.createElement("canvas");
+          c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(hh * k));
+          c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+          var d = c.toDataURL("image/webp", step < 3 ? 0.86 - step * 0.1 : 0.6);
+          if (!/^data:image\/webp/.test(d)) d = c.toDataURL("image/jpeg", 0.82 - step * 0.08);
+          if (d.length <= 430000) return ok(d);
+          max = Math.round(max * 0.8);
+        }
+        bad("Картинка не сжимается до 400 КБ, возьмите поменьше.");
+      };
+      im.onerror = function () { URL.revokeObjectURL(url); bad("Не удалось открыть картинку."); };
+      im.src = url;
+    });
+  }
+  function adEdit(a, done) {
+    a = a || { style: "wide", place: "both", enabled: true, tag: "Реклама", links: [], sort: 0 };
+    var image = a.image || "";
+    var err = h("div", { class: "auth-err" });
+    function inp(k, v, max, ph, type) { return h("input", { type: type || "text", maxlength: max, placeholder: ph || "", value: v == null ? "" : v, spellcheck: "false", "data-ak": k }); }
+    function lab(t, el, hint) { return h("label", { class: "fld" }, h("span", { text: t }), el, hint ? h("span", { class: "hint", text: hint }) : null); }
+    var title = inp("title", a.title, 80, "Senko Family");
+    var srv = inp("srv", a.srv, 80, "Majestic RP · Los Angeles");
+    var text = h("textarea", { maxlength: 400, rows: 3, placeholder: "Пара предложений о партнёре", value: a.body || "" });
+    var tag = inp("tag", a.tag || "Реклама", 24);
+    var promo = inp("promo", a.promo, 24, "Например, Senko");
+    var sort = inp("sort", a.sort || 0, 5, "", "number");
+    var style = h("select", { value: a.style }, [["wide", "Широкий: картинка слева"], ["square", "Квадратный: картинка сверху"]].map(function (o) { return h("option", { value: o[0], text: o[1] }); }));
+    var place = h("select", { value: a.place }, [["both", "На сайте и в программе"], ["site", "Только на сайте"], ["app", "Только в программе"]].map(function (o) { return h("option", { value: o[0], text: o[1] }); }));
+    var on = h("input", { type: "checkbox" }); on.checked = a.enabled !== false;
+    var links = [0, 1, 2, 3].map(function (i) { var l = (a.links || [])[i] || {}; return [inp("ll" + i, l.label, 40, i === 0 ? "Discord" : "Подпись"), inp("lu" + i, l.url, 500, "https://…")]; });
+    var imgUrl = inp("img", /^data:/.test(image) ? "" : image, 500, "https://… или оставьте пустым и загрузите файл");
+    var file = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp,image/gif" });
+    var imgInfo = h("span", { class: "hint" });
+    var prev = h("div", { class: "adp-wrap" });
+    function vals() {
+      return { id: a.id || 0, title: title.value.trim(), srv: srv.value.trim(), text: text.value.replace(/\s+/g, " ").trim(), tag: tag.value.trim(), promo: promo.value.trim(),
+        sort: parseInt(sort.value, 10) || 0, style: style.value, place: place.value, enabled: on.checked, image: imgUrl.value.trim() || image,
+        links: links.map(function (l) { return { label: l[0].value.trim(), url: l[1].value.trim() }; }).filter(function (l) { return l.url; }) };
+    }
+    function paint() {
+      var v = vals();
+      imgInfo.textContent = /^data:/.test(v.image) ? "Загружен файл, " + Math.round(v.image.length * 0.75 / 1024) + " КБ." : v.image ? "Картинка по ссылке." : "Без картинки.";
+      prev.textContent = ""; prev.appendChild(adPreview({ title: v.title, srv: v.srv, text: v.text, tag: v.tag, promo: v.promo, style: v.style, image: v.image, links: v.links }));
+    }
+    file.addEventListener("change", function () {
+      var f = file.files && file.files[0];
+      if (!f) return;
+      imgInfo.textContent = "Сжимаю…";
+      adImage(f, style.value === "square").then(function (d) { image = d; imgUrl.value = ""; paint(); }, function (m) { err.textContent = m; paint(); });
+    });
+    var f = h("form", { novalidate: true },
+      h("div", { class: "grid g2" }, lab("Название", title), lab("Подпись сверху", srv, "Сервер или вид проекта")),
+      lab("Текст", text),
+      h("div", { class: "grid g2" }, lab("Вид", style), lab("Где показывать", place)),
+      h("div", { class: "grid g2" }, lab("Метка", tag, "Обычно «Реклама»"), lab("Промокод", promo, "Кнопка «Скопировать», можно пусто")),
+      h("div", { class: "fld" }, h("span", { text: "Ссылки" }), links.map(function (l) { return h("div", { class: "row", style: "margin-bottom:6px" }, h("div", { style: "flex:0 1 160px" }, l[0]), h("div", { class: "grow" }, l[1])); }),
+        h("span", { class: "hint", text: "До 4 кнопок. Discord и Telegram сами получат свой цвет." })),
+      h("div", { class: "fld" }, h("span", { text: "Картинка" }), h("div", { class: "row" }, file, image ? btn("Убрать картинку", function () { image = ""; imgUrl.value = ""; paint(); }, "btn-sm") : null), imgUrl, imgInfo),
+      h("div", { class: "grid g2" }, lab("Порядок", sort, "Меньше число — выше"), h("label", { class: "chk", style: "margin-top:22px" }, on, "Показывать")),
+      h("div", { class: "fld" }, h("span", { text: "Как будет выглядеть" }), prev),
+      err,
+      h("div", { class: "dlg-f" }, btn("Отмена", closeDlg), h("button", { type: "submit", class: "btn btn-p", text: a.id ? "Сохранить" : "Добавить" })));
+    f.addEventListener("input", paint);
+    f.addEventListener("change", paint);
+    f.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var v = vals();
+      if (!v.title) { err.textContent = "Укажите название."; return; }
+      var badUrl = v.links.filter(function (l) { return !/^https:\/\/\S+$/i.test(l.url); })[0];
+      if (badUrl) { err.textContent = "Ссылка должна начинаться с https://"; return; }
+      if (v.image && !/^data:image\//.test(v.image) && !/^\/img\//.test(v.image) && !/^https:\/\/\S+$/i.test(v.image)) { err.textContent = "Ссылка на картинку должна начинаться с https://"; return; }
+      var go = f.querySelector("button[type=submit]");
+      go.disabled = true; err.textContent = "";
+      api("ads_save", v).then(function (r) {
+        go.disabled = false;
+        if (!r.ok) { err.textContent = r.error || "Не получилось сохранить."; return; }
+        closeDlg(); toast(a.id ? "Баннер сохранён." : "Баннер добавлен."); done();
+      });
+    });
+    dlg(a.id ? "Баннер: " + a.title : "Новый баннер", f, true);
+    paint();
+  }
+  PAGES.ads = function (el) {
+    if (!ME.owner) return ownerOnly(el);
+    var box = h("div");
+    function load() {
+      box.textContent = "";
+      box.appendChild(h("div", { class: "load", text: "Загружаю…" }));
+      return api("ads_list").then(function (r) {
+        box.textContent = "";
+        if (!r.ok) return box.appendChild(errMsg(r));
+        if (!r.rows.length) return box.appendChild(h("div", { class: "card" }, h("p", { text: "Баннеров нет. Блок «Реклама» на сайте и в программе сейчас скрыт." })));
+        box.appendChild(h("div", { class: "grid g2" }, r.rows.map(function (a) {
+          return h("div", { class: "card ad-card" + (a.enabled ? "" : " off") },
+            h("div", { class: "row", style: "justify-content:space-between;margin-bottom:10px" },
+              h("div", { class: "row", style: "gap:6px" }, pill(a.enabled ? "показывается" : "выключен", a.enabled ? "on" : "off"), pill(AD_PLACE[a.place] || a.place), pill(a.style === "square" ? "квадратный" : "широкий")),
+              h("span", { class: "muted small", text: "порядок " + a.sort })),
+            adPreview(a),
+            h("p", { class: "muted small", style: "margin-top:10px", text: "Изменён " + ago(a.updated_at) + (a.updated_by ? ", " + a.updated_by : "") }),
+            h("div", { class: "row", style: "margin-top:10px" },
+              btn(a.enabled ? "Выключить" : "Включить", function () { api("ads_toggle", { id: a.id, enabled: !a.enabled }).then(function (y) { toast(y.ok ? (y.row.enabled ? "Баннер включён." : "Баннер выключен.") : y.error, !y.ok); load(); }); }, "btn-sm" + (a.enabled ? "" : " btn-p")),
+              btn("Изменить", function () { adEdit(a, load); }, "btn-sm"),
+              btn("Удалить", function () { confirmDlg("Удалить баннер", "Удалить «" + a.title + "» насовсем? Если нужно спрятать на время, лучше выключить.", "Удалить", function () { api("ads_delete", { id: a.id }).then(function (y) { toast(y.ok ? "Баннер удалён." : y.error, !y.ok); load(); }); }, true); }, "btn-sm btn-d")));
+        })));
+      });
+    }
+    head(el, "Реклама", "Баннеры на сайте и на главной странице программы. Изменения видны в течение 10 минут.",
+      h("div", { class: "row" }, btn("Обновить", load, "btn-sm", "i-refresh"), btn("Добавить баннер", function () { adEdit(null, load); }, "btn-sm btn-p", "i-ad")));
+    el.appendChild(box);
+    return load();
+  };
+
   // База данных: только разрешённые таблицы и поля; каждая правка с прежними значениями попадает в журнал
   var DBS = { table: "profiles", q: "", page: 0 };
   var DB_COLS = {
@@ -885,7 +1023,7 @@
     el.appendChild(c2);
   };
 
-  var ACT_RU = { ban: "блокировка", unban: "разблокировка", tempban: "блокировка на срок", tempban_end: "конец блокировки", autoban: "автоблокировка", warn: "предупреждение", unwarn: "снято предупреждение", kick: "завершены сессии", note: "заметка", tag: "тег", untag: "убран тег", role: "роль", rename: "ник", setstatic: "статик", setorg: "организация", delete: "удаление аккаунта", profile_update: "изменение профиля", password_reset: "сброс пароля", reset_approve: "сброс подтверждён", reset_reject: "сброс отклонён", broadcast: "рассылка", maintenance: "техработы", regs: "регистрация", reglimit: "лимит регистраций", blacklist: "чёрный список", appeal: "обжалование", delay: "отложенная команда", backup: "резервная копия", laws: "законы", approve: "заявка принята", reject: "заявка отклонена", approval: "приём новичков", shift_start: "начало смены", shift_end: "конец смены", ctrl_create: "контрольный тест", sync_reset: "сброс синхронизации", report_create: "рапорт", report_delete: "рапорт удалён", report_review: "рапорт проверен", panel_login: "вход в панель", panel_key: "пароль панели", panel_revoke: "закрыт вход в панель", db_edit: "правка базы", db_delete: "удаление из базы", db_revert: "возврат правки" };
+  var ACT_RU = { ban: "блокировка", unban: "разблокировка", tempban: "блокировка на срок", tempban_end: "конец блокировки", autoban: "автоблокировка", warn: "предупреждение", unwarn: "снято предупреждение", kick: "завершены сессии", note: "заметка", tag: "тег", untag: "убран тег", role: "роль", rename: "ник", setstatic: "статик", setorg: "организация", delete: "удаление аккаунта", profile_update: "изменение профиля", password_reset: "сброс пароля", reset_approve: "сброс подтверждён", reset_reject: "сброс отклонён", broadcast: "рассылка", maintenance: "техработы", regs: "регистрация", reglimit: "лимит регистраций", blacklist: "чёрный список", appeal: "обжалование", delay: "отложенная команда", backup: "резервная копия", laws: "законы", approve: "заявка принята", reject: "заявка отклонена", approval: "приём новичков", shift_start: "начало смены", shift_end: "конец смены", ctrl_create: "контрольный тест", sync_reset: "сброс синхронизации", report_create: "рапорт", report_delete: "рапорт удалён", report_review: "рапорт проверен", panel_login: "вход в панель", panel_key: "пароль панели", panel_revoke: "закрыт вход в панель", db_edit: "правка базы", db_delete: "удаление из базы", db_revert: "возврат правки", ad_save: "баннер сохранён", ad_toggle: "баннер вкл/выкл", ad_delete: "баннер удалён" };
   PAGES.audit = function (el, arg) {
     if (!ME.owner) return ownerOnly(el);
     var S = { q: arg === "db" ? "db_edit" : "", page: 0 };

@@ -2,8 +2,14 @@ name: Deploy function
 
 # Заливает supabase/functions/senko/index.ts из репозитория в Supabase (запуск вручную: Actions → Deploy function → Run workflow).
 # Нужен секрет SUPABASE_ACCESS_TOKEN: supabase.com → аватар → Account preferences → Access Tokens → Generate new token.
+# С 2.3 workflow заодно обновляет базу: выполняет supabase/schema.sql (он безопасен для повторного запуска) через Management API.
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      db:
+        description: "Обновить базу (выполнить supabase/schema.sql)"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -24,6 +30,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Обновить базу (schema.sql)
+        if: ${{ inputs.db }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then echo "::error::Не задан секрет SUPABASE_ACCESS_TOKEN"; exit 1; fi
+          jq -Rs '{query: .}' supabase/schema.sql > /tmp/q.json
+          code=$(curl -sS -o /tmp/r.json -w '%{http_code}' -X POST "https://api.supabase.com/v1/projects/wcjspwailippjmyffkei/database/query" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" --data @/tmp/q.json)
+          if [ "$code" -ge 300 ]; then echo "::error::База не обновилась (код $code): $(head -c 600 /tmp/r.json)"; exit 1; fi
+          echo "База обновлена: schema.sql выполнен"
       - name: Залить функцию senko
         run: |
           if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then echo "::error::Не задан секрет SUPABASE_ACCESS_TOKEN"; exit 1; fi

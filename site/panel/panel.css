@@ -265,3 +265,12 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px}
   .ph{margin-bottom:16px}
   .card{padding:16px}
 }
+/* Реклама: превью баннера как на сайте */
+.adp{display:grid;grid-template-columns:minmax(0,38%) 1fr;gap:14px;align-items:center;border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--bg)}
+.adp.sq{grid-template-columns:96px 1fr}
+.adp-img{border-radius:10px;overflow:hidden;background:var(--chip)}
+.adp-img img{display:block;width:100%;height:auto;max-height:180px;object-fit:cover}
+.adp-b h3{margin:6px 0 4px}
+.adp-b p{color:var(--muted);margin:0}
+.ad-card.off .adp{opacity:.55}
+@media (max-width:560px){.adp{grid-template-columns:1fr}.adp.sq{grid-template-columns:80px 1fr}}

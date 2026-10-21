@@ -351,6 +351,36 @@ create table if not exists public.panel_sessions (
 );
 create index if not exists panel_sessions_user_idx on public.panel_sessions (user_id);
 
+-- Рекламные баннеры (2.3.0): показываются на сайте и на главной в программе, правит владелец в панели
+create table if not exists public.ads (
+  id          bigserial primary key,
+  title       text not null,
+  srv         text not null default '',
+  body        text not null default '',
+  tag         text not null default 'Реклама',
+  style       text not null default 'wide' check (style in ('wide','square')),
+  image       text not null default '',
+  links       jsonb not null default '[]'::jsonb,
+  promo       text not null default '',
+  place       text not null default 'both' check (place in ('both','site','app')),
+  enabled     boolean not null default true,
+  sort        int not null default 0,
+  updated_at  timestamptz not null default now(),
+  updated_by  text not null default ''
+);
+insert into public.ads (title, srv, body, style, image, links, promo, sort)
+select * from (values
+  ('Senko Family', 'Majestic RP · Los Angeles',
+   'Семья на сервере Los Angeles. Заходите в Discord и Telegram: знакомство, набор и новости семьи.',
+   'wide', '/img/senko-family-820.webp',
+   '[{"label":"Discord семьи","url":"https://discord.gg/ZEz5kfG6W8"},{"label":"Telegram семьи","url":"https://t.me/senkofamq"}]'::jsonb, '', 10),
+  ('Docossum | Ассистент GTA 5RP', 'Программа-ассистент · GTA 5 RP',
+   'Помощник для игроков GTA 5 RP, похожий на наш, только умеет ещё больше. Загляните в Discord и Telegram, а с нашим промокодом будет приятнее.',
+   'square', '/img/docossum.webp',
+   '[{"label":"Discord","url":"https://discord.gg/Nnv9YjX3px"},{"label":"Telegram","url":"https://t.me/docossum"}]'::jsonb, 'Senko', 20)
+) v(title, srv, body, style, image, links, promo, sort)
+where not exists (select 1 from public.ads);
+
 -- Закрываем таблицы от публичного API ----------------------------------------
 alter table public.profiles       enable row level security;
 alter table public.sessions       enable row level security;
@@ -379,6 +409,7 @@ alter table public.search_misses  enable row level security;
 alter table public.login_log      enable row level security;
 alter table public.panel_keys     enable row level security;
 alter table public.panel_sessions enable row level security;
+alter table public.ads            enable row level security;
 
 revoke all on table public.profiles, public.sessions, public.recovery_codes,
                     public.reset_requests, public.audit_log, public.rate_limits, public.sync_items,
@@ -387,7 +418,7 @@ revoke all on table public.profiles, public.sessions, public.recovery_codes,
                     public.xp_week, public.achievements, public.shifts, public.control_tests,
                     public.control_results, public.ai_log, public.reports,
                     public.shares, public.transfers, public.search_misses, public.login_log,
-                    public.panel_keys, public.panel_sessions
+                    public.panel_keys, public.panel_sessions, public.ads
   from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;
 
