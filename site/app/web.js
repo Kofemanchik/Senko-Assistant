@@ -193,7 +193,7 @@
         if (!r || !r.ok) return { ok: false, error: (r && r.error) || "ИИ-сервис вернул ошибку.", limit: !!(r && r.limit), sources: sources };
         var fid = "";
         if (r.logId) { fid = String(++aiSeq); aiLogs[fid] = r.logId; }
-        return { ok: true, answer: String(r.answer || ""), left: typeof r.left === "number" ? r.left : null, cached: !!r.cached, sources: sources, fid: fid };
+        return { ok: true, answer: String(r.answer || ""), left: typeof r.left === "number" ? r.left : null, bonus: typeof r.bonus === "number" ? r.bonus : null, cached: !!r.cached, sources: sources, fid: fid };
       });
     }).catch(function () { aiBusy = false; return { ok: false, error: "Не удалось связаться с ИИ-сервисом. Проверьте подключение к интернету." }; });
   }

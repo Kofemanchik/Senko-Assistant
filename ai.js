@@ -107,7 +107,7 @@ async function ask(question, opts) {
       const error = j && j.code === "auth" ? "Войдите в аккаунт, чтобы задавать вопросы ИИ." : (j && j.error) || "ИИ-сервис не ответил. Попробуйте позже.";
       return { ok: false, error, limit: !!(j && j.limit), sources };
     }
-    return { ok: true, answer: String(j.answer || ""), left: typeof j.left === "number" ? j.left : null, cached: !!j.cached, sources, fid: track(j.logId) };
+    return { ok: true, answer: String(j.answer || ""), left: typeof j.left === "number" ? j.left : null, bonus: typeof j.bonus === "number" ? j.bonus : null, cached: !!j.cached, sources, fid: track(j.logId) };
   } catch (e) {
     return { ok: false, error: "Не удалось связаться с ИИ-сервисом. Проверьте подключение к интернету." };
   } finally {

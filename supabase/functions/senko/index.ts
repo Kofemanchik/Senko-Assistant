@@ -1316,8 +1316,11 @@ function ensureXpAdj() {
   if (!xpAdjReady)
     xpAdjReady = (async () => {
       const sql = db();
-      const [c] = await sql`select 1 from information_schema.columns where table_schema = 'public' and table_name = 'profiles' and column_name = 'xp_adj'`;
-      if (!c) await sql.unsafe("alter table public.profiles add column if not exists xp_adj integer not null default 0");
+      const cols = await sql`select column_name c from information_schema.columns where table_schema = 'public' and table_name = 'profiles' and column_name in ('xp_adj', 'ai_bonus')`;
+      const has = new Set(cols.map((r) => r.c));
+      if (!has.has("xp_adj")) await sql.unsafe("alter table public.profiles add column if not exists xp_adj integer not null default 0");
+      // 2.6.6: дополнительные запросы к ИИ сверх дневного лимита (выдаёт владелец в панели)
+      if (!has.has("ai_bonus")) await sql.unsafe("alter table public.profiles add column if not exists ai_bonus integer not null default 0");
     })().catch((e) => {
       xpAdjReady = null;
       throw e;
@@ -3594,7 +3597,7 @@ async function panelApi(b, ip, ua) {
   const op = String(b.op || "");
   if (op === "login") return panelLogin(b, ip, ua);
   const owners = ["audit", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert", "ads_list", "ads_save", "ads_toggle", "ads_delete",
-    "prog_get", "prog_xp", "prog_ach", "prog_ach_new"];
+    "prog_get", "prog_xp", "prog_ach", "prog_ach_new", "prog_ai"];
   const { p, a, th, err } = await pwho(b, owners.includes(op));
   if (err) return err;
   const sql = db();
@@ -3702,6 +3705,7 @@ async function panelApi(b, ip, ua) {
     case "prog_xp":
     case "prog_ach":
     case "prog_ach_new":
+    case "prog_ai":
       return panelProgress(b, a);
   }
   return fail("Неизвестное действие панели.");
@@ -3712,14 +3716,14 @@ async function progOf(p) {
   const sql = db();
   await ensureXpAdj();
   const [{ sx }] = await sql`select coalesce(max(senko_num(data#>>'{}')), 0)::int sx from sync_items where user_id = ${p.id} and kind = 'xp' and not deleted`;
-  const [{ adj }] = await sql`select xp_adj adj from profiles where id = ${p.id}`;
+  const [{ adj, aib }] = await sql`select xp_adj adj, ai_bonus aib from profiles where id = ${p.id}`;
   const got = await sql`select code, at from achievements where user_id = ${p.id}`;
   const G = Object.fromEntries(got.map((r) => [r.code, r.at]));
   const AX = await getSetting("achx", {});
   const list = ACH.map((x) => ({ code: x.code, icon: x.icon, name: x.name, desc: x.desc, custom: false, at: G[x.code] || null }))
     .concat(Object.entries(AX).map(([code, x]) => ({ code, icon: x.icon, name: x.name, desc: x.desc, custom: true, at: G[code] || null })));
   const xp = Math.max(0, sx + adj);
-  return { ok: true, login: p.login, nick: p.nick, xp, synced: sx, adj, level: lvOf(xp), levels: LVN.map((n, i) => ({ n: i + 1, name: n, from: LVT[i] })), ach: list };
+  return { ok: true, login: p.login, nick: p.nick, xp, synced: sx, adj, aiBonus: aib || 0, level: lvOf(xp), levels: LVN.map((n, i) => ({ n: i + 1, name: n, from: LVT[i] })), ach: list };
 }
 async function achNotice(p, x, by) {
   await db()`insert into broadcasts (user_id, title, author, text, expires_at)
@@ -3743,6 +3747,19 @@ async function panelProgress(b, a) {
                             values (${p.id}, ${want > cur.xp ? "⭐ Начислен опыт" : "Опыт изменён"}, ${a.label},
                                     ${`Опыт: ${cur.xp} → ${want}${b.reason ? "\nПричина: " + clean(b.reason, 200) : ""}`}, now() + interval '7 days')`;
     await checkAch(p).catch((e) => console.error("ach", e));
+    return progOf(p);
+  }
+  if (b.op === "prog_ai") {
+    // дополнительные запросы к ИИ: числом («сделать 50») или прибавкой («+20»); тратятся, когда кончился дневной лимит
+    const cur = await progOf(p);
+    const want = b.set != null && b.set !== "" ? Math.floor(+b.set) : cur.aiBonus + Math.floor(+b.add || 0);
+    if (!Number.isFinite(want) || want < 0 || want > 100000) return fail("Запросы к ИИ: целое число от 0 до 100 000.");
+    if (want === cur.aiBonus) return cur;
+    await sql`update profiles set ai_bonus = ${want} where id = ${p.id}`;
+    await audit(a.label, "ai_bonus", p.login, { before: cur.aiBonus, after: want });
+    if (b.notify && want > cur.aiBonus) await sql`insert into broadcasts (user_id, title, author, text, expires_at)
+                            values (${p.id}, '🤖 Дополнительные запросы к ИИ', ${a.label},
+                                    ${`Вам выдано дополнительных запросов к ИИ: ${want - cur.aiBonus}. Всего: ${want}.\nОни тратятся, когда закончится дневной лимит, и не сгорают.${b.reason ? "\nПричина: " + clean(b.reason, 200) : ""}`}, now() + interval '7 days')`;
     return progOf(p);
   }
   if (b.op === "prog_ach") {
@@ -4561,7 +4578,15 @@ async function aiAsk(b) {
   const { p, err } = await who(b);
   if (err) return err;
   if (!AI_KEY) return fail("ИИ-помощник на сервере ещё не подключён. Сообщите владельцу.", { code: "ai_off" });
-  if (!(await hit(`aiweb:${p.id}`, 60, 86400))) return fail("Дневной лимит вопросов к ИИ исчерпан. Он обновится завтра.", { limit: true });
+  let bonus = 0;
+  try {
+    await ensureXpAdj();
+    const [r] = await db()`select ai_bonus from profiles where id = ${p.id}`;
+    bonus = (r && r.ai_bonus) || 0;
+  } catch (e) {
+    console.error("ai_bonus", e);
+  }
+  if (!(await hit(`aiweb:${p.id}`, 60, 86400)) && bonus <= 0) return fail("Дневной лимит вопросов к ИИ исчерпан. Он обновится завтра.", { limit: true });
   const q = String(b.q == null ? "" : b.q).replace(/\s+/g, " ").trim().slice(0, 500);
   if (q.length < 3) return fail("Напишите вопрос подробнее.");
   const ctx = (Array.isArray(b.ctx) ? b.ctx : []).slice(0, 10).map((c) => ({ ref: clean(c && c.ref, 80), text: String((c && c.text) || "").slice(0, 2000) })).filter((c) => c.ref && c.text);
@@ -4572,7 +4597,10 @@ async function aiAsk(b) {
   try {
     const r = await fetch(AI_URL + "/ask", {
       method: "POST",
-      headers: { "content-type": "application/json", "x-senko-cid": cid, "x-senko-ts": ts, "x-senko-sig": await hmacHex(AI_KEY, cid + "." + ts) },
+      headers: {
+        "content-type": "application/json", "x-senko-cid": cid, "x-senko-ts": ts, "x-senko-sig": await hmacHex(AI_KEY, cid + "." + ts),
+        ...(bonus > 0 ? { "x-senko-bsig": await hmacHex(AI_KEY, cid + "." + ts + ".b") } : {}),
+      },
       body: JSON.stringify({ short: !!b.short, q, ctx }),
       signal: AbortSignal.timeout(35000),
     });
@@ -4584,7 +4612,15 @@ async function aiAsk(b) {
   const logged = !(j && j.limit) ? await aiLog({ token: b.token, q, refs, ok: !!(j && j.ok) }).catch(() => null) : null;
   const logId = logged && logged.ok ? logged.id : "";
   if (!j || !j.ok) return fail((j && j.error) || "ИИ-сервис вернул ошибку (" + status + ").", { limit: !!(j && j.limit) });
-  return { ok: true, answer: String(j.answer || ""), left: typeof j.left === "number" ? j.left : null, cached: !!j.cached, logId };
+  if (j.bonus && bonus > 0) {
+    try {
+      const [u] = await db()`update profiles set ai_bonus = greatest(ai_bonus - 1, 0) where id = ${p.id} returning ai_bonus`;
+      bonus = u ? u.ai_bonus : bonus - 1;
+    } catch (e) {
+      console.error("ai_bonus spend", e);
+    }
+  }
+  return { ok: true, answer: String(j.answer || ""), left: typeof j.left === "number" ? j.left : null, bonus, cached: !!j.cached, logId };
 }
 
 // 2.6.1: распознавание речи для рации. Запись идёт в ИИ-прокси (Whisper), обратно приходит только текст; здесь ничего не сохраняется

@@ -469,7 +469,7 @@
     function progShow(r) {
       progBox.textContent = "";
       if (!r || !r.ok) { progBox.appendChild(errMsg(r)); return; }
-      var C = card("Опыт и достижения", "Изменения видны в личном кабинете программы и в рейтинге. Недельный рейтинг считает только опыт, заработанный в программе.");
+      var C = card("Опыт, достижения и запросы к ИИ", "Изменения видны в личном кабинете программы и в рейтинге. Недельный рейтинг считает только опыт, заработанный в программе.");
       var note = h("input", { type: "checkbox" }); note.checked = true;
       var why = h("input", { class: "grow", maxlength: 200, placeholder: "Причина (необязательно, увидит пользователь)" });
       var setInp = h("input", { type: "number", min: 0, max: 1000000, step: 1, style: "width:120px", "aria-label": "Опыт", value: String(r.xp) });
@@ -487,6 +487,20 @@
         h("select", { class: "btn-sm", "aria-label": "Звание", style: "width:auto", on: { change: function (e) { if (e.target.value !== "") xp({ set: +e.target.value }); } } },
           h("option", { value: "", text: "Сделать званием…" }), r.levels.map(function (l) { return h("option", { value: String(l.from), text: l.n + ". " + l.name + " (" + l.from + ")" }); }))));
       C.appendChild(h("div", { class: "row", style: "gap:8px;margin-bottom:12px" }, why, h("label", { class: "small", style: "display:flex;align-items:center;gap:6px;white-space:nowrap" }, note, "Сообщить в программе")));
+      // 2.6.6: дополнительные запросы к ИИ, тратятся после дневного лимита и не сгорают
+      var aiInp = h("input", { type: "number", min: 0, max: 100000, step: 1, style: "width:120px", "aria-label": "Дополнительные запросы к ИИ", value: String(r.aiBonus || 0) });
+      function aiq(data) {
+        api("prog_ai", Object.assign({ login: login, notify: note.checked, reason: why.value.trim() }, data)).then(function (y) {
+          if (!y.ok) return toast(y.error, true);
+          toast("Дополнительных запросов к ИИ: " + y.aiBonus + "."); progShow(y);
+        });
+      }
+      C.appendChild(h("h3", { text: "Запросы к ИИ", style: "margin:6px 0" }));
+      C.appendChild(h("p", { class: "muted small", text: "Дополнительные запросы тратятся, когда у пользователя кончился дневной лимит, и не сгорают. Сейчас: " + (r.aiBonus || 0) + "." }));
+      C.appendChild(h("div", { class: "row", style: "flex-wrap:wrap;gap:8px;margin:8px 0 12px" },
+        aiInp, btn("Установить", function () { var v = aiInp.value.trim(); if (!/^\d{1,6}$/.test(v)) return toast("Запросы: целое число от 0.", true); aiq({ set: +v }); }, "btn-sm btn-p"),
+        [10, 25, 50, 100].map(function (n) { return btn("+" + n, function () { aiq({ add: n }); }, "btn-sm"); }),
+        btn("Обнулить", function () { aiq({ set: 0 }); }, "btn-sm")));
       C.appendChild(h("h3", { text: "Достижения", style: "margin:6px 0" }));
       C.appendChild(h("div", { class: "tbl-wrap", style: "box-shadow:none" }, h("table", { class: "tbl" }, h("tbody", null, r.ach.map(function (x) {
         return h("tr", { style: "cursor:default" },

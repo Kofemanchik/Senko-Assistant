@@ -481,3 +481,5 @@ revoke all on all sequences in schema public from anon, authenticated;
 
 -- 2.6.3: поправка опыта из панели владельца (функция создаёт столбец сама, если schema.sql не запускали)
 alter table public.profiles add column if not exists xp_adj integer not null default 0;
+-- 2.6.6: дополнительные запросы к ИИ сверх дневного лимита (выдаёт владелец в панели)
+alter table public.profiles add column if not exists ai_bonus integer not null default 0;
