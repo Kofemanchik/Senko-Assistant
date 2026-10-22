@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: "Выпустить релиз v<версия из package.json> (тег создастся сам)"
+        description: "Выпустить релиз v<версия из package.json> (тег создастся сам). Версия вида 2.5.0-beta.1 выходит бета-версией для тестеров"
         type: boolean
         default: false
 
@@ -41,6 +41,11 @@ jobs:
 
       - run: npm run dist
 
+      # обычная версия даёт latest.yml, бета (2.5.0-beta.1) — beta.yml; служебный файл сборщика в релиз не нужен
+      - name: Убрать служебные файлы сборки
+        shell: bash
+        run: rm -f dist/builder-debug.yml && ls dist
+
       # С 2.2.1 ключей в программе нет: законы и ИИ идут через сервер. Сборка не пройдёт, если ключ законов попал внутрь.
       - name: Проверка, что ключей нет в сборке
         shell: bash
@@ -59,7 +64,7 @@ jobs:
           name: Senko-Assistant-Setup
           path: |
             dist/*.exe
-            dist/latest.yml
+            dist/*.yml
             dist/*.blockmap
           if-no-files-found: error
 
@@ -76,8 +81,9 @@ jobs:
           body_path: release-notes.md
           tag_name: v${{ steps.ver.outputs.v }}
           target_commitish: ${{ github.sha }}
+          prerelease: ${{ contains(steps.ver.outputs.v, '-') }}
           files: |
             dist/*.exe
-            dist/latest.yml
+            dist/*.yml
             dist/*.blockmap
           fail_on_unmatched_files: true

@@ -399,9 +399,10 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
     sys: () => sys,
 
     // Сообщение об ошибке из программы — уходит владельцу в Telegram
-    bugReport(text, log) {
+    bugReport(text, log, shot) {
       if (!current || !token) return Promise.resolve({ ok: false, error: "Нужно войти в аккаунт.", code: "auth" });
-      return call({ action: "bug_report", token, text: String(text == null ? "" : text).slice(0, 2000), ver: String(version || ""), log: typeof log === "string" ? log.slice(0, 60000) : "" });
+      const img = typeof shot === "string" && /^data:image\/(jpeg|png);base64,/.test(shot) && shot.length <= 680000 ? shot : "";
+      return call({ action: "bug_report", token, text: String(text == null ? "" : text).slice(0, 2000), ver: String(version || ""), log: typeof log === "string" ? log.slice(0, 60000) : "", ...(img ? { shot: img } : {}) });
     },
 
     // Действия этапа 4: прогресс, рейтинг, смены, контрольные тесты

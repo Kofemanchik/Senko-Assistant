@@ -246,7 +246,7 @@
     del.forEach(function (k) { W.ls(k, null); });
   }
 
-  var PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password", "ads"];
+  var PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password", "ads", "status", "beta", "hooks", "events", "ideas", "patrol"];
   function act(action, data) {
     return W.call(Object.assign({}, W.client(), data && typeof data === "object" ? data : {}, { action: action, token: (W.session() || {}).token })).then(function (r) {
       if (r && (r.code === "auth" || r.code === "banned")) setTimeout(function () { lost(r.code === "banned" ? r.error : ""); }, 0);
@@ -313,8 +313,11 @@
         return r;
       });
     },
-    bug: function (text, log) {
-      return W.call({ action: "bug_report", token: (W.session() || {}).token, text: String(text || "").slice(0, 2000), ver: "web " + (CFG.ver || ""), log: typeof log === "string" ? log.slice(0, 60000) : "" });
+    bug: function (text, log, shot) {
+      var img = typeof shot === "string" && /^data:image\/(jpeg|png);base64,/.test(shot) && shot.length <= 680000 ? shot : "";
+      var d = { action: "bug_report", token: (W.session() || {}).token, text: String(text || "").slice(0, 2000), ver: "web " + (CFG.ver || ""), log: typeof log === "string" ? log.slice(0, 60000) : "" };
+      if (img) d.shot = img;
+      return W.call(d);
     },
     diagLog: function () {
       var st = sync.status();

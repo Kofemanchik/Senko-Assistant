@@ -2839,7 +2839,7 @@ function buildNav(){nav2.innerHTML="";[tbT,tbC].forEach(function(b){b.hidden=tru
 // раздел, который можно открыть в роли: кодексы, главная и руководство есть всегда
 function tabOk(r,t){return t==="home"||t==="boss"||BASE.indexOf(t)>=0||visible(r).indexOf(t)>=0}
 function firstTab(r){var L=ROLES[r][1];return L.length?L[0]:"home"}
-function remember(t){if(!t||t==="boss")return;if(RC.last[X.role]!==t){RC.last[X.role]=t;saveRC()}}
+function remember(t){if(!t||t==="boss"||t==="ideas"||t==="tester")return;if(RC.last[X.role]!==t){RC.last[X.role]=t;saveRC()}}
 function setRole(r){if(ALLOW.indexOf(r)<0)r="off";remember(state.tab);X.role=r;try{localStorage.setItem("bos-role",r)}catch(e){}buildNav();
  var t=RC.last[r];
  if(t&&tabOk(r,t))state.tab=t; else if(!tabOk(r,state.tab))state.tab=firstTab(r);
@@ -3832,7 +3832,9 @@ function settingsHtml(){
   if(window.SA_s10Rows) h+=window.SA_s10Rows(row,sw);
   if(window.SA_s12Rows) h+=window.SA_s12Rows(row,sw);
   if(window.SA_s13Rows) h+=window.SA_s13Rows(row,sw,seg);
+  if(window.SA_s24Rows) h+=window.SA_s24Rows(row,sw,seg);
   h+=appSettingsHtml();
+  if(window.SA_appExtra) h+=window.SA_appExtra(row); // 2.3–2.4: голосовой ввод, мини-окно (блоки ниже не видят appSettingsHtml)
   if(window.SA_dataRows) h+=window.SA_dataRows(row);
   h+='<div class="sgroup">Документы</div>';
   h+=row("Политика конфиденциальности","Какие данные хранит Senko Assistant и где они находятся.",'<button type="button" class="btn" data-legal="privacy">Читать</button>');
@@ -3904,7 +3906,7 @@ function cabHtml(){
       fld("discord","Discord",acc.discord,40,"ник в Discord")+fld("telegram","Telegram",acc.telegram,33,"@name или пусто")+fld("phone","Номер в игре",acc.phone,12,"только цифры или пусто")+
       '<div class="sbtns" style="margin:0"><button type="button" class="btn" data-cab="accsave" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Сохранить</button></div>'+
       '<div id="accMsg" role="status" aria-live="polite" style="font-size:12.5px;color:var(--muted);min-height:1.2em"></div></div></div>';
-    ah+=deptInfo(acc.org||dept)+(window.SA_PROG?window.SA_PROG.html():"")+(window.SA_CAB11?window.SA_CAB11(true):"")+(window.SA_CAB13?window.SA_CAB13(true):"")+(window.SA_RP?window.SA_RP.cabHtml():"")+detHtml()+testHtml();
+    ah+=deptInfo(acc.org||dept)+(window.SA_PROG?window.SA_PROG.html():"")+(window.SA_CAB11?window.SA_CAB11(true):"")+(window.SA_CAB13?window.SA_CAB13(true):"")+(window.SA_CAB24?window.SA_CAB24():"")+(window.SA_RP?window.SA_RP.cabHtml():"")+detHtml()+testHtml();
     ah+='<p class="cab-foot">Данные кабинета хранятся в вашем аккаунте. После смены ведомства программу нужно перезапустить.</p>';
     return ah;
   }
@@ -5906,7 +5908,7 @@ function pCtrl(){
 
 function draw(){
  var rn=window.SA_RP?window.SA_RP.bossNew():0;
- var subs=[["sum","Обзор"],["staff","Сотрудники"],["rate","Рейтинг"],["shift","Смены"],["ctrl","Контрольные тесты"]]; if(window.SA_RP)subs.push(["rep","Рапорты"+(rn?" · "+rn:"")]); if(!B.scope)subs.push(["orgs","Организации"]);
+ var subs=[["sum","Обзор"],["staff","Сотрудники"],["rate","Рейтинг"],["shift","Смены"],["ctrl","Контрольные тесты"]]; if(window.SA_RP)subs.push(["rep","Рапорты"+(rn?" · "+rn:"")]); if(window.SA_B24)window.SA_B24.subs(subs); if(!B.scope)subs.push(["orgs","Организации"]);
  if(!subs.some(function(s){return s[0]===B.sub}))B.sub="sum";
  var title=B.scope?"Панель руководителя · "+esc(B.scope):"Панель руководителя";
  var h='<div class="subnav noprint">'+subs.map(function(s){return '<button class="pill" data-bpsub="'+s[0]+'" aria-pressed="'+(s[0]===B.sub)+'">'+s[1]+'</button>'}).join("")+'</div>';
@@ -5916,7 +5918,7 @@ function draw(){
  if(B.viewer)h+='<p class="sub">Вы видите данные как: '+(RANKS[B.viewer]||B.viewer)+(B.scope?". Доступна только ваша организация.":".")+'</p>';
  if(B.err)h+='<div class="banner bp-err" role="alert">'+esc(B.err)+'</div>';
  if(!B.data)h+='<p class="bp-empty">'+(B.loading?"Загружаем данные…":"Данные недоступны.")+'</p>';
- else h+=B.sub==="rep"?window.SA_RP.boss(curOrg(),draw):B.sub==="staff"?pStaff():B.sub==="orgs"?pOrgs():B.sub==="rate"?pRate():B.sub==="shift"?pShift():B.sub==="ctrl"?pCtrl():pSum();
+ else h+=(B.sub==="hooks"||B.sub==="events")?window.SA_B24.html(B.sub,curOrg(),draw):B.sub==="rep"?window.SA_RP.boss(curOrg(),draw):B.sub==="staff"?pStaff():B.sub==="orgs"?pOrgs():B.sub==="rate"?pRate():B.sub==="shift"?pShift():B.sub==="ctrl"?pCtrl():pSum();
  view.innerHTML=h+'</section>';
 }
 
@@ -5933,7 +5935,7 @@ view.addEventListener("click",function(e){
   eload("ctrl","create",{title:CF.title,topics:tps,n:CF.n,days:CF.days},function(e){CF.title="";CF.topics={};e.msg="Тест назначен. Сотрудники увидят его в программе в течение 20 минут или после перезапуска."});
   draw();return}
  if(t.dataset.bpsub){B.sub=t.dataset.bpsub;if(B.sub==="staff"&&B.sort.k==="det7"&&!B.touched)B.sort={k:"nick",dir:1};draw();return}
- if(t.dataset.bp==="reload"){load();if(E[B.sub]){E[B.sub].key=null;E[B.sub].data=null}if(B.sub==="rep")window.SA_RP.bossReload();return}
+ if(t.dataset.bp==="reload"){load();if(E[B.sub]){E[B.sub].key=null;E[B.sub].data=null}if(B.sub==="rep")window.SA_RP.bossReload();if((B.sub==="hooks"||B.sub==="events")&&window.SA_B24)window.SA_B24.reload(B.sub);return}
  if(t.dataset.bp==="win"){if(A.staff)A.staff();return}
  if(t.dataset.bps){var k=t.dataset.bps;B.touched=1;B.sort=B.sort.k===k?{k:k,dir:-B.sort.dir}:{k:k,dir:1};draw();return}
  if(t.dataset.cp!=null){A.copy(t.dataset.cp);t.style.outline="2px solid var(--accent)";setTimeout(function(){t.style.outline=""},500)}
@@ -6053,10 +6055,17 @@ var bo=null;
 function closeBug(){if(bo){bo.remove();bo=null}}
 window.SA_bug=function(pre){
  if(!A.bug) return; closeBug(); pre=typeof pre==="string"?pre:"";
+ // 2.4: снимок окна делается до того, как откроется окно сообщения
+ if(A.shot&&!window.__bugShotting){window.__bugShotting=1;A.shot().then(function(img){window.__bugShotting=0;openBug(pre,img)},function(){window.__bugShotting=0;openBug(pre,null)});return}
+ openBug(pre,null);
+};
+function openBug(pre,shot){
+ var useShot=!!shot;
  bo=document.createElement("div"); bo.className="sa-ov noprint"; bo.style.zIndex="2147470000";
  bo.innerHTML='<div class="sa-sheet" role="dialog" aria-modal="true" aria-labelledby="bugT" tabindex="-1"><div class="sa-head"><h2 id="bugT">Сообщить об ошибке</h2><button type="button" class="ic sa-x" data-bug="x" aria-label="Закрыть">×</button></div>'+
   '<div class="sa-body" style="padding:16px 18px"><p style="margin:0 0 10px;color:var(--muted)">Опишите, что случилось и что вы делали перед этим. Сообщение получит разработчик вместе с версией программы, ответ придёт сюда же, в программу.</p>'+
   '<textarea class="bug-ta" id="bugText" maxlength="2000" placeholder="Например: в разделе «Задержание» не останавливается таймер после нажатия «Пауза»…"></textarea>'+
+  (shot?'<div class="s12-blog"><label><input type="checkbox" id="bugShot" checked> Приложить снимок окна</label><small>Так разработчик увидит, что было на экране. Снимите галочку, если на нём личные данные.</small><img src="'+shot+'" alt="Снимок окна" style="display:block;max-width:100%;max-height:160px;margin-top:6px;border:1px solid var(--line);border-radius:6px"></div>':'')+
   (A.diagLog&&window.SA_bugLog?'<div class="s12-blog"><label><input type="checkbox" id="bugLog" checked> Приложить журнал</label><button type="button" class="s12-lnk" data-bug="log">Что в журнале?</button><small>Версии, состояние программы и последние ошибки. Без паролей, заметок и задержаний.</small><pre id="bugLogV" hidden></pre></div>':'')+
   '<div style="display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:10px;flex-wrap:wrap"><span id="bugMsg" role="status" style="font-size:12.5px;color:var(--muted)"></span>'+
   '<button type="button" class="btn" data-bug="send" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Отправить</button></div></div></div>';
@@ -6069,15 +6078,16 @@ window.SA_bug=function(pre){
   var t=document.getElementById("bugText").value.trim(), m=document.getElementById("bugMsg");
   if(t.length<10||(pre&&t.length<pre.trim().length+6)){m.textContent="Опишите подробнее, хотя бы пару предложений.";return}
   b.disabled=true; b.textContent="Отправка…";
-  var lg=document.getElementById("bugLog");
-  (lg&&lg.checked&&window.SA_bugLog?window.SA_bugLog().catch(function(){return ""}):Promise.resolve("")).then(function(log){return A.bug(t,log)}).then(function(r){
+  var lg=document.getElementById("bugLog"), sh=document.getElementById("bugShot");
+  useShot=!!(shot&&sh&&sh.checked);
+  (lg&&lg.checked&&window.SA_bugLog?window.SA_bugLog().catch(function(){return ""}):Promise.resolve("")).then(function(log){return A.bug(t,log,useShot?shot:"")}).then(function(r){
    if(r&&r.ok){ bo.querySelector(".sa-body").innerHTML='<p style="margin:0 0 14px">✅ Спасибо! Сообщение №'+esc(r.id)+' отправлено разработчику.</p><div style="text-align:right"><button type="button" class="btn" data-bug="x">Закрыть</button></div>'; return }
    b.disabled=false; b.textContent="Отправить"; m.textContent=(r&&r.error)||"Не удалось отправить.";
   },function(){b.disabled=false; b.textContent="Отправить"; m.textContent="Ошибка связи с программой."});
  });
  bo.addEventListener("keydown",function(e){if(e.key==="Escape")closeBug()});
  var ta=document.getElementById("bugText"); if(ta){ ta.value=pre; ta.focus(); ta.setSelectionRange(pre.length,pre.length); }
-};
+}
 })();
 </script>
 <style>
@@ -6201,7 +6211,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.3.0";
+var APP_VER="2.4.0";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6290,6 +6300,21 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.4.0",d:"22.10.2026",items:[
+  ["🪟","Мини-окно задержания","Маленькое окно поверх игры: таймеры задержаний, статьи и итог калькулятора. Открывается сочетанием Ctrl+Alt+M, клавиша и прозрачность меняются в настройках."],
+  ["🚓","Совместный патруль","На странице задержания: создайте экипаж и передайте код напарникам. Задержания и таймеры каждого видны всем в реальном времени. Пока доступен бета-тестерам."],
+  ["🗺","Тактическая доска","«На месте» → «Зоны и места»: стрелки, маршрут, точки сбора и подписи на схеме. Схему можно отправить напарникам ссылкой."],
+  ["🔊","Озвучка статей","Кнопка 🔊 у статьи читает её вслух голосом Windows. Голос и скорость выбираются в настройках."],
+  ["💡","Идеи с голосованием","Новый раздел «Идеи»: предлагайте, что добавить, и голосуйте за идеи других. Ответ разработчика приходит в программу."],
+  ["📅","Мероприятия организации","Руководство назначает учения и собрания, они видны на главной, а за час приходит напоминание в Telegram."],
+  ["🔔","Вебхуки Discord","Панель руководителя → «Вебхуки»: рапорты, новые сотрудники, контрольные тесты, мероприятия и недельный отчёт приходят в ваш Discord."],
+  ["🪪","Карточка сотрудника","Личный кабинет: картинка с уровнем, местом в рейтинге и достижениями, чтобы поделиться в Discord."],
+  ["🟧","Тепловая карта активности","В личном кабинете видно, в какие дни были задержания, тренировки и работа в программе."],
+  ["🦊","Лиса Senko","Подсказки и поздравления с достижениями и сериями. Выключается в настройках."],
+  ["🎃","Сезонное оформление","На Хэллоуин и Новый год меню и главная украшаются сами. Выключается в настройках."],
+  ["⭐","Изменения в избранном","В уведомлении об изменённых статьях из избранного есть кнопка «было / стало»."],
+  ["🧪","Панель тестера","Для бета-тестеров: задания от разработчика, экспериментальные функции, ранние версии и сообщения об ошибках со снимком окна."]
+ ]},
  {v:"2.3.0",d:"22.10.2026",items:[
   ["🎙","Голосовой поиск удобнее","Ищет в открытом кодексе, клик по карточке открывает статью. В настройках: время скрытия, размер и шрифт окна, выбор микрофона с индикатором, режим «нажми и говори», кнопка выключения и прозрачность."],
   ["🗣","Голосовые команды","«Открой калькулятор», «запусти таймер», «добавь в калькулятор 12.8 УК», «добавь в избранное 12.8» и переходы по разделам выполняются прямо из оверлея."],
@@ -7993,7 +8018,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.3.0";
+var APP_VER="2.4.0";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
@@ -9015,6 +9040,7 @@ function shareOpen(kind,ids,title,text){
    '<div class="s10-qr"><div class="qr">'+qrSvg(url)+'</div><p>Наведите камеру телефона на QR-код, чтобы открыть расчёт в браузере. В программе ссылку вставляют в строку поиска: статьи можно сразу добавить в калькулятор или сохранить набором.<br><br>Ссылка действует '+(r.days||30)+' дней.</p></div>'});
 }
 function shareShow(sh){
+ if(sh&&sh.kind==="board"&&window.SA_board){SA_board.open(sh);return} /* 2.4: тактическая доска */
  var ids=okIds2(sh.ids),R=ids.map(function(i){return BYID[i]});
  if(!R.length){toast("В ссылке нет статей, которые есть в этой версии программы");return}
  window.__s10sh=ids;
@@ -10088,7 +10114,7 @@ function favNote(){
  if(note||(window.SA_S&&SA_S.favchg===false))return;var L=favChanged();if(!L.length)return;
  note=document.createElement("div");note.className="s12-note noprint";note.setAttribute("role","status");
  note.innerHTML='<div class="s12-nh"><b>'+(L.length===1?"Изменилась статья из избранного":"Изменились статьи из избранного: "+L.length)+'</b><button type="button" class="ic" data-s12="favx" aria-label="Закрыть">×</button></div><ul>'+
-  L.slice(0,6).map(function(r){return '<li><button type="button" class="s12-lnk" data-s12go="'+r.k+'|'+e(r.code)+'">'+e(rowName(r))+'</button> <span>'+e(strip(r.title)).slice(0,70)+'</span> <em>'+(r.chg.k==="added"?"новая":"изменена")+' '+e(day(r.chg.at).slice(0,5))+'</em></li>'}).join("")+(L.length>6?'<li>…и ещё '+(L.length-6)+'</li>':'')+
+  L.slice(0,6).map(function(r){return '<li><button type="button" class="s12-lnk" data-s12go="'+r.k+'|'+e(r.code)+'">'+e(rowName(r))+'</button> <span>'+e(strip(r.title)).slice(0,70)+'</span> <em>'+(r.chg.k==="added"?"новая":"изменена")+' '+e(day(r.chg.at).slice(0,5))+'</em>'+(r.chg.k!=="added"&&r.chg.was&&r.chg.lid&&typeof chgBadge==="function"?' '+chgBadge(r):'')+'</li>'}).join("")+(L.length>6?'<li>…и ещё '+(L.length-6)+'</li>':'')+
   '</ul><div class="s12-na"><button type="button" class="btn" data-s12go="ref|chg">Все изменения</button><button type="button" class="btn primary" data-s12="favx">Понятно</button></div>';
  document.body.appendChild(note)}
 function favClose(){favSeen();if(note){note.remove();note=null}}
@@ -11213,8 +11239,9 @@ function voiceRows(st){
  h+=row("Шрифт оверлея","Размер текста в оверлее.",vrange("voiceFont",80,150,5,c.voiceFont||100,"%","Шрифт оверлея"));
  h+=row("Положение оверлея","Перетаскивается мышкой за верхнюю полоску. Двойной щелчок по ней тоже возвращает на место.",'<div class="fsctl"><button type="button" class="btn" data-v23="pos">Вернуть по центру сверху</button></div>');
  return h}
-if(typeof appSettingsHtml==="function"){var AS0=appSettingsHtml;
- appSettingsHtml=function(){var h=AS0.apply(this,arguments);try{var A2=window.senkoApp,st=A2&&!A2.web&&A2.state?A2.state():null;if(st&&h)h+=voiceRows(st)}catch(x){}return h}}
+var AX23=window.SA_appExtra;
+window.SA_appExtra=function(rowFn){var h=AX23?AX23(rowFn):"";try{row=rowFn;var A2=window.senkoApp,st=A2&&!A2.web&&A2.state?A2.state():null;if(st)h+=voiceRows(st)}catch(x){}return h};
+var row=function(){return ""};
 function vset(k,v){var A2=window.senkoApp;if(!A2||!A2.set)return null;var r=A2.set(k,v);if(r&&r.ok===false&&r.error)toast(r.error);return r}
 function vrepaint(){if(window.SA_paintSheet)SA_paintSheet()}
 document.addEventListener("input",function(ev){var t=ev.target;if(!t||!t.dataset||!t.dataset.v23r)return;var v=+t.value,o=t.parentNode.querySelector("output");if(o)o.textContent=v+(t.dataset.u||"");vset(t.dataset.v23r,v)});
@@ -11267,6 +11294,771 @@ window.SA_homeExtra=function(){if(HX0)HX0.apply(this,arguments);try{adsPaint();a
 view.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-ad23promo]");if(!b)return;if(typeof copyText==="function")copyText(b.dataset.ad23promo,b);else toast("Промокод: "+b.dataset.ad23promo)});
 
 window.SA_S23={rps:RPS,f:function(){return F},opened:function(){return OPN},ref:refTarget,pick:pickScore};
+})();
+</script>
+<style id="s24-style">
+/* ===== 2.4: панель тестера, идеи, вебхуки и мероприятия, экипаж, доска, озвучка, карточка, лиса, сезонные темы ===== */
+.s24-sec{margin-top:12px}
+.s24-sec h2{margin:0 0 4px;font:600 18px/1.3 var(--f-head,inherit)}
+.s24-sec>.sub{margin:0 0 12px;color:var(--muted);font-size:13.5px}
+.s24-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.s24-row .tin,.s24-in{flex:1 1 220px;min-width:0;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:8px 10px;font:inherit}
+.s24-ta{width:100%;min-height:76px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:8px 10px;font:inherit;resize:vertical;box-sizing:border-box}
+.s24-chip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;background:var(--chip);color:var(--muted);white-space:nowrap}
+.s24-chip.ok{background:rgba(46,125,79,.14);color:#2e7d4f}
+.s24-chip.bad{background:rgba(179,38,30,.13);color:#b3261e}
+.s24-chip.work{background:rgba(59,130,246,.14);color:#2f6fd6}
+.s24-chip.no{background:var(--chip);color:var(--muted);text-decoration:line-through}
+.s24-chip.beta{background:var(--soft);color:var(--accent)}
+.s24-msg{font-size:13px;color:var(--muted);min-height:1.2em;margin:8px 0 0}
+.s24-msg.err{color:#b3261e}
+.s24-empty{color:var(--muted);font-size:13.5px;margin:6px 0}
+.s24-list{display:grid;gap:8px}
+.s24-card{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--surface)}
+.s24-card h3{margin:0 0 4px;font:600 15px/1.35 var(--f-body,inherit)}
+.s24-card p{margin:4px 0;font-size:14px;white-space:pre-wrap;word-break:break-word}
+.s24-card small,.s24-meta{color:var(--muted);font-size:12.5px}
+.s24-flag{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)}
+.s24-flag:last-child{border-bottom:0}
+.s24-flag b{font-weight:600}
+.s24-rel ul{margin:4px 0 8px;padding-left:20px;font-size:13.5px}
+/* идеи */
+.s24-idea{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start}
+.s24-vote{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:52px;padding:6px 8px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font-weight:700;cursor:pointer}
+.s24-vote i{font-style:normal;font-size:13px;line-height:1}
+.s24-vote[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.s24-vote:disabled{opacity:.5;cursor:default}
+.s24-ans{margin-top:6px;padding:8px 10px;border-left:3px solid var(--accent);background:var(--soft);border-radius:0 8px 8px 0;font-size:13.5px}
+/* главная: мероприятия */
+.s24-ev{display:grid;gap:6px;margin:0 0 6px}
+.s24-evi{display:flex;gap:12px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--surface)}
+.s24-evd{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:52px;padding:4px 6px;border-radius:9px;background:var(--soft);color:var(--accent);font-weight:700;line-height:1.1}
+.s24-evd small{font-size:11px;font-weight:600}
+.s24-evi .t{min-width:0}
+.s24-evi .t b{display:block}
+.s24-evi .t span{color:var(--muted);font-size:13px}
+.s24-evi.soon{border-color:var(--accent)}
+/* экипаж */
+.s24-pt .s24-code{font:700 22px/1 var(--f-mono,monospace);letter-spacing:.12em;padding:6px 12px;border-radius:8px;background:var(--chip)}
+.s24-mem{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.s24-mem span{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:13px}
+.s24-mem i{width:8px;height:8px;border-radius:50%;background:#9aa0a6}
+.s24-mem i.on{background:#2e9e5b}
+.s24-pti{display:flex;gap:10px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.s24-pti .ck{font:700 18px/1 var(--f-mono,monospace);font-variant-numeric:tabular-nums}
+.s24-pti.late .ck{color:#d64545}.s24-pti.warn .ck{color:#d98a00}.s24-pti.done .ck{color:#2e7d4f;font-size:14px}
+.s24-pti.mine{background:var(--soft)}
+/* тактическая доска */
+.s24-bd{display:grid;grid-template-columns:minmax(0,520px) minmax(220px,1fr);gap:14px;align-items:start}
+@media (max-width:820px){.s24-bd{grid-template-columns:1fr}}
+.s24-bsvg{width:100%;aspect-ratio:100/140;border-radius:12px;border:1px solid var(--line);touch-action:none;cursor:crosshair;background:var(--chip);user-select:none}
+.s24-bsvg[data-tool="e"]{cursor:not-allowed}
+.s24-bsvg .s24-sh{pointer-events:visiblePainted}
+.s24-bsvg[data-tool="e"] .s24-sh:hover{opacity:.45}
+.s24-tools{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.s24-tools .pill[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.s24-cols{display:flex;gap:6px;margin-bottom:10px}
+.s24-cols button{width:26px;height:26px;border-radius:50%;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line);cursor:pointer}
+.s24-cols button[aria-pressed="true"]{box-shadow:0 0 0 2px var(--ink)}
+/* озвучка */
+.art-h .s24-tts{margin-left:auto;opacity:.45;font-size:14px;width:28px;height:28px}
+.art-h .s24-tts+.art-bug{margin-left:0}
+.art:hover .art-h .s24-tts,.art-h .s24-tts:focus-visible,.art-h .s24-tts.on{opacity:1}
+.art-h .s24-tts.on{color:var(--accent)}
+@media (hover:none){.art-h .s24-tts{opacity:.75}}
+@media print{.s24-tts{display:none!important}}
+/* тепловая карта активности */
+.s24-heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,12px);gap:3px;margin:6px 0 4px;overflow-x:auto;padding-bottom:4px}
+.s24-heat i{width:12px;height:12px;border-radius:3px;background:var(--chip)}
+.s24-heat i.l1{background:color-mix(in srgb,var(--accent) 28%,var(--chip))}
+.s24-heat i.l2{background:color-mix(in srgb,var(--accent) 52%,var(--chip))}
+.s24-heat i.l3{background:color-mix(in srgb,var(--accent) 76%,var(--chip))}
+.s24-heat i.l4{background:var(--accent)}
+.s24-heat i.fut{visibility:hidden}
+.s24-hl{display:flex;gap:4px;align-items:center;font-size:12px;color:var(--muted)}
+.s24-hl i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.s24-cardv canvas{width:100%;height:auto;border-radius:12px;border:1px solid var(--line)}
+/* лиса Senko */
+.s24-fox{position:fixed;right:18px;bottom:76px;z-index:60;display:flex;align-items:flex-end;gap:8px;pointer-events:none}
+.s24-fox button.f{pointer-events:auto;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow);padding:4px;cursor:pointer;transition:transform .2s}
+.s24-fox button.f:hover{transform:translateY(-2px) rotate(-6deg)}
+.s24-fox button.f svg{width:100%;height:100%;display:block}
+.s24-fox .b{pointer-events:auto;max-width:260px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px 14px 4px 14px;box-shadow:var(--shadow);padding:9px 12px;font-size:13.5px;line-height:1.35;opacity:0;transform:translateY(6px);transition:opacity .25s,transform .25s}
+.s24-fox .b.on{opacity:1;transform:none}
+.s24-fox .b[hidden]{display:none}
+.s24-fox.hop button.f{animation:s24hop .6s ease}
+@keyframes s24hop{0%,100%{transform:none}30%{transform:translateY(-10px) rotate(-8deg)}60%{transform:translateY(0) rotate(4deg)}}
+html.noanim .s24-fox.hop button.f{animation:none}
+@media print{.s24-fox,.s24-snow{display:none!important}}
+html.sa-stream .s24-fox{display:none}
+/* сезонное оформление */
+html[data-season] .sd-brand{position:relative}
+html[data-season] .sd-brand::after{position:absolute;right:-2px;top:-8px;font-size:22px;pointer-events:none}
+html[data-season="halloween"] .sd-brand::after{content:"🎃"}
+html[data-season="newyear"] .sd-brand::after{content:"🎄"}
+html[data-season="halloween"] .side{background-image:linear-gradient(180deg,rgba(255,122,24,.10),transparent 160px)}
+html[data-season="newyear"] .side{background-image:radial-gradient(circle at 8px 6px,#e5484d 3px,transparent 4px),radial-gradient(circle at 28px 10px,#f5c518 3px,transparent 4px),radial-gradient(circle at 48px 6px,#2f9e6e 3px,transparent 4px),radial-gradient(circle at 68px 10px,#3b82f6 3px,transparent 4px);background-size:80px 16px;background-repeat:repeat-x}
+html[data-season="halloween"] .hm-hi{background-image:linear-gradient(120deg,rgba(255,122,24,.12),rgba(120,60,200,.10))}
+html[data-season="newyear"] .hm-hi{background-image:linear-gradient(120deg,rgba(59,130,246,.10),rgba(229,72,77,.08))}
+.s24-snow{position:fixed;inset:0;pointer-events:none;z-index:40;overflow:hidden}
+.s24-snow i{position:absolute;top:-24px;font-style:normal;color:#fff;text-shadow:0 0 3px rgba(80,120,200,.6);opacity:.8;animation:s24fall linear infinite}
+:root[data-theme="light"] .s24-snow i,html:not([data-theme]) .s24-snow i{color:#a9c7ee}
+@keyframes s24fall{to{transform:translateY(calc(100vh + 40px)) translateX(30px) rotate(200deg)}}
+html.noanim .s24-snow{display:none}
+.s24-bat{position:fixed;top:60px;left:-60px;z-index:40;pointer-events:none;font-size:24px;animation:s24bat 22s linear infinite}
+@keyframes s24bat{0%{transform:translate(0,0)}25%{transform:translate(30vw,40px)}50%{transform:translate(60vw,-10px)}75%{transform:translate(90vw,30px)}100%{transform:translate(110vw,0)}}
+html.noanim .s24-bat{display:none}
+</style>
+<script>
+/* ===== 2.4 =====
+   Панель тестера, идеи с голосованием, вебхуки Discord и мероприятия в панели руководителя, мероприятия на главной,
+   совместный патруль (экипаж), тактическая доска на схеме зон, озвучка статей, карточка сотрудника картинкой,
+   тепловая карта активности, лиса Senko, сезонное оформление, данные для мини-окна задержания.
+   Функции включаются флагами владельца (sys.flags: all | beta | off), см. FLAG_DEFS на сервере. */
+(function(){
+"use strict";
+var A=window.senkoApp, X=window.SA_X||{sub:{}}, H=document.documentElement;
+var DESK=!!(A&&!A.web);
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(x){return d}}
+function jset(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(x){}}
+function toast(t){if(window.SA_toast)SA_toast(t)}
+function st(){try{return A&&A.state?A.state():null}catch(x){return null}}
+function sys(){var s=st();return (s&&s.sys)||{}}
+function user(){var s=st();return s&&s.user}
+function online(){var u=user();return !!(u&&!u.offline&&A&&A.api)}
+function rerender(){var y=window.pageYOffset;render();window.scrollTo(0,y)}
+function goTab(t,sub){if(sub&&X.sub)X.sub[t]=sub;if(window.SA_modalClose)SA_modalClose();if(window.SA_closeSheet)SA_closeSheet();if(window.SA_go)SA_go(t);else{state.tab=t;render()}window.scrollTo(0,0)}
+function api(a,d){
+ if(!A||!A.api)return Promise.resolve({ok:false,error:"Нужно войти в аккаунт."});
+ return A.api(a,d||{}).then(function(r){return r||{ok:false,error:"Нет ответа от сервера."}},function(){return {ok:false,error:"Ошибка связи с программой."}})}
+function dkey(d){d=d||new Date();var p=function(n){return (n<10?"0":"")+n};return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())}
+function dt(v){var d=new Date(v);return isNaN(d)?"":d.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}
+function sec(t,d,body,id){return '<section class="panel s24-sec"'+(id?' id="'+id+'"':'')+'><h2>'+t+'</h2>'+(d?'<p class="sub">'+d+'</p>':'')+body+'</section>'}
+function swb(attr,on,label){return '<button type="button" class="sw" role="switch" '+attr+' aria-checked="'+(!!on)+'" aria-label="'+e(label)+'"></button>'}
+function fmtMs(ms){ms=Math.max(0,ms);var s=Math.floor(ms/1000),m=Math.floor(s/60);s%=60;return (m<10?"0":"")+m+":"+(s<10?"0":"")+s}
+var LIM_MS=typeof LIM==="number"?LIM:3600000;
+function elapsedOf(t){if(!t||!t.start)return 0;if(t.decidedAt)return t.decidedAt;var cur=t.paused&&t.paused.at?Date.now()-t.paused.at:0;return Date.now()-t.start-(t.pausedTotal||0)-cur}
+
+/* ---------- свои настройки 2.4 (localStorage bos-s24) ---------- */
+var C=jget("bos-s24",{});
+if(!C||typeof C!=="object")C={};
+if(!C.exp||typeof C.exp!=="object")C.exp={};
+if(!C.tts||typeof C.tts!=="object")C.tts={};
+if(!(+C.tts.rate>=0.6&&+C.tts.rate<=1.8))C.tts.rate=1;
+if(typeof C.tts.voice!=="string")C.tts.voice="";
+if(typeof C.mascot!=="boolean")C.mascot=true;
+if(typeof C.season!=="boolean")C.season=true;
+if(["","halloween","newyear"].indexOf(C.prev)<0)C.prev="";
+function saveC(){jset("bos-s24",C)}
+
+/* ---------- флаги функций ---------- */
+var FDEF={patrol:"beta",board:"all",mini:"all",tts:"all",mascot:"all",season:"all",card:"all",ideas:"all",events:"all"};
+var FN={patrol:["Совместный патруль","Экипаж по коду: общий список задержаний и таймеров с напарниками."],board:["Тактическая доска","Рисование на схеме зон и отправка схемы ссылкой."],mini:["Мини-окно задержания","Маленькое окно поверх игры с таймерами и итогом калькулятора."],
+ tts:["Озвучка статей","Кнопка 🔊 у статьи читает её вслух голосом Windows."],mascot:["Лиса Senko","Подсказки и поздравления в углу окна."],season:["Сезонное оформление","Хэллоуин и Новый год."],card:["Карточка сотрудника","Картинка со статистикой для Discord."],
+ ideas:["Идеи и голосование","Раздел «Идеи» в меню."],events:["Мероприятия организаций","Учения и собрания на главной и в панели руководителя."]};
+function tester(){var s=sys(),u=user();return !!(s.tester||(u&&(u.rank==="owner"||u.rank==="moderator")))}
+function mode(k){var f=sys().flags;return f&&f[k]?f[k]:FDEF[k]}
+function flag(k){var m=mode(k);if(m==="off")return false;if(m==="beta")return tester()&&C.exp[k]!==false;return true}
+window.SA_flag=flag;
+
+/* =================================================================== */
+/* ===================== Панель тестера ============================== */
+var TS={d:null,loading:false,err:"",at:0,cm:{},msg:{},rel:null,relErr:""};
+function tsLoad(force){
+ if(TS.loading||(!force&&TS.d&&Date.now()-TS.at<60000))return;
+ TS.loading=true;TS.err="";
+ api("beta",{op:"tasks"}).then(function(r){TS.loading=false;TS.at=Date.now();if(r.ok)TS.d=r;else TS.err=r.error||"Не удалось загрузить задания.";if(state.tab==="tester")rerender()});
+}
+var REL_URL="https://api.github.com/repos/Kofemanchik/Senko-Assistant/releases?per_page=15";
+function relLoad(){
+ if(TS.rel||TS.relBusy||typeof fetch!=="function")return;TS.relBusy=true;
+ fetch(REL_URL,{headers:{Accept:"application/vnd.github+json"}}).then(function(r){return r.ok?r.json():Promise.reject(r.status)}).then(function(a){
+  TS.relBusy=false;TS.rel=(Array.isArray(a)?a:[]).filter(function(x){return x&&x.prerelease&&!x.draft}).slice(0,6).map(function(x){return {v:String(x.tag_name||"").replace(/^v/,""),d:x.published_at||"",b:String(x.body||"").slice(0,3000)}});
+  if(state.tab==="tester")rerender()
+ },function(){TS.relBusy=false;TS.rel=[];TS.relErr="Не удалось загрузить список с GitHub.";if(state.tab==="tester")rerender()});
+}
+function relItems(b){return String(b||"").split("\n").map(function(l){return l.trim()}).filter(function(l){return /^[-*•]\s+/.test(l)}).map(function(l){return e(l.replace(/^[-*•]\s+/,"").replace(/`/g,"")).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")}).slice(0,12)}
+function testerHtml(){
+ var s=st()||{},u=s.user||{},c=s.cfg||{};
+ tsLoad();
+ var h=sec("Панель тестера","Спасибо, что помогаете! Здесь задания от разработчика, экспериментальные функции и ранние версии программы. Роль «Бета-тестер» выдаёт владелец или модератор.",
+  '<div class="s24-row" style="margin-top:0"><span class="s24-chip beta">🧪 '+e(u.nick||u.login||"Тестер")+'</span><span class="s24-meta">Версия программы: '+e(s.version||"")+'</span></div>');
+ /* задания */
+ var b="";
+ if(!TS.d)b=TS.err?'<p class="s24-msg err">'+e(TS.err)+' <button type="button" class="btn" data-t24="reload">Повторить</button></p>':'<p class="s24-empty">Загружаем задания…</p>';
+ else if(!TS.d.tasks.length)b='<p class="s24-empty">Сейчас заданий нет. Когда разработчик добавит новое, бот пришлёт сообщение в Telegram.</p>';
+ else b='<div class="s24-list">'+TS.d.tasks.map(function(t){
+  var my=t.my,cm=TS.cm[t.id]!=null?TS.cm[t.id]:(my&&my.comment)||"";
+  return '<div class="s24-card"><h3>№'+e(t.id)+' · '+e(t.title)+' '+(my?'<span class="s24-chip '+(my.status==="ok"?"ok":"bad")+'">'+(my.status==="ok"?"✓ работает":"✕ не работает")+'</span>':'')+'</h3>'+
+   (t.body?'<p>'+e(t.body)+'</p>':'')+'<small>'+e(t.author||"")+(t.at?' · '+dt(t.at):'')+' · отметили: '+(t.n||0)+'</small>'+
+   '<textarea class="s24-ta" data-t24cm="'+e(t.id)+'" maxlength="800" rows="2" placeholder="Комментарий: что проверили, что заметили. Если не работает, опишите, что происходит" style="margin-top:8px">'+e(cm)+'</textarea>'+
+   '<div class="s24-row"><button type="button" class="btn primary" data-t24="ok" data-id="'+e(t.id)+'">✓ Работает</button><button type="button" class="btn" data-t24="bad" data-id="'+e(t.id)+'">✕ Не работает</button>'+
+   '<button type="button" class="btn" data-t24="bug">Сообщить с картинкой</button></div><p class="s24-msg" id="t24m'+e(t.id)+'">'+e(TS.msg[t.id]||"")+'</p></div>'}).join("")+'</div>';
+ h+=sec("Задания","Проверьте и отметьте результат. Ответ сразу уходит разработчику.",b+'<div class="s24-row"><button type="button" class="btn" data-t24="reload">Обновить</button></div>');
+ /* экспериментальные функции */
+ var F=Object.keys(FN).map(function(k){
+  var m=mode(k),chip=m==="all"?'<span class="s24-chip ok">у всех</span>':m==="beta"?'<span class="s24-chip beta">только тестерам</span>':'<span class="s24-chip">выключено</span>';
+  return '<div class="s24-flag"><span><b>'+e(FN[k][0])+'</b> '+chip+'<br><small class="s24-meta">'+e(FN[k][1])+'</small></span>'+(m==="beta"?swb('data-t24exp="'+k+'"',C.exp[k]!==false,FN[k][0]):'')+'</div>'}).join("");
+ h+=sec("Экспериментальные функции","Функции с пометкой «только тестерам» видите только вы и другие тестеры. Если что-то мешает, выключите её здесь, это действует только на этом компьютере.",F);
+ /* ранние версии */
+ if(DESK&&c.betaUpdates!=null){
+  relLoad();
+  var rl=TS.rel?(TS.rel.length?TS.rel.map(function(r){var it=relItems(r.b);return '<div class="s24-rel"><b>'+e(r.v)+'</b> <small class="s24-meta">'+(r.d?dt(r.d):'')+'</small>'+(it.length?'<ul>'+it.map(function(x){return '<li>'+x+'</li>'}).join("")+'</ul>':'')+'</div>'}).join(""):'<p class="s24-empty">'+e(TS.relErr||"Бета-версий пока не выпускали.")+'</p>'):'<p class="s24-empty">Загружаем список бета-версий…</p>';
+  h+=sec("Ранние версии","Бета-версия приходит через автообновление раньше остальных. В ней могут быть ошибки: о них сообщайте кнопкой ниже.",
+   '<div class="s24-flag"><span><b>Получать бета-версии</b><br><small class="s24-meta">Выключите, чтобы снова получать только обычные версии. Уже установленная бета останется до выхода следующей обычной версии.</small></span>'+swb('data-t24="betaupd"',!!c.betaUpdates,"Получать бета-версии")+'</div>'+
+   '<div class="s24-row"><button type="button" class="btn" data-t24="check">Проверить обновления</button></div><h3 style="font-size:15px;margin:14px 0 6px">Журнал бета-версий</h3>'+rl);
+ }
+ h+=sec("Сообщить о проблеме","К сообщению приложатся снимок окна, версия и журнал программы.",'<button type="button" class="btn primary" data-t24="bug">Сообщить о проблеме</button>');
+ h+=sec("Сезонное оформление","Посмотреть оформление заранее. Обычно оно включается само по дате.",
+  '<div class="s24-row" style="margin-top:0">'+[["","Как по дате"],["halloween","Хэллоуин"],["newyear","Новый год"]].map(function(x){return '<button type="button" class="pill" data-t24prev="'+x[0]+'" aria-pressed="'+(C.prev===x[0])+'">'+x[1]+'</button>'}).join("")+'</div>');
+ return h;
+}
+document.addEventListener("input",function(ev){var t=ev.target;if(t&&t.dataset&&t.dataset.t24cm!=null)TS.cm[t.dataset.t24cm]=t.value},true);
+document.addEventListener("click",function(ev){
+ var b=ev.target.closest&&ev.target.closest("[data-t24],[data-t24exp],[data-t24prev]");if(!b)return;
+ if(b.dataset.t24exp){var k=b.dataset.t24exp;C.exp[k]=C.exp[k]===false;saveC();applyAll();rerender();return}
+ if(b.dataset.t24prev!=null){C.prev=b.dataset.t24prev;saveC();applySeason();rerender();return}
+ var a=b.dataset.t24;
+ if(a==="reload"){TS.d=null;tsLoad(true);rerender();return}
+ if(a==="bug"){if(window.SA_bug)SA_bug("[Тест "+((st()||{}).version||"")+"] ");return}
+ if(a==="check"){if(A&&A.checkUpdate){A.checkUpdate();toast("Проверяем обновления…")}return}
+ if(a==="betaupd"){var on=b.getAttribute("aria-checked")!=="true",r=A.set("betaUpdates",on);if(r&&r.ok===false&&r.error)toast(r.error);else toast(on?"Бета-версии включены":"Только обычные версии");rerender();return}
+ if(a==="ok"||a==="bad"){
+  var id=b.dataset.id,cm=TS.cm[id]!=null?TS.cm[id]:"",m=document.getElementById("t24m"+id);
+  if(a==="bad"&&String(cm).trim().length<5){if(m){m.className="s24-msg err";m.textContent="Опишите в комментарии, что не работает."}return}
+  b.disabled=true;
+  api("beta",{op:"result",id:id,status:a,comment:cm}).then(function(r){b.disabled=false;
+   if(r.ok){TS.msg[id]="Спасибо! Отметка отправлена.";(TS.d.tasks||[]).forEach(function(t){if(t.id===id){if(!t.my)t.n=(t.n||0)+1;t.my={status:a,comment:cm,at:Date.now()}}});rerender()}
+   else if(m){m.className="s24-msg err";m.textContent=r.error||"Не удалось отправить."}})
+ }
+});
+
+/* =================================================================== */
+/* ===================== Идеи ======================================== */
+var IS={list:null,sort:"top",status:"",loading:false,err:"",text:"",msg:"",key:""};
+var IST={new:["Новая",""],work:["В работе","work"],done:["Сделано","ok"],no:["Отклонено","no"]};
+function isLoad(){
+ var key=IS.sort+"|"+IS.status;if(IS.loading)return;IS.loading=true;IS.err="";
+ api("ideas",{op:"list",sort:IS.sort,status:IS.status}).then(function(r){IS.loading=false;IS.key=key;if(r.ok)IS.list=r.ideas||[];else IS.err=r.error||"Не удалось загрузить идеи.";if(state.tab==="ideas")rerender()});
+}
+function ideasHtml(){
+ if(!online())return sec("Идеи","","<p class=\"s24-empty\">Идеи доступны после входа в аккаунт и при подключении к интернету.</p>");
+ if(IS.key!==IS.sort+"|"+IS.status&&!IS.loading)setTimeout(isLoad,0);
+ var h=sec("Предложить идею","Что добавить или улучшить в программе, боте или на сайте. Можно предложить до 3 идей в сутки. Ответ разработчика придёт сюда и уведомлением в программе.",
+  '<textarea class="s24-ta" data-i24in="text" maxlength="600" rows="3" placeholder="Например: добавить в калькулятор кнопку «скопировать для рации»">'+e(IS.text)+'</textarea>'+
+  '<div class="s24-row"><button type="button" class="btn primary" data-i24="add">Предложить</button><span class="s24-msg'+(IS.msgErr?' err':'')+'" style="margin:0">'+e(IS.msg)+'</span></div>');
+ var flt='<div class="s24-row" style="margin-top:0">'+[["top","Популярные"],["new","Новые"]].map(function(x){return '<button type="button" class="pill" data-i24sort="'+x[0]+'" aria-pressed="'+(IS.sort===x[0])+'">'+x[1]+'</button>'}).join("")+
+  '<span style="width:12px"></span>'+[["","Все"],["new","Новые"],["work","В работе"],["done","Сделано"],["no","Отклонено"]].map(function(x){return '<button type="button" class="pill" data-i24st="'+x[0]+'" aria-pressed="'+(IS.status===x[0])+'">'+x[1]+'</button>'}).join("")+'</div>';
+ var L=IS.list,b;
+ if(!L)b=IS.err?'<p class="s24-msg err">'+e(IS.err)+'</p>':'<p class="s24-empty">Загружаем…</p>';
+ else if(!L.length)b='<p class="s24-empty">Идей пока нет. Предложите первую!</p>';
+ else b='<div class="s24-list" style="margin-top:10px">'+L.map(function(i){var S=IST[i.status]||IST.new;
+  return '<div class="s24-card s24-idea"><button type="button" class="s24-vote" data-i24="vote" data-id="'+e(i.id)+'" aria-pressed="'+(!!i.voted)+'" title="'+(i.voted?"Убрать голос":"Поддержать идею")+'"><i>▲</i>'+(i.votes||0)+'</button>'+
+   '<div><p style="margin-top:0">'+e(i.text)+'</p><small>'+e(i.nick||"")+(i.at?' · '+dt(i.at):'')+'</small> <span class="s24-chip '+S[1]+'">'+S[0]+'</span>'+(i.mine?' <span class="s24-chip">ваша</span>':'')+
+   (i.answer?'<div class="s24-ans"><b>Ответ разработчика:</b> '+e(i.answer)+'</div>':'')+
+   (i.mine&&i.status==="new"?'<div class="s24-row" style="margin-top:6px"><button type="button" class="more" data-i24="del" data-id="'+e(i.id)+'">Удалить</button></div>':'')+'</div></div>'}).join("")+'</div>';
+ return h+sec("Все идеи","Голосуйте за идеи, которые нужны вам. Самые популярные разработчик берёт в работу первыми.",flt+b);
+}
+document.addEventListener("input",function(ev){var t=ev.target;if(t&&t.dataset&&t.dataset.i24in==="text"){ev.stopPropagation();IS.text=t.value}},true);
+document.addEventListener("click",function(ev){
+ var b=ev.target.closest&&ev.target.closest("[data-i24],[data-i24sort],[data-i24st]");if(!b)return;
+ if(b.dataset.i24sort){IS.sort=b.dataset.i24sort;IS.list=null;isLoad();rerender();return}
+ if(b.dataset.i24st!=null){IS.status=b.dataset.i24st;IS.list=null;isLoad();rerender();return}
+ var a=b.dataset.i24;
+ if(a==="add"){
+  var t=IS.text.trim();if(t.length<15){IS.msg="Опишите идею подробнее: хотя бы одно предложение.";IS.msgErr=1;rerender();return}
+  b.disabled=true;
+  api("ideas",{op:"add",text:t}).then(function(r){
+   if(r.ok){IS.text="";IS.msg="Спасибо! Идея отправлена.";IS.msgErr=0;IS.sort="new";IS.status="";IS.list=null;isLoad()}else{IS.msg=r.error||"Не удалось отправить.";IS.msgErr=1}
+   rerender()});return}
+ if(a==="vote"){
+  var id=b.dataset.id,on=b.getAttribute("aria-pressed")!=="true";b.disabled=true;
+  api("ideas",{op:"vote",id:id,on:on}).then(function(r){b.disabled=false;
+   if(r.ok){(IS.list||[]).forEach(function(i){if(i.id===id){i.votes=r.votes;i.voted=r.voted}});rerender()}else toast(r.error||"Не удалось проголосовать")});return}
+ if(a==="del"){
+  if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Точно удалить?";return}
+  api("ideas",{op:"del",id:b.dataset.id}).then(function(r){if(r.ok){IS.list=(IS.list||[]).filter(function(i){return i.id!==b.dataset.id});rerender()}else toast(r.error||"Не удалось удалить")});return}
+});
+
+/* =================================================================== */
+/* ======== Панель руководителя: вебхуки Discord и мероприятия ======== */
+var BH={org:null,d:null,loading:false,err:"",msg:"",url:"",ev:null};
+var BE={org:null,d:null,loading:false,err:"",msg:"",f:{title:"",at:"",place:"",body:""}};
+var bDraw=null;
+function bRedraw(){if(state.tab==="boss"&&bDraw)bDraw()}
+function bCall(S,act,org,op,extra,ok){
+ if(S.loading)return;S.loading=true;S.err="";S.msg="";S.org=org;
+ api(act,Object.assign({org:org,op:op||(act==="hooks"?"get":"list")},extra||{})).then(function(r){S.loading=false;
+  if(r.ok){if(r.hook!==undefined||r.events)S.d=r;S.msg=r.msg||"";if(ok)ok(r)}else{S.err=r.error||"Не удалось выполнить.";if(!S.d&&!op)S.d=null}
+  bRedraw()});
+}
+function needOrg(S,act,org){
+ if(!org)return '<p class="bp-empty">Выберите организацию в списке сверху.</p>';
+ if(S.org!==org||(!S.d&&!S.loading&&!S.err)){if(S.org!==org){S.d=null;S.ev=null}setTimeout(function(){bCall(S,act,org)},0);return '<p class="bp-empty">Загружаем…</p>'}
+ if(!S.d)return S.loading?'<p class="bp-empty">Загружаем…</p>':'<div class="banner bp-err" role="alert">'+e(S.err)+'</div>';
+ return "";
+}
+function bMsg(S){return (S.err?'<div class="banner bp-err" role="alert">'+e(S.err)+'</div>':'')+(S.msg?'<p class="bp-ok" role="status">'+e(S.msg)+'</p>':'')}
+function hooksHtml(org){
+ var w=needOrg(BH,"hooks",org);if(w)return w;
+ var d=BH.d,hk=d.hook,EV=d.events||{};
+ if(!BH.ev)BH.ev=hk?hk.events.slice():Object.keys(EV);
+ var h='<p class="sub">Сообщения о событиях организации будут приходить в ваш канал Discord. Как получить ссылку: настройки канала → «Интеграция» → «Вебхуки» → «Новый вебхук» → «Копировать URL вебхука». Ссылку видит только руководство организации.</p>'+bMsg(BH);
+ if(hk)h+='<div class="bp-box" style="margin-bottom:12px"><h3>'+(hk.fails?'⚠️ Вебхук не отвечает':'✅ Вебхук подключён')+'</h3><p class="bp-empty" style="margin:0">'+e(hk.url)+'<br>Изменил(а): '+e(hk.by||"—")+(hk.at?', '+dt(hk.at):'')+(hk.error?'<br>Последняя ошибка: '+e(hk.error):'')+'</p></div>';
+ h+='<div class="bp-box"><h3>'+(hk?'Изменить':'Подключить вебхук')+'</h3><div class="bp-tools"><input class="s24-in" data-b24in="url" type="url" maxlength="200" autocomplete="off" placeholder="'+(hk?'Новая ссылка (пусто — оставить прежнюю)':'https://discord.com/api/webhooks/…')+'" value="'+e(BH.url)+'" aria-label="Ссылка вебхука" style="flex:1 1 320px"></div>'+
+  '<p style="margin:10px 0 6px;font-weight:600">Что отправлять</p><div class="presets" style="margin:0 0 10px">'+Object.keys(EV).map(function(k){return '<button type="button" class="pill" data-b24ev="'+k+'" aria-pressed="'+(BH.ev.indexOf(k)>=0)+'">'+e(EV[k])+'</button>'}).join("")+'</div>'+
+  '<div class="bp-tools"><button type="button" class="btn" data-b24="hsave"'+(BH.loading?' disabled':'')+' style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Сохранить</button>'+
+  (hk?'<button type="button" class="btn" data-b24="htest"'+(BH.loading?' disabled':'')+'>Отправить проверку</button><button type="button" class="btn" data-b24="hdel"'+(BH.loading?' disabled':'')+'>Отключить</button>':'')+'</div></div>';
+ return h+'<p class="bp-foot">Еженедельный отчёт приходит по понедельникам, напоминание о мероприятии за час до начала.</p>';
+}
+function evDate(v){var d=new Date(v);return {d:d.toLocaleDateString("ru-RU",{day:"2-digit",month:"short"}).replace(".",""),t:d.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}),w:d.toLocaleDateString("ru-RU",{weekday:"long"})}}
+function evItem(x,del){var D=evDate(x.at),soon=new Date(x.at).getTime()-Date.now()<3600e3;
+ return '<div class="s24-evi'+(soon?' soon':'')+'"><span class="s24-evd">'+e(D.d)+'<small>'+e(D.t)+'</small></span><span class="t"><b>'+e(x.title)+'</b><span>'+e(D.w)+(x.place?' · 📍 '+e(x.place):'')+(x.author?' · '+e(x.author):'')+'</span>'+(x.body?'<span style="display:block;white-space:pre-wrap">'+e(x.body)+'</span>':'')+'</span>'+
+  (del?'<button type="button" class="btn" data-b24="edel" data-id="'+e(x.id)+'" style="margin-left:auto">Удалить</button>':'')+'</div>'}
+function eventsHtml(org){
+ var w=needOrg(BE,"events",org);if(w)return w;
+ var L=BE.d.events||[],f=BE.f;
+ var h='<p class="sub">Учения, собрания и проверки. Сотрудники организации увидят мероприятие на главной странице программы, а за час до начала получат напоминание в Telegram (и в Discord, если подключён вебхук).</p>'+bMsg(BE);
+ h+='<div class="bp-box" style="margin-bottom:12px"><h3>Новое мероприятие</h3><div class="bp-tools"><input class="s24-in" data-b24f="title" maxlength="80" placeholder="Название, например «Учения по задержанию»" value="'+e(f.title)+'" aria-label="Название" style="flex:2 1 260px">'+
+  '<input class="s24-in" data-b24f="at" type="datetime-local" value="'+e(f.at)+'" aria-label="Дата и время" style="flex:1 1 200px"></div>'+
+  '<div class="bp-tools"><input class="s24-in" data-b24f="place" maxlength="80" placeholder="Место (необязательно)" value="'+e(f.place)+'" aria-label="Место"></div>'+
+  '<textarea class="s24-ta" data-b24f="body" maxlength="600" rows="2" placeholder="Описание (необязательно): форма одежды, что взять с собой">'+e(f.body)+'</textarea>'+
+  '<div class="bp-tools" style="margin-top:8px"><button type="button" class="btn" data-b24="ecreate"'+(BE.loading?' disabled':'')+' style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Назначить</button></div></div>';
+ h+='<h3 style="font-size:14.5px;margin:0 0 8px">Запланировано</h3>'+(L.length?'<div class="s24-ev">'+L.map(function(x){return evItem(x,true)}).join("")+'</div>':'<p class="bp-empty">Мероприятий пока нет.</p>');
+ return h;
+}
+window.SA_B24={
+ subs:function(L){if(!online())return;L.push(["hooks","Вебхуки"]);if(flag("events"))L.push(["events","Мероприятия"])},
+ html:function(sub,org,draw){bDraw=draw;return sub==="hooks"?hooksHtml(org):eventsHtml(org)},
+ reload:function(sub){var S=sub==="hooks"?BH:BE;S.d=null;S.org=null;S.ev=null}
+};
+document.addEventListener("input",function(ev){var t=ev.target;if(!t||!t.dataset)return;
+ if(t.dataset.b24in==="url"){ev.stopPropagation();BH.url=t.value}
+ else if(t.dataset.b24f){ev.stopPropagation();BE.f[t.dataset.b24f]=t.value}},true);
+document.addEventListener("change",function(ev){var t=ev.target;if(t&&t.dataset&&t.dataset.b24f){ev.stopPropagation();BE.f[t.dataset.b24f]=t.value}},true);
+document.addEventListener("click",function(ev){
+ var b=ev.target.closest&&ev.target.closest("[data-b24],[data-b24ev]");if(!b||state.tab!=="boss")return;
+ if(b.dataset.b24ev){var k=b.dataset.b24ev,i=BH.ev.indexOf(k);if(i>=0)BH.ev.splice(i,1);else BH.ev.push(k);b.setAttribute("aria-pressed",String(i<0));return}
+ var a=b.dataset.b24;
+ if(a==="hsave"){bCall(BH,"hooks",BH.org,"set",{url:BH.url.trim(),events:BH.ev},function(){BH.url="";BH.msg="Сохранено."});bRedraw();return}
+ if(a==="htest"){bCall(BH,"hooks",BH.org,"test");bRedraw();return}
+ if(a==="hdel"){if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Точно отключить?";return}bCall(BH,"hooks",BH.org,"del",null,function(){BH.ev=null;BH.msg="Вебхук отключён."});bRedraw();return}
+ if(a==="ecreate"){var f=BE.f,d=f.at?new Date(f.at):null;
+  if(f.title.trim().length<3){BE.err="Напишите название мероприятия.";BE.msg="";bRedraw();return}
+  if(!d||isNaN(d)){BE.err="Укажите дату и время.";BE.msg="";bRedraw();return}
+  bCall(BE,"events",BE.org,"create",{title:f.title.trim(),at:d.toISOString(),place:f.place.trim(),body:f.body.trim()},function(){BE.f={title:"",at:"",place:"",body:""};BE.msg="Мероприятие назначено. Сотрудники увидят его на главной."});bRedraw();return}
+ if(a==="edel"){if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Точно удалить?";return}bCall(BE,"events",BE.org,"del",{id:b.dataset.id});bRedraw();return}
+});
+
+/* =================================================================== */
+/* ===================== Главная: мероприятия ======================== */
+function homeEvents(){
+ if(state.tab!=="home"||!flag("events"))return;
+ var L=(sys().events||[]).filter(function(x){return new Date(x.at).getTime()>Date.now()-3*3600e3});
+ var old=view.querySelector(".s24-hmev");if(old)old.remove();
+ if(!L.length)return;
+ var q=view.querySelector(".hm-q");if(!q)return;
+ var u=user()||{};
+ q.insertAdjacentHTML("afterend",'<div class="s24-hmev"><div class="hm-h">Мероприятия '+e(u.org||"")+' <small>назначает руководство</small></div><div class="s24-ev">'+L.slice(0,4).map(function(x){return evItem(x,false)}).join("")+'</div></div>');
+}
+/* за час до начала: всплывающее сообщение один раз */
+function evRemind(){
+ if(!flag("events"))return;
+ var seen=jget("bos-ev24",{}),ch=0;
+ (sys().events||[]).forEach(function(x){var t=new Date(x.at).getTime()-Date.now();if(t>0&&t<=3600e3&&!seen[x.id]){seen[x.id]=Date.now();ch=1;
+  toast("📅 Через "+Math.max(1,Math.round(t/60000))+" мин: "+x.title);if(A&&A.notify)A.notify("Скоро мероприятие",x.title+(x.place?" · "+x.place:""))}});
+ Object.keys(seen).forEach(function(k){if(Date.now()-seen[k]>7*864e5){delete seen[k];ch=1}});
+ if(ch)jset("bos-ev24",seen);
+}
+setInterval(evRemind,60000);setTimeout(evRemind,8000);
+
+/* =================================================================== */
+/* ===================== Совместный патруль ========================== */
+var PT={code:null,d:null,err:"",busy:false,join:"",sent:{},at:0,started:false};
+function myItems(){var o={};(typeof tms!=="undefined"?tms:[]).forEach(function(t){if(!t.start)return;
+ o["t"+t.start]={nick:t.nick||"",st:t.st||"",arts:t.arts||"",mode:t.mode||"",start:t.start,pausedTotal:t.pausedTotal||0,paused:t.paused&&t.paused.at?{at:t.paused.at,k:t.paused.k||""}:null,decidedAt:t.decidedAt||0,result:t.result||""}});return o}
+function ptApply(r){
+ if(!r.ok){PT.err=r.error||"Не удалось связаться с экипажем.";if(r.code==="nopatrol"){PT.code=null;PT.d=null;PT.sent={}}return}
+ PT.err="";PT.at=Date.now();
+ if(!r.code){PT.code=null;PT.d=null;PT.sent={};return}
+ if(PT.code!==r.code)PT.sent={};
+ PT.code=r.code;PT.d=r;
+ (r.items||[]).forEach(function(i){if(i.mine&&!(i.uid in PT.sent))PT.sent[i.uid]=JSON.stringify(i.data)});
+}
+function ptPaint(){var el=document.getElementById("s24pt");if(el)el.innerHTML=ptInner()}
+function ptCall(op,extra){PT.busy=true;return api("patrol",Object.assign({op:op},extra||{})).then(function(r){PT.busy=false;ptApply(r);ptPaint();return r})}
+/* свои таймеры уходят в экипаж: новые и изменённые — put, удалённые — del */
+function ptSync(){
+ if(!PT.code||PT.busy||!online()||!flag("patrol"))return;
+ var mine=myItems(),uid;
+ for(uid in mine){var s=JSON.stringify(mine[uid]);if(PT.sent[uid]!==s){var d=mine[uid];PT.sent[uid]=s;ptCall("put",{uid:uid,data:d});return}}
+ for(uid in PT.sent){if(!(uid in mine)){delete PT.sent[uid];ptCall("del",{uid:uid});return}}
+ if(Date.now()-PT.at>9000)ptCall("state");
+}
+setInterval(function(){if(document.visibilityState==="visible"||PT.code)ptSync()},4000);
+setTimeout(function(){if(online()&&flag("patrol"))ptCall("state")},9000);
+function ptInner(){
+ if(!online())return '<h2>Совместный патруль</h2><p class="s24-empty">Экипаж работает после входа в аккаунт и при подключении к интернету.</p>';
+ var h='<h2>Совместный патруль'+(mode("patrol")==="beta"?' <span class="s24-chip beta">бета</span>':'')+'</h2>';
+ if(!PT.code){
+  return h+'<p class="sub">Объединитесь с напарниками в экипаж: задержания и таймеры каждого будут видны всем в реальном времени. Создайте экипаж и передайте код или введите код напарника.</p>'+
+   '<div class="s24-row" style="margin-top:0"><button type="button" class="btn primary" data-p24="create"'+(PT.busy?' disabled':'')+'>Создать экипаж</button>'+
+   '<input class="s24-in" data-p24in="join" maxlength="7" placeholder="Код напарника" value="'+e(PT.join)+'" style="flex:0 1 160px;text-transform:uppercase;font-family:var(--f-mono,monospace)" aria-label="Код экипажа"><button type="button" class="btn" data-p24="join"'+(PT.busy?' disabled':'')+'>Войти</button></div>'+
+   (PT.err?'<p class="s24-msg err">'+e(PT.err)+'</p>':'');
+ }
+ var d=PT.d||{},M=d.members||[],I=d.items||[];
+ h+='<div class="s24-row" style="margin-top:0"><span class="s24-code" aria-label="Код экипажа">'+e(PT.code)+'</span><button type="button" class="btn" data-p24="copy">Скопировать код</button><button type="button" class="btn" data-p24="leave">Выйти из экипажа</button></div>';
+ h+='<div class="s24-mem">'+M.map(function(m){return '<span><i class="'+(m.online?'on':'')+'"></i>'+e(m.nick)+(m.me?' (вы)':'')+'<small class="s24-meta">'+e(m.org||"")+'</small></span>'}).join("")+'</div>';
+ if(!I.length)h+='<p class="s24-empty">Пока задержаний нет. Запущенные таймеры появятся здесь у всех участников.</p>';
+ else h+='<div class="s24-list">'+I.map(function(i,n){var t=i.data||{};return '<div class="s24-pti'+(i.mine?' mine':'')+'" data-p24i="'+n+'"><span><b>'+e(t.nick||"Задержанный")+'</b>'+(t.st?' · '+e(t.st):'')+'<br><small class="s24-meta">'+(t.arts?e(t.arts)+' · ':'')+(i.mine?'вы':e(i.by))+'</small></span><span class="ck" data-p24ck="'+n+'"></span></div>'}).join("")+'</div>';
+ h+=(PT.err?'<p class="s24-msg err">'+e(PT.err)+'</p>':'')+'<p class="hint">Экипаж закрывается сам через 12 часов. Код живёт, пока в экипаже есть хотя бы один человек.</p>';
+ return h;
+}
+setInterval(function(){
+ var I=PT.d&&PT.d.items;if(!I)return;
+ document.querySelectorAll("[data-p24ck]").forEach(function(el){var i=I[+el.dataset.p24ck];if(!i)return;var t=i.data||{},left=LIM_MS-elapsedOf(t),row=el.parentNode;
+  el.textContent=t.decidedAt?"мера":(left<0?"+"+fmtMs(-left):fmtMs(left))+(t.paused?" ⏸":"");
+  row.classList.toggle("done",!!t.decidedAt);row.classList.toggle("late",!t.decidedAt&&left<0);row.classList.toggle("warn",!t.decidedAt&&left>=0&&left<300000)});
+},1000);
+document.addEventListener("input",function(ev){var t=ev.target;if(t&&t.dataset&&t.dataset.p24in==="join"){ev.stopPropagation();PT.join=t.value}},true);
+document.addEventListener("keydown",function(ev){var t=ev.target;if(ev.key==="Enter"&&t&&t.dataset&&t.dataset.p24in==="join"){ev.preventDefault();var b=document.querySelector('[data-p24="join"]');if(b)b.click()}},true);
+document.addEventListener("click",function(ev){
+ var b=ev.target.closest&&ev.target.closest("[data-p24]");if(!b)return;var a=b.dataset.p24;
+ if(a==="create"){ptCall("create").then(function(r){if(r.ok)toast("Экипаж создан: "+r.code)});ptPaint();return}
+ if(a==="join"){var c=PT.join.replace(/[^A-Za-z0-9]/g,"").toUpperCase();if(c.length!==6){PT.err="Код экипажа — 6 букв и цифр.";ptPaint();return}ptCall("join",{code:c}).then(function(r){if(r.ok){PT.join="";toast("Вы в экипаже "+r.code)}});return}
+ if(a==="copy"){if(typeof copyText==="function")copyText(PT.code,b);else if(A&&A.copy){A.copy(PT.code);toast("Код скопирован")}return}
+ if(a==="leave"){if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Точно выйти?";return}ptCall("leave");return}
+});
+
+/* =================================================================== */
+/* ===================== Тактическая доска =========================== */
+var BCOL=["#e5484d","#3b82f6","#2f9e6e","#f59e0b","#8b5cf6","#111111"];
+var BD=jget("bos-board",null);if(!BD||!Array.isArray(BD.s))BD={s:[],t:""};
+var BT={tool:"a",c:BCOL[0],label:"",draft:null,msg:""};
+function bSave(){jset("bos-board",BD)}
+function r1(v){return Math.round(v*10)/10}
+function okShape(s){
+ if(!s||typeof s!=="object"||["a","f","p","x"].indexOf(s.t)<0||!Array.isArray(s.p))return null;
+ var p=s.p.slice(0,s.t==="f"?400:4).map(function(v){return Math.max(-5,Math.min(150,r1(+v||0)))});
+ if(p.length<2||p.length%2)return null;
+ var c=/^#[0-9a-f]{6}$/i.test(s.c||"")?s.c:BCOL[0];
+ return {t:s.t,c:c,p:p,l:String(s.l||"").slice(0,40)};
+}
+function arrowHead(x1,y1,x2,y2,c){var a=Math.atan2(y2-y1,x2-x1),L=3.2,w=0.5;
+ return '<polygon points="'+r1(x2)+','+r1(y2)+' '+r1(x2-L*Math.cos(a-w))+','+r1(y2-L*Math.sin(a-w))+' '+r1(x2-L*Math.cos(a+w))+','+r1(y2-L*Math.sin(a+w))+'" fill="'+c+'"/>'}
+function shapeSvg(s,i){var p=s.p,c=s.c,g='<g class="s24-sh" data-bi="'+i+'">';
+ if(s.t==="a")g+='<line x1="'+p[0]+'" y1="'+p[1]+'" x2="'+p[2]+'" y2="'+p[3]+'" stroke="'+c+'" stroke-width="1.1" stroke-linecap="round"/>'+arrowHead(p[0],p[1],p[2],p[3],c);
+ else if(s.t==="f"){var d="M"+p[0]+" "+p[1];for(var k=2;k<p.length;k+=2)d+=" L"+p[k]+" "+p[k+1];g+='<path d="'+d+'" fill="none" stroke="'+c+'" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 1.4"/>'}
+ else if(s.t==="p")g+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="2.6" fill="'+c+'" stroke="#fff" stroke-width=".6"/>'+(s.l?'<text x="'+p[0]+'" y="'+(p[1]+1.1)+'" text-anchor="middle" font-size="3" font-weight="700" fill="#fff">'+e(s.l.slice(0,2))+'</text>':'');
+ else if(s.t==="x")g+='<text x="'+p[0]+'" y="'+p[1]+'" font-size="3.6" font-weight="700" fill="'+c+'" stroke="rgba(255,255,255,.85)" stroke-width=".5" paint-order="stroke">'+e(s.l)+'</text>';
+ return g+'</g>'}
+function mapBg(){var m=view.querySelector(".s11-map");if(!m)return '<rect width="100" height="140" fill="var(--chip)"/>';
+ return m.innerHTML.replace(/\sdata-s11pin="[^"]*"/g,"").replace(/\stabindex="0"/g,"").replace(/\srole="button"/g,"")}
+function boardSvg(S,draft,bg){return '<svg class="s24-bsvg" viewBox="0 0 100 140" data-tool="'+BT.tool+'" role="img" aria-label="Тактическая доска">'+(bg||mapBg())+'<g>'+S.map(shapeSvg).join("")+(draft?shapeSvg(draft,-1):'')+'</g></svg>'}
+function boardHtml(){
+ var T=[["a","➚ Стрелка"],["f","〰 Маршрут"],["p","● Точка"],["x","T Подпись"],["e","⌫ Ластик"]];
+ return '<h2>Тактическая доска</h2><p class="sub">Нарисуйте план на схеме: стрелки, маршрут, точки сбора и подписи. Схему можно отправить напарникам ссылкой: они откроют её у себя в программе.</p>'+
+  '<div class="s24-bd"><div id="s24bdw">'+boardSvg(BD.s,null)+'</div><div>'+
+  '<div class="s24-tools">'+T.map(function(t){return '<button type="button" class="pill" data-bt24tool="'+t[0]+'" aria-pressed="'+(BT.tool===t[0])+'">'+t[1]+'</button>'}).join("")+'</div>'+
+  '<div class="s24-cols">'+BCOL.map(function(c){return '<button type="button" data-bt24col="'+c+'" style="background:'+c+'" aria-pressed="'+(BT.c===c)+'" aria-label="Цвет '+c+'"></button>'}).join("")+'</div>'+
+  '<div class="s24-row" style="margin-top:0"><input class="s24-in" data-bt24in="label" maxlength="40" placeholder="Текст для точки или подписи" value="'+e(BT.label)+'"></div>'+
+  '<div class="s24-row"><input class="s24-in" data-bt24in="title" maxlength="80" placeholder="Название схемы, например «Штурм банка»" value="'+e(BD.t)+'"></div>'+
+  '<div class="s24-row"><button type="button" class="btn" data-bt24="undo"'+(BD.s.length?'':' disabled')+'>↶ Отменить</button><button type="button" class="btn" data-bt24="clear"'+(BD.s.length?'':' disabled')+'>Очистить</button>'+(jget("bos-board-prev",null)?'<button type="button" class="btn" data-bt24="prev">Вернуть прежнюю</button>':'')+'</div>'+
+  '<div class="s24-row"><button type="button" class="btn primary" data-bt24="share"'+(BD.s.length?'':' disabled')+'>Поделиться ссылкой</button></div><div id="s24bsh" class="s24-msg">'+e(BT.msg)+'</div>'+
+  '<p class="hint">Подсказка: для точки сбора выберите «Точка» и напишите номер или букву, например «1» или «A».</p></div></div>';
+}
+function bPaint(){var w=document.getElementById("s24bdw");if(w)w.innerHTML=boardSvg(BD.s,BT.draft)}
+function bPanel(){var el=document.getElementById("s24board");if(el)el.innerHTML=boardHtml()}
+function bPoint(ev,svg){var r=svg.getBoundingClientRect();return {x:r1((ev.clientX-r.left)/r.width*100),y:r1((ev.clientY-r.top)/r.height*140)}}
+document.addEventListener("pointerdown",function(ev){
+ var svg=ev.target.closest&&ev.target.closest(".s24-bsvg");if(!svg||!svg.closest("#s24bdw"))return;
+ ev.preventDefault();var p=bPoint(ev,svg);
+ if(BT.tool==="e"){var g=ev.target.closest("[data-bi]");if(g&&+g.dataset.bi>=0){BD.s.splice(+g.dataset.bi,1);bSave();bPanel()}return}
+ if(BT.tool==="p"||BT.tool==="x"){
+  if(BT.tool==="x"&&!BT.label.trim()){toast("Напишите текст подписи справа от схемы");return}
+  if(BD.s.length>=250){toast("На доске уже 250 фигур");return}
+  BD.s.push({t:BT.tool,c:BT.c,p:[p.x,p.y],l:BT.label.trim()});bSave();bPanel();return}
+ BT.draft={t:BT.tool,c:BT.c,p:BT.tool==="a"?[p.x,p.y,p.x,p.y]:[p.x,p.y],l:""};
+ try{svg.setPointerCapture(ev.pointerId)}catch(x){}
+},true);
+document.addEventListener("pointermove",function(ev){
+ if(!BT.draft)return;var svg=document.querySelector("#s24bdw .s24-bsvg");if(!svg)return;var p=bPoint(ev,svg),d=BT.draft;
+ if(d.t==="a"){d.p[2]=p.x;d.p[3]=p.y}
+ else{var n=d.p.length;if(Math.hypot(p.x-d.p[n-2],p.y-d.p[n-1])>=1.2&&n<400)d.p.push(p.x,p.y)}
+ bPaint();
+});
+function bEnd(){var d=BT.draft;if(!d)return;BT.draft=null;
+ var ok=d.t==="a"?Math.hypot(d.p[2]-d.p[0],d.p[3]-d.p[1])>2:d.p.length>=6;
+ if(ok&&BD.s.length<250){BD.s.push(d);bSave()}bPanel()}
+document.addEventListener("pointerup",bEnd);document.addEventListener("pointercancel",bEnd);
+document.addEventListener("input",function(ev){var t=ev.target;if(!t||!t.dataset||!t.dataset.bt24in)return;ev.stopPropagation();
+ if(t.dataset.bt24in==="label")BT.label=t.value;else{BD.t=t.value;bSave()}},true);
+document.addEventListener("click",function(ev){
+ var b=ev.target.closest&&ev.target.closest("[data-bt24],[data-bt24tool],[data-bt24col]");if(!b)return;
+ if(b.dataset.bt24tool){BT.tool=b.dataset.bt24tool;bPanel();return}
+ if(b.dataset.bt24col){BT.c=b.dataset.bt24col;bPanel();return}
+ var a=b.dataset.bt24;
+ if(a==="undo"){BD.s.pop();bSave();bPanel();return}
+ if(a==="clear"){if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Точно очистить?";return}jset("bos-board-prev",{s:BD.s,t:BD.t});BD={s:[],t:""};bSave();bPanel();return}
+ if(a==="prev"){var p=jget("bos-board-prev",null);if(p&&Array.isArray(p.s)){jset("bos-board-prev",{s:BD.s,t:BD.t});BD={s:p.s.map(okShape).filter(Boolean),t:String(p.t||"")};bSave();bPanel()}return}
+ if(a==="share"){
+  if(!online()){BT.msg="Ссылка создаётся после входа в аккаунт.";bPanel();return}
+  var data=JSON.stringify({v:1,s:BD.s});
+  if(data.length>29000){BT.msg="Схема слишком большая для ссылки. Уберите часть маршрутов.";bPanel();return}
+  b.disabled=true;BT.msg="Создаём ссылку…";var m=document.getElementById("s24bsh");if(m)m.textContent=BT.msg;
+  api("share",{op:"create",kind:"board",title:BD.t||"Тактическая доска",data:data}).then(function(r){BT.msg="";
+   var box=document.getElementById("s24bsh");b.disabled=false;if(!box)return;
+   if(!r.ok){box.className="s24-msg err";box.textContent=r.error||"Не удалось создать ссылку.";return}
+   var url=/^https?:/i.test(r.url||"")?r.url:(((st()||{}).shareUrl||"")+"?s="+r.code);
+   box.className="";box.innerHTML='<div class="s24-row"><input class="s24-in" readonly value="'+e(url)+'" aria-label="Ссылка"><button type="button" class="btn primary" data-bt24cp="'+e(url)+'">Скопировать</button></div><p class="hint">Напарник вставляет ссылку в строку поиска программы. Ссылка действует '+(r.days||30)+' дней.</p>'});
+  return}
+});
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-bt24cp]");if(!b)return;if(typeof copyText==="function")copyText(b.dataset.bt24cp,b)});
+/* открыть схему по ссылке (вызывается из окна «Поделиться» этапа 10) */
+window.SA_board={open:function(sh){
+ var o=null;try{o=JSON.parse(sh.data||"null")}catch(x){}
+ var S=o&&Array.isArray(o.s)?o.s.map(okShape).filter(Boolean).slice(0,250):[];
+ if(!S.length){toast("Схема по ссылке пустая или повреждена");return}
+ if(!flag("board")){toast("Тактическая доска сейчас выключена");return}
+ var title=String(sh.title||"Тактическая доска").slice(0,80);
+ var html='<p class="sd-note">'+(sh.author?'От '+e(sh.author):'')+(sh.at?' · '+e(dt(sh.at)):'')+' · фигур: '+S.length+'</p><div style="max-width:320px;margin:0 auto">'+boardSvg(S,null,'<rect width="100" height="140" fill="var(--chip)"/>')+'</div>'+
+  '<p class="sd-note">Схема откроется на вашей доске в разделе «На месте» → «Зоны и места». Ваша текущая схема сохранится, её можно вернуть кнопкой «Вернуть прежнюю».</p><div class="sd-acts"><button type="button" class="btn" data-sd="x">Отмена</button><button type="button" class="btn primary" data-bt24open="1">Открыть на доске</button></div>';
+ window.__s24bd={s:S,t:title};
+ if(window.SA_modal)SA_modal(e(title),html);
+}};
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-bt24open]");if(!b||!window.__s24bd)return;
+ if(BD.s.length)jset("bos-board-prev",{s:BD.s,t:BD.t});BD=window.__s24bd;window.__s24bd=null;bSave();goTab("field","f_map");
+ setTimeout(function(){var el=document.getElementById("s24board");if(el)el.scrollIntoView({block:"start"})},80)});
+
+/* =================================================================== */
+/* ===================== Озвучка статей ============================== */
+var SY=window.speechSynthesis||null,TT={btn:null,q:[]};
+function voices(){try{return (SY?SY.getVoices():[]).filter(function(v){return /^ru/i.test(v.lang)})}catch(x){return []}}
+if(SY&&SY.addEventListener)SY.addEventListener("voiceschanged",function(){if(window.SA_paintSheet)SA_paintSheet()});
+function ttsStop(){TT.q=[];try{if(SY)SY.cancel()}catch(x){}if(TT.btn){TT.btn.classList.remove("on");TT.btn.textContent="🔊";TT.btn=null}}
+function chunks(t){var out=[],cur="";(String(t).match(/[^.!?;:]+[.!?;:]*\s*/g)||[]).map(function(x){return x.trim()}).filter(Boolean).forEach(function(s){if((cur+" "+s).length>220&&cur){out.push(cur);cur=s}else cur=cur?cur+" "+s:s});if(cur)out.push(cur);
+ return out.reduce(function(a,c){while(c.length>260){a.push(c.slice(0,260));c=c.slice(260)}a.push(c);return a},[])}
+function speak(text,btn){
+ if(!SY){toast("Озвучка недоступна на этом устройстве");return}
+ ttsStop();var V=voices(),v=V.filter(function(x){return x.voiceURI===C.tts.voice})[0]||V[0]||null;
+ if(!v&&!voices().length)toast("Русский голос не найден. Установите его в Windows: Параметры → Время и язык → Речь");
+ TT.q=chunks(String(text||"").slice(0,6000));TT.btn=btn||null;if(btn){btn.classList.add("on");btn.textContent="⏹"}
+ (function next(){var c=TT.q.shift();if(c==null){ttsStop();return}var u=new SpeechSynthesisUtterance(c);u.lang="ru-RU";if(v)u.voice=v;u.rate=+C.tts.rate||1;u.onend=next;u.onerror=function(){ttsStop()};SY.speak(u)})();
+}
+window.SA_speak=speak;
+function artText(a){var c=a.cloneNode(true);c.querySelectorAll("button,.chip,.jur,.chgb,.fxbar,.my-acts,svg,.s9-acts,.note-h").forEach(function(n){n.remove()});
+ var code=a.dataset.c||"",k={uk:"Уголовный кодекс",ak:"Административный кодекс",dk:"Дорожный кодекс",pk:"Процессуальный кодекс"}[a.dataset.k]||"";
+ return (k?k+", статья "+code+". ":"")+c.textContent.replace(/\s+/g," ").replace(/^\s*[\d.]+\s*/,"").trim()}
+function ttsDecor(){if(!SY||!flag("tts"))return;
+ view.querySelectorAll("article.art>.art-h:not([data-s24t])").forEach(function(h){h.setAttribute("data-s24t","1");var bug=h.querySelector(".art-bug");
+  var b='<button type="button" class="ic s24-tts" data-s24tts="1" aria-label="Прочитать статью вслух" title="Прочитать вслух">🔊</button>';
+  if(bug)bug.insertAdjacentHTML("beforebegin",b);else h.insertAdjacentHTML("beforeend",b)})}
+var ttsT=0;new MutationObserver(function(){if(ttsT)return;ttsT=requestAnimationFrame(function(){ttsT=0;ttsDecor()})}).observe(view,{childList:true,subtree:true});
+view.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s24tts]");if(!b)return;ev.preventDefault();ev.stopPropagation();
+ if(TT.btn===b){ttsStop();return}var a=b.closest("article.art");if(a)speak(artText(a),b)},true);
+window.addEventListener("beforeunload",ttsStop);
+
+/* =================================================================== */
+/* ========== Кабинет: тепловая карта активности и карточка ========== */
+var ACT=jget("bos-act24",{});if(!ACT||typeof ACT!=="object")ACT={};
+setInterval(function(){if(document.visibilityState!=="visible"||!document.hasFocus())return;var d=dkey();ACT[d]=Math.min(1440,(ACT[d]||0)+1);
+ var K=Object.keys(ACT).sort();if(K.length>130)K.slice(0,K.length-130).forEach(function(k){delete ACT[k]});jset("bos-act24",ACT)},60000);
+function heatData(){
+ var M={},al=jget("bos-alog",{}),det={};
+ [].concat(jget("bos-dlog",[])||[]).forEach(function(r){if(r&&+r.id)det[+r.id]=1});
+ [].concat(jget("bos-thist",[])||[]).forEach(function(r){if(r&&+r.start)det[+r.start]=1});
+ (typeof tms!=="undefined"?tms:[]).forEach(function(t){if(t.start)det[t.start]=1});
+ var g=function(k){return M[k]||(M[k]={a:0,d:0,m:0})};
+ Object.keys(al||{}).forEach(function(k){g(k).a=+(al[k]&&al[k].a)||0});
+ Object.keys(det).forEach(function(ts){g(dkey(new Date(+ts))).d++});
+ Object.keys(ACT).forEach(function(k){g(k).m=ACT[k]});
+ return M}
+function heatHtml(){
+ var M=heatData(),W=12,end=new Date();end.setHours(0,0,0,0);
+ var dow=(end.getDay()+6)%7,start=new Date(end);start.setDate(end.getDate()-dow-(W-1)*7);
+ var cells="",tot={a:0,d:0,days:0};
+ for(var i=0;i<W*7;i++){var d=new Date(start);d.setDate(start.getDate()+i);var k=dkey(d),x=M[k]||{a:0,d:0,m:0},fut=d>end;
+  var sc=x.a+x.d*4+Math.floor(x.m/15),l=sc<=0?0:sc<=3?1:sc<=8?2:sc<=16?3:4;
+  if(!fut&&sc>0){tot.days++;tot.a+=x.a;tot.d+=x.d}
+  cells+='<i class="'+(fut?'fut':'l'+l)+'" title="'+e(d.toLocaleDateString("ru-RU",{day:"numeric",month:"long",weekday:"short"}))+': '+(sc?'ответов '+x.a+', задержаний '+x.d+', в программе '+x.m+' мин':'нет активности')+'"></i>'}
+ return '<div class="cab-h">Активность<small>12 недель, этот компьютер</small></div><div class="s24-heat" role="img" aria-label="Тепловая карта активности за 12 недель">'+cells+'</div>'+
+  '<div class="s24-row" style="margin-top:4px;justify-content:space-between"><span class="s24-meta">Активных дней: '+tot.days+' · ответов: '+tot.a+' · задержаний: '+tot.d+'</span><span class="s24-hl">меньше <i style="background:var(--chip)"></i><i class="l1" style="background:color-mix(in srgb,var(--accent) 28%,var(--chip))"></i><i style="background:color-mix(in srgb,var(--accent) 52%,var(--chip))"></i><i style="background:color-mix(in srgb,var(--accent) 76%,var(--chip))"></i><i style="background:var(--accent)"></i> больше</span></div>'}
+window.SA_CAB24=function(){var h=heatHtml();
+ if(flag("card")&&online())h+='<div class="s24-row" style="margin:6px 0 12px"><button type="button" class="btn" data-c24="card">🪪 Карточка сотрудника для Discord</button></div>';
+ return h};
+/* статистика аккаунта: для карточки и лисы */
+var STATS={d:null,at:0,busy:false,cb:[]};
+function stats(cb){if(STATS.d&&Date.now()-STATS.at<120000){if(cb)cb(STATS.d);return}if(cb)STATS.cb.push(cb);if(STATS.busy||!online())return;STATS.busy=true;
+ api("my_stats",{}).then(function(r){STATS.busy=false;if(r.ok){STATS.d=r;STATS.at=Date.now();foxStats(r)}var L=STATS.cb;STATS.cb=[];L.forEach(function(f){f(r.ok?r:null)})})}
+function cssVar(n,d){try{var v=getComputedStyle(H).getPropertyValue(n).trim();return v||d}catch(x){return d}}
+function avatarSrc(){var i=document.querySelector("#cabBtn img");return i?i.getAttribute("src"):""}
+function drawCard(cv,d,u,img){
+ var x=cv.getContext("2d"),W=cv.width,Hh=cv.height,ac=cssVar("--accent","#FF8A3D");
+ var g=x.createLinearGradient(0,0,W,Hh);g.addColorStop(0,"#14100c");g.addColorStop(1,"#2a1a0e");x.fillStyle=g;x.fillRect(0,0,W,Hh);
+ x.fillStyle=ac;x.globalAlpha=.16;x.beginPath();x.arc(W-90,70,260,0,7);x.fill();x.globalAlpha=1;
+ x.fillStyle=ac;x.fillRect(0,0,W,8);
+ var F='"Segoe UI",system-ui,sans-serif',ax=64,ay=80,R=78;
+ x.save();x.beginPath();x.arc(ax+R,ay+R,R,0,7);x.closePath();x.fillStyle="#2b2219";x.fill();x.clip();
+ if(img)x.drawImage(img,ax,ay,R*2,R*2);else{x.fillStyle=ac;x.font="700 64px "+F;x.textAlign="center";x.textBaseline="middle";x.fillText(String((u.nick||u.login||"?")[0]).toUpperCase(),ax+R,ay+R+4)}
+ x.restore();x.strokeStyle=ac;x.lineWidth=4;x.beginPath();x.arc(ax+R,ay+R,R+2,0,7);x.stroke();
+ x.textAlign="left";x.textBaseline="alphabetic";x.fillStyle="#fff";x.font="700 46px "+F;x.fillText(String(u.nick||u.login||"").slice(0,26),270,132);
+ x.fillStyle="#d9cfc4";x.font="500 24px "+F;x.fillText([u.org,u.rankName&&u.rank!=="user"?u.rankName:""].filter(Boolean).join(" · "),270,172);
+ var lv=d.level||{n:1,name:""};x.fillStyle=ac;x.font="700 26px "+F;x.fillText("Уровень "+lv.n+(lv.name?" · "+lv.name:""),270,214);
+ var pc=lv.to>lv.from?Math.max(0,Math.min(1,(d.xp-lv.from)/(lv.to-lv.from))):1;x.fillStyle="rgba(255,255,255,.12)";x.fillRect(270,230,420,10);x.fillStyle=ac;x.fillRect(270,230,420*pc,10);
+ var w=d.week||{},T=[["Опыт",String(d.xp||0)],["Место за неделю",w.place?w.place+" из "+w.of:"—"],["Серия дней",String(d.streak||0)],["Задержаний, 7 дн.",String(d.det7||0)],["Средний тест",d.avg_p==null?"—":d.avg_p+"%"]];
+ T.forEach(function(t,i){var bx=64+i*204,by=300;x.fillStyle="rgba(255,255,255,.06)";x.fillRect(bx,by,188,110);x.fillStyle="#fff";x.font="700 36px "+F;x.fillText(t[1],bx+16,by+56);x.fillStyle="#b9ada0";x.font="500 17px "+F;x.fillText(t[0],bx+16,by+88,160)});
+ var got=(d.ach||[]).filter(function(a){return a.at});
+ x.fillStyle="#d9cfc4";x.font="600 20px "+F;x.fillText("Достижения: "+got.length+" из "+(d.ach||[]).length,64,462);
+ x.font="34px "+F;got.slice(0,14).forEach(function(a,i){x.fillText(a.icon||"🏅",64+i*52,512)});
+ x.fillStyle="#8f8377";x.font="500 18px "+F;x.fillText("Senko Assistant · Majestic RP Boston · "+new Date().toLocaleDateString("ru-RU"),64,Hh-34);
+}
+function cardOpen(){
+ var u=user();if(!u)return;
+ var o=window.SA_modal?SA_modal("Карточка сотрудника",'<div class="s24-cardv" id="s24cv"><p class="sub">Собираем статистику…</p></div><div class="sd-acts"><button type="button" class="btn" data-c24="copy" disabled>Скопировать картинку</button><button type="button" class="btn primary" data-c24="save" disabled>Сохранить PNG</button></div>',true):null;
+ if(!o)return;
+ stats(function(d){var box=document.getElementById("s24cv");if(!box)return;
+  if(!d){box.innerHTML='<p class="s24-msg err">Не удалось загрузить статистику. Проверьте интернет.</p>';return}
+  var cv=document.createElement("canvas");cv.width=1100;cv.height=600;box.innerHTML="";box.appendChild(cv);
+  var go=function(img){drawCard(cv,d,u,img);document.querySelectorAll('[data-c24="copy"],[data-c24="save"]').forEach(function(b){b.disabled=false})};
+  var src=avatarSrc();if(src&&!(H.classList.contains("sa-stream"))){var im=new Image();im.onload=function(){go(im)};im.onerror=function(){go(null)};im.src=src}else go(null)});
+}
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-c24]");if(!b)return;var a=b.dataset.c24;
+ if(a==="card"){cardOpen();return}
+ var cv=document.querySelector("#s24cv canvas");if(!cv)return;
+ if(a==="save"){var l=document.createElement("a");l.download="senko-card.png";l.href=cv.toDataURL("image/png");document.body.appendChild(l);l.click();l.remove();return}
+ if(a==="copy"){try{cv.toBlob(function(bl){navigator.clipboard.write([new ClipboardItem({"image/png":bl})]).then(function(){toast("Картинка скопирована: вставьте её в Discord")},function(){toast("Не получилось, сохраните PNG")})})}catch(x){toast("Не получилось, сохраните PNG")}}
+});
+
+/* =================================================================== */
+/* ===================== Лиса Senko ================================== */
+var FOXSVG='<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 10 L24 22 L40 22 L56 10 L52 36 C50 48 42 56 32 56 C22 56 14 48 12 36 Z" fill="#f08a2c"/><path d="M8 10 L22 24 L14 30 Z M56 10 L42 24 L50 30 Z" fill="#7a3b10" opacity=".55"/><path d="M14 36 C20 42 26 44 32 44 C38 44 44 42 50 36 C48 48 41 55 32 55 C23 55 16 48 14 36 Z" fill="#fff4ea"/><circle cx="24" cy="33" r="3" fill="#2a1a0e"/><circle cx="40" cy="33" r="3" fill="#2a1a0e"/><circle cx="25" cy="32" r="1" fill="#fff"/><circle cx="41" cy="32" r="1" fill="#fff"/><path d="M29 41 Q32 44 35 41 Q32 39 29 41 Z" fill="#2a1a0e"/></svg>';
+var FX={el:null,t:0,last:0,run:0};
+var FOXTIPS=["Ctrl+F ставит курсор в поиск с любой вкладки.","Кнопка 🔊 у статьи прочитает её вслух.","Мини-окно задержания: Ctrl+Alt+M поверх игры.","В разделе «Идеи» можно предложить, что добавить в программу.","Звёздочка у статьи кладёт её в избранное.","Мини-тест дня даёт +20 опыта и продлевает серию.","Схему на карте зон можно отправить напарнику ссылкой."];
+function foxOn(){return C.mascot&&flag("mascot")}
+function foxEl(){if(FX.el)return FX.el;var d=document.createElement("div");d.className="s24-fox noprint";d.innerHTML='<div class="b" hidden role="status" aria-live="polite"></div><button type="button" class="f" title="Лиса Senko" aria-label="Лиса Senko: совет">'+FOXSVG+'</button>';
+ document.body.appendChild(d);FX.el=d;d.querySelector(".f").addEventListener("click",function(){say(FOXTIPS[Math.floor(Math.random()*FOXTIPS.length)],true)});return d}
+function foxSync(){if(foxOn())foxEl().hidden=false;else if(FX.el)FX.el.hidden=true}
+function say(t,force){if(!foxOn())return;if(!force&&Date.now()-FX.last<15000)return;FX.last=Date.now();var d=foxEl(),b=d.querySelector(".b");
+ b.textContent=t;b.hidden=false;requestAnimationFrame(function(){b.classList.add("on")});d.classList.remove("hop");void d.offsetWidth;d.classList.add("hop");
+ clearTimeout(FX.t);FX.t=setTimeout(function(){b.classList.remove("on");setTimeout(function(){if(!b.classList.contains("on"))b.hidden=true},300)},6500)}
+window.SA_fox=say;
+var _ans=window.SA_onAns;
+window.SA_onAns=function(id,tp,ok){if(_ans)try{_ans.apply(this,arguments)}catch(x){}
+ if(ok){FX.run++;if(FX.run===5)say("5 верных ответов подряд! Так держать 🦊",true);else if(FX.run===10)say("10 подряд! Вы знаете кодекс лучше меня.",true);else if(FX.run===20)say("20 подряд, это уже уровень экзаменатора!",true)}
+ else{if(FX.run>=4)say("Серия прервалась на "+FX.run+". Эту статью я отмечу «повторить».");FX.run=0}};
+function foxStats(d){
+ var got=(d.ach||[]).filter(function(a){return a.at}),seen=jget("bos-ach24",null),ids=got.map(function(a){return a.code||a.name});
+ if(seen&&Array.isArray(seen)){var nw=got.filter(function(a){return seen.indexOf(a.code||a.name)<0});if(nw.length)say("🏆 Новое достижение: «"+nw[0].name+"»"+(nw.length>1?" и ещё "+(nw.length-1):"")+"!",true)}
+ jset("bos-ach24",ids);
+ var td=dkey();if((d.streak||0)>=3&&jget("bos-fox-streak","")!==td){jset("bos-fox-streak",td);setTimeout(function(){say("Серия "+d.streak+" "+(d.streak%10===1&&d.streak%100!==11?"день":d.streak%10>=2&&d.streak%10<=4&&(d.streak%100<10||d.streak%100>=20)?"дня":"дней")+"! Не забудьте мини-тест сегодня.")},4000)}
+}
+setTimeout(function(){foxSync();if(!foxOn())return;
+ if(!jget("bos-fox-hi",0)){jset("bos-fox-hi",1);say("Привет! Я Senko. Буду подсказывать и радоваться вашим успехам. Выключить меня можно в настройках.",true)}
+ stats()},5000);
+setInterval(function(){if(foxOn()&&document.visibilityState==="visible")stats()},10*60000);
+
+/* =================================================================== */
+/* ===================== Сезонное оформление ========================= */
+function seasonNow(){var d=new Date(),m=d.getMonth()+1,day=d.getDate();
+ if((m===10&&day>=24)||(m===11&&day<=2))return "halloween";
+ if((m===12&&day>=20)||(m===1&&day<=10))return "newyear";
+ return ""}
+var SEAS={el:null,s:null};
+function applySeason(){
+ var s=C.prev&&tester()?C.prev:(C.season&&flag("season")?seasonNow():"");
+ if(s===SEAS.s)return;SEAS.s=s;
+ if(s)H.setAttribute("data-season",s);else H.removeAttribute("data-season");
+ if(SEAS.el){SEAS.el.remove();SEAS.el=null}
+ if(s==="newyear"){var w=document.createElement("div");w.className="s24-snow";var h="";for(var i=0;i<22;i++)h+='<i style="left:'+(Math.random()*100).toFixed(1)+'%;font-size:'+(8+Math.random()*10).toFixed(0)+'px;animation-duration:'+(9+Math.random()*12).toFixed(1)+'s;animation-delay:-'+(Math.random()*20).toFixed(1)+'s">❄</i>';w.innerHTML=h;document.body.appendChild(w);SEAS.el=w}
+ else if(s==="halloween"){var b=document.createElement("div");b.className="s24-bat";b.textContent="🦇";document.body.appendChild(b);SEAS.el=b}
+}
+setInterval(applySeason,30*60000);
+
+/* =================================================================== */
+/* ===================== Мини-окно задержания: данные ================ */
+var MINI={sig:"",at:0};
+function miniPush(){
+ if(!A||!A.miniState)return;var s=st(),c=(s&&s.cfg)||{};if(!s||!(s.miniOpen||c.miniEnabled))return;
+ var T=(typeof tms!=="undefined"?tms:[]).filter(function(t){return t.start}).map(function(t){return {id:t.id,nick:t.nick||"",st:t.st||"",arts:t.arts||"",start:t.start,pausedTotal:t.pausedTotal||0,pausedAt:t.paused&&t.paused.at||0,decidedAt:t.decidedAt||0}});
+ var calc=null;try{var it=typeof basketItems==="function"?basketItems():[];if(it.length){var uk=it.filter(function(r){return r.k==="uk"}),ft=typeof finalTerm==="function"?finalTerm(it):{m:0,cut:false};
+  calc={n:it.length,stars:Math.max.apply(null,uk.map(function(r){return r.stars||0}).concat([0])),term:ft.m||0,cut:!!ft.cut,fine:it.filter(function(r){return r.k!=="uk"||!r.m}).reduce(function(a,r){return a+(r.fmax||0)},0)}}}catch(x){}
+ var d={timers:T,sel:typeof selId!=="undefined"?selId:0,calc:calc,accent:cssVar("--accent","")};
+ var sig=JSON.stringify(d);if(sig===MINI.sig&&Date.now()-MINI.at<30000)return;MINI.sig=sig;MINI.at=Date.now();A.miniState(d);
+}
+if(DESK&&A.miniState)setInterval(miniPush,1000);
+
+/* =================================================================== */
+/* ===================== Настройки =================================== */
+var REC=false;
+window.SA_s24Rows=function(row){
+ var h='<div class="sgroup">Озвучка, лиса и оформление</div>';
+ if(SY&&flag("tts")){var V=voices();
+  h+=row("Голос для озвучки статей",V.length?"Кнопка 🔊 у статьи читает её вслух. Голоса берутся из Windows.":"Русских голосов не найдено. Их можно добавить в Windows: Параметры → Время и язык → Речь → Добавить голоса.",
+   '<div class="fsctl"><select data-s24set="voice" aria-label="Голос">'+(V.length?V.map(function(v){return '<option value="'+e(v.voiceURI)+'"'+(v.voiceURI===C.tts.voice?' selected':'')+'>'+e(v.name)+'</option>'}).join(""):'<option>Нет русских голосов</option>')+'</select><button type="button" class="btn" data-s24set="test">Проверить</button></div>');
+  h+=row("Скорость чтения","",'<div class="fsctl"><input type="range" min="0.6" max="1.8" step="0.1" value="'+C.tts.rate+'" data-s24set="rate" aria-label="Скорость чтения"><output>'+(+C.tts.rate).toFixed(1)+'×</output></div>');
+ }
+ if(flag("mascot"))h+=row("Лиса Senko","Подсказки, поздравления с достижениями и сериями в углу окна.",swb('data-s24set="mascot"',C.mascot,"Лиса Senko"));
+ if(flag("season"))h+=row("Сезонное оформление","Хэллоуин (24 октября – 2 ноября) и Новый год (20 декабря – 10 января): украшения в меню и на главной.",swb('data-s24set="season"',C.season,"Сезонное оформление"));
+ return h};
+function miniRows(s){
+ var c=s.cfg||{};if(c.miniHotkey==null||!flag("mini"))return "";
+ var h='<div class="sgroup">Мини-окно задержания</div>';
+ h+=row("Мини-окно поверх игры","Маленькое окно с таймерами задержаний, статьями и итогом калькулятора. Открывается и закрывается сочетанием "+e(c.miniHotkey)+(s.miniError?". "+e(s.miniError):"."),swb('data-s24set="miniEnabled"',c.miniEnabled,"Мини-окно"));
+ h+=row("Горячая клавиша мини-окна",REC?"Нажмите сочетание клавиш… (Esc — отмена)":"Сейчас "+e(c.miniHotkey)+".",'<div class="fsctl"><button type="button" class="btn" data-s24set="rec">'+(REC?"Ждём сочетание…":"Изменить")+'</button><button type="button" class="btn" data-s24set="mini">'+(s.miniOpen?"Закрыть окно":"Открыть сейчас")+'</button></div>');
+ h+=row("Прозрачность мини-окна","",'<div class="fsctl"><input type="range" min="30" max="100" step="5" value="'+(c.miniOpacity||90)+'" data-s24set="miniOpacity" aria-label="Прозрачность мини-окна"><output>'+(c.miniOpacity||90)+'%</output></div>');
+ return h}
+var AX24=window.SA_appExtra,row=function(){return ""};
+window.SA_appExtra=function(rowFn){var h=AX24?AX24(rowFn):"";try{row=rowFn;var s=DESK?st():null;if(s)h+=miniRows(s)}catch(x){}return h};
+function aset(k,v){var r=A&&A.set?A.set(k,v):null;if(r&&r.ok===false&&r.error)toast(r.error);return r}
+function sp(){if(window.SA_paintSheet)SA_paintSheet()}
+document.addEventListener("input",function(ev){var t=ev.target;if(!t||!t.dataset||!t.dataset.s24set)return;var k=t.dataset.s24set,o=t.parentNode.querySelector("output");
+ if(k==="rate"){C.tts.rate=+t.value;saveC();if(o)o.textContent=(+t.value).toFixed(1)+"×"}
+ if(k==="miniOpacity"){if(o)o.textContent=t.value+"%";aset("miniOpacity",+t.value)}});
+document.addEventListener("change",function(ev){var t=ev.target;if(t&&t.dataset&&t.dataset.s24set==="voice"){C.tts.voice=t.value;saveC()}});
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s24set]");if(!b||b.tagName==="SELECT"||b.tagName==="INPUT")return;var k=b.dataset.s24set;
+ if(k==="test"){speak("Статья двенадцать точка восемь. Незаконное ношение оружия.",null);return}
+ if(k==="mascot"){C.mascot=!C.mascot;saveC();foxSync();if(C.mascot)say("Я снова здесь!",true);sp();return}
+ if(k==="season"){C.season=!C.season;saveC();applySeason();sp();return}
+ if(k==="miniEnabled"){aset("miniEnabled",b.getAttribute("aria-checked")!=="true");sp();return}
+ if(k==="mini"){aset("mini",!((st()||{}).miniOpen));setTimeout(sp,120);return}
+ if(k==="rec"){REC=!REC;sp();return}});
+document.addEventListener("keydown",function(ev){if(!REC)return;ev.preventDefault();ev.stopPropagation();
+ if(ev.key==="Escape"){REC=false;sp();return}
+ if(["Control","Shift","Alt","Meta"].indexOf(ev.key)>=0)return;
+ var key=ev.code&&/^Key[A-Z]$/.test(ev.code)?ev.code.slice(3):ev.code&&/^Digit\d$/.test(ev.code)?ev.code.slice(5):/^F\d{1,2}$/.test(ev.key)?ev.key:"";
+ REC=false;var mods=[];if(ev.ctrlKey)mods.push("Ctrl");if(ev.altKey)mods.push("Alt");if(ev.shiftKey)mods.push("Shift");if(ev.metaKey)mods.push("Super");
+ if(!key||!mods.length){toast("Нужно сочетание с Ctrl, Alt или Win и буквой, цифрой или F1–F12");sp();return}
+ var r=aset("miniHotkey",mods.concat(key).join("+"));if(r&&r.ok)toast("Мини-окно: "+mods.concat(key).join("+"));sp()},true);
+
+/* =================================================================== */
+/* ===================== Встраивание в render ======================== */
+function testerOk(){return online()&&tester()}
+function ideasOk(){return online()&&flag("ideas")}
+window.SA_S24={testerOk:testerOk,ideasOk:ideasOk,flag:flag};
+var R24=render;
+render=function(){
+ if(state.tab==="tester"||state.tab==="ideas"){
+  if(state.tab==="tester"?!testerOk():!ideasOk()){state.tab="home";setTimeout(function(){if(window.SA_go)SA_go("home")},0);return}
+  document.querySelectorAll(".tab").forEach(function(t){t.setAttribute("aria-selected","false")});
+  qEl.disabled=true;qc.hidden=true;qEl.placeholder="Поиск работает в разделах УК, АК, ДК, ПК";
+  var qt=document.querySelector(".qtools"),qh=document.getElementById("qh");if(qt)qt.hidden=true;if(qh)qh.hidden=true;
+  view.innerHTML=state.tab==="tester"?testerHtml():ideasHtml();
+  if(typeof updateBadge==="function")updateBadge();
+  return;
+ }
+ R24.apply(this,arguments);
+ try{
+  if(state.tab==="timer"&&flag("patrol"))view.insertAdjacentHTML("beforeend",'<section class="panel s24-sec s24-pt noprint" id="s24pt">'+ptInner()+'</section>');
+  if(state.tab==="field"&&X.sub&&X.sub.field==="f_map"&&flag("board")&&view.querySelector(".s11-map"))view.insertAdjacentHTML("beforeend",'<section class="panel s24-sec noprint" id="s24board">'+boardHtml()+'</section>');
+  ttsDecor();
+ }catch(x){}
+};
+var HX24=window.SA_homeExtra;
+window.SA_homeExtra=function(){if(HX24)HX24.apply(this,arguments);try{homeEvents()}catch(x){}};
+function applyAll(){foxSync();applySeason();if(flag("mini")===false&&A&&A.state){var s=st();if(s&&s.miniOpen)aset("mini",false)}}
+if(A&&A.onChange)A.onChange(function(){applyAll()});
+applyAll();
 })();
 </script>
 <style>
@@ -11463,7 +12255,9 @@ var I={
  gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.700 1.700 0 0 0 .3 1.800l.1.1a2 2 0 1 1-2.800 2.800l-.1-.1a1.700 1.700 0 0 0-1.800-.3 1.700 1.700 0 0 0-1 1.500V21a2 2 0 1 1-4 0v-.1a1.700 1.700 0 0 0-1.100-1.500 1.700 1.700 0 0 0-1.800.3l-.1.1a2 2 0 1 1-2.800-2.800l.1-.1a1.700 1.700 0 0 0 .3-1.800 1.700 1.700 0 0 0-1.500-1H3a2 2 0 1 1 0-4h.1a1.700 1.700 0 0 0 1.500-1.100 1.700 1.700 0 0 0-.3-1.800l-.1-.1a2 2 0 1 1 2.800-2.800l.1.1a1.700 1.700 0 0 0 1.800.3H9a1.700 1.700 0 0 0 1-1.500V3a2 2 0 1 1 4 0v.1a1.700 1.700 0 0 0 1 1.500 1.700 1.700 0 0 0 1.800-.3l.1-.1a2 2 0 1 1 2.800 2.800l-.1.1a1.700 1.700 0 0 0-.3 1.800V9a1.700 1.700 0 0 0 1.500 1H21a2 2 0 1 1 0 4h-.1a1.700 1.700 0 0 0-1.500 1z"/>',
  star:'<path d="m12 3 2.800 5.700 6.200.9-4.500 4.400 1.100 6.200L12 17.300 6.400 20.200l1.100-6.200L3 9.600l6.200-.9z"/>',
  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.500-6 8-6s7 2 8 6"/>',
- menu:'<path d="M4 6h16M4 12h16M4 18h16"/>'
+ menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
+ tester:'<path d="M9 3h6M10 3v6L4.5 18.5A2 2 0 0 0 6.2 21.5h11.6a2 2 0 0 0 1.7-3L14 9V3"/><path d="M7.5 15h9"/>',
+ ideas:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.9V16h5v-.2c0-.8.4-1.5 1-1.9A6 6 0 0 0 12 3z"/>'
 };
 function ic(k){return '<svg viewBox="0 0 24 24" aria-hidden="true">'+(I[k]||"")+'</svg>'}
 var FOX='<svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="38" fill="#090D15"/><path fill="#EEE8E4" d="M226.5 474.3C140.3 461.4 69.1 397.3 48 313.5C41.1 286.4 39.1 254.6 42.5 227.9C56.7 115.3 146.3 34 256 34C296.9 34 334.9 44.8 369.7 66.3C442.8 111.7 483.7 206.1 468.4 294.4C452.1 388.9 377.9 461.4 284.2 474.4C269.9 476.4 240.3 476.4 226.5 474.3ZM278.5 461.5C331.4 450.5 385.4 406 412.1 351.5C423.5 328.2 428.8 307.5 429.7 283C430.3 266 430.7 265.9 434.1 282.3C440.2 312.6 432.9 350.2 415 380C409.3 389.5 409.9 389.4 418 379.5C465.3 321.6 472.3 231.3 435.2 157.5C393.4 74.3 300.6 30.9 209.7 52.1C96.7 78.5 28.2 200.5 61.5 316C81.7 386.1 139.5 441.7 209.9 458.7C232.8 464.2 260.3 465.3 278.5 461.5ZM234.5 451.9C220.9 450.1 192 441.2 192 438.9C192 438.6 195 438.2 198.8 438.1C214 437.7 234.2 433 251.1 425.8C266.9 419.1 267.1 418.4 253.7 418.8C216.8 419.9 178.6 408.5 151.8 388.5C141.6 380.8 126.8 365.6 120.9 356.6C118.6 353 116.5 350.2 116.3 350.4C115.7 351 120.3 363.7 123.6 370.5C130.3 384.2 143.6 399 157.3 408C161 410.4 163.8 412.5 163.6 412.7C163 413.3 145.6 405.8 139.7 402.4C108.6 384.2 83.9 347.8 77.6 311.1C75 295.8 76.2 281.4 81.2 268.4L83.5 262.5L84.1 275C84.7 287.9 86.9 298.3 90.9 307L93 311.5L92.4 307.6C92.1 305.5 91.9 297.9 91.9 290.6C91.9 270.1 96.4 255.2 107.4 238.6C121.1 218.1 145.8 200.6 169 195.1C180.8 192.2 180.9 192.3 174.4 199.2C143 233.2 138.9 280.9 164.1 320.1C167.9 326.1 168.7 325.8 166.7 319.3C164.3 311.9 163 303.4 163 295.1L163.1 287.5L165.9 294.7C181 332.9 215.9 361.4 265 375.5C271.7 377.4 281.2 379.6 286.1 380.2C296.4 381.6 295.6 382.3 281.5 384.1C262.9 386.4 236 383.1 213.8 375.6C208.4 373.9 204 372.6 204.1 372.9C204.1 373.8 214.8 382.2 221.9 387C248.2 404.7 280.6 408.8 312.5 398.5C330.5 392.7 349.2 381.3 364.9 366.5C368.8 362.8 372 360.1 372 360.6C372 361.1 369.7 366.2 366.9 372C350.6 406 321.6 433.9 291 445C272.7 451.7 251.7 454.3 234.5 451.9ZM377 373.9C377 373.6 378.3 370.4 379.9 366.9C385.2 355.2 393.3 324.9 391.1 325C390.8 325.1 388.5 327.8 386 331.1C373 348.6 352.6 362.4 332.8 366.9C310 372.2 294.7 370.1 268.4 358.5C253.7 351.9 246.8 350 237.3 350C233.3 350 230 349.7 230 349.3C230 347.2 239.2 335.1 244.7 330.1C257.1 318.7 270.3 313.5 286.5 313.6C296.4 313.7 298.6 314.1 309 317.5C324 322.4 333 323.1 342.8 320.1C372.4 311.1 390.1 269.1 379.4 233.6C378.3 230.3 384.5 234.7 391.9 242.7C421.1 273.8 417.7 331.9 384.8 366.4C380.5 370.9 377.1 374.2 377 373.9ZM199.3 307.9C196.3 307 196.1 306.8 197.2 304.4C198.6 301.3 196.4 299 192.2 299C190.9 299 189 298.5 188 298C186.2 297.1 186.5 296.1 192.5 283.9C202.5 263.2 203.4 257.3 199.5 236C193.7 204.4 206.1 173.8 233.4 152.1C238.4 148.1 249.3 141 250.3 141C250.5 141 249.1 145.4 247.4 150.8C241.6 168.3 242 170 249 156.5C268.7 118.5 293.4 77.7 299.2 73.5C305.2 69.3 310.8 74.1 319.3 90.6C339.8 130.8 342 173.5 325 199.9L321 206L327.9 206C331.6 206 338.1 206.9 342.4 208C349.8 209.9 366 217.4 366 219C366 219.4 363.7 220 360.9 220.3C352.9 221.3 343 224.8 329.2 231.5L316.5 237.7L322.2 238.9C330.5 240.7 339.6 245.6 345.9 251.7C348.9 254.6 351.1 257.2 350.8 257.5C350.5 257.8 347.2 257.3 343.4 256.3C333 253.8 312.1 254 300.8 256.8C288.6 259.8 277.9 264.1 268 270C256.9 276.6 256.6 277.1 264.2 275.2C274.2 272.7 291.9 273.1 299.9 275.9C312.4 280.3 322.5 289.3 326.5 299.5C327.3 301.8 327.5 302.7 326.7 301.6C317.1 287.3 306 281.1 288.5 280.2C272.4 279.5 258.9 283.7 237 296.3C216.6 308.1 216.2 308.3 209.1 308.6C205.5 308.8 201.1 308.5 199.3 307.9ZM412.2 260.6C402.2 228.6 375.6 199 349.5 191.1C347.3 190.4 345 189.7 344.3 189.5C343.5 189.2 343.8 187 345.2 181.8C346.9 175.9 347.3 171.5 347.3 159.2L347.3 144L350.9 144.6C367 147.3 381.5 153.6 392.3 162.5C396.1 165.6 399 168.3 398.8 168.5C398.6 168.7 396 168.2 393 167.4C389.6 166.5 383.9 166.1 378.1 166.2L368.7 166.5L374.6 168.9C386.5 173.7 396.1 180.2 406.6 190.5C421.2 204.9 429.9 219.2 435.4 238.3C437.6 245.9 440.2 260 439.5 260.8C439.4 260.9 437.4 257.2 435.2 252.6C429.5 240.6 423.9 232.7 415.2 224.2C411.1 220.2 407.6 217 407.5 217.2C407.3 217.4 408.2 220.7 409.5 224.5C413.5 236.4 415.1 246.6 414.8 257.8L414.5 268.2L412.2 260.6ZM236.2 251.9C240.4 248.6 245.1 244.3 246.6 242.2C248.1 240.2 250.9 236.5 252.7 234.1C254.5 231.7 255.8 229.5 255.6 229.3C254.9 228.6 244.1 233.8 238.4 237.6C231.8 242 227.8 247.8 225 256.9C222.5 264.9 222.5 265.2 225.8 261.1C227.2 259.3 231.9 255.1 236.2 251.9ZM296.8 193.5C314.5 185 322 171.2 322 146.5C322 140.4 321.3 131.4 320.4 126.5C317.7 110.4 308.2 85.8 304.3 84.3C299.7 82.5 287.8 107.4 272.1 152L268 163.5L276.3 155C280.8 150.3 288 142.7 292.3 138L300 129.5L300 137.5C300 150.3 295.5 164.5 288 175.8L285.7 179.1L291.4 176.6C294.5 175.2 298.5 173.1 300.1 171.9C304 169.2 304.4 169.7 302.5 175C300.4 181 297.4 185.7 291.6 191.8C285.9 197.9 286.9 198.3 296.8 193.5ZM204.2 171.9C203.7 170.6 200.5 162.2 197.1 153.2C183.1 116.2 176.1 91.5 178 86.4C179.8 81.7 187.3 84.4 208.9 97.7C226.1 108.3 252 127.1 252 128.9C252 129.3 249.1 131.2 245.6 133.2C231.3 141.5 219.2 153 209.8 167.2C205.3 174 205 174.3 204.2 171.9Z"/></svg>';
@@ -11488,7 +12282,9 @@ var D={
  learn:["Обучение","Тренажёр и карточки","Обучение","Тренажёр и карточки по кодексам, разбор ситуаций «Что делать, если…», частые ошибки и обучение по программе."],
  apps:["Мои инструменты","Свои калькуляторы и памятки","Мои инструменты","Свои калькуляторы по формуле, памятки и наборы статей. Создаются за минуту и хранятся у вас."],
  ref:["Справочник","Шпаргалка, неприкосновенные","Справочник","Шпаргалка, неприкосновенные лица, охраняемые места и регламент передачи дел."],
- boss:["Руководство","Панель руководителя","Панель руководителя","Сотрудники организации, рейтинг недели, смены и контрольные тесты."]
+ boss:["Руководство","Панель руководителя","Панель руководителя","Сотрудники организации, рейтинг недели, смены и контрольные тесты."],
+ ideas:["Идеи","Предложить и проголосовать","Идеи","Предложите, что добавить в программу, и голосуйте за идеи других. Самые популярные разработчик берёт в работу."],
+ tester:["Панель тестера","Задания и бета-версии","Панель тестера","Задания от разработчика, экспериментальные функции и ранние версии программы."]
 };
 var X=window.SA_X||{role:"off"};
 var CODES=["uk","ak","dk","pk","gen","laws"], WORKS=["timer","calc","tools","field","sup","def","rp","dept","apps"], DEV=["ref","learn"];
@@ -11528,6 +12324,9 @@ function navHtml(){
  h+='<div class="sd-g">Начало</div>'+item("home");
  grp("Кодексы и законы",CODES); grp("Работа",WORKS); grp("Развитие",DEV);
  if(bossOk()) h+='<div class="sd-g">Руководство</div>'+item("boss");
+ var S24=window.SA_S24;
+ if(S24&&S24.ideasOk()) h+='<div class="sd-g">Сообщество</div>'+item("ideas");
+ if(S24&&S24.testerOk()) h+='<div class="sd-g">Тестирование</div>'+item("tester");
  return h;
 }
 function roleHtml(){

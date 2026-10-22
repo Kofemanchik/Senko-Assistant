@@ -268,7 +268,8 @@
   var NAV = [
     ["Обзор", [["dash", "i-home", "Сводка", "Цифры и режимы"], ["health", "i-pulse", "Состояние", "Сервисы, версии, поиск"]]],
     ["Люди", [["users", "i-users", "Пользователи", "Поиск и действия"], ["staff", "i-key", "Роли и доступ", "Модераторы и руководство"], ["queue", "i-inbox", "Заявки и сбросы", "Новички и пароли", "queue"]]],
-    ["Работа", [["reports", "i-file", "Рапорты", "Рапорты сотрудников", "reports"], ["rating", "i-trophy", "Рейтинг", "Неделя и контрольные"], ["news", "i-mega", "Рассылки", "Сообщения в программе", null, 1], ["bugs", "i-bug", "Ошибки", "Сообщения пользователей", "bugs", 1]]],
+    ["Работа", [["reports", "i-file", "Рапорты", "Рапорты сотрудников", "reports"], ["rating", "i-trophy", "Рейтинг", "Неделя и контрольные"], ["news", "i-mega", "Рассылки", "Сообщения в программе", null, 1], ["bugs", "i-bug", "Ошибки", "Сообщения пользователей", "bugs", 1], ["ideas", "i-mega", "Идеи", "Предложения пользователей"]]],
+    ["Тестирование", [["beta", "i-shield", "Тестеры", "Роль, задания, функции"]]],
     ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1]]],
     ["Сервис", [["console", "i-term", "Консоль бота", "Любая команда"]]],
   ];
@@ -443,7 +444,7 @@
         if (!r.ok) { left.textContent = ""; left.appendChild(errMsg(r)); return r; }
         var old = el.querySelector(".ph");
         if (old) old.remove();
-        var P = h("div", { class: "pills" }, pill(r.user.rankName, r.user.rank === "user" ? "" : "acc"), r.user.banned ? pill("заблокирован", "bad") : null, r.user.approval !== "ok" ? pill("ждёт подтверждения", "warn") : null);
+        var P = h("div", { class: "pills" }, pill(r.user.rankName, r.user.rank === "user" ? "" : "acc"), r.user.beta ? pill("бета-тестер", "acc") : null, r.user.banned ? pill("заблокирован", "bad") : null, r.user.approval !== "ok" ? pill("ждёт подтверждения", "warn") : null);
         head(el, r.user.login, r.user.nick + " · " + r.user.static + " · " + r.user.org, P);
         el.insertBefore(el.querySelector(".ph"), el.children[1]);
         if (!right.parentNode) el.appendChild(h("div", { class: "ubox" }, left, right));
@@ -484,6 +485,9 @@
         acts.appendChild(act("Организация", [{ k: "o", label: "Новая организация", type: "select", options: DEPTS.map(function (d) { return [d, d]; }), value: u.org }], function (v) { return "/setorg " + L + " " + v.o; }));
         if (u.approval !== "ok") acts.appendChild(act("Принять заявку", null, function () { return "/approve " + L; }));
         acts.appendChild(act("Завершить сессии", null, function () { return "/kick " + L; }));
+        acts.appendChild(btn(u.beta ? "Снять роль «Бета-тестер»" : "Выдать роль «Бета-тестер»", function () {
+          api("beta_set", { login: L, on: !u.beta }).then(function (y) { toast(y.ok ? (u.beta ? "Роль тестера снята." : "Роль тестера выдана.") : y.error, !y.ok); load(); });
+        }, "btn-sm"));
         if (u.banned) acts.appendChild(act("Разблокировать", null, function () { return "/unban " + L; }));
         else {
           acts.appendChild(act("Блокировка на срок", [{ k: "d", label: "Срок", type: "select", options: [["30m", "30 минут"], ["2h", "2 часа"], ["12h", "12 часов"], ["1d", "1 день"], ["3d", "3 дня"], ["7d", "7 дней"], ["14d", "14 дней"], ["30d", "30 дней"]], value: "1d" }, { k: "t", label: "Причина", max: 200 }],
@@ -887,6 +891,152 @@
     }
     head(el, "Реклама", "Баннеры на сайте и на главной странице программы. Изменения видны в течение 10 минут.",
       h("div", { class: "row" }, btn("Обновить", load, "btn-sm", "i-refresh"), btn("Добавить баннер", function () { adEdit(null, load); }, "btn-sm btn-p", "i-ad")));
+    el.appendChild(box);
+    return load();
+  };
+
+  // 2.4: бета-тестеры (роль, задания, режимы функций) и идеи пользователей
+  var FLAG_MODE = [["all", "всем"], ["beta", "только тестерам"], ["off", "выключено"]];
+  function betaTask(t, after) {
+    var f = h("form", { novalidate: true }), err = h("div", { class: "auth-err" });
+    var ti = h("input", { maxlength: 120, value: t ? t.title : "", placeholder: "Например: проверить мини-окно задержания" });
+    var bo = h("textarea", { maxlength: 1500, placeholder: "Что сделать и на что смотреть" });
+    bo.value = t ? t.body || "" : "";
+    var cl = h("select", null, h("option", { value: "", text: "открыто" }), h("option", { value: "1", text: "закрыто" }));
+    cl.value = t && t.closed ? "1" : "";
+    f.appendChild(h("label", { class: "fld" }, h("span", { text: "Что проверить" }), ti));
+    f.appendChild(h("label", { class: "fld" }, h("span", { text: "Подробности" }), bo, h("span", { class: "hint", text: t ? "" : "Тестеры с Telegram получат уведомление." })));
+    if (t) f.appendChild(h("label", { class: "fld" }, h("span", { text: "Состояние" }), cl));
+    f.appendChild(err);
+    f.appendChild(h("div", { class: "dlg-f" }, btn("Отмена", closeDlg), h("button", { type: "submit", class: "btn btn-p", text: t ? "Сохранить" : "Создать" })));
+    f.addEventListener("submit", function (e) {
+      e.preventDefault();
+      api("beta_task_save", { id: t ? t.id : 0, title: ti.value, body: bo.value, closed: cl.value === "1" }).then(function (y) {
+        if (!y.ok) { err.textContent = y.error; return; }
+        closeDlg(); toast(t ? "Задание сохранено." : "Задание создано."); after();
+      });
+    });
+    dlg(t ? "Задание: " + t.title : "Новое задание", f, true);
+  }
+  function betaResults(t) {
+    dlg("Результаты: " + t.title, h("div", { class: "load", text: "Загружаю…" }), true);
+    api("beta_task", { id: t.id }).then(function (r) {
+      if (!r.ok) return dlg("Результаты", errMsg(r));
+      dlg("Результаты: " + t.title, r.results.length ? h("div", { class: "tbl-wrap", style: "box-shadow:none" }, h("table", { class: "tbl" }, h("tbody", null, r.results.map(function (x) {
+        return h("tr", { style: "cursor:default" }, h("td", null, pill(x.status === "ok" ? "работает" : "есть проблема", x.status === "ok" ? "on" : "bad")),
+          h("td", null, h("b", { text: x.login }), h("div", { class: "muted small", text: x.nick })), h("td", { class: "small", text: x.comment || "—", style: "white-space:pre-wrap" }), h("td", { class: "mono small muted", text: fmt(x.at) }));
+      })))) : h("p", { class: "muted", text: "Пока никто не отметил результат." }), true);
+    });
+  }
+  PAGES.beta = function (el) {
+    var box = h("div");
+    function load() {
+      box.textContent = "";
+      box.appendChild(h("div", { class: "load", text: "Загружаю…" }));
+      return api("beta_list").then(function (r) {
+        box.textContent = "";
+        if (!r.ok) return box.appendChild(errMsg(r));
+        var g = h("div", { class: "grid g2" });
+        // тестеры
+        var U = card("Бета-тестеры", "Видят «Панель тестера» в программе, получают задания и функции в режиме «только тестерам».");
+        var gi = h("input", { maxlength: 40, placeholder: "логин", spellcheck: "false" });
+        var gf = h("form", { class: "row", novalidate: true }, gi, h("button", { type: "submit", class: "btn btn-sm btn-p", text: "Выдать роль" }));
+        gf.addEventListener("submit", function (e) {
+          e.preventDefault();
+          var L = gi.value.trim(); if (!L) return;
+          api("beta_set", { login: L, on: true }).then(function (y) { toast(y.ok ? "Роль тестера выдана: " + L + "." : y.error, !y.ok); if (y.ok) load(); });
+        });
+        U.appendChild(gf);
+        if (!r.users.length) U.appendChild(h("p", { class: "muted", style: "margin-top:12px", text: "Тестеров пока нет. Роль можно выдать здесь, на странице пользователя или командой бота /beta логин on." }));
+        else U.appendChild(h("div", { class: "tbl-wrap", style: "box-shadow:none;margin-top:12px" }, h("table", { class: "tbl" }, h("tbody", null, r.users.map(function (u) {
+          return h("tr", { on: { click: function (e) { if (e.target.closest("button")) return; location.hash = "#user/" + encodeURIComponent(u.login); } } },
+            h("td", null, h("b", { text: u.login }), h("div", { class: "muted small", text: u.nick + " · " + u.org })),
+            h("td", { class: "small muted", text: (u.app_version ? "v" + u.app_version + " · " : "") + "отметок: " + u.results }),
+            h("td", { class: "small muted", text: u.last_seen ? ago(u.last_seen) : "—" }),
+            h("td", null, btn("Снять", function () {
+              confirmDlg("Снять роль тестера", "Снять роль «Бета-тестер» с " + u.login + "? «Панель тестера» у него пропадёт.", "Снять", function () {
+                api("beta_set", { login: u.login, on: false }).then(function (y) { toast(y.ok ? "Роль снята." : y.error, !y.ok); load(); });
+              }, true);
+            }, "btn-sm")));
+        })))));
+        g.appendChild(U);
+        // функции
+        var F = card("Функции 2.4", r.canFlags ? "«Только тестерам» — функция видна лишь бета-тестерам. Изменения доходят до программы за минуту." : "Режимы меняет владелец.");
+        Object.keys(r.defs).forEach(function (k) {
+          var cur = r.flags[k], ctl;
+          if (r.canFlags) {
+            ctl = h("select", { style: "max-width:180px" }, FLAG_MODE.map(function (m) { return h("option", { value: m[0], text: m[1] }); }));
+            ctl.value = cur;
+            ctl.addEventListener("change", function () { api("flags_set", { key: k, mode: ctl.value }).then(function (y) { toast(y.ok ? "Сохранено." : y.error, !y.ok); if (!y.ok) ctl.value = cur; else cur = ctl.value; }); });
+          } else ctl = pill(FLAG_MODE.filter(function (m) { return m[0] === cur; })[0][1], cur === "all" ? "on" : cur === "off" ? "off" : "acc");
+          F.appendChild(h("div", { class: "row", style: "justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)" }, h("span", { text: r.defs[k] }), ctl));
+        });
+        g.appendChild(F);
+        box.appendChild(g);
+        // задания
+        var T = card("Задания для тестеров", "Тестеры отмечают в программе: «работает» или «есть проблема» с комментарием.");
+        T.style.marginTop = "14px";
+        T.appendChild(h("div", { class: "row", style: "margin-bottom:12px" }, btn("Новое задание", function () { betaTask(null, load); }, "btn-sm btn-p")));
+        if (!r.tasks.length) T.appendChild(h("p", { class: "muted", text: "Заданий нет." }));
+        else T.appendChild(h("div", { class: "tbl-wrap", style: "box-shadow:none" }, h("table", { class: "tbl" }, h("tbody", null, r.tasks.map(function (t) {
+          return h("tr", { style: "cursor:default" + (t.closed ? ";opacity:.6" : "") },
+            h("td", null, h("b", { text: t.title }), t.body ? h("div", { class: "muted small", text: t.body.length > 140 ? t.body.slice(0, 140) + "…" : t.body }) : null),
+            h("td", null, h("div", { class: "pills" }, t.closed ? pill("закрыто", "off") : null, pill("✓ " + t.ok_n, "on"), pill("✗ " + t.bad_n, t.bad_n ? "bad" : ""))),
+            h("td", null, h("div", { class: "row", style: "gap:6px;flex-wrap:nowrap" },
+              btn("Результаты", function () { betaResults(t); }, "btn-sm"),
+              btn("Изменить", function () { betaTask(t, load); }, "btn-sm"),
+              btn("Удалить", function () { confirmDlg("Удалить задание", "Удалить «" + t.title + "» вместе с отметками тестеров?", "Удалить", function () { api("beta_task_delete", { id: t.id }).then(function (y) { toast(y.ok ? "Задание удалено." : y.error, !y.ok); load(); }); }, true); }, "btn-sm btn-d"))));
+        })))));
+        box.appendChild(T);
+      });
+    }
+    head(el, "Тестеры", "Роль «Бета-тестер», задания и функции, которые видят только тестеры", btn("Обновить", load, "btn-sm", "i-refresh"));
+    el.appendChild(box);
+    return load();
+  };
+  var IDEAS = { status: "", sort: "top" };
+  var IDEA_PILL = { new: "", work: "acc", done: "on", no: "off" };
+  function ideaEdit(x, st, after) {
+    var s = h("select", null, Object.keys(st).map(function (k) { return h("option", { value: k, text: st[k] }); }));
+    s.value = x.status;
+    var a = h("textarea", { maxlength: 600, placeholder: "Необязательно. Автор увидит ответ в программе." });
+    a.value = x.answer || "";
+    var err = h("div", { class: "auth-err" });
+    var f = h("form", { novalidate: true }, h("p", { text: x.text, style: "white-space:pre-wrap;margin-bottom:12px" }),
+      h("label", { class: "fld" }, h("span", { text: "Статус" }), s), h("label", { class: "fld" }, h("span", { text: "Ответ автору" }), a), err,
+      h("div", { class: "dlg-f" }, btn("Отмена", closeDlg), h("button", { type: "submit", class: "btn btn-p", text: "Сохранить" })));
+    f.addEventListener("submit", function (e) {
+      e.preventDefault();
+      api("ideas_set", { id: x.id, status: s.value, answer: a.value }).then(function (y) { if (!y.ok) { err.textContent = y.error; return; } closeDlg(); toast("Сохранено. Автор получит уведомление в программе."); after(); });
+    });
+    dlg("Идея №" + x.id, f, true);
+  }
+  PAGES.ideas = function (el) {
+    var box = h("div"), bar = h("div", { class: "row", style: "margin-bottom:14px" });
+    function load() {
+      box.textContent = "";
+      box.appendChild(h("div", { class: "load", text: "Загружаю…" }));
+      return api("ideas_list", IDEAS).then(function (r) {
+        box.textContent = ""; bar.textContent = "";
+        if (!r.ok) return box.appendChild(errMsg(r));
+        [["", "Все"]].concat(Object.keys(r.statuses).map(function (k) { return [k, r.statuses[k]]; })).forEach(function (o) {
+          bar.appendChild(btn(o[1], function () { IDEAS.status = o[0]; load(); }, "btn-sm" + (IDEAS.status === o[0] ? " btn-p" : "")));
+        });
+        bar.appendChild(btn(IDEAS.sort === "top" ? "Сначала популярные" : "Сначала новые", function () { IDEAS.sort = IDEAS.sort === "top" ? "new" : "top"; load(); }, "btn-sm"));
+        if (!r.ideas.length) return box.appendChild(h("div", { class: "card" }, h("p", { text: "Идей нет." })));
+        box.appendChild(h("div", { class: "grid g2" }, r.ideas.map(function (x) {
+          return h("div", { class: "card" },
+            h("div", { class: "row", style: "justify-content:space-between;margin-bottom:8px" }, h("div", { class: "pills" }, pill(r.statuses[x.status] || x.status, IDEA_PILL[x.status]), pill("▲ " + x.votes)), h("span", { class: "muted small", text: ago(x.at) })),
+            h("p", { text: x.text, style: "white-space:pre-wrap;word-break:break-word" }),
+            x.answer ? h("p", { class: "small", style: "margin-top:8px;padding:8px 10px;border-left:3px solid var(--accent);background:var(--soft)", text: "Ответ: " + x.answer }) : null,
+            h("p", { class: "muted small", style: "margin-top:8px", text: x.login ? x.login + " · " + x.nick + " · " + x.org : "автор удалён" }),
+            h("div", { class: "row", style: "margin-top:10px" }, btn("Статус и ответ", function () { ideaEdit(x, r.statuses, load); }, "btn-sm btn-p"),
+              btn("Удалить", function () { confirmDlg("Удалить идею", "Удалить идею вместе с голосами?", "Удалить", function () { api("ideas_delete", { id: x.id }).then(function (y) { toast(y.ok ? "Идея удалена." : y.error, !y.ok); load(); }); }, true); }, "btn-sm btn-d")));
+        })));
+      });
+    }
+    head(el, "Идеи", "Предложения пользователей из программы: голоса, статус и ответ автору", btn("Обновить", load, "btn-sm", "i-refresh"));
+    el.appendChild(bar);
     el.appendChild(box);
     return load();
   };

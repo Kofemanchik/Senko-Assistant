@@ -206,6 +206,7 @@ function pub(p) {
     telegram: p.telegram,
     phone: p.phone,
     needLegal: p.legal_version !== LEGAL_VERSION,
+    beta: !!p.beta,
   };
 }
 
@@ -353,6 +354,7 @@ async function register(b, ip) {
   } catch (e) {
     console.error("notify register", e);
   }
+  await postHook(p.org, "join", pend ? "🆕 Заявка в организацию" : "🆕 Новый сотрудник", `**${esc(p.nick)}** (статик ${esc(p.static_id)}) зарегистрировался в Senko Assistant${pend ? " и ждёт подтверждения руководства: /pending в боте или панель руководителя в программе." : "."}`, 0x2e7d4f);
   if (pend) {
     try {
       await askApproval(p);
@@ -808,7 +810,7 @@ async function api(req) {
     return J(fail("Некорректный запрос."), 400);
   }
   if (!b || typeof b !== "object") return J(fail("Некорректный запрос."), 400);
-  if (b.action !== "sync" && b.action !== "xfer" && !((b.action === "ai_ask" || b.action === "panel") && raw.length <= 40000) && !(b.action === "panel" && b.op === "ads_save" && raw.length <= 700000) && raw.length > 8192) return J(fail("Слишком большой запрос."), 413);
+  if (b.action !== "sync" && b.action !== "xfer" && !((b.action === "ai_ask" || b.action === "panel") && raw.length <= 40000) && !(b.action === "panel" && b.op === "ads_save" && raw.length <= 700000) && !(b.action === "bug_report" && raw.length <= 700000) && !(b.action === "share" && raw.length <= 40000) && raw.length > 8192) return J(fail("Слишком большой запрос."), 413);
   const ip = req.headers.get("cf-connecting-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
   switch (b.action) {
     case "register":
@@ -880,6 +882,18 @@ async function api(req) {
       return J(await resetComplete(b, ip));
     case "ads":
       return J(await adsPublic(b));
+    case "status":
+      return J(await statusApi());
+    case "beta":
+      return J(await betaApi(b));
+    case "hooks":
+      return J(await hooksApi(b));
+    case "events":
+      return J(await eventsApi(b));
+    case "ideas":
+      return J(await ideasApi(b));
+    case "patrol":
+      return J(await patrolApi(b));
     default:
       return J(fail("Неизвестное действие."), 400);
   }
@@ -887,7 +901,7 @@ async function api(req) {
 
 // ───────────── Этап 10: ссылки «Поделиться», перенос по коду, поиски без результата ─────────────
 const SHARE_DAYS = 30; // сколько живёт ссылка на расчёт или набор
-const SHARE_KINDS = { calc: "Расчёт", set: "Набор статей" };
+const SHARE_KINDS = { calc: "Расчёт", set: "Набор статей", board: "Тактическая доска" };
 const SHARE_ID_RE = /^(uk|ak|dk)[0-9a-zа-яё.]{1,12}-[0-9a-zа-яё.]{0,6}$/i;
 const XFER_MIN = 15; // сколько действует код переноса
 const XFER_BYTES = 900000;
@@ -908,8 +922,11 @@ async function shareApi(b) {
     const kind = String(b.kind || "");
     if (!SHARE_KINDS[kind]) return fail("Неизвестный вид ссылки.");
     const ids = (Array.isArray(b.ids) ? b.ids : []).map((x) => clean(x, 30)).filter((x) => SHARE_ID_RE.test(x)).slice(0, 40);
-    if (!ids.length) return fail("Добавьте статьи, чтобы поделиться.");
-    const body = cleanText(b.text, 3000);
+    // 2.4: доска передаёт рисунок (JSON) вместо статей
+    const board = kind === "board" ? String(b.data == null ? "" : b.data) : "";
+    if (kind === "board" && (board.length < 10 || board.length > 30000 || !/^\{[\s\S]*\}$/.test(board))) return fail("Доска пустая или слишком большая.");
+    if (!ids.length && kind !== "board") return fail("Добавьте статьи, чтобы поделиться.");
+    const body = kind === "board" ? board : cleanText(b.text, 3000);
     if (!(await hit(`sh:${p.id}`, 30, 3600))) return fail(RATE_MSG, { code: "rate" });
     let code = "";
     for (let i = 0; i < 5 && !code; i++) {
@@ -931,7 +948,7 @@ async function shareApi(b) {
       : [];
     if (!r) return fail("Ссылка не найдена или устарела: ссылки действуют " + SHARE_DAYS + " дней.");
     await sql`update shares set views = views + 1 where code = ${code}`;
-    return { ok: true, share: { code, kind: r.kind, title: r.title, ids: r.ids, author: r.author, at: new Date(r.created_at).getTime() } };
+    return { ok: true, share: { code, kind: r.kind, title: r.title, ids: r.ids, author: r.author, at: new Date(r.created_at).getTime(), data: r.kind === "board" ? r.body : undefined } };
   }
   return fail("Неизвестное действие.");
 }
@@ -947,7 +964,7 @@ async function shareView(req, url) {
     : [];
   if (!r) return new Response("Senko Assistant\n\nСсылка не найдена или устарела: ссылки действуют " + SHARE_DAYS + " дней.", { status: 404, headers: head });
   await db()`update shares set views = views + 1 where code = ${code}`;
-  const t = `Senko Assistant · ${SHARE_KINDS[r.kind] || "Ссылка"}${r.title ? ": " + r.title : ""}\nОт: ${r.author} · ${fmtDate(r.created_at)}\n\n${r.body || ""}\n\n` +
+  const t = `Senko Assistant · ${SHARE_KINDS[r.kind] || "Ссылка"}${r.title ? ": " + r.title : ""}\nОт: ${r.author} · ${fmtDate(r.created_at)}\n\n${r.kind === "board" ? "Схема на карте зон: откройте её в программе." : r.body || ""}\n\n` +
     `Открыть в программе: скопируйте эту ссылку и вставьте в строку поиска Senko Assistant.\nКод: ${code}`;
   return new Response(t, { status: 200, headers: head });
 }
@@ -1078,7 +1095,12 @@ async function sysFor(p) {
                           where t.org = ${p.org} and not t.closed and t.due_at > now() and t.author_id is distinct from ${p.id}
                             and not exists (select 1 from control_results r where r.test_id = t.id and r.user_id = ${p.id})
                           order by t.due_at limit 5`;
+  const flags = await flagsNow();
+  const events = flags.events === "off" ? [] : (await eventsFor(p.org, 14)).slice(0, 5).map((e) => evOut(e, p));
   return {
+    flags,
+    tester: isTester(p),
+    events,
     controls: ctrl.map((t) => ({ id: String(t.id), title: t.title, topics: t.topics, n: t.n, due: t.due_at })),
     maintenance: m && m.on ? { on: true, text: m.text || "", exempt: p.rank === "owner" || p.rank === "moderator" } : { on: false },
     notices: rows.map((r) => ({
@@ -1125,6 +1147,9 @@ async function bugReport(b) {
       reply_markup: { inline_keyboard: [[{ text: "✉️ Ответить", callback_data: `bg:${r.id}` }]] },
     });
     if (log) await sendFile(OWNER_TG, `bug-${r.id}-log.txt`, log, `📎 Журнал к сообщению #${r.id}`, "text/plain");
+    // 2.4: скриншот окна программы (тестеры и все, кто поставил галочку)
+    const m = /^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=]{100,})$/.exec(String(b.shot || ""));
+    if (m && m[2].length <= 680000) await sendPhoto(OWNER_TG, Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0)), `bug-${r.id}.${m[1] === "png" ? "png" : "jpg"}`, `📷 Скриншот к сообщению #${r.id}${p.beta ? " · 🧪 тестер" : ""}`);
   }
   return { ok: true, id: String(r.id) };
 }
@@ -1227,6 +1252,22 @@ async function sendFile(chat, name, text, caption, type = "application/json") {
     return await r.json();
   } catch (e) {
     console.error("telegram sendDocument", String(e).split(BOT_TOKEN).join("***"));
+    return null;
+  }
+}
+
+async function sendPhoto(chat, bytes, name, caption) {
+  if (!BOT_TOKEN) return null;
+  const fd = new FormData();
+  fd.append("chat_id", String(chat));
+  fd.append("caption", caption);
+  fd.append("parse_mode", "HTML");
+  fd.append("photo", new Blob([bytes], { type: /png$/.test(name) ? "image/png" : "image/jpeg" }), name);
+  try {
+    const r = await fetch(`${TG_API}/bot${BOT_TOKEN}/sendPhoto`, { method: "POST", body: fd, signal: AbortSignal.timeout(30000) });
+    return await r.json();
+  } catch (e) {
+    console.error("telegram sendPhoto", String(e).split(BOT_TOKEN).join("***"));
     return null;
   }
 }
@@ -1529,6 +1570,7 @@ async function ctrlApi(b) {
     const [t] = await sql`insert into control_tests (org, author_id, author, title, topics, n, due_at)
                           values (${org}, ${p.id}, ${p.nick || p.login}, ${title}, ${topics}, ${n}, now() + make_interval(days => ${days})) returning id`;
     await audit(p.login, "ctrl_create", org, { id: t.id, title, topics, n, days });
+    await postHook(org, "ctrl", "📋 Контрольный тест: " + title, `Вопросов: ${n}, срок: ${days} дн. Пройти можно в программе: сверху появится плашка с кнопкой «Пройти».\nНазначил(а): ${esc(p.nick || p.login)}`, 0x7c3aed);
   } else if (op === "close") {
     const id = parseInt(b.id, 10);
     const r = id ? await sql`update control_tests set closed = true where id = ${id} and (${org}::text is null or org = ${org}) returning id` : [];
@@ -1609,6 +1651,7 @@ async function rpNotify(r) {
   const staff = (await moderatorChats()).concat(OWNER_TG ? [OWNER_TG] : []);
   for (const c of staff) if ((await getSetting("rpn:" + c, { on: false })).on) chats.add(c);
   for (const c of chats) await send(c, rpText(r, 1500) + (r.body.length > 1500 ? `\n\nПолностью: /report ${r.id}` : ""), { disable_notification: true, ...rpButtons(r) });
+  await postHook(r.org, "rep", `📝 Рапорт №${r.id}: ${r.title}`, rpText(r, 1500), 0xc2530e);
 }
 // Решение по рапорту. who: { label, name, org (null — любая организация) }
 async function rpReview(by, id, ok, note) {
@@ -1744,10 +1787,19 @@ async function sendOrgReports() {
   const rows = await db()`select org, tg_id from profiles where rank = 'leader' and tg_id is not null and not banned`;
   const by = {};
   rows.forEach((r) => (by[r.org] = by[r.org] || []).push(String(r.tg_id)));
+  let hooks = [];
+  try {
+    hooks = (await db()`select org from org_hooks where 'week' = any(events)`).map((h) => h.org);
+  } catch (e) {}
+  hooks.forEach((o) => (by[o] = by[o] || []));
   let n = 0;
   for (const org of Object.keys(by)) {
     const t = await orgReport(org);
     if (!t) continue;
+    if (hooks.includes(org)) {
+      const nl = t.indexOf("\n");
+      await postHook(org, "week", t.slice(0, nl).replace(/<[^>]+>/g, ""), t.slice(nl + 1), 0xff8a3d);
+    }
     for (const c of by[org]) {
       await send(c, t);
       n++;
@@ -1856,6 +1908,7 @@ const HELP_COMMON =
   "/unban &lt;логин&gt; — разблокировать\n" +
   "/kick &lt;логин&gt; — завершить все сессии без блокировки\n" +
   "/tag &lt;логин&gt; &lt;тег&gt; [тег…] — добавить теги; /untag &lt;логин&gt; &lt;тег&gt; — убрать\n" +
+  "/beta &lt;логин&gt; on|off — роль «Бета-тестер»; /beta list — все тестеры\n" +
   "/setorg &lt;логин&gt; &lt;организация&gt; — сменить организацию (" + DEPTS.join(", ") + ")\n" +
   "/resets — ожидающие запросы на сброс пароля\n" +
   "\n<b>Рейтинг и руководство</b>\n" +
@@ -1912,6 +1965,7 @@ const AUDIT_ACTIONS = [
   "report_create", "report_delete", "report_review",
   "panel_login", "panel_key", "panel_revoke", "db_edit", "db_delete", "db_revert",
   "ad_save", "ad_toggle", "ad_delete",
+  "beta", "beta_task", "flags", "hook", "event", "idea",
 ];
 
 async function findProfile(login) {
@@ -2214,6 +2268,18 @@ async function onMessage(m, opts = {}) {
       await sql`update profiles set tags = ${next}::text[] where id = ${p.id}`;
       await audit(a.label, cmd, p.login, { tags });
       return send(chat, `🏷 ${esc(p.login)}: ${next.length ? next.map((t) => "#" + esc(t)).join(" ") : "тегов нет"}`);
+    }
+
+    case "beta": {
+      if (args[0] === "list" || !args[0]) {
+        const rows = await sql`select login, nick, org from profiles where beta order by login_lc limit 100`;
+        return send(chat, rows.length ? `🧪 <b>Бета-тестеры: ${rows.length}</b>\n` + rows.map((r) => `• <code>${esc(r.login)}</code> — ${esc(r.nick)} · ${esc(r.org)}`).join("\n") + "\n\nВыдать: /beta &lt;логин&gt; on, забрать: /beta &lt;логин&gt; off" : "Бета-тестеров пока нет. Выдать роль: /beta &lt;логин&gt; on");
+      }
+      const p = await target("/beta &lt;логин&gt; on|off");
+      if (!p) return;
+      const on = !/^(off|нет|0|выкл)/i.test(String(args[1] || "on"));
+      await setBeta(a, p, on);
+      return send(chat, on ? `🧪 ${esc(p.login)} теперь бета-тестер. В программе появится «Панель тестера» (после перезапуска или в течение 20 минут).` : `${esc(p.login)} больше не бета-тестер.`);
     }
 
     case "online": {
@@ -2837,6 +2903,11 @@ async function tick() {
     await setSetting("orgreport", { ...rep, last: wk.key });
     await sendOrgReports();
   }
+  try {
+    await eventReminders();
+  } catch (e) {
+    console.error("events", e);
+  }
   if (Math.random() < 0.05) await cleanup();
   return { ok: true, jobs: jobs.length };
 }
@@ -2951,6 +3022,7 @@ async function setup(url) {
       { command: "unban", description: "Разблокировать" },
       { command: "kick", description: "Завершить сессии" },
       { command: "tag", description: "Теги аккаунта" },
+      { command: "beta", description: "Бета-тестеры" },
       { command: "dups", description: "Похожие аккаунты" },
       { command: "setorg", description: "Сменить организацию" },
       { command: "health", description: "Статус сервисов" },
@@ -3329,7 +3401,7 @@ async function panelUser(b, a) {
   return {
     ok: true,
     html: await fullCard(p, a.kind),
-    user: { login: p.login, nick: p.nick, static: p.static_id, org: p.org, rank: p.rank, rankName: RANKS[p.rank], banned: p.banned, approval: p.approval, tags: p.tags || [], hasTg: p.tg_id != null, self: p.id === a.profile.id },
+    user: { login: p.login, nick: p.nick, static: p.static_id, org: p.org, rank: p.rank, rankName: RANKS[p.rank], banned: p.banned, approval: p.approval, tags: p.tags || [], hasTg: p.tg_id != null, self: p.id === a.profile.id, beta: !!p.beta },
     touch: canTouch(a, p) || "",
     panelKey: owner && k ? { created: k.created_at, used: k.last_used_at } : null,
     logins,
@@ -3442,6 +3514,17 @@ async function panelApi(b, ip, ua) {
     case "ads_toggle":
     case "ads_delete":
       return panelAds(b, a);
+    case "beta_list":
+    case "beta_set":
+    case "beta_task":
+    case "beta_task_save":
+    case "beta_task_delete":
+    case "flags_set":
+      return panelBeta(b, a);
+    case "ideas_list":
+    case "ideas_set":
+    case "ideas_delete":
+      return panelIdeas(b, a);
   }
   return fail("Неизвестное действие панели.");
 }
@@ -3584,6 +3667,547 @@ async function panelAds(b, a) {
   return fail("Неизвестное действие панели.");
 }
 
+
+// ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
+// Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
+const SCHEMA_V = 24;
+const SCHEMA_24 = `
+alter table public.profiles add column if not exists beta boolean not null default false;
+alter table public.shares drop constraint if exists shares_kind_check;
+alter table public.shares add constraint shares_kind_check check (kind in ('calc','set','board'));
+create table if not exists public.beta_tasks (
+  id bigserial primary key, title text not null, body text not null default '', author text not null default '',
+  created_at timestamptz not null default now(), closed boolean not null default false);
+create table if not exists public.beta_results (
+  task_id bigint not null references public.beta_tasks(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  status text not null check (status in ('ok','bad')), comment text not null default '', at timestamptz not null default now(),
+  primary key (task_id, user_id));
+create table if not exists public.org_hooks (
+  org text primary key, url text not null, events text[] not null default '{}', updated_by text not null default '',
+  updated_at timestamptz not null default now(), fails int not null default 0, last_error text not null default '');
+create table if not exists public.org_events (
+  id bigserial primary key, org text not null, title text not null, body text not null default '', place text not null default '',
+  starts_at timestamptz not null, author text not null default '', created_at timestamptz not null default now(), reminded boolean not null default false);
+create index if not exists org_events_org_idx on public.org_events (org, starts_at);
+create table if not exists public.ideas (
+  id bigserial primary key, user_id uuid references public.profiles(id) on delete set null, text text not null,
+  status text not null default 'new' check (status in ('new','work','done','no')), answer text not null default '',
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+create table if not exists public.idea_votes (
+  idea_id bigint not null references public.ideas(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade, primary key (idea_id, user_id));
+create table if not exists public.patrols (
+  code text primary key, owner_id uuid references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(), expires_at timestamptz not null);
+create table if not exists public.patrol_members (
+  code text not null references public.patrols(code) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  joined_at timestamptz not null default now(), seen_at timestamptz not null default now(), primary key (code, user_id));
+create table if not exists public.patrol_items (
+  id bigserial primary key, code text not null references public.patrols(code) on delete cascade,
+  user_id uuid references public.profiles(id) on delete cascade, uid text not null default '',
+  data jsonb not null default '{}'::jsonb, updated_at timestamptz not null default now(), deleted boolean not null default false);
+create unique index if not exists patrol_items_key on public.patrol_items (code, user_id, uid);
+alter table public.beta_tasks enable row level security;
+alter table public.beta_results enable row level security;
+alter table public.org_hooks enable row level security;
+alter table public.org_events enable row level security;
+alter table public.ideas enable row level security;
+alter table public.idea_votes enable row level security;
+alter table public.patrols enable row level security;
+alter table public.patrol_members enable row level security;
+alter table public.patrol_items enable row level security;
+revoke all on table public.beta_tasks, public.beta_results, public.org_hooks, public.org_events, public.ideas, public.idea_votes,
+                    public.patrols, public.patrol_members, public.patrol_items from anon, authenticated;
+revoke all on all sequences in schema public from anon, authenticated;
+`;
+let schemaReady = null;
+function ensureSchema() {
+  if (!schemaReady)
+    schemaReady = (async () => {
+      try {
+        const v = await getSetting("schema_v", 0);
+        if (+v >= SCHEMA_V) return;
+        await db().unsafe(ADS_DDL + SCHEMA_24);
+        adsReady = true;
+        await setSetting("schema_v", SCHEMA_V);
+      } catch (e) {
+        console.error("schema", e);
+        schemaReady = null; // попробуем при следующем запросе
+      }
+    })();
+  return schemaReady;
+}
+
+// ───────────── 2.4: функции по флагам (владелец включает в панели: всем, только тестерам или никому) ─────────────
+const FLAG_DEFS = {
+  patrol: ["Совместный патруль", "beta"],
+  board: ["Тактическая доска", "all"],
+  mini: ["Мини-окно задержания", "all"],
+  tts: ["Озвучка статей", "all"],
+  mascot: ["Лиса Senko", "all"],
+  season: ["Сезонное оформление", "all"],
+  card: ["Карточка сотрудника", "all"],
+  ideas: ["Идеи и голосование", "all"],
+  events: ["Мероприятия организаций", "all"],
+};
+const FLAG_MODES = ["all", "beta", "off"];
+async function flagsNow() {
+  const s = (await getSetting("flags", {})) || {};
+  const out = {};
+  for (const k of Object.keys(FLAG_DEFS)) out[k] = FLAG_MODES.includes(s[k]) ? s[k] : FLAG_DEFS[k][1];
+  return out;
+}
+const isTester = (p) => !!p && (!!p.beta || p.rank === "owner" || p.rank === "moderator");
+
+// ───────────── 2.4: бета-тестеры ─────────────
+async function setBeta(a, p, on) {
+  const sql = db();
+  await sql`update profiles set beta = ${!!on} where id = ${p.id}`;
+  await audit(a.label, "beta", p.login, { on: !!on });
+  if (on) {
+    await sql`insert into broadcasts (user_id, title, author, text, expires_at)
+              values (${p.id}, ${"🧪 Вы бета-тестер"}, ${a.label}, ${"Вам выдана роль «Бета-тестер». В меню программы появилась «Панель тестера»: задания на проверку, экспериментальные функции и ранние версии. Спасибо за помощь!"}, now() + interval '14 days')`;
+    if (p.tg_id != null) await send(String(p.tg_id), "🧪 Вам выдана роль <b>«Бета-тестер»</b> в Senko Assistant. В меню программы появилась «Панель тестера». Перезапустите программу, если её не видно.");
+  }
+}
+async function betaApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!isTester(p)) return fail("Панель тестера доступна только бета-тестерам.", { code: "forbidden" });
+  const sql = db();
+  const op = String(b.op || "tasks");
+  if (op === "tasks") {
+    const rows = await sql`select t.id, t.title, t.body, t.author, t.created_at, r.status, r.comment, r.at,
+                             (select count(*)::int from beta_results x where x.task_id = t.id) as n
+                           from beta_tasks t left join beta_results r on r.task_id = t.id and r.user_id = ${p.id}
+                           where not t.closed order by t.id desc limit 50`;
+    return { ok: true, tasks: rows.map((r) => ({ id: String(r.id), title: r.title, body: r.body, author: r.author, at: r.created_at, n: r.n, my: r.status ? { status: r.status, comment: r.comment, at: r.at } : null })), flags: await flagsNow() };
+  }
+  if (op === "result") {
+    const id = parseInt(b.id, 10) || 0;
+    const status = b.status === "bad" ? "bad" : "ok";
+    const comment = cleanText(b.comment, 800);
+    if (status === "bad" && comment.length < 5) return fail("Опишите, что не работает.");
+    if (!(await hit(`bt:${p.id}`, 60, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const [t] = await sql`select * from beta_tasks where id = ${id} and not closed`;
+    if (!t) return fail("Задание не найдено или уже закрыто.");
+    await sql`insert into beta_results (task_id, user_id, status, comment) values (${id}, ${p.id}, ${status}, ${comment})
+              on conflict (task_id, user_id) do update set status = excluded.status, comment = excluded.comment, at = now()`;
+    await quiet(`🧪 <b>${esc(p.login)}</b> · задание №${id} «${esc(t.title)}»: ${status === "ok" ? "✅ работает" : "❌ не работает"}${comment ? "\n" + esc(comment) : ""}`);
+    return { ok: true };
+  }
+  return fail("Неизвестное действие.");
+}
+
+// ───────────── 2.4: вебхуки Discord для организаций ─────────────
+const HOOK_EVENTS = { rep: "Новые рапорты", join: "Новые сотрудники и заявки", ctrl: "Контрольные тесты", event: "Мероприятия и напоминания", week: "Еженедельный отчёт" };
+const HOOK_RE = /^https:\/\/(?:ptb\.|canary\.)?discord(?:app)?\.com\/api\/webhooks\/\d{5,25}\/[\w-]{20,120}$/;
+const hookMask = (u) => String(u || "").replace(/(\/webhooks\/\d+\/)[\w-]+$/, (m, a) => a + "•••" + String(u).slice(-4));
+// Telegram-HTML в Markdown Discord
+function htmlToMd(s) {
+  return String(s || "")
+    .replace(/<\/?b>/g, "**").replace(/<\/?i>/g, "*").replace(/<\/?code>/g, "`")
+    .replace(/<a href="([^"]+)">([^<]*)<\/a>/g, "[$2]($1)").replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+}
+async function postHook(org, ev, title, text, color = 0xff8a3d) {
+  try {
+    const [h] = await db()`select * from org_hooks where org = ${org}`;
+    if (!h || !(h.events || []).includes(ev) || h.fails >= 20) return false;
+    return await hookSend(h, title, text, color);
+  } catch (e) {
+    console.error("hook", e);
+    return false;
+  }
+}
+async function hookSend(h, title, text, color = 0xff8a3d) {
+  let ok = false, er = "";
+  try {
+    const r = await fetch(h.url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: "Senko Assistant", allowed_mentions: { parse: [] }, embeds: [{ title: clean(htmlToMd(title), 250), description: htmlToMd(text).slice(0, 3900), color, timestamp: new Date().toISOString(), footer: { text: "Senko Assistant · " + h.org } }] }),
+      signal: AbortSignal.timeout(10000),
+    });
+    ok = r.ok;
+    if (!ok) er = r.status === 404 ? "Вебхук удалён в Discord" : "Discord ответил " + r.status;
+  } catch (e) {
+    er = "Discord не отвечает";
+  }
+  await db()`update org_hooks set fails = ${ok ? 0 : h.fails + 1}, last_error = ${ok ? "" : er} where org = ${h.org}`;
+  return ok ? true : er;
+}
+async function hooksApi(b) {
+  const { p, err } = await who(b, ["leader", "moderator", "owner"]);
+  if (err) return err;
+  const org = staffOrg(p, b);
+  if (!org) return fail("Выберите организацию.");
+  const sql = db();
+  const op = String(b.op || "get");
+  const label = `${p.login} (${RANKS[p.rank]})`;
+  const out = async () => {
+    const [h] = await sql`select * from org_hooks where org = ${org}`;
+    return { ok: true, org, events: HOOK_EVENTS, hook: h ? { url: hookMask(h.url), events: h.events || [], by: h.updated_by, at: h.updated_at, fails: h.fails, error: h.last_error } : null };
+  };
+  if (op === "get") return out();
+  if (!(await hit(`hk:${p.id}`, 30, 3600))) return fail(RATE_MSG, { code: "rate" });
+  if (op === "set") {
+    const evs = (Array.isArray(b.events) ? b.events : []).map(String).filter((k) => HOOK_EVENTS[k]);
+    const url = String(b.url || "").trim();
+    const [h] = await sql`select * from org_hooks where org = ${org}`;
+    if (url) {
+      if (!HOOK_RE.test(url)) return fail("Нужна ссылка вебхука Discord: https://discord.com/api/webhooks/…");
+      await sql`insert into org_hooks (org, url, events, updated_by) values (${org}, ${url}, ${evs}::text[], ${label})
+                on conflict (org) do update set url = excluded.url, events = excluded.events, updated_by = excluded.updated_by, updated_at = now(), fails = 0, last_error = ''`;
+    } else if (h) {
+      await sql`update org_hooks set events = ${evs}::text[], updated_by = ${label}, updated_at = now() where org = ${org}`;
+    } else return fail("Вставьте ссылку вебхука.");
+    await audit(label, "hook", org, { events: evs, url: !!url });
+    return out();
+  }
+  if (op === "test") {
+    const [h] = await sql`select * from org_hooks where org = ${org}`;
+    if (!h) return fail("Сначала сохраните вебхук.");
+    const r = await hookSend(h, "✅ Проверка связи", `Вебхук ${org} подключён к Senko Assistant. Проверил(а): ${p.nick || p.login}.`, 0x2e7d4f);
+    return r === true ? { ok: true, msg: "Сообщение отправлено в Discord." } : fail("Не получилось: " + r + ". Проверьте ссылку вебхука.");
+  }
+  if (op === "del") {
+    await sql`delete from org_hooks where org = ${org}`;
+    await audit(label, "hook", org, { deleted: true });
+    return out();
+  }
+  return fail("Неизвестное действие.");
+}
+
+// ───────────── 2.4: мероприятия организаций ─────────────
+const evOut = (e, p) => ({ id: String(e.id), org: e.org, title: e.title, body: e.body, place: e.place, at: e.starts_at, author: e.author, mine: !!p && e.author === (p.nick || p.login) });
+async function eventsFor(org, days = 14) {
+  return db()`select * from org_events where org = ${org} and starts_at > now() - interval '3 hours' and starts_at < now() + make_interval(days => ${days})
+              order by starts_at limit 20`;
+}
+async function eventsApi(b) {
+  const op = String(b.op || "list");
+  const staff = op !== "list" || b.org;
+  const { p, err } = await who(b, staff ? ["leader", "moderator", "owner"] : undefined);
+  if (err) return err;
+  const org = staff ? staffOrg(p, b) : p.org;
+  if (!org) return fail("Выберите организацию.");
+  const sql = db();
+  if (op === "list") return { ok: true, org, events: (await eventsFor(org, 60)).map((e) => evOut(e, p)) };
+  if (!(await hit(`ev:${p.id}`, 40, 3600))) return fail(RATE_MSG, { code: "rate" });
+  if (op === "create") {
+    const title = clean(b.title, 80);
+    if (title.length < 3) return fail("Напишите название мероприятия.");
+    const at = new Date(String(b.at || ""));
+    if (isNaN(at.getTime()) || at.getTime() < Date.now() - 60e3) return fail("Укажите дату и время в будущем.");
+    if (at.getTime() > Date.now() + 90 * 864e5) return fail("Не дальше чем на 90 дней вперёд.");
+    const [{ n }] = await sql`select count(*)::int n from org_events where org = ${org} and starts_at > now()`;
+    if (n >= 30) return fail("Запланировано уже 30 мероприятий, удалите лишние.");
+    const [e] = await sql`insert into org_events (org, title, body, place, starts_at, author)
+                          values (${org}, ${title}, ${cleanText(b.body, 600)}, ${clean(b.place, 80)}, ${at}, ${p.nick || p.login}) returning *`;
+    await audit(`${p.login} (${RANKS[p.rank]})`, "event", org, { id: String(e.id), title });
+    await postHook(org, "event", "📅 Новое мероприятие: " + title, evText(e), 0x3b82f6);
+    return { ok: true, events: (await eventsFor(org, 60)).map((x) => evOut(x, p)) };
+  }
+  if (op === "del") {
+    const id = parseInt(b.id, 10) || 0;
+    const [e] = await sql`delete from org_events where id = ${id} and org = ${org} returning *`;
+    if (!e) return fail("Мероприятие не найдено.");
+    await audit(`${p.login} (${RANKS[p.rank]})`, "event", org, { id: String(id), deleted: true });
+    if (e.starts_at > new Date()) await postHook(org, "event", "🚫 Мероприятие отменено: " + e.title, evText(e), 0xb3261e);
+    return { ok: true, events: (await eventsFor(org, 60)).map((x) => evOut(x, p)) };
+  }
+  return fail("Неизвестное действие.");
+}
+const evWhen = (d) => new Date(d).toLocaleString("ru-RU", { timeZone: "Europe/Moscow", day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit" }) + " МСК";
+const evText = (e) => `🕒 ${evWhen(e.starts_at)}${e.place ? "\n📍 " + esc(e.place) : ""}${e.body ? "\n\n" + esc(e.body) : ""}\n\nНазначил(а): ${esc(e.author)}`;
+// Напоминание за час до начала: Telegram сотрудникам организации и вебхук
+async function eventReminders() {
+  const sql = db();
+  const due = await sql`update org_events set reminded = true where id in (
+                          select id from org_events where not reminded and starts_at > now() and starts_at <= now() + interval '60 minutes' limit 3)
+                        returning *`;
+  for (const e of due) {
+    const text = `⏰ <b>Скоро мероприятие ${esc(e.org)}: ${esc(e.title)}</b>\n${evText(e)}`;
+    const rows = await sql`select tg_id from profiles where org = ${e.org} and tg_id is not null and not banned and approval = 'ok' limit 150`;
+    for (const r of rows) await send(String(r.tg_id), text, { disable_notification: false });
+    await postHook(e.org, "event", "⏰ Через час: " + e.title, evText(e), 0xf59e0b);
+  }
+  return due.length;
+}
+
+// ───────────── 2.4: идеи с голосованием ─────────────
+const IDEA_ST = { new: "Новая", work: "В работе", done: "Сделано", no: "Отклонено" };
+async function ideasApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const sql = db();
+  const op = String(b.op || "list");
+  if (op === "list") {
+    const st = IDEA_ST[b.status] ? String(b.status) : "";
+    const rows = await sql`select i.id, i.text, i.status, i.answer, i.created_at, i.user_id = ${p.id} as mine, coalesce(pr.nick, 'Удалённый аккаунт') as nick,
+                             (select count(*)::int from idea_votes v where v.idea_id = i.id) as votes,
+                             exists (select 1 from idea_votes v where v.idea_id = i.id and v.user_id = ${p.id}) as voted
+                           from ideas i left join profiles pr on pr.id = i.user_id
+                           where ${st ? sql`i.status = ${st}` : sql`i.status <> 'no' or i.user_id = ${p.id}`}
+                           order by ${b.sort === "new" ? sql`i.created_at desc` : sql`votes desc, i.created_at desc`} limit 100`;
+    return { ok: true, ideas: rows.map((r) => ({ id: String(r.id), text: r.text, status: r.status, answer: r.answer, at: r.created_at, mine: r.mine, nick: r.nick, votes: r.votes, voted: r.voted })) };
+  }
+  if (op === "add") {
+    const text = cleanText(b.text, 600);
+    if (text.length < 15) return fail("Опишите идею подробнее: хотя бы одно предложение.");
+    if (!(await hit(`ia:${p.id}`, 3, 86400))) return fail("Можно предложить не больше 3 идей в сутки.", { code: "rate" });
+    const bad = await blacklisted(text);
+    if (bad) return fail("В тексте есть запрещённое слово.");
+    const [r] = await sql`insert into ideas (user_id, text) values (${p.id}, ${text}) returning id`;
+    await sql`insert into idea_votes (idea_id, user_id) values (${r.id}, ${p.id}) on conflict do nothing`;
+    await quiet(`💡 <b>Новая идея №${r.id}</b> от ${esc(p.login)} (${esc(p.org)})\n${esc(text)}`);
+    return { ok: true, id: String(r.id) };
+  }
+  if (op === "vote") {
+    const id = parseInt(b.id, 10) || 0;
+    if (!(await hit(`iv:${p.id}`, 200, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const [i] = await sql`select id, status from ideas where id = ${id}`;
+    if (!i) return fail("Идея не найдена.");
+    if (b.on === false) await sql`delete from idea_votes where idea_id = ${id} and user_id = ${p.id}`;
+    else await sql`insert into idea_votes (idea_id, user_id) values (${id}, ${p.id}) on conflict do nothing`;
+    const [{ n }] = await sql`select count(*)::int n from idea_votes where idea_id = ${id}`;
+    return { ok: true, votes: n, voted: b.on !== false };
+  }
+  if (op === "del") {
+    const id = parseInt(b.id, 10) || 0;
+    const r = await sql`delete from ideas where id = ${id} and user_id = ${p.id} and status = 'new' returning id`;
+    return r.length ? { ok: true } : fail("Удалить можно только свою идею, пока её не взяли в работу.");
+  }
+  return fail("Неизвестное действие.");
+}
+
+// ───────────── 2.4: совместный патруль (экипаж) ─────────────
+const PATROL_MAX = 8;
+const patrolCode = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+function patrolItem(d) {
+  d = d && typeof d === "object" ? d : {};
+  const n = (v, max) => Math.max(0, Math.min(max, Math.round(+v || 0)));
+  return {
+    nick: clean(d.nick, 40), st: clean(d.st, 12), arts: clean(d.arts, 300), mode: clean(d.mode, 8),
+    start: n(d.start, 9e15), pausedTotal: n(d.pausedTotal, 864e5), paused: d.paused && +d.paused.at ? { at: n(d.paused.at, 9e15), k: clean(d.paused.k, 20) } : null,
+    decidedAt: n(d.decidedAt, 864e5), result: clean(d.result, 120),
+  };
+}
+async function patrolApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!(await hit(`pt:${p.id}`, 1500, 3600))) return fail(RATE_MSG, { code: "rate" });
+  const sql = db();
+  const op = String(b.op || "state");
+  const mine = async () => (await sql`select m.code from patrol_members m join patrols t on t.code = m.code where m.user_id = ${p.id} and t.expires_at > now() limit 1`)[0];
+  const state = async (code) => {
+    await sql`update patrol_members set seen_at = now() where code = ${code} and user_id = ${p.id}`;
+    const [t] = await sql`select * from patrols where code = ${code}`;
+    const mem = await sql`select m.user_id, m.seen_at, pr.nick, pr.org from patrol_members m join profiles pr on pr.id = m.user_id where m.code = ${code} order by m.joined_at`;
+    const items = await sql`select i.uid, i.data, i.updated_at, i.user_id, pr.nick from patrol_items i left join profiles pr on pr.id = i.user_id
+                            where i.code = ${code} and not i.deleted and i.updated_at > now() - interval '12 hours' order by i.id`;
+    return {
+      ok: true, code, expires: t ? t.expires_at : null, now: Date.now(),
+      members: mem.map((m) => ({ nick: m.nick, org: m.org, me: m.user_id === p.id, online: Date.now() - new Date(m.seen_at).getTime() < 90e3 })),
+      items: items.map((i) => ({ uid: i.uid, by: i.nick || "", mine: i.user_id === p.id, data: i.data, at: i.updated_at })),
+    };
+  };
+  if (op === "state") {
+    const m = await mine();
+    if (!m) return { ok: true, code: null };
+    return state(m.code);
+  }
+  if (op === "create") {
+    const m = await mine();
+    if (m) return state(m.code);
+    const ABC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    for (let i = 0; i < 6 && !code; i++) {
+      const c = Array.from(crypto.getRandomValues(new Uint8Array(6))).map((x) => ABC[x % ABC.length]).join("");
+      const r = await sql`insert into patrols (code, owner_id, expires_at) values (${c}, ${p.id}, now() + interval '12 hours') on conflict do nothing returning code`;
+      if (r.length) code = c;
+    }
+    if (!code) return fail("Не удалось создать экипаж. Попробуйте ещё раз.");
+    await sql`insert into patrol_members (code, user_id) values (${code}, ${p.id})`;
+    await sql`delete from patrols where expires_at < now() - interval '1 day'`;
+    return state(code);
+  }
+  if (op === "join") {
+    const code = patrolCode(b.code);
+    const [t] = code.length === 6 ? await sql`select * from patrols where code = ${code} and expires_at > now()` : [];
+    if (!t) return fail("Экипаж с таким кодом не найден или уже закончил смену.");
+    const m = await mine();
+    if (m && m.code !== code) await sql`delete from patrol_members where code = ${m.code} and user_id = ${p.id}`;
+    const [{ n }] = await sql`select count(*)::int n from patrol_members where code = ${code}`;
+    if (n >= PATROL_MAX && !(m && m.code === code)) return fail(`В экипаже уже ${PATROL_MAX} человек.`);
+    await sql`insert into patrol_members (code, user_id) values (${code}, ${p.id}) on conflict do nothing`;
+    return state(code);
+  }
+  const m = await mine();
+  if (!m) return fail("Вы не в экипаже.", { code: "nopatrol" });
+  if (op === "leave") {
+    await sql`delete from patrol_items where code = ${m.code} and user_id = ${p.id}`;
+    await sql`delete from patrol_members where code = ${m.code} and user_id = ${p.id}`;
+    const [{ n }] = await sql`select count(*)::int n from patrol_members where code = ${m.code}`;
+    if (!n) await sql`delete from patrols where code = ${m.code}`;
+    return { ok: true, code: null };
+  }
+  if (op === "put") {
+    const uid = clean(b.uid, 24);
+    if (!/^[\w-]{1,24}$/.test(uid)) return fail("Некорректная запись.");
+    const [{ n }] = await sql`select count(*)::int n from patrol_items where code = ${m.code} and not deleted`;
+    if (n >= 60) return fail("В экипаже уже 60 задержаний.");
+    await sql`insert into patrol_items (code, user_id, uid, data) values (${m.code}, ${p.id}, ${uid}, ${sql.json(patrolItem(b.data))})
+              on conflict (code, user_id, uid) do update set data = excluded.data, updated_at = now(), deleted = false`;
+    return state(m.code);
+  }
+  if (op === "del") {
+    await sql`update patrol_items set deleted = true, updated_at = now() where code = ${m.code} and user_id = ${p.id} and uid = ${clean(b.uid, 24)}`;
+    return state(m.code);
+  }
+  return fail("Неизвестное действие.");
+}
+
+// ───────────── 2.4: публичный статус сервисов (страница /status/ на сайте) ─────────────
+let statusCache = null;
+async function statusApi() {
+  if (statusCache && Date.now() - statusCache.at < 60e3) return statusCache.r;
+  const S = [];
+  let t0 = Date.now();
+  try {
+    await db()`select 1`;
+    S.push({ k: "db", name: "База данных", ok: true, ms: Date.now() - t0 });
+  } catch (e) {
+    S.push({ k: "db", name: "База данных", ok: false });
+  }
+  S.push({ k: "api", name: "Сервер (вход, синхронизация, бот)", ok: true });
+  t0 = Date.now();
+  try {
+    const r = await fetch(AI_HEALTH_URL, { signal: AbortSignal.timeout(6000) });
+    const j = await r.json().catch(() => ({}));
+    S.push({ k: "ai", name: "ИИ-помощник", ok: r.ok && j.ok !== false, ms: Date.now() - t0 });
+  } catch (e) {
+    S.push({ k: "ai", name: "ИИ-помощник", ok: false });
+  }
+  let laws = null;
+  try {
+    const r = await fetch(LAWS_STATUS_URL + "?t=" + Date.now(), { signal: AbortSignal.timeout(6000) });
+    const j = await r.json();
+    laws = { checkedAt: j.checkedAt || 0, updatedAt: j.updatedAt || 0, count: j.count || 0 };
+    S.push({ k: "laws", name: "Обновление законов с форума", ok: !!j.ok && Date.now() - j.checkedAt < 36 * 3600e3 });
+  } catch (e) {
+    S.push({ k: "laws", name: "Обновление законов с форума", ok: false });
+  }
+  let tickAt = 0;
+  try {
+    const tk = await getSetting("tick", null);
+    tickAt = tk ? tk.at : 0;
+  } catch (e) {}
+  S.push({ k: "tick", name: "Уведомления и расписание", ok: Date.now() - tickAt < 10 * 60e3 });
+  let m = { on: false };
+  try {
+    m = (await getSetting("maintenance", { on: false })) || { on: false };
+  } catch (e) {}
+  const r = { ok: true, at: Date.now(), services: S, laws, maintenance: m.on ? { on: true, text: m.text || "" } : { on: false } };
+  statusCache = { at: Date.now(), r };
+  return r;
+}
+
+// 2.4: панель — бета-тестеры, задания, флаги функций, идеи
+async function panelBeta(b, a) {
+  const sql = db();
+  const op = b.op;
+  if (op === "beta_list") {
+    const users = await sql`select p.login, p.nick, p.org, p.rank, p.last_seen, p.app_version,
+                              (select count(*)::int from beta_results r where r.user_id = p.id) as results
+                            from profiles p where p.beta order by p.last_seen desc nulls last limit 200`;
+    const tasks = await sql`select t.*, (select count(*)::int from beta_results r where r.task_id = t.id and r.status = 'ok') as ok_n,
+                              (select count(*)::int from beta_results r where r.task_id = t.id and r.status = 'bad') as bad_n
+                            from beta_tasks t order by t.closed, t.id desc limit 60`;
+    return { ok: true, users, tasks, flags: await flagsNow(), defs: Object.fromEntries(Object.entries(FLAG_DEFS).map(([k, v]) => [k, v[0]])), canFlags: a.kind === "owner" };
+  }
+  if (op === "beta_set") {
+    const t = await findProfile(String(b.login || ""));
+    if (!t) return fail("Пользователь не найден.");
+    await setBeta(a, t, !!b.on);
+    return { ok: true };
+  }
+  if (op === "beta_task") {
+    const id = parseInt(b.id, 10) || 0;
+    const rows = await sql`select r.*, p.login, p.nick from beta_results r join profiles p on p.id = r.user_id where r.task_id = ${id} order by r.at desc`;
+    return { ok: true, results: rows.map((r) => ({ login: r.login, nick: r.nick, status: r.status, comment: r.comment, at: r.at })) };
+  }
+  if (op === "beta_task_save") {
+    const title = clean(b.title, 120);
+    if (title.length < 3) return fail("Напишите, что нужно проверить.");
+    const body = cleanText(b.body, 1500);
+    const id = parseInt(b.id, 10) || 0;
+    let t;
+    if (id) [t] = await sql`update beta_tasks set title = ${title}, body = ${body}, closed = ${!!b.closed} where id = ${id} returning *`;
+    else [t] = await sql`insert into beta_tasks (title, body, author) values (${title}, ${body}, ${a.label}) returning *`;
+    if (!t) return fail("Задание не найдено.");
+    await audit(a.label, "beta_task", title, { id: String(t.id), closed: t.closed });
+    if (!id) {
+      const rows = await sql`select tg_id from profiles where beta and tg_id is not null and not banned limit 100`;
+      for (const r of rows) await send(String(r.tg_id), `🧪 <b>Новое задание для тестеров</b>\n${esc(title)}${body ? "\n\n" + esc(body.slice(0, 600)) : ""}\n\nОтметить результат: программа → «Панель тестера».`, { disable_notification: true });
+    }
+    return { ok: true };
+  }
+  if (op === "beta_task_delete") {
+    const [t] = await sql`delete from beta_tasks where id = ${parseInt(b.id, 10) || 0} returning title`;
+    if (!t) return fail("Задание не найдено.");
+    await audit(a.label, "beta_task", t.title, { deleted: true });
+    return { ok: true };
+  }
+  if (op === "flags_set") {
+    if (a.kind !== "owner") return fail("Это доступно только владельцу.", { code: "forbidden" });
+    const k = String(b.key || ""), mode = String(b.mode || "");
+    if (!FLAG_DEFS[k] || !FLAG_MODES.includes(mode)) return fail("Неизвестная функция.");
+    const s = (await getSetting("flags", {})) || {};
+    s[k] = mode;
+    await setSetting("flags", s);
+    await audit(a.label, "flags", k, { mode });
+    return { ok: true, flags: await flagsNow() };
+  }
+  return fail("Неизвестное действие панели.");
+}
+async function panelIdeas(b, a) {
+  const sql = db();
+  if (b.op === "ideas_list") {
+    const st = IDEA_ST[b.status] ? String(b.status) : "";
+    const rows = await sql`select i.*, p.login, p.nick, p.org, (select count(*)::int from idea_votes v where v.idea_id = i.id) as votes
+                           from ideas i left join profiles p on p.id = i.user_id
+                           where ${st ? sql`i.status = ${st}` : sql`true`}
+                           order by ${b.sort === "new" ? sql`i.created_at desc` : sql`votes desc, i.created_at desc`} limit 200`;
+    return { ok: true, ideas: rows.map((r) => ({ id: String(r.id), text: r.text, status: r.status, answer: r.answer, at: r.created_at, login: r.login, nick: r.nick, org: r.org, votes: r.votes })), statuses: IDEA_ST };
+  }
+  if (b.op === "ideas_set") {
+    const id = parseInt(b.id, 10) || 0;
+    const status = IDEA_ST[b.status] ? String(b.status) : "";
+    if (!status) return fail("Выберите статус.");
+    const answer = cleanText(b.answer, 600);
+    const [old] = await sql`select * from ideas where id = ${id}`;
+    if (!old) return fail("Идея не найдена.");
+    const [r] = await sql`update ideas set status = ${status}, answer = ${answer}, updated_at = now() where id = ${id} returning *`;
+    await audit(a.label, "idea", "№" + id, { status });
+    if (r.user_id && (old.status !== status || old.answer !== answer))
+      await sql`insert into broadcasts (user_id, title, author, text, expires_at)
+                values (${r.user_id}, ${"💡 Ваша идея: " + IDEA_ST[status].toLowerCase()}, ${a.label},
+                        ${`«${r.text.slice(0, 160)}${r.text.length > 160 ? "…" : ""}» — ${IDEA_ST[status].toLowerCase()}.${answer ? " Ответ: " + answer : ""}`}, now() + interval '14 days')`;
+    return { ok: true };
+  }
+  if (b.op === "ideas_delete") {
+    const [r] = await sql`delete from ideas where id = ${parseInt(b.id, 10) || 0} returning id`;
+    if (!r) return fail("Идея не найдена.");
+    await audit(a.label, "idea", "№" + r.id, { deleted: true });
+    return { ok: true };
+  }
+  return fail("Неизвестное действие панели.");
+}
+
 // ───────────── Точка входа ─────────────
 // ───────────── Законы и ИИ для программы и сайта (ключи только здесь), запросы из браузера ─────────────
 // Секреты (Edge Functions → Secrets). С 2.2.1 ключей нет ни в программе, ни на сайте, оба ходят сюда:
@@ -3719,6 +4343,7 @@ Deno.serve(async (req) => withCors(req, await handle(req)));
 async function handle(req) {
   try {
     if (req.method === "OPTIONS") return preflight(req);
+    await ensureSchema();
     if (req.method === "GET") {
       const url = new URL(req.url);
       if (url.searchParams.has("setup")) return await setup(url);

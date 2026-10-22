@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Senko — задержание</title>
+<style>
+  :root { --ac: #ff9a3c; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; overflow: hidden; user-select: none;
+    font: 13px/1.35 "Segoe UI", system-ui, sans-serif; color: #f2f5fa; }
+  #box { margin: 6px; padding: 8px 10px 10px; border-radius: 14px; background: rgba(16, 14, 12, .92);
+    border: 1px solid rgba(255,255,255,.14); box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+  .bar { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; color: #b9b2a8; font-size: 12px; }
+  .grip { flex: 1; display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 4px; border-radius: 7px; cursor: grab; white-space: nowrap; overflow: hidden; }
+  .grip:hover, .grip.drag { background: rgba(255,255,255,.07); color: #e7e1d8; }
+  .grip.drag { cursor: grabbing; }
+  .grip b { color: var(--ac); font-weight: 700; }
+  .ib { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border-radius: 7px;
+    border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.05); color: #d9d2c8; cursor: pointer; font: 13px "Segoe UI", sans-serif; }
+  .ib:hover { background: rgba(255,255,255,.16); }
+  .tm { padding: 6px 8px; border-radius: 10px; background: rgba(255,255,255,.05); margin-top: 5px; cursor: pointer; }
+  .tm:hover { background: rgba(255,255,255,.09); }
+  .tm.sel { box-shadow: inset 3px 0 0 var(--ac); }
+  .row { display: flex; align-items: baseline; gap: 8px; }
+  .nm { flex: 1; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ck { font: 700 18px/1.1 "Segoe UI", system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+  .warn .ck { color: #ffb84d; }
+  .late .ck { color: #ff5d5d; }
+  .done .ck { color: #3ddc97; font-size: 13px; }
+  .pause .ck { color: #9aa4b8; }
+  .ar { margin-top: 2px; color: #b9b2a8; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pg { height: 3px; margin-top: 5px; border-radius: 2px; background: rgba(255,255,255,.1); overflow: hidden; }
+  .pg i { display: block; height: 100%; background: var(--ac); }
+  .warn .pg i { background: #ffb84d; } .late .pg i { background: #ff5d5d; } .done .pg i { background: #3ddc97; }
+  .calc { margin-top: 7px; padding-top: 7px; border-top: 1px solid rgba(255,255,255,.1); display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: #b9b2a8; cursor: pointer; }
+  .calc b { color: #f2f5fa; font-size: 13px; }
+  .empty { padding: 8px 4px 4px; color: #9a948b; font-size: 12px; }
+  .more { margin-top: 5px; color: #9a948b; font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div id="box">
+  <div class="bar">
+    <div class="grip" id="grip" title="Перетащить"><svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="2" cy="2" r="1.4"/><circle cx="8" cy="2" r="1.4"/><circle cx="2" cy="7" r="1.4"/><circle cx="8" cy="7" r="1.4"/><circle cx="2" cy="12" r="1.4"/><circle cx="8" cy="12" r="1.4"/></svg><span><b>Senko</b> · задержания</span></div>
+    <button class="ib" id="wd" title="Ширина окна">↔</button>
+    <button class="ib" id="op" title="Открыть программу">↗</button>
+    <button class="ib" id="cl" title="Закрыть (горячая клавиша откроет снова)">✕</button>
+  </div>
+  <div id="list"></div>
+  <div id="calc" class="calc" style="display:none" title="Открыть калькулятор"></div>
+</div>
+<script>
+(function () {
+  "use strict";
+  var LIM = 3600000, S = { timers: [], calc: null, sel: 0 }, api = window.senkoMini;
+  var list = document.getElementById("list"), calc = document.getElementById("calc"), box = document.getElementById("box");
+  function el(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
+  function fmt(ms) { ms = Math.max(0, ms); var s = Math.floor(ms / 1000), m = Math.floor(s / 60); s %= 60; return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s; }
+  function elapsed(t) {
+    if (!t.start) return 0;
+    if (t.decidedAt) return t.decidedAt;
+    return Date.now() - t.start - (t.pausedTotal || 0) - (t.pausedAt ? Date.now() - t.pausedAt : 0);
+  }
+  function money(n) { return "$" + String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, " "); }
+  function fitSoon() { requestAnimationFrame(function () { api.fit(box.getBoundingClientRect().height + 12); }); }
+  var nodes = {};
+  function render() {
+    list.textContent = ""; nodes = {};
+    var run = (S.timers || []).filter(function (t) { return t.start; });
+    if (!run.length) list.appendChild(el("div", "empty", "Нет активных задержаний. Запустите таймер в программе."));
+    run.slice(0, 4).forEach(function (t) {
+      var c = el("div", "tm" + (t.id === S.sel ? " sel" : "")), r = el("div", "row");
+      r.appendChild(el("span", "nm", t.nick || "Задержанный"));
+      var ck = el("span", "ck"); r.appendChild(ck); c.appendChild(r);
+      var ar = [t.st, t.arts].filter(Boolean).join(" · ");
+      if (ar) c.appendChild(el("div", "ar", ar));
+      var pg = el("div", "pg"), bar = el("i"); pg.appendChild(bar); c.appendChild(pg);
+      c.onclick = function () { api.open("timer"); };
+      list.appendChild(c);
+      nodes[t.id] = { c: c, ck: ck, bar: bar, t: t };
+    });
+    if (run.length > 4) list.appendChild(el("div", "more", "и ещё " + (run.length - 4) + " в программе"));
+    var k = S.calc;
+    if (k && k.n) {
+      calc.textContent = "";
+      calc.appendChild(el("span", null, "Статей: ")).appendChild(el("b", null, String(k.n)));
+      if (k.stars) calc.appendChild(el("span", null, "Розыск: ")).appendChild(el("b", null, "★".repeat(Math.min(6, k.stars))));
+      if (k.term) calc.appendChild(el("span", null, "Срок: ")).appendChild(el("b", null, k.term + " мес." + (k.cut ? " (предел)" : "")));
+      if (k.fine) calc.appendChild(el("span", null, "Штраф: ")).appendChild(el("b", null, "до " + money(k.fine)));
+      calc.style.display = "";
+    } else calc.style.display = "none";
+    tick(); fitSoon();
+  }
+  function tick() {
+    Object.keys(nodes).forEach(function (id) {
+      var n = nodes[id], t = n.t, e = elapsed(t), left = LIM - e;
+      var st = t.decidedAt ? "done" : t.pausedAt ? "pause" : left <= 0 ? "late" : left <= 300000 ? "warn" : "";
+      n.c.className = "tm" + (t.id === S.sel ? " sel" : "") + (st ? " " + st : "");
+      n.ck.textContent = t.decidedAt ? "мера · " + fmt(t.decidedAt) : (left <= 0 ? "+" + fmt(-left) : fmt(left)) + (t.pausedAt ? " ⏸" : "");
+      n.bar.style.width = Math.min(100, e / LIM * 100) + "%";
+    });
+  }
+  api.onState(function (d) {
+    S = d || {};
+    if (S.accent && /^#[0-9a-f]{3,8}$/i.test(S.accent)) document.documentElement.style.setProperty("--ac", S.accent);
+    render();
+  });
+  setInterval(tick, 500);
+  document.getElementById("cl").onclick = function () { api.close(); };
+  document.getElementById("op").onclick = function () { api.open("timer"); };
+  document.getElementById("wd").onclick = function () { api.width(); };
+  calc.onclick = function () { api.open("calc"); };
+  var grip = document.getElementById("grip"), dragging = false;
+  grip.addEventListener("mousedown", function (e) { if (e.button !== 0) return; dragging = true; grip.classList.add("drag"); api.dragStart(); e.preventDefault(); });
+  window.addEventListener("mouseup", function () { if (!dragging) return; dragging = false; grip.classList.remove("drag"); api.dragEnd(); });
+  window.addEventListener("blur", function () { if (dragging) { dragging = false; grip.classList.remove("drag"); api.dragEnd(); } });
+  window.addEventListener("resize", fitSoon);
+  render();
+  api.ready();
+})();
+</script>
+</body>
+</html>

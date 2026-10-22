@@ -426,3 +426,55 @@ revoke all on all sequences in schema public from anon, authenticated;
 create or replace function public.ping() returns text
 language sql stable as $$ select 'ok'::text $$;
 grant execute on function public.ping() to anon, authenticated;
+
+-- 2.4: бета-тестеры, задания, вебхуки Discord, мероприятия, идеи, экипажи, доска в ссылках.
+-- Функция создаёт всё это сама при первом запросе (bot_settings.schema_v = 24), здесь то же самое для ручной установки.
+alter table public.profiles add column if not exists beta boolean not null default false;
+alter table public.shares drop constraint if exists shares_kind_check;
+alter table public.shares add constraint shares_kind_check check (kind in ('calc','set','board'));
+create table if not exists public.beta_tasks (
+  id bigserial primary key, title text not null, body text not null default '', author text not null default '',
+  created_at timestamptz not null default now(), closed boolean not null default false);
+create table if not exists public.beta_results (
+  task_id bigint not null references public.beta_tasks(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  status text not null check (status in ('ok','bad')), comment text not null default '', at timestamptz not null default now(),
+  primary key (task_id, user_id));
+create table if not exists public.org_hooks (
+  org text primary key, url text not null, events text[] not null default '{}', updated_by text not null default '',
+  updated_at timestamptz not null default now(), fails int not null default 0, last_error text not null default '');
+create table if not exists public.org_events (
+  id bigserial primary key, org text not null, title text not null, body text not null default '', place text not null default '',
+  starts_at timestamptz not null, author text not null default '', created_at timestamptz not null default now(), reminded boolean not null default false);
+create index if not exists org_events_org_idx on public.org_events (org, starts_at);
+create table if not exists public.ideas (
+  id bigserial primary key, user_id uuid references public.profiles(id) on delete set null, text text not null,
+  status text not null default 'new' check (status in ('new','work','done','no')), answer text not null default '',
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+create table if not exists public.idea_votes (
+  idea_id bigint not null references public.ideas(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade, primary key (idea_id, user_id));
+create table if not exists public.patrols (
+  code text primary key, owner_id uuid references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(), expires_at timestamptz not null);
+create table if not exists public.patrol_members (
+  code text not null references public.patrols(code) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  joined_at timestamptz not null default now(), seen_at timestamptz not null default now(), primary key (code, user_id));
+create table if not exists public.patrol_items (
+  id bigserial primary key, code text not null references public.patrols(code) on delete cascade,
+  user_id uuid references public.profiles(id) on delete cascade, uid text not null default '',
+  data jsonb not null default '{}'::jsonb, updated_at timestamptz not null default now(), deleted boolean not null default false);
+create unique index if not exists patrol_items_key on public.patrol_items (code, user_id, uid);
+alter table public.beta_tasks enable row level security;
+alter table public.beta_results enable row level security;
+alter table public.org_hooks enable row level security;
+alter table public.org_events enable row level security;
+alter table public.ideas enable row level security;
+alter table public.idea_votes enable row level security;
+alter table public.patrols enable row level security;
+alter table public.patrol_members enable row level security;
+alter table public.patrol_items enable row level security;
+revoke all on table public.beta_tasks, public.beta_results, public.org_hooks, public.org_events, public.ideas, public.idea_votes,
+                    public.patrols, public.patrol_members, public.patrol_items from anon, authenticated;
+revoke all on all sequences in schema public from anon, authenticated;
