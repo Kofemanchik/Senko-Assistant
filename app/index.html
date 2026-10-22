@@ -6228,7 +6228,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.6.0";
+var APP_VER="2.6.1";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6317,6 +6317,10 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.6.1",d:"22.10.2026",items:[
+  ["🎯","Точное распознавание рации","Рация распознаёт речь онлайн через Whisper: имена, номера статей, части и паспорта понимаются намного точнее. Без интернета рация, как раньше, распознаёт офлайн. Выключается в «Рация» → «Диспетчер» → «Точное распознавание»."],
+  ["📻","Диспетчер понимает больше","Фраза «задержание начато Hanami Senko, статья 12.8 часть 1» больше не путает имя, «часть первая» понимается как ч.1. Если «мера избрана» прозвучит в первые 2 минуты задержания, диспетчер переспросит, а не остановит таймер."]
+ ]},
  {v:"2.6.0",d:"22.10.2026",items:[
   ["📻","Рация диспетчера","В углу экрана появляется рация в стиле Motorola: дата, время по МСК, ваши задержания и оставшееся время. Зажмите Ctrl+Alt+R (или кнопку PTT на рации) и говорите, отпустите, и диспетчер ответит голосом по уставу: «Принято», «Так точно», «Повторите»."],
   ["🎙","Задержание голосом","Скажите «задержан гражданин Иван Петров, паспорт 42051, статья 12.8 часть 1», и диспетчер сам заведёт задержание с именем, паспортом и статьёй. «В ходе обыска 12.1 часть 1» добавит статью в текущее задержание."],
@@ -8054,7 +8058,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.6.0";
+var APP_VER="2.6.1";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
@@ -12679,9 +12683,10 @@ var TH={"тысяча":1,"тысячи":1,"тысяч":1,"тысячу":1};
 function cls(w){if(UN.hasOwnProperty(w))return ["U",UN[w]];if(TE.hasOwnProperty(w))return ["E",TE[w]];if(TN.hasOwnProperty(w))return ["T",TN[w]];if(HU.hasOwnProperty(w))return ["H",HU[w]];if(TH[w])return ["K",1000];return null}
 function ext(a,b){return (a==="H"&&(b==="T"||b==="E"||b==="U"))||(a==="T"&&b==="U")||(a==="K"&&b!=="K")}
 function toks(text){
- var s=String(text||"").toLowerCase().replace(/ё/g,"е").replace(/(\d)\s*[.,]\s*(?=\d)/g,"$1.").replace(/\bч\s*\.?\s*(?=\d)/g," часть ").replace(/\bст\s*\.\s*/g," статья ").replace(/[,;]/g," , ").replace(/[^a-zа-я0-9.,\s-]/g," ");
+ var s=String(text||"").toLowerCase().replace(/ё/g,"е").replace(/(\d)[-‐–](?=\d)/g,"$1").replace(/(\d)\s*[.,]\s*(?=\d)/g,"$1.").replace(/\bч\s*\.?\s*(?=\d)/g," часть ").replace(/\bст\s*\.\s*/g," статья ").replace(/[,;]/g," , ").replace(/[^a-zа-я0-9.,\s-]/g," ");
  var W=s.split(/\s+/).filter(Boolean),out=[],i=0;
  while(i<W.length){var w=W[i];
+  if(w.length>1&&/\.$/.test(w))w=w.replace(/\.+$/,""); // точка в конце фразы у онлайн-распознавания: «УК.», «1.»
   if(/^\d+(\.\d+)*$/.test(w)){out.push(w.indexOf(".")>0?{t:"ref",s:w}:{t:"num",v:+w,s:w});i++;continue}
   var c=cls(w);
   if(c){var total=0,cur=0,last=null,hasK=false; // «сорок две тысячи пятьдесят один» = 42051, «четыре два ноль» = 4, 2, 0
@@ -12690,7 +12695,7 @@ function toks(text){
     if(c2[0]==="K"){total=(cur||1)*1000;cur=0;hasK=true}else cur+=c2[1];last=c2[0];i++}
    var v=total+cur;out.push({t:"num",v:v,s:String(v)});continue}
   if(w==="точка"||w==="запятая"||w==="дробь"||w==="."){out.push({t:"dot"});i++;continue}
-  if(w===","){out.push({t:"sep"});i++;continue}
+  if(w===","){i++;continue} // запятые Whisper не должны разрывать «Hanami Senko, статья 12.8, часть 1»
   out.push({t:"w",s:w.replace(/^-+|-+$/g,"")});i++}
  return out}
 
@@ -12883,6 +12888,7 @@ function setHtml(){
  var h='<div class="r26-set">';
  h+=row("Рация включена",s.radioError?e(s.radioError):"Говорите, пока держите клавишу.",sw("radioEnabled",c.radioEnabled,"Рация"));
  h+=row("Клавиша рации",REC?"Нажмите сочетание… (Esc — отмена)":"Зажмите и говорите, отпустите — диспетчер ответит.",'<button type="button" class="btn" data-r26="rec">'+(REC?"Ждём сочетание…":'<span class="r26-kbd">'+e(c.radioHotkey||"—")+'</span>')+'</button>');
+ h+=row("Точное распознавание (онлайн)","Запись фразы распознаёт Whisper через сервер Senko, записи не сохраняются. Без интернета рация распознаёт офлайн, но хуже.",sw("radioOnline",c.radioOnline,"Точное распознавание"));
  h+=row("Всегда на экране","Иначе рация прячется после ответа.",sw("radioPin",c.radioPin,"Всегда на экране"));
  if(!c.radioPin)h+=row("Прятать через",'<output>'+(c.radioHide||20)+' с</output>','<input type="range" min="5" max="120" step="5" value="'+(c.radioHide||20)+'" data-r26in="radioHide" aria-label="Прятать через, секунд">');
  h+=row("Ответ голосом","Диспетчер отвечает по уставу: «Принято», «Так точно», «Никак нет», «Повторите».",sw("radioVoice",c.radioVoice,"Ответ голосом"));

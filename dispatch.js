@@ -27,7 +27,7 @@ function send(ch, v) {
 }
 function opts() {
   const c = ctx.getCfg();
-  return { voice: !!c.radioVoice, sfx: !!c.radioSfx, rate: c.radioRate, voiceName: c.radioVoiceName || "", pin: !!c.radioPin, hide: c.radioHide, hotkey: c.radioEnabled ? c.radioHotkey : "", mic: c.voiceMic || "" };
+  return { voice: !!c.radioVoice, sfx: !!c.radioSfx, rate: c.radioRate, voiceName: c.radioVoiceName || "", pin: !!c.radioPin, hide: c.radioHide, hotkey: c.radioEnabled ? c.radioHotkey : "", mic: c.voiceMic || "", online: !!c.radioOnline };
 }
 function clampPos(x, y, near) {
   const a = screen.getDisplayNearestPoint(near || { x, y }).workArea;
@@ -155,7 +155,7 @@ async function page(fn, arg) {
 const clip = (s, n) => String(s || "").slice(0, n);
 
 function init(c) {
-  ctx = c; // { getWin, getCfg, saveCfg, changed, fromMain, openTarget }
+  ctx = c; // { getWin, getCfg, saveCfg, changed, fromMain, stt, openTarget }
   const own = (e) => live() && e.sender === win.webContents;
   ipcMain.on("radio:ready", (e) => {
     if (!own(e)) return;
@@ -170,6 +170,14 @@ function init(c) {
     const r = await page("SA_radioCmd", { text: clip(t, 400), alt: clip(alt, 400) });
     if (!r || typeof r !== "object") return { say: "Нет связи с программой.", show: "Нет связи с программой." };
     return { say: clip(r.say, 600), show: clip(r.show, 400), close: !!r.close };
+  });
+  // 2.6.1: онлайн-распознавание. Подсказка Whisper: типовая фраза и имена текущих задержаний, чтобы имена и номера писались верно
+  ipcMain.handle("radio:stt", async (e, b64) => {
+    if (!own(e) || !ctx.getCfg().radioOnline || typeof b64 !== "string" || b64.length < 2000 || b64.length > 1100000) return { ok: false };
+    const names = ((last && last.timers) || []).map((t) => t.nick).filter(Boolean).slice(-4);
+    const prompt = "Диспетчер, задержан гражданин Hanami Senko, паспорт 42051, статья 12.8 часть 1 УК. Вызван адвокат, адвокат прибыл. Найдено 2 куста и 7 пакетиков." + (names.length ? " Задержанные: " + names.join(", ") + "." : "");
+    try { const r = await ctx.stt({ audio: b64, prompt }); return r && r.ok ? { ok: true, text: clip(r.text, 600) } : { ok: false, error: clip(r && r.error, 200) }; }
+    catch (x) { return { ok: false }; }
   });
   ipcMain.on("radio:select", (e, id) => { if (own(e)) page("SA_radioSel", +id || 0); });
   ipcMain.on("radio:hide", (e) => { if (own(e)) hide(); });

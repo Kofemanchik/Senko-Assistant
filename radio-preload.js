@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld("senkoRadio", {
   ready: () => ipcRenderer.send("radio:ready"),
   status: (s) => ipcRenderer.send("radio:status", String(s)),
   text: (t, alt) => ipcRenderer.invoke("radio:text", String(t || ""), String(alt || "")),
+  stt: (b64) => ipcRenderer.invoke("radio:stt", String(b64 || "")),
   select: (id) => ipcRenderer.send("radio:select", +id || 0),
   hide: () => ipcRenderer.send("radio:hide"),
   open: (t) => ipcRenderer.send("radio:open", String(t || "")),

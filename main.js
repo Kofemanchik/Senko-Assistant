@@ -199,6 +199,7 @@ const DEFAULTS = {
   radioVoiceName: "",        // голос Windows (пусто — первый русский)
   radioRate: 105,            // скорость речи, % (60–180)
   radioSfx: true,            // щелчки и шипение рации
+  radioOnline: true,         // 2.6.1: распознавать речь онлайн (Whisper через ИИ-прокси), без сети — офлайн
   radioSize: "m",            // размер рации s | m | l
   radioPos: null             // позиция рации {x, y}
 };
@@ -214,7 +215,7 @@ const cfgFile = () => path.join(app.getPath("userData"), "app-settings.json");
 function loadCfg() {
   const j = readJson(cfgFile()) || {};
   cfg = { ...DEFAULTS, ...j };
-  for (const k of ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "maximized", "voiceEnabled", "ghost", "voicePtt", "miniEnabled", "betaUpdates", "radioEnabled", "radioPin", "radioVoice", "radioSfx"]) cfg[k] = !!cfg[k];
+  for (const k of ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "maximized", "voiceEnabled", "ghost", "voicePtt", "miniEnabled", "betaUpdates", "radioEnabled", "radioPin", "radioVoice", "radioSfx", "radioOnline"]) cfg[k] = !!cfg[k];
   if (!validHotkey(cfg.radioHotkey)) cfg.radioHotkey = DEFAULTS.radioHotkey;
   cfg.radioHide = Math.min(120, Math.max(5, Math.round(+cfg.radioHide || DEFAULTS.radioHide)));
   cfg.radioRate = Math.min(180, Math.max(60, Math.round(+cfg.radioRate || DEFAULTS.radioRate)));
@@ -739,7 +740,7 @@ function getState() {
       ghostBy: cfg.ghostBy, strip: cfg.strip, snap: cfg.snap, watchApps: cfg.watchApps.slice(), watchMode: cfg.watchMode, watchOpacity: cfg.watchOpacity, streamAuto: cfg.streamAuto,
       miniEnabled: cfg.miniEnabled, miniHotkey: cfg.miniHotkey, miniOpacity: cfg.miniOpacity, betaUpdates: cfg.betaUpdates,
       radioEnabled: cfg.radioEnabled, radioHotkey: cfg.radioHotkey, radioPin: cfg.radioPin, radioHide: cfg.radioHide, radioVoice: cfg.radioVoice,
-      radioVoiceName: cfg.radioVoiceName, radioRate: cfg.radioRate, radioSfx: cfg.radioSfx, radioSize: cfg.radioSize
+      radioVoiceName: cfg.radioVoiceName, radioRate: cfg.radioRate, radioSfx: cfg.radioSfx, radioOnline: cfg.radioOnline, radioSize: cfg.radioSize
     },
     miniOpen: mini.isOpen(),
     radioOpen: radio.isOpen(),
@@ -765,7 +766,7 @@ function pushState() {
 }
 
 function applySet(key, val) {
-  const bools = ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "voiceEnabled", "ghost", "voicePtt", "miniEnabled", "betaUpdates", "radioEnabled", "radioPin", "radioVoice", "radioSfx"];
+  const bools = ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "voiceEnabled", "ghost", "voicePtt", "miniEnabled", "betaUpdates", "radioEnabled", "radioPin", "radioVoice", "radioSfx", "radioOnline"];
   let result = { ok: true };
   if (key === "autostart") {
     if (!app.isPackaged) return { ok: false, error: "Автозапуск доступен только в установленной версии." };
@@ -800,7 +801,7 @@ function applySet(key, val) {
       if (!result.ok) { cfg.radioEnabled = false; radio.registerHotkey(); }
       if (!cfg.radioEnabled) radio.toggle(false);
     }
-    if (key === "radioPin" || key === "radioVoice" || key === "radioSfx") radio.applyOpts();
+    if (key === "radioPin" || key === "radioVoice" || key === "radioSfx" || key === "radioOnline") radio.applyOpts();
     if (key === "betaUpdates") {
       if (updater) updater.allowPrerelease = val;
       if (val) setTimeout(() => checkForAppUpdate(false), 1500);
@@ -1690,6 +1691,7 @@ app.whenReady().then(() => {
     saveCfg,
     changed: () => { updateTrayMenu(); pushState(); },
     fromMain,
+    stt: (d) => accounts.act("stt", d, 22000),
     openTarget: (t) => {
       if (!win || win.isDestroyed()) return;
       showWindow();

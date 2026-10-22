@@ -810,7 +810,7 @@ async function api(req) {
     return J(fail("Некорректный запрос."), 400);
   }
   if (!b || typeof b !== "object") return J(fail("Некорректный запрос."), 400);
-  if (b.action !== "sync" && b.action !== "xfer" && !((b.action === "ai_ask" || b.action === "panel") && raw.length <= 40000) && !(b.action === "panel" && b.op === "ads_save" && raw.length <= 700000) && !(b.action === "bug_report" && raw.length <= 700000) && !(b.action === "share" && raw.length <= 40000) && raw.length > 8192) return J(fail("Слишком большой запрос."), 413);
+  if (b.action !== "sync" && b.action !== "xfer" && !((b.action === "ai_ask" || b.action === "panel") && raw.length <= 40000) && !(b.action === "panel" && b.op === "ads_save" && raw.length <= 700000) && !(b.action === "bug_report" && raw.length <= 700000) && !(b.action === "stt" && raw.length <= 1200000) && !(b.action === "share" && raw.length <= 40000) && raw.length > 8192) return J(fail("Слишком большой запрос."), 413);
   const ip = req.headers.get("cf-connecting-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
   switch (b.action) {
     case "register":
@@ -827,6 +827,8 @@ async function api(req) {
       return J(await lawsApi(b));
     case "ai_ask":
       return J(await aiAsk(b));
+    case "stt":
+      return J(await sttApi(b));
     case "panel":
       return J(await panelApi(b, ip, req.headers.get("user-agent") || ""));
     case "bug_report":
@@ -4464,6 +4466,33 @@ async function aiAsk(b) {
   const logId = logged && logged.ok ? logged.id : "";
   if (!j || !j.ok) return fail((j && j.error) || "ИИ-сервис вернул ошибку (" + status + ").", { limit: !!(j && j.limit) });
   return { ok: true, answer: String(j.answer || ""), left: typeof j.left === "number" ? j.left : null, cached: !!j.cached, logId };
+}
+
+// 2.6.1: распознавание речи для рации. Запись идёт в ИИ-прокси (Whisper), обратно приходит только текст; здесь ничего не сохраняется
+async function sttApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!AI_KEY) return fail("Распознавание на сервере ещё не подключено.", { code: "ai_off" });
+  const audio = typeof b.audio === "string" ? b.audio : "";
+  if (audio.length < 2000 || audio.length > 1100000) return fail("Неверная запись.");
+  if (!(await hit(`stt:${p.id}`, 500, 86400))) return fail("Дневной лимит распознавания исчерпан.", { limit: true });
+  const prompt = String(b.prompt == null ? "" : b.prompt).replace(/\s+/g, " ").slice(0, 600);
+  const cid = (await sha256("web:" + p.id)).slice(0, 32);
+  const ts = String(Date.now());
+  try {
+    const r = await fetch(AI_URL + "/stt", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-senko-cid": cid, "x-senko-ts": ts, "x-senko-sig": await hmacHex(AI_KEY, cid + "." + ts) },
+      body: JSON.stringify({ audio, prompt }),
+      signal: AbortSignal.timeout(20000),
+    });
+    let j = null;
+    try { j = await r.json(); } catch (e) {}
+    if (!j || !j.ok) return fail((j && j.error) || "Распознавание вернуло ошибку (" + r.status + ").", { limit: !!(j && j.limit) });
+    return { ok: true, text: String(j.text || "").slice(0, 600) };
+  } catch (e) {
+    return fail("Не удалось связаться с распознаванием.");
+  }
 }
 
 Deno.serve(async (req) => withCors(req, await handle(req)));

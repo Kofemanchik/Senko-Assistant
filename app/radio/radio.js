@@ -4,7 +4,7 @@
   var api = window.senkoRadio;
   var $ = function (id) { return document.getElementById(id); };
   var MODEL_URL = "senko-voice://app/model.tar.gz";
-  var MAX_MS = 30000;
+  var MAX_MS = 25000; // и для онлайн-распознавания: 25 с WAV 16 кГц укладываются в лимит записи
   // Второй распознаватель слушает только слова команд и числа: так номера статей, паспорта и количества разбираются заметно точнее.
   // Имя он не знает ([unk]), его берём из обычного распознавания.
   var GRAMMAR = ("задержан задержана задержаны задерживаю гражданин гражданка гражданина подозреваемый подозреваемая паспорт паспорта номер статик " +
@@ -47,7 +47,7 @@
     }
     return out.join(" ").trim();
   }
-  var S = { opts: { voice: true, sfx: true, rate: 100, voiceName: "", pin: false, hide: 20, hotkey: "", mic: "" }, state: "idle", model: null, modelP: null,
+  var S = { opts: { voice: true, sfx: true, rate: 100, voiceName: "", pin: false, hide: 20, hotkey: "", mic: "", online: true }, state: "idle", model: null, modelP: null,
             sess: null, data: null, sel: 0, hideT: null, over: false, speaking: false, token: 0 };
   var LCD = ["", "lcd-amber", "lcd-night"];
   function ls(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
@@ -93,6 +93,29 @@
   /* ───── сообщение на экране ───── */
   function msg(who, text) { $("msg").firstElementChild.textContent = who + ":"; $("msgT").textContent = text || ""; }
   function led(c) { $("led").className = "led" + (c ? " " + c : ""); }
+  /* ───── запись для онлайн-распознавания (WAV 16 кГц моно) ───── */
+  function wavB64(chunks, rate) {
+    var n = 0; chunks.forEach(function (c) { n += c.length; });
+    var ratio = rate / 16000, m = Math.floor(n / ratio), pcm = new Int16Array(m), all = new Float32Array(n), o = 0;
+    chunks.forEach(function (c) { all.set(c, o); o += c.length; });
+    for (var i = 0; i < m; i++) { // усредняем окно вместо фильтра: для речи этого достаточно
+      var a = Math.floor(i * ratio), b = Math.max(a + 1, Math.floor((i + 1) * ratio)), sum = 0;
+      for (var j = a; j < b && j < n; j++) sum += all[j];
+      var v = Math.max(-1, Math.min(1, sum / (b - a)));
+      pcm[i] = v < 0 ? v * 32768 : v * 32767;
+    }
+    var buf = new ArrayBuffer(44 + pcm.length * 2), dv = new DataView(buf);
+    var w = function (off, str) { for (var k = 0; k < str.length; k++) dv.setUint8(off + k, str.charCodeAt(k)); };
+    w(0, "RIFF"); dv.setUint32(4, 36 + pcm.length * 2, true); w(8, "WAVE"); w(12, "fmt "); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+    dv.setUint32(24, 16000, true); dv.setUint32(28, 32000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, "data"); dv.setUint32(40, pcm.length * 2, true);
+    new Int16Array(buf, 44).set(pcm);
+    var bytes = new Uint8Array(buf), bin = "";
+    for (var q = 0; q < bytes.length; q += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(q, q + 0x8000));
+    return { b64: btoa(bin), sec: m / 16000 };
+  }
+  function online(b64) {
+    return Promise.race([api.stt(b64), new Promise(function (r) { setTimeout(function () { r({ ok: false }); }, 12000); })]).catch(function () { return { ok: false }; });
+  }
   function setState(st) { S.state = st; api.status(st); $("ptt").classList.toggle("on", st === "listening"); $("pttK").textContent = st === "listening" ? "ГОТОВО" : "ГОВОРИТЬ";
     $("softMid").textContent = st === "listening" ? "ПРД" : st === "loading" ? "ЗАГР" : st === "thinking" ? "ОБРАБ" : "ПРД"; }
 
@@ -192,7 +215,7 @@
     var actx = new AudioContext(); try { await actx.resume(); } catch (e) {}
     var rec = new model.KaldiRecognizer(actx.sampleRate), recG = null;
     try { recG = new model.KaldiRecognizer(actx.sampleRate, GJSON); } catch (e) { recG = null; }
-    var s = { stream: stream, ctx: actx, rec: rec, recG: recG, text: "", partial: "", gtext: "", gpartial: "", done: false };
+    var s = { stream: stream, ctx: actx, rec: rec, recG: recG, text: "", partial: "", gtext: "", gpartial: "", done: false, pcm: [], rate: actx.sampleRate };
     S.sess = s;
     if (recG) {
       recG.on("result", function (m) { var t = (m && m.result && m.result.text || "").trim(); if (t) s.gtext = (s.gtext ? s.gtext + " " : "") + t; });
@@ -205,6 +228,7 @@
       if (s.done) return;
       var d = ev.inputBuffer.getChannelData(0), sum = 0; for (var i = 0; i < d.length; i++) sum += d[i] * d[i];
       bars(Math.sqrt(sum / d.length));
+      if (S.opts.online && api.stt) s.pcm.push(new Float32Array(d));
       try { rec.acceptWaveform(ev.inputBuffer); } catch (e) {}
       if (recG) { try { recG.acceptWaveform(ev.inputBuffer); } catch (e) {} }
     };
@@ -221,16 +245,27 @@
     setTimeout(function () {
       var text = ((s.text ? s.text + " " : "") + (s.partial || "")).trim();
       var gt = ((s.gtext ? s.gtext + " " : "") + (s.gpartial || "")).trim();
+      var off = gt ? merge(gt, text) : "";
+      var pcm = s.pcm, rate = s.rate; s.pcm = [];
       cleanup(s); setState("thinking"); led("busy");
-      send(text, gt ? merge(gt, text) : "");
+      if (!S.opts.online || !api.stt || !pcm.length) { send(off || text, text); return; }
+      var wav = wavB64(pcm, rate);
+      if (wav.sec < 0.4) { send(off || text, text); return; }
+      msg("РАЦИЯ", "Распознаю…");
+      online(wav.b64).then(function (r) {
+        var t = r && r.ok ? String(r.text || "").trim() : "";
+        // онлайн-текст главный, офлайн остаётся запасным вариантом разбора
+        if (t) send(t, off || text); else send(off || text, text);
+      });
     }, 250);
   }
-  async function send(text, cmdText) {
-    if (!text && cmdText) { text = cmdText; cmdText = ""; }
+  async function send(text, alt) { // text — главный вариант разбора, alt — запасной (если по главному диспетчер не понял)
+    text = String(text || "").trim(); alt = String(alt || "").trim();
+    if (!text && alt) { text = alt; alt = ""; }
     if (!text) { setState("idle"); reply({ say: "Повторите, не расслышал.", show: "Повторите, не расслышал." }); return; }
-    msg("Я", cmdText || text);
+    msg("Я", text);
     var r;
-    try { r = await api.text(cmdText || text, cmdText ? text : ""); } catch (e) { r = { say: "Нет связи с программой.", show: "Нет связи с программой." }; }
+    try { r = await api.text(text, alt !== text ? alt : ""); } catch (e) { r = { say: "Нет связи с программой.", show: "Нет связи с программой." }; }
     setState("idle");
     reply(r);
   }

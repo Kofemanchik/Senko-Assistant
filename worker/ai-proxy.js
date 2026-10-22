@@ -149,6 +149,58 @@ function providers(env) {
   return list;
 }
 
+// ───── распознавание речи для рации (2.6.1, с согласия Hanami 22.10.2026): Whisper у Groq, если есть ключ, иначе Whisper в Workers AI.
+// Запись не сохраняется: прокси передаёт её на распознавание и возвращает только текст.
+const MAX_AUDIO_B64 = 1100000; // ~25 с WAV 16 кГц моно
+function b64bytes(b64) { const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+async function sttGroq(env, b64, prompt) {
+  const fd = new FormData();
+  fd.append("file", new Blob([b64bytes(b64)], { type: "audio/wav" }), "radio.wav");
+  fd.append("model", env.GROQ_STT_MODEL || "whisper-large-v3-turbo");
+  fd.append("language", "ru");
+  fd.append("temperature", "0");
+  fd.append("response_format", "json");
+  if (prompt) fd.append("prompt", prompt);
+  const r = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", { method: "POST", headers: { authorization: "Bearer " + env.GROQ_API_KEY }, body: fd });
+  if (!r.ok) throw Object.assign(new Error("groq stt " + r.status + " " + (await r.text().catch(() => "")).slice(0, 200)), { status: r.status });
+  const j = await r.json();
+  return String((j && j.text) || "").trim();
+}
+async function sttCloudflare(env, b64, prompt) {
+  let out;
+  try { out = await env.AI.run(env.CF_STT_MODEL || "@cf/openai/whisper-large-v3-turbo", { audio: b64, language: "ru", initial_prompt: prompt || undefined, vad_filter: true }); }
+  catch (e) { const m = String((e && e.message) || e); throw Object.assign(new Error("cloudflare stt " + m.slice(0, 200)), { status: /limit|quota|neuron|capacity|4006/i.test(m) ? 429 : 502 }); }
+  return String((out && out.text) || "").trim();
+}
+function sttProviders(env) {
+  const list = [];
+  if (env.GROQ_API_KEY) list.push(["groq", sttGroq]);
+  if (env.AI) list.push(["cloudflare", sttCloudflare]);
+  return list;
+}
+async function handleStt(request, env, uid) {
+  let body;
+  try { body = await request.json(); } catch (e) { body = null; }
+  const b64 = body && typeof body.audio === "string" ? body.audio.replace(/\s+/g, "") : "";
+  if (!b64 || b64.length < 2000 || b64.length > MAX_AUDIO_B64 || !/^[A-Za-z0-9+/=]+$/.test(b64)) return json({ ok: false, error: "Неверная запись." }, 400);
+  const prompt = String((body && body.prompt) || "").replace(/\s+/g, " ").slice(0, 600);
+  const per = +env.STT_PER_USER || 400;
+  if (env.LIMITS) {
+    const k = `stt:${dayKey()}:${uid}`; let n = 0;
+    try { n = parseInt((await env.LIMITS.get(k)) || "0", 10) || 0; } catch (e) {}
+    if (n >= per) return json({ ok: false, error: "Дневной лимит распознавания исчерпан.", limit: true }, 429);
+    try { await env.LIMITS.put(k, String(n + 1), { expirationTtl: 172800 }); } catch (e) {}
+  }
+  const list = sttProviders(env);
+  if (!list.length) return json({ ok: false, error: "Распознавание не настроено." }, 503);
+  const codes = [];
+  for (const [name, fn] of list) {
+    try { return json({ ok: true, text: (await fn(env, b64, prompt)).slice(0, 600), provider: name }); }
+    catch (e) { console.error("stt failed:", name, String(e && e.message)); codes.push(name + " " + (e.status || "сеть")); }
+  }
+  return json({ ok: false, error: "Распознавание сейчас недоступно (" + codes.join(", ") + ")." }, 502);
+}
+
 // ───── лимиты (мягкие, через KV) ─────
 const dayKey = () => new Date().toISOString().slice(0, 10);
 // Сначала проверяем остаток (чтение), а списываем вопрос (запись) только после успешного ответа ИИ:
@@ -169,8 +221,8 @@ async function commitQuota(env, uid, q) {
 async function handle(request, env, ctxW) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
   const url = new URL(request.url);
-  if (request.method === "GET" && url.pathname === "/health") return json({ ok: true, providers: providers(env).map((p) => p[0]) });
-  if (request.method !== "POST" || url.pathname !== "/ask") return json({ ok: false, error: "Not found" }, 404);
+  if (request.method === "GET" && url.pathname === "/health") return json({ ok: true, providers: providers(env).map((p) => p[0]), stt: sttProviders(env).map((p) => p[0]) });
+  if (request.method !== "POST" || (url.pathname !== "/ask" && url.pathname !== "/stt")) return json({ ok: false, error: "Not found" }, 404);
   if (!env.APP_KEY) return json({ ok: false, error: "Сервис не настроен." }, 503);
 
   // подпись сервера Senko: HMAC(APP_KEY, "<cid>.<ts>"). С 2.2.1 ключ есть только у сервера Supabase,
@@ -182,6 +234,7 @@ async function handle(request, env, ctxW) {
   // WEB_KEY: необязательный второй ключ (если на сервере Supabase задан он, а не APP_KEY)
   const okSig = safeEq(sig, await hmacHex(env.APP_KEY, cid + "." + ts)) || (!!env.WEB_KEY && safeEq(sig, await hmacHex(env.WEB_KEY, cid + "." + ts)));
   if (!okSig) return json({ ok: false, error: "Запрос отклонён." }, 403);
+  if (url.pathname === "/stt") return handleStt(request, env, (await sha256Hex(cid)).slice(0, 24));
 
   let body;
   try { body = cleanBody(await request.json()); } catch (e) { body = null; }
