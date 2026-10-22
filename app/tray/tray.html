@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Senko Assistant — меню</title>
+<style>
+  :root { --bg: #141416; --ink: #f2f2f3; --muted: #9b9ba4; --line: rgba(255,255,255,.09); --hover: rgba(255,255,255,.06); --ac: #ff8a3d; --ac-ink: #140a03; --soft: rgba(255,138,61,.14); --sw: #3a3a41; --bad: #ff6b6b; }
+  html.light { --bg: #ffffff; --ink: #1f1a15; --muted: #6b625a; --line: #ece6dd; --hover: #f4efe8; --ac: #c2530e; --ac-ink: #fff; --soft: #fcefe5; --sw: #d9d2c8; --bad: #c62828; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; overflow: hidden; user-select: none; font: 13px/1.35 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--ink); }
+  #box { margin: 8px; border-radius: 14px; background: var(--bg); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.2); overflow: hidden; animation: up .14s ease-out; }
+  @keyframes up { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+  .hd { display: flex; align-items: center; gap: 10px; padding: 12px 12px 10px; }
+  .lg { width: 34px; height: 34px; border-radius: 9px; overflow: hidden; flex: none; box-shadow: 0 0 0 1px var(--line); }
+  .lg svg { display: block; width: 100%; height: 100%; }
+  .hd b { display: block; font-size: 14px; font-weight: 650; }
+  .hd small { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;  }
+  .hd > span:not(.lg) { min-width: 0; flex: 1; }
+  .main { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 10px 8px; width: calc(100% - 20px); height: 36px; border: 0; border-radius: 10px; background: var(--ac); color: var(--ac-ink); font: 600 13.5px "Segoe UI", system-ui, sans-serif; cursor: pointer; }
+  .main:hover { filter: brightness(1.06); }
+  .main svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .sec { border-top: 1px solid var(--line); padding: 6px; }
+  .it { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 34px; padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: var(--ink); text-align: left; font: 13.5px "Segoe UI", system-ui, sans-serif; cursor: pointer; }
+  .it:hover, .it:focus-visible { background: var(--hover); outline: none; }
+  .it > svg { width: 17px; height: 17px; flex: none; stroke: var(--muted); fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .it .t { flex: 1; min-width: 0; }
+  .it .t small { display: block; font: 11px "Cascadia Mono", Consolas, monospace; color: var(--muted); margin-top: 1px; }
+  .sw { position: relative; width: 30px; height: 18px; border-radius: 9px; background: var(--sw); flex: none; transition: background .15s; }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .15s; }
+  .it[aria-checked="true"] .sw { background: var(--ac); }
+  .it[aria-checked="true"] .sw::after { transform: translateX(12px); }
+  .seg { display: flex; gap: 2px; margin: 2px 8px 6px 35px; padding: 2px; border-radius: 8px; background: var(--hover); }
+  .seg button { flex: 1; height: 26px; border: 0; border-radius: 6px; background: none; color: var(--muted); font: 600 12px "Segoe UI", system-ui, sans-serif; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--bg); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+  .lab { padding: 6px 8px 2px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .ft { display: flex; gap: 6px; border-top: 1px solid var(--line); padding: 8px; }
+  .ft button { flex: 1; white-space: nowrap; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: none; color: var(--ink); font: 600 12.5px "Segoe UI", system-ui, sans-serif; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .ft button:hover { background: var(--hover); }
+  .ft button svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .ft .q { color: var(--bad); }
+  .ft .q:hover { background: color-mix(in srgb, var(--bad) 12%, transparent); border-color: color-mix(in srgb, var(--bad) 35%, transparent); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #2fbf71; display: inline-block; margin-right: 5px; vertical-align: 1px; }
+  .dot.off { background: var(--muted); }
+</style>
+</head>
+<body>
+<div id="box" role="menu" aria-label="Senko Assistant"></div>
+<script>
+(function () {
+  "use strict";
+  var api = window.senkoTray, box = document.getElementById("box"), S = {};
+  var FOX = '<svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="38" fill="#090D15"/><path fill="#EEE8E4" d="M226.5 474.3C140.3 461.4 69.1 397.3 48 313.5C41.1 286.4 39.1 254.6 42.5 227.9C56.7 115.3 146.3 34 256 34C296.9 34 334.9 44.8 369.7 66.3C442.8 111.7 483.7 206.1 468.4 294.4C452.1 388.9 377.9 461.4 284.2 474.4C269.9 476.4 240.3 476.4 226.5 474.3ZM278.5 461.5C331.4 450.5 385.4 406 412.1 351.5C423.5 328.2 428.8 307.5 429.7 283C430.3 266 430.7 265.9 434.1 282.3C440.2 312.6 432.9 350.2 415 380C409.3 389.5 409.9 389.4 418 379.5C465.3 321.6 472.3 231.3 435.2 157.5C393.4 74.3 300.6 30.9 209.7 52.1C96.7 78.5 28.2 200.5 61.5 316C81.7 386.1 139.5 441.7 209.9 458.7C232.8 464.2 260.3 465.3 278.5 461.5ZM234.5 451.9C220.9 450.1 192 441.2 192 438.9C192 438.6 195 438.2 198.8 438.1C214 437.7 234.2 433 251.1 425.8C266.9 419.1 267.1 418.4 253.7 418.8C216.8 419.9 178.6 408.5 151.8 388.5C141.6 380.8 126.8 365.6 120.9 356.6C118.6 353 116.5 350.2 116.3 350.4C115.7 351 120.3 363.7 123.6 370.5C130.3 384.2 143.6 399 157.3 408C161 410.4 163.8 412.5 163.6 412.7C163 413.3 145.6 405.8 139.7 402.4C108.6 384.2 83.9 347.8 77.6 311.1C75 295.8 76.2 281.4 81.2 268.4L83.5 262.5L84.1 275C84.7 287.9 86.9 298.3 90.9 307L93 311.5L92.4 307.6C92.1 305.5 91.9 297.9 91.9 290.6C91.9 270.1 96.4 255.2 107.4 238.6C121.1 218.1 145.8 200.6 169 195.1C180.8 192.2 180.9 192.3 174.4 199.2C143 233.2 138.9 280.9 164.1 320.1C167.9 326.1 168.7 325.8 166.7 319.3C164.3 311.9 163 303.4 163 295.1L163.1 287.5L165.9 294.7C181 332.9 215.9 361.4 265 375.5C271.7 377.4 281.2 379.6 286.1 380.2C296.4 381.6 295.6 382.3 281.5 384.1C262.9 386.4 236 383.1 213.8 375.6C208.4 373.9 204 372.6 204.1 372.9C204.1 373.8 214.8 382.2 221.9 387C248.2 404.7 280.6 408.8 312.5 398.5C330.5 392.7 349.2 381.3 364.9 366.5C368.8 362.8 372 360.1 372 360.6C372 361.1 369.7 366.2 366.9 372C350.6 406 321.6 433.9 291 445C272.7 451.7 251.7 454.3 234.5 451.9ZM377 373.9C377 373.6 378.3 370.4 379.9 366.9C385.2 355.2 393.3 324.9 391.1 325C390.8 325.1 388.5 327.8 386 331.1C373 348.6 352.6 362.4 332.8 366.9C310 372.2 294.7 370.1 268.4 358.5C253.7 351.9 246.8 350 237.3 350C233.3 350 230 349.7 230 349.3C230 347.2 239.2 335.1 244.7 330.1C257.1 318.7 270.3 313.5 286.5 313.6C296.4 313.7 298.6 314.1 309 317.5C324 322.4 333 323.1 342.8 320.1C372.4 311.1 390.1 269.1 379.4 233.6C378.3 230.3 384.5 234.7 391.9 242.7C421.1 273.8 417.7 331.9 384.8 366.4C380.5 370.9 377.1 374.2 377 373.9ZM199.3 307.9C196.3 307 196.1 306.8 197.2 304.4C198.6 301.3 196.4 299 192.2 299C190.9 299 189 298.5 188 298C186.2 297.1 186.5 296.1 192.5 283.9C202.5 263.2 203.4 257.3 199.5 236C193.7 204.4 206.1 173.8 233.4 152.1C238.4 148.1 249.3 141 250.3 141C250.5 141 249.1 145.4 247.4 150.8C241.6 168.3 242 170 249 156.5C268.7 118.5 293.4 77.7 299.2 73.5C305.2 69.3 310.8 74.1 319.3 90.6C339.8 130.8 342 173.5 325 199.9L321 206L327.9 206C331.6 206 338.1 206.9 342.4 208C349.8 209.9 366 217.4 366 219C366 219.4 363.7 220 360.9 220.3C352.9 221.3 343 224.8 329.2 231.5L316.5 237.7L322.2 238.9C330.5 240.7 339.6 245.6 345.9 251.7C348.9 254.6 351.1 257.2 350.8 257.5C350.5 257.8 347.2 257.3 343.4 256.3C333 253.8 312.1 254 300.8 256.8C288.6 259.8 277.9 264.1 268 270C256.9 276.6 256.6 277.1 264.2 275.2C274.2 272.7 291.9 273.1 299.9 275.9C312.4 280.3 322.5 289.3 326.5 299.5C327.3 301.8 327.5 302.7 326.7 301.6C317.1 287.3 306 281.1 288.5 280.2C272.4 279.5 258.9 283.7 237 296.3C216.6 308.1 216.2 308.3 209.1 308.6C205.5 308.8 201.1 308.5 199.3 307.9ZM412.2 260.6C402.2 228.6 375.6 199 349.5 191.1C347.3 190.4 345 189.7 344.3 189.5C343.5 189.2 343.8 187 345.2 181.8C346.9 175.9 347.3 171.5 347.3 159.2L347.3 144L350.9 144.6C367 147.3 381.5 153.6 392.3 162.5C396.1 165.6 399 168.3 398.8 168.5C398.6 168.7 396 168.2 393 167.4C389.6 166.5 383.9 166.1 378.1 166.2L368.7 166.5L374.6 168.9C386.5 173.7 396.1 180.2 406.6 190.5C421.2 204.9 429.9 219.2 435.4 238.3C437.6 245.9 440.2 260 439.5 260.8C439.4 260.9 437.4 257.2 435.2 252.6C429.5 240.6 423.9 232.7 415.2 224.2C411.1 220.2 407.6 217 407.5 217.2C407.3 217.4 408.2 220.7 409.5 224.5C413.5 236.4 415.1 246.6 414.8 257.8L414.5 268.2L412.2 260.6ZM236.2 251.9C240.4 248.6 245.1 244.3 246.6 242.2C248.1 240.2 250.9 236.5 252.7 234.1C254.5 231.7 255.8 229.5 255.6 229.3C254.9 228.6 244.1 233.8 238.4 237.6C231.8 242 227.8 247.8 225 256.9C222.5 264.9 222.5 265.2 225.8 261.1C227.2 259.3 231.9 255.1 236.2 251.9ZM296.8 193.5C314.5 185 322 171.2 322 146.5C322 140.4 321.3 131.4 320.4 126.5C317.7 110.4 308.2 85.8 304.3 84.3C299.7 82.5 287.8 107.4 272.1 152L268 163.5L276.3 155C280.8 150.3 288 142.7 292.3 138L300 129.5L300 137.5C300 150.3 295.5 164.5 288 175.8L285.7 179.1L291.4 176.6C294.5 175.2 298.5 173.1 300.1 171.9C304 169.2 304.4 169.7 302.5 175C300.4 181 297.4 185.7 291.6 191.8C285.9 197.9 286.9 198.3 296.8 193.5ZM204.2 171.9C203.7 170.6 200.5 162.2 197.1 153.2C183.1 116.2 176.1 91.5 178 86.4C179.8 81.7 187.3 84.4 208.9 97.7C226.1 108.3 252 127.1 252 128.9C252 129.3 249.1 131.2 245.6 133.2C231.3 141.5 219.2 153 209.8 167.2C205.3 174 205 174.3 204.2 171.9Z"/></svg>';
+  var I = {
+    open: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+    hide: '<path d="M5 12h14"/>',
+    pin: '<path d="M12 17v5M9 10.8V5h6v5.8l2 2.2H7z"/>',
+    compact: '<rect x="7" y="3" width="10" height="18" rx="2"/>',
+    mic: '<path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/>',
+    mini: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/>',
+    users: '<circle cx="9" cy="8" r="4"/><path d="M2 21c.8-3.5 3.6-5.5 7-5.5s6.2 2 7 5.5M16 3.5a4 4 0 0 1 0 8M22 21c-.5-2.6-2-4.4-4-5.1"/>',
+    upd: '<path d="M21 12a9 9 0 1 1-2.6-6.4M21 4v5h-5"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/>',
+    out: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+    power: '<path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.8 0"/>'
+  };
+  function ic(k) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + I[k] + '</svg>'; }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function tog(k, icon, label, on, key) {
+    return '<button type="button" class="it" role="menuitemcheckbox" data-k="' + k + '" aria-checked="' + !!on + '">' + ic(icon) + '<span class="t">' + label + (key ? '<small>' + esc(key) + '</small>' : '') + '</span><i class="sw" aria-hidden="true"></i></button>';
+  }
+  function act(k, icon, label) { return '<button type="button" class="it" role="menuitem" data-k="' + k + '">' + ic(icon) + '<span class="t">' + label + '</span></button>'; }
+  function render() {
+    document.documentElement.classList.toggle("light", S.dark === false);
+    var u = S.user, h = '';
+    h += '<div class="hd"><span class="lg">' + FOX + '</span><span><b>Senko Assistant</b><small>' +
+      (u ? '<i class="dot' + (u.offline ? ' off' : '') + '"></i>' + esc(u.nick || u.login) + ' · ' : '') + 'версия ' + esc(S.version || "") + '</small></span></div>';
+    h += '<button type="button" class="main" data-k="toggle">' + ic(S.visible ? "hide" : "open") + (S.visible ? 'Свернуть в трей' : 'Открыть Senko Assistant') + '</button>';
+    h += '<div class="sec">' + tog("alwaysOnTop", "pin", "Поверх всех окон", S.alwaysOnTop) + tog("compact", "compact", "Компактный режим", S.compact) +
+      tog("mini", "mini", "Мини-окно задержания", S.mini, S.miniHotkey) + tog("voiceEnabled", "mic", "Голосовой ввод", S.voiceEnabled, S.voiceHotkey) + '</div>';
+    if (S.profiles && S.profiles.length) h += '<div class="sec"><div class="lab">Профиль окна</div><div class="seg">' + S.profiles.map(function (p) { return '<button type="button" data-k="profile" data-v="' + esc(p.k) + '" aria-pressed="' + !!p.on + '">' + esc(p.n) + '</button>'; }).join("") + '</div></div>';
+    h += '<div class="sec">' + (S.staff ? act("staff", "users", "Список сотрудников") : '') + act("update", "upd", "Проверить обновления") + act("about", "info", "О программе") + '</div>';
+    h += '<div class="ft">' + (u ? '<button type="button" data-k="logout" title="Выйти из аккаунта ' + esc(u.login) + '">' + ic("out") + 'Сменить аккаунт</button>' : '') + '<button type="button" class="q" data-k="quit">' + ic("power") + 'Выход</button></div>';
+    box.innerHTML = h;
+    requestAnimationFrame(function () { api.fit(box.getBoundingClientRect().height + 16); });
+  }
+  box.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-k]"); if (!b) return;
+    var k = b.dataset.k;
+    if (b.hasAttribute("aria-checked")) { var on = b.getAttribute("aria-checked") !== "true"; b.setAttribute("aria-checked", String(on)); api.act(k, on); return; }
+    api.act(k, b.dataset.v);
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { api.close(); return; }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    var L = [].slice.call(box.querySelectorAll("button")), i = L.indexOf(document.activeElement);
+    L[(i + (e.key === "ArrowDown" ? 1 : -1) + L.length) % L.length].focus();
+  });
+  api.onState(function (d) { S = d || {}; render(); });
+  render();
+})();
+</script>
+</body>
+</html>

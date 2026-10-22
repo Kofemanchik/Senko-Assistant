@@ -7,6 +7,7 @@ const fs = require("fs");
 const crypto = require("crypto");
 const voice = require("./voice"); // голосовой ввод и оверлей
 const mini = require("./mini"); // 2.4: мини-окно задержания поверх игры
+const trayMenu = require("./traymenu"); // 2.5: своё меню значка в трее вместо системного
 const ai = require("./ai");       // ИИ-помощник (через прокси)
 
 // ───────────── НАСТРОЙКИ ─────────────
@@ -608,6 +609,8 @@ function ensureTray() {
       tray = new Tray(nativeImage.createFromPath(iconPath()));
       tray.setToolTip("Senko Assistant");
       tray.on("click", toggleWindow);
+      // В Linux значок трея не получает правый щелчок без системного меню, там остаётся оно
+      if (process.platform !== "linux") tray.on("right-click", (e, b) => trayMenu.show(b || (tray && tray.getBounds())));
       updateTrayMenu();
     } catch (e) {
       tray = null;
@@ -617,8 +620,37 @@ function ensureTray() {
     tray = null;
   }
 }
+function trayState() {
+  const u = accounts.current();
+  const P = cfg.winProfiles || {};
+  return {
+    version: app.getVersion(),
+    user: u ? { login: u.login, nick: u.nick, offline: !!u.offline } : null,
+    visible: !!(win && !win.isDestroyed() && win.isVisible() && !win.isMinimized()),
+    alwaysOnTop: !!cfg.alwaysOnTop, compact: !!cfg.compact,
+    voiceEnabled: !!cfg.voiceEnabled, voiceHotkey: cfg.voiceHotkey,
+    mini: mini.isOpen(), miniHotkey: cfg.miniHotkey,
+    profiles: [["game", "В игре"], ["desk", "За столом"]].filter(([k]) => P[k]).map(([k, n]) => ({ k, n, on: cfg.winProfile === k })),
+    staff: accounts.isStaff()
+  };
+}
+// действие из меню трея; true — меню остаётся открытым (переключатели), false — закрывается
+function trayAct(k, v) {
+  if (["alwaysOnTop", "compact", "voiceEnabled", "mini"].includes(k)) { applySet(k, !!v); return true; }
+  if (k === "profile") { if (cfg.winProfiles && cfg.winProfiles[v]) { winx.profUse(v); updateTrayMenu(); } return true; }
+  if (k === "toggle") {
+    if (win && !win.isDestroyed() && win.isVisible() && !win.isMinimized()) { if (cfg.tray) win.hide(); else win.minimize(); }
+    else showWindow();
+  } else if (k === "staff") openStaff();
+  else if (k === "update") { checkForAppUpdate(true); checkForUpdate(true); }
+  else if (k === "about") showAbout();
+  else if (k === "logout") logout();
+  else if (k === "quit") { quitting = true; app.quit(); }
+  return false;
+}
 function updateTrayMenu() {
   if (!tray) return;
+  if (process.platform !== "linux") { trayMenu.refresh(); return; }
   const u = accounts.current();
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -1450,6 +1482,7 @@ function initSystem() {
 }
 function tearDownSystem() {
   if (tray) { tray.destroy(); tray = null; }
+  trayMenu.destroy();
   try { globalShortcut.unregisterAll(); } catch (e) {}
   hotkeyActive = null;
   voice.destroy();
@@ -1580,6 +1613,7 @@ app.whenReady().then(() => {
     sendMain: (ch, data) => { if (win && !win.isDestroyed()) win.webContents.send(ch, data); },
     aiAvailable: ai.configured   // подключён ли ИИ-сервис (иначе переключатель режима неактивен)
   });
+  trayMenu.init({ state: trayState, act: trayAct });
   mini.init({
     getCfg: () => cfg,
     saveCfg,
