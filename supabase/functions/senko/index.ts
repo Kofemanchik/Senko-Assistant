@@ -2116,7 +2116,8 @@ async function onMessage(m, opts = {}) {
     return send(
       chat,
       `Senko Assistant.\nВаш Telegram ID: <code>${m.from.id}</code>\n` +
-        (a ? `Доступ: ${a.kind === "owner" ? "владелец" : a.kind === "leader" ? "руководство " + esc(a.profile.org) : "модератор памятки"}. Команды: /help` : "Команды вам недоступны. Если вы модератор, сообщите этот ID владельцу.")
+        (a ? `Доступ: ${a.kind === "owner" ? "владелец" : a.kind === "leader" ? "руководство " + esc(a.profile.org) : "модератор памятки"}. Команды: /help` : "Команды вам недоступны. Если вы модератор, сообщите этот ID владельцу.") +
+        "\n\n📖 Статьи кодексов в любом чате: наберите в строке сообщения имя бота через @ и номер статьи или слова, например <code>12.8</code>, <code>ак 2.1</code> или <code>оружие</code>, и выберите статью из списка."
     );
   }
   if (!a) return send(chat, "Нет доступа.");
@@ -2866,6 +2867,7 @@ async function bot(req) {
   try {
     if (u.message) await onMessage(u.message);
     else if (u.callback_query) await onCallback(u.callback_query);
+    else if (u.inline_query) await onInline(u.inline_query);
   } catch (e) {
     console.error("bot", e);
   }
@@ -2942,6 +2944,132 @@ const ghError = (r) =>
   r.status === 403 || r.status === 404 ? "У токена GH_LAWS_TOKEN нет доступа: нужен доступ к репозиторию " + GH_REPO + " с правом Actions: Read and write." :
   "GitHub ответил ошибкой " + r.status + ".";
 
+// ───────────── 2.4.1: inline-режим бота ─────────────
+// В любом чате: «@бот 12.8», «@бот ак 2.1», «@бот оружие» → статья кодекса уходит в чат сообщением.
+// Кодексы берутся из app/index.html репозитория (те же массивы UK_RAW, AK_RAW, DK_RAW, PK, что в программе),
+// копия держится в памяти функции 30 минут. В BotFather у бота должен быть включён /setinline.
+const CODES_URL = Deno.env.get("CODES_URL") || "https://raw.githubusercontent.com/Kofemanchik/Senko-Assistant/main/app/index.html";
+const KIND_NAME = { uk: "УК", ak: "АК", dk: "ДК", pk: "ПК" };
+const KIND_FULL = { uk: "Уголовный кодекс", ak: "Административный кодекс", dk: "Дорожный кодекс", pk: "Процессуальный кодекс" };
+let codesCache = null; // { at, arts: [{ k, code, title, parts: [...] }] }
+function codesArr(html, name) {
+  const re = new RegExp("\\bvar " + name + " = \\(?\\[");
+  const m = re.exec(html);
+  if (!m) throw new Error("нет массива " + name);
+  const start = m.index + m[0].length - 1;
+  // массив заканчивается первой строкой «]» или «]])»: внутри строк скобки экранированы JSON-строками
+  let depth = 0, inStr = false, i = start;
+  for (; i < html.length; i++) {
+    const c = html[i];
+    if (inStr) { if (c === "\\") i++; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === "[") depth++;
+    else if (c === "]" && --depth === 0) break;
+  }
+  return JSON.parse(html.slice(start, i + 1).replace(/,\s*\]/g, "]"));
+}
+function codesParse(html) {
+  const rows = [];
+  for (const l of codesArr(html, "UK_RAW")) { const a = l.split("|"); rows.push({ k: "uk", code: a[0], title: a[1], part: a[2], stars: +a[3] || 0, m: +a[4] || 0, fmin: +a[5] || 0, fmax: +a[6] || 0, rec: a[7] === "1", note: a[8] || "" }); }
+  for (const l of codesArr(html, "AK_RAW")) { const a = l.split("|"); rows.push({ k: "ak", code: a[0], title: a[1], part: a[2], fmin: +a[3] || 0, fmax: +a[4] || 0, note: a[5] || "" }); }
+  for (const l of codesArr(html, "DK_RAW")) { const a = l.split("|"); rows.push({ k: "dk", code: a[0], title: a[1], part: a[2], fmax: +a[3] || 0, x: a[4] || "", note: a[5] || "" }); }
+  for (const a of codesArr(html, "PK")) rows.push({ k: "pk", code: a[0], part: a[1], title: a[2], note: a[3] || "" });
+  const map = new Map();
+  for (const r of rows) {
+    const id = r.k + ":" + r.code;
+    if (!map.has(id)) map.set(id, { k: r.k, code: r.code, title: r.title, parts: [] });
+    map.get(id).parts.push(r);
+  }
+  return [...map.values()];
+}
+async function codesLoad() {
+  if (codesCache && Date.now() - codesCache.at < 30 * 60e3) return codesCache.arts;
+  try {
+    const r = await fetch(CODES_URL + "?t=" + Math.floor(Date.now() / 600e3), { signal: AbortSignal.timeout(20000) });
+    if (!r.ok) throw new Error("GitHub вернул " + r.status);
+    const arts = codesParse(await r.text());
+    if (arts.length < 50) throw new Error("мало статей: " + arts.length);
+    codesCache = { at: Date.now(), arts };
+  } catch (e) {
+    console.error("codes", e);
+    if (!codesCache) throw e;
+    codesCache.at = Date.now() - 25 * 60e3; // старая копия, повторим через 5 минут
+  }
+  return codesCache.arts;
+}
+const money = (n) => "$" + String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+function codesChips(p) {
+  const c = [];
+  if (p.stars) c.push(p.stars + "★");
+  if (p.m) c.push("до " + p.m + " мес.");
+  if (p.fmin && p.fmax && p.fmin !== p.fmax) c.push("штраф " + money(p.fmin) + "–" + money(p.fmax));
+  else if (p.fmax || p.fmin) c.push("штраф " + money(p.fmax || p.fmin));
+  if (p.x) c.push(p.x);
+  if (p.rec) c.push("судимость");
+  return c;
+}
+function codesText(a) {
+  const head = `<b>${KIND_NAME[a.k]} ст. ${esc(a.code)} · ${esc(a.title)}</b>`;
+  const body = a.parts.map((p) => {
+    const chips = codesChips(p);
+    const pn = p.part ? "ч." + p.part : a.parts.length > 1 ? "ч.1" : "";
+    return (pn ? `<b>${pn}</b> ` : "") + esc(p.note) + (chips.length ? `\n<i>${esc(chips.join(" · "))}</i>` : "");
+  }).filter((x) => x.trim()).join("\n\n");
+  let t = head + (body ? "\n\n" + body : "") + `\n\n<i>${KIND_FULL[a.k]} · Senko Assistant</i>`;
+  if (t.length > 4000) t = head + "\n\n" + esc(a.parts.map((p) => (p.part ? "ч." + p.part + " " : "") + p.note).join("\n").slice(0, 3600)) + "…\n\n<i>Полный текст в программе Senko Assistant</i>";
+  return t;
+}
+const INLINE_KIND = { "ук": "uk", "uk": "uk", "ак": "ak", "ak": "ak", "коап": "ak", "дк": "dk", "dk": "dk", "пдд": "dk", "пк": "pk", "pk": "pk", "упк": "pk" };
+function codesSearch(arts, q) {
+  q = String(q || "").toLowerCase().replace(/ё/g, "е").replace(/[«»"']/g, " ").replace(/\s+/g, " ").trim();
+  let kind = "";
+  q = q.replace(/(^|\s)(ук|uk|ак|ak|коап|дк|dk|пдд|пк|pk|упк)(?=\s|$|\d)/, (m, sp, k) => { kind = INLINE_KIND[k]; return " "; }).replace(/(^|\s)(ст\.?|статья|статьи)(?=\s|\d|$)/g, " ").replace(/\s+/g, " ").trim();
+  const pool = kind ? arts.filter((a) => a.k === kind) : arts;
+  const num = /^(\d+(?:\.\d+)*)\.?$/.exec(q);
+  if (num) {
+    const n = num[1];
+    const exact = pool.filter((a) => a.code === n);
+    const more = pool.filter((a) => a.code !== n && a.code.startsWith(n + "."));
+    return exact.concat(more).sort((x, y) => (x.code === n ? 0 : 1) - (y.code === n ? 0 : 1) || Object.keys(KIND_NAME).indexOf(x.k) - Object.keys(KIND_NAME).indexOf(y.k));
+  }
+  const words = q.split(" ").filter((w) => w.length >= 2).map((w) => (w.length >= 5 ? w.slice(0, w.length - (w.length >= 7 ? 2 : 1)) : w)); // грубое окончание: «маска» находит «маске»
+  if (!words.length) return [];
+  const scored = [];
+  for (const a of pool) {
+    const title = a.title.toLowerCase().replace(/ё/g, "е");
+    const all = title + " " + a.parts.map((p) => p.note).join(" ").toLowerCase().replace(/ё/g, "е");
+    if (!words.every((w) => all.includes(w))) continue;
+    scored.push({ a, s: words.filter((w) => title.includes(w)).length * 10 + (a.k === "uk" ? 2 : a.k === "ak" ? 1 : 0) });
+  }
+  return scored.sort((x, y) => y.s - x.s).map((x) => x.a);
+}
+async function onInline(iq) {
+  const answer = (results, extra) => tg("answerInlineQuery", { inline_query_id: iq.id, results, cache_time: 300, ...(extra || {}) });
+  const q = String(iq.query || "").slice(0, 100);
+  if (!(await hit(`inl:${iq.from && iq.from.id}`, 120, 600))) return answer([], { cache_time: 30 });
+  if (q.trim().length < 1)
+    return answer([], { cache_time: 3600, button: { text: "Напишите номер статьи или слова: 12.8, ак 2.1, оружие", start_parameter: "inline" } });
+  let arts;
+  try {
+    arts = await codesLoad();
+  } catch (e) {
+    return answer([], { cache_time: 10, button: { text: "Кодексы временно недоступны, попробуйте позже", start_parameter: "inline" } });
+  }
+  const found = codesSearch(arts, q).slice(0, 20);
+  if (!found.length) return answer([], { cache_time: 60, button: { text: "Ничего не нашлось. Попробуйте номер статьи", start_parameter: "inline" } });
+  return answer(found.map((a) => {
+    const p0 = a.parts[0];
+    const chips = codesChips(a.parts.reduce((m, p) => ({ stars: Math.max(m.stars || 0, p.stars || 0), m: Math.max(m.m || 0, p.m || 0), fmin: m.fmin || p.fmin, fmax: Math.max(m.fmax || 0, p.fmax || 0), x: m.x || p.x, rec: m.rec || p.rec }), {}));
+    return {
+      type: "article",
+      id: (a.k + "-" + a.code).slice(0, 64),
+      title: `${KIND_NAME[a.k]} ${a.code} · ${a.title}`.slice(0, 120),
+      description: ((chips.length ? chips.join(" · ") + ". " : "") + (p0.note || "")).slice(0, 200),
+      input_message_content: { message_text: codesText(a), parse_mode: "HTML", link_preview_options: { is_disabled: true } },
+    };
+  }));
+}
+
 async function lawsCmd(chat, arg) {
   if (!GH_LAWS_TOKEN) return send(chat, "Не задан секрет GH_LAWS_TOKEN (токен GitHub). Добавьте его в Supabase → Edge Functions → Secrets.");
   const runs = await gh(`/actions/workflows/${LAWS_WORKFLOW}/runs?per_page=3`);
@@ -3004,7 +3132,7 @@ async function setup(url) {
   const hook = await tg("setWebhook", {
     url: SELF_URL,
     secret_token: WEBHOOK_SECRET,
-    allowed_updates: ["message", "callback_query"],
+    allowed_updates: ["message", "callback_query", "inline_query"],
     drop_pending_updates: true,
   });
   await tg("setMyCommands", {
