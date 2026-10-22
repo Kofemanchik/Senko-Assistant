@@ -43,10 +43,12 @@ jobs:
           done
           if [ -z "$FOUND" ]; then
             echo "::error::Worker senko-ai не найден в аккаунтах, которые видит токен. Ниже список аккаунтов и их workers."
+            echo "Проверка токена: $(curl -sS -H "$H" "$API/user/tokens/verify" | jq -c '{success, status: .result.status, errors}')"
             for A in $ACCS; do
               N=$(curl -sS -H "$H" "$API/accounts/$A" | jq -r '.result.name // "?"')
-              W=$(curl -sS -H "$H" "$API/accounts/$A/workers/scripts" | jq -r '[.result[]?.id] | join(", ")')
-              echo "Аккаунт «$N» ($A): workers: ${W:-нет}"
+              curl -sS -H "$H" "$API/accounts/$A/workers/scripts" > /tmp/wl.json
+              W=$(jq -r '[.result[]?.id] | join(", ")' /tmp/wl.json)
+              echo "Аккаунт «$N» ($A): workers: ${W:-нет}; ответ Cloudflare: success=$(jq -r '.success' /tmp/wl.json) $(jq -c '.errors' /tmp/wl.json)"
             done
             exit 1
           fi
