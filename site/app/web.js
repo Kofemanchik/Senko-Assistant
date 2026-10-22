@@ -53,11 +53,16 @@
       watchApps: [], watchMode: "fade", watchOpacity: 25, streamAuto: false
     };
   }
+  // 2.7: бета-сборку видят как бету только тестеры; остальным показываем номер последней обычной версии
+  function shownVer(u) {
+    var t = !!((sys && sys.tester) || (u && (u.rank === "owner" || u.rank === "moderator")));
+    return (!t && CFG.stable) || CFG.ver || "";
+  }
   function getState() {
     var u = pubUser();
     return {
       cfg: cfg(), win: { stream: [], profiles: [], profile: "" }, platform: "web", web: true, autostart: false,
-      sync: sync.status(), hotkeyError: "", packaged: true, version: CFG.ver || "", dataVersion: CFG.ver || "",
+      sync: sync.status(), hotkeyError: "", packaged: true, version: shownVer(u), dataVersion: CFG.ver || "",
       depts: DEPTS.slice(), shareUrl: CFG.api, sys: sys,
       user: u ? { login: u.login, nick: u.nick, static: u.static, discord: u.discord, telegram: u.telegram, phone: u.phone, role: u.role, roleName: u.roleName, org: u.org, rank: u.rank, rankName: u.rankName, offline: !!u.offline } : null
     };
@@ -246,7 +251,7 @@
     del.forEach(function (k) { W.ls(k, null); });
   }
 
-  var PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password", "ads", "status", "beta", "hooks", "events", "ideas", "patrol"];
+  var PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password", "ads", "status", "beta", "hooks", "events", "ideas", "patrol", "ai_dict", "ai_hist", "ai_check"]; // 2.7: словарь ИИ, история вопросов, самопроверка
   function act(action, data) {
     return W.call(Object.assign({}, W.client(), data && typeof data === "object" ? data : {}, { action: action, token: (W.session() || {}).token })).then(function (r) {
       if (r && (r.code === "auth" || r.code === "banned")) setTimeout(function () { lost(r.code === "banned" ? r.error : ""); }, 0);

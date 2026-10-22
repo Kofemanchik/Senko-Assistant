@@ -863,6 +863,12 @@ async function api(req) {
       return J(await aiLog(b));
     case "ai_vote":
       return J(await aiVote(b));
+    case "ai_dict":
+      return J(await aiDictApi(b));
+    case "ai_hist":
+      return J(await aiHist(b));
+    case "ai_check":
+      return J(await aiCheck(b));
     case "sync_reset":
       return J(await syncReset(b));
     case "logout": {
@@ -1866,7 +1872,8 @@ async function aiLog(b) {
   if (!q) return fail("Пустой вопрос.");
   const refs = (Array.isArray(b.refs) ? b.refs : []).slice(0, 10).map((r) => clean(r, 120)).filter(Boolean); // 2.6.4: до 120 знаков, иначе номер статьи закона обрезался
   const ok = b.ok !== false;
-  const [r] = await db()`insert into ai_log (user_id, q, refs, ok) values (${p.id}, ${q}, ${refs}, ${ok}) returning id`;
+  const ans = String(b.ans == null ? "" : b.ans).slice(0, 4000); // 2.7: ответ ИИ нужен для разбора плохих ответов в панели
+  const [r] = await db()`insert into ai_log (user_id, q, refs, ok, ans) values (${p.id}, ${q}, ${refs}, ${ok}, ${ans}) returning id`;
   const chat = await aiChat();
   if (chat)
     await send(chat, `🤖 <b>${esc(p.login)}</b> · ${esc(p.org)}${ok ? "" : " · ⚠️ ИИ не ответил"} · №${r.id}\n${esc(q)}${refs.length ? "\n<i>Статьи: " + esc(refs.join(", ")) + "</i>" : ""}`, { disable_notification: true });
@@ -1896,6 +1903,164 @@ async function aiStatsText(days = 7) {
   return `🤖 <b>ИИ-помощник за ${days} дн.</b>\nВопросов: ${s.n} от ${s.users} чел. · 👍 ${s.up} · 👎 ${s.down}${s.bad ? " · без ответа: " + s.bad : ""}` +
     (refs.length ? `\n\n<b>Где ИИ чаще ошибается</b> (статьи в ответах с 👎)\n` + refs.map((r) => `• ${esc(r.r)} — ${r.n}`).join("\n") : "") +
     (last.length ? `\n\n<b>Последние вопросы</b>\n` + last.map((l) => `${l.vote > 0 ? "👍" : l.vote < 0 ? "👎" : "•"} ${esc(l.login || "?")}: ${esc(l.q.slice(0, 120))}`).join("\n") : "");
+}
+
+// ───────────── 2.7: словарь «бытовое слово → статья», самопроверка ИИ и история вопросов ─────────────
+// Словарь ведёт владелец в панели. Программа скачивает его и ставит указанные статьи первыми, если в вопросе есть все слова фразы.
+const AI_KIND = { "ук": "uk", "ак": "ak", "дк": "dk", "пк": "pk", uk: "uk", ak: "ak", dk: "dk", pk: "pk" };
+const AI_KN = { uk: "УК", ak: "АК", dk: "ДК", pk: "ПК" };
+// «УК 10.5, АК ст. 3» → ["uk|10.5", "ak|3"]
+function aiRefKeys(v) {
+  const out = [];
+  String(Array.isArray(v) ? v.join(",") : v == null ? "" : v).toLowerCase().split(/[,;\n]+/).forEach((part) => {
+    const m = /(ук|ак|дк|пк|uk|ak|dk|pk)\s*(?:\||ст\.?|статья|статьи)?\s*(\d{1,3}(?:\.\d{1,3}){0,3})/.exec(part.trim());
+    if (m) { const k = AI_KIND[m[1]] + "|" + m[2]; if (!out.includes(k)) out.push(k); }
+  });
+  return out.slice(0, 6);
+}
+const aiRefLabel = (k) => { const [kind, code] = String(k || "").split("|"); return AI_KN[kind] ? AI_KN[kind] + " " + code : String(k || "").replace(/^law:/, ""); };
+let aiDictCache = null;
+async function aiDictRows() {
+  if (aiDictCache && Date.now() - aiDictCache.at < 60e3) return aiDictCache.rows;
+  const rows = await db()`select id, phrase, refs, note, author, created_at from ai_dict order by id`;
+  aiDictCache = { at: Date.now(), rows };
+  return rows;
+}
+async function aiDictApi(b) {
+  const { err } = await who(b);
+  if (err) return err;
+  const rows = await aiDictRows();
+  return { ok: true, items: rows.map((r) => ({ p: r.phrase, r: r.refs })) };
+}
+// история: свои вопросы за последние 90 дней (столько хранится журнал)
+async function aiHist(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const rows = await db()`select id, q, vote, ok, at from ai_log where user_id = ${p.id} order by at desc limit 150`;
+  return { ok: true, rows: rows.map((r) => ({ id: String(r.id), q: r.q, vote: r.vote, ok: r.ok, at: r.at })) };
+}
+const AI_GOLD_DEFAULT = [
+  "убил человека", "оружие без лицензии", "полицейский избил гражданского", "что такое законное требование", "что такое процессуальный час",
+  "угнал машину", "сколько можно держать задержанного", "штраф за превышение скорости", "ходил в маске", "не подчинился полицейскому",
+  "дал взятку полицейскому", "оскорбил сотрудника полиции", "проехал на красный свет", "похитил человека", "хранение наркотиков",
+  "можно ли обыскать без ордера", "напал на сотрудника полиции", "ложный вызов полиции", "сколько ждать адвоката", "залез на охраняемую территорию",
+];
+async function aiGoldRows() {
+  const sql = db();
+  let rows = await sql`select * from ai_gold order by id`;
+  if (!rows.length && !(await getSetting("aigold_seeded", false))) {
+    for (const q of AI_GOLD_DEFAULT) await sql`insert into ai_gold (q) values (${q})`;
+    await setSetting("aigold_seeded", true);
+    rows = await sql`select * from ai_gold order by id`;
+  }
+  return rows;
+}
+const dayUtc = () => new Date().toISOString().slice(0, 10);
+// Самопроверка: подбор статей работает в программе, поэтому раз в день его запускает программа владельца или модератора.
+// Сервер сравнивает первую статью с прошлым разом (и с закреплённой, если она задана) и пишет владельцу, если что-то поменялось.
+async function aiCheck(b) {
+  const { p, err } = await who(b, ["owner", "moderator"]);
+  if (err) return err;
+  const sql = db();
+  const st = (await getSetting("aicheck", {})) || {};
+  if (b.op === "list") {
+    const rows = await aiGoldRows();
+    return { ok: true, due: st.day !== dayUtc(), items: rows.map((r) => ({ id: String(r.id), q: r.q })) };
+  }
+  if (b.op !== "report") return fail("Неизвестное действие.");
+  if (st.day === dayUtc() && !b.force) return { ok: true, skipped: true };
+  const res = (Array.isArray(b.res) ? b.res : []).slice(0, 60);
+  const rows = await aiGoldRows();
+  const byId = new Map(rows.map((r) => [String(r.id), r]));
+  const changed = [];
+  let n = 0;
+  for (const x of res) {
+    const r = byId.get(String(x && x.id));
+    if (!r) continue;
+    n++;
+    const top = clean(x.top, 160), label = clean(x.ref, 160);
+    if ((r.last && r.last !== top) || (r.expect && r.expect !== top)) changed.push({ q: r.q, was: r.last_ref || aiRefLabel(r.last) || "—", now: label || aiRefLabel(top) || "ничего не найдено", expect: r.expect });
+    await sql`update ai_gold set prev = last, prev_ref = last_ref, last = ${top}, last_ref = ${label}, checked_at = now() where id = ${r.id}`;
+  }
+  await setSetting("aicheck", { day: dayUtc(), at: Date.now(), by: p.login, n, changed: changed.length, ver: clean(b.ver, 30) });
+  if (changed.length && OWNER_TG)
+    await send(OWNER_TG, `🧪 <b>Самопроверка ИИ</b>: первая статья поменялась в ${changed.length} из ${n} вопросов\n` +
+      changed.slice(0, 15).map((c) => `• «${esc(c.q)}»: было ${esc(c.was)}, стало ${esc(c.now)}${c.expect && c.expect !== c.now ? ` (закреплена ${esc(aiRefLabel(c.expect))})` : ""}`).join("\n") +
+      `\n\nЗапуск: ${esc(p.login)}. Подробности — в панели, раздел «ИИ-помощник».`, { disable_notification: true });
+  return { ok: true, n, changed: changed.length };
+}
+// панель владельца: словарь, плохие ответы, эталонные вопросы
+async function panelAi(b, a) {
+  const sql = db();
+  const op = b.op;
+  if (op === "ai_dict_list") return { ok: true, rows: await sql`select * from ai_dict order by id desc` };
+  if (op === "ai_dict_save") {
+    const phrase = String(b.phrase == null ? "" : b.phrase).replace(/\s+/g, " ").trim().toLowerCase().slice(0, 80);
+    const refs = aiRefKeys(b.refs);
+    const note = clean(b.note, 200);
+    if (phrase.length < 3) return fail("Фраза: от 3 символов, например «угнал тачку».");
+    if (!refs.length) return fail("Статьи: например «УК 10.5» или «УК 10.5, АК 3».");
+    const id = parseInt(b.id, 10) || 0;
+    const [r] = id
+      ? await sql`update ai_dict set phrase = ${phrase}, refs = ${refs}, note = ${note}, author = ${a.label} where id = ${id} returning *`
+      : await sql`insert into ai_dict (phrase, refs, note, author) values (${phrase}, ${refs}, ${note}, ${a.label}) returning *`;
+    if (!r) return fail("Запись не найдена.");
+    aiDictCache = null;
+    await audit(a.label, "ai_dict", phrase, { refs, id: r.id, edit: !!id });
+    return { ok: true, row: r };
+  }
+  if (op === "ai_dict_delete") {
+    const [r] = await sql`delete from ai_dict where id = ${parseInt(b.id, 10) || 0} returning *`;
+    if (!r) return fail("Запись не найдена.");
+    aiDictCache = null;
+    await audit(a.label, "ai_dict", r.phrase, { deleted: true, refs: r.refs });
+    return { ok: true };
+  }
+  if (op === "ai_bad") {
+    const days = Math.max(1, Math.min(90, parseInt(b.days, 10) || 30));
+    const rows = await sql`select l.id, l.q, l.refs, l.ans, l.ok, l.at, p.login, p.org from ai_log l left join profiles p on p.id = l.user_id
+                           where l.vote < 0 and l.at > now() - make_interval(days => ${days}) order by l.at desc limit 100`;
+    return { ok: true, rows, days };
+  }
+  if (op === "ai_gold_list") return { ok: true, rows: await aiGoldRows(), last: (await getSetting("aicheck", {})) || {} };
+  if (op === "ai_gold_save") {
+    const q = String(b.q == null ? "" : b.q).replace(/\s+/g, " ").trim().slice(0, 300);
+    if (q.length < 3) return fail("Вопрос: от 3 символов.");
+    const exp = b.expect == null || b.expect === "" ? "" : aiRefKeys(b.expect)[0] || "";
+    if (b.expect && !exp) return fail("Ожидаемая статья: например «УК 6.1».");
+    const id = parseInt(b.id, 10) || 0;
+    const [r] = id
+      ? await sql`update ai_gold set q = ${q}, expect = ${exp} where id = ${id} returning *`
+      : await sql`insert into ai_gold (q, expect) values (${q}, ${exp}) returning *`;
+    if (!r) return fail("Вопрос не найден.");
+    await audit(a.label, "ai_gold", q, { expect: exp, edit: !!id });
+    return { ok: true, row: r };
+  }
+  if (op === "ai_gold_delete") {
+    const [r] = await sql`delete from ai_gold where id = ${parseInt(b.id, 10) || 0} returning *`;
+    if (!r) return fail("Вопрос не найден.");
+    await audit(a.label, "ai_gold", r.q, { deleted: true });
+    return { ok: true };
+  }
+  if (op === "ai_gold_pin") {
+    // закрепить текущий результат как правильный (у одного вопроса или у всех)
+    const id = parseInt(b.id, 10) || 0;
+    const rows = id ? await sql`update ai_gold set expect = last where id = ${id} and last <> '' returning id`
+      : await sql`update ai_gold set expect = last where last <> '' returning id`;
+    await audit(a.label, "ai_gold", id ? String(id) : "все", { pin: true, n: rows.length });
+    return { ok: true, n: rows.length };
+  }
+  if (op === "ai_gold_run") {
+    // следующий запуск программы владельца или модератора проверит заново
+    const st = (await getSetting("aicheck", {})) || {};
+    await setSetting("aicheck", { ...st, day: "" });
+    return { ok: true };
+  }
+  return fail("Неизвестное действие панели.");
+}
+async function flagFor(p, k) {
+  const m = (await flagsNow())[k];
+  return m === "all" || (m === "beta" && isTester(p));
 }
 
 async function actorOf(tgId) {
@@ -2011,7 +2176,7 @@ const AUDIT_ACTIONS = [
   "panel_login", "panel_key", "panel_revoke", "db_edit", "db_delete", "db_revert",
   "ad_save", "ad_toggle", "ad_delete",
   "beta", "beta_task", "flags", "hook", "event", "idea",
-  "xp_set", "ach_grant", "ach_revoke", "ach_custom",
+  "xp_set", "ach_grant", "ach_revoke", "ach_custom", "ai_bonus", "ai_dict", "ai_gold",
 ];
 
 async function findProfile(login) {
@@ -3597,7 +3762,8 @@ async function panelApi(b, ip, ua) {
   const op = String(b.op || "");
   if (op === "login") return panelLogin(b, ip, ua);
   const owners = ["audit", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert", "ads_list", "ads_save", "ads_toggle", "ads_delete",
-    "prog_get", "prog_xp", "prog_ach", "prog_ach_new", "prog_ai"];
+    "prog_get", "prog_xp", "prog_ach", "prog_ach_new", "prog_ai",
+    "ai_dict_list", "ai_dict_save", "ai_dict_delete", "ai_bad", "ai_gold_list", "ai_gold_save", "ai_gold_delete", "ai_gold_pin", "ai_gold_run"];
   const { p, a, th, err } = await pwho(b, owners.includes(op));
   if (err) return err;
   const sql = db();
@@ -3707,6 +3873,16 @@ async function panelApi(b, ip, ua) {
     case "prog_ach_new":
     case "prog_ai":
       return panelProgress(b, a);
+    case "ai_dict_list":
+    case "ai_dict_save":
+    case "ai_dict_delete":
+    case "ai_bad":
+    case "ai_gold_list":
+    case "ai_gold_save":
+    case "ai_gold_delete":
+    case "ai_gold_pin":
+    case "ai_gold_run":
+      return panelAi(b, a);
   }
   return fail("Неизвестное действие панели.");
 }
@@ -3936,7 +4112,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 24;
+const SCHEMA_V = 27;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -3988,6 +4164,20 @@ revoke all on table public.beta_tasks, public.beta_results, public.org_hooks, pu
                     public.patrols, public.patrol_members, public.patrol_items from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;
 `;
+// 2.7: словарь ИИ, эталонные вопросы для самопроверки, ответ ИИ в журнале
+const SCHEMA_27 = `
+alter table public.ai_log add column if not exists ans text not null default '';
+create table if not exists public.ai_dict (
+  id bigserial primary key, phrase text not null, refs text[] not null default '{}', note text not null default '',
+  author text not null default '', created_at timestamptz not null default now());
+create table if not exists public.ai_gold (
+  id bigserial primary key, q text not null, expect text not null default '', last text not null default '', last_ref text not null default '',
+  prev text not null default '', prev_ref text not null default '', checked_at timestamptz, created_at timestamptz not null default now());
+alter table public.ai_dict enable row level security;
+alter table public.ai_gold enable row level security;
+revoke all on table public.ai_dict, public.ai_gold from anon, authenticated;
+revoke all on all sequences in schema public from anon, authenticated;
+`;
 let schemaReady = null;
 function ensureSchema() {
   if (!schemaReady)
@@ -3995,7 +4185,8 @@ function ensureSchema() {
       try {
         const v = await getSetting("schema_v", 0);
         if (+v >= SCHEMA_V) return;
-        await db().unsafe(ADS_DDL + SCHEMA_24);
+        // база уже на 2.4: повторно 2.4 не выполняем (иначе вернулись бы удалённые баннеры по умолчанию)
+        await db().unsafe(+v >= 24 ? SCHEMA_27 : ADS_DDL + SCHEMA_24 + SCHEMA_27);
         adsReady = true;
         await setSetting("schema_v", SCHEMA_V);
       } catch (e) {
@@ -4017,6 +4208,7 @@ const FLAG_DEFS = {
   card: ["Карточка сотрудника", "all"],
   ideas: ["Идеи и голосование", "all"],
   events: ["Мероприятия организаций", "all"],
+  ai27: ["ИИ 2.7: словарь, ведомство, быстрые вопросы, уточнения, история", "beta"],
 };
 const FLAG_MODES = ["all", "beta", "off"];
 async function flagsNow() {
@@ -4593,6 +4785,8 @@ async function aiAsk(b) {
   const refs = ctx.map((c) => c.ref);
   const cid = (await sha256("web:" + p.id)).slice(0, 32);
   const ts = String(Date.now());
+  // 2.7: встречный вопрос, если не хватает деталей (только в окне ИИ, не в голосовом помощнике; по флагу ai27)
+  const clar = !b.short && (await flagFor(p, "ai27").catch(() => false));
   let j = null, status = 0;
   try {
     const r = await fetch(AI_URL + "/ask", {
@@ -4601,7 +4795,7 @@ async function aiAsk(b) {
         "content-type": "application/json", "x-senko-cid": cid, "x-senko-ts": ts, "x-senko-sig": await hmacHex(AI_KEY, cid + "." + ts),
         ...(bonus > 0 ? { "x-senko-bsig": await hmacHex(AI_KEY, cid + "." + ts + ".b") } : {}),
       },
-      body: JSON.stringify({ short: !!b.short, q, ctx }),
+      body: JSON.stringify({ short: !!b.short, clar: clar, q, ctx }),
       signal: AbortSignal.timeout(35000),
     });
     status = r.status;
@@ -4609,7 +4803,7 @@ async function aiAsk(b) {
   } catch (e) {
     return fail("Не удалось связаться с ИИ-сервисом. Попробуйте позже.");
   }
-  const logged = !(j && j.limit) ? await aiLog({ token: b.token, q, refs, ok: !!(j && j.ok) }).catch(() => null) : null;
+  const logged = !(j && j.limit) ? await aiLog({ token: b.token, q, refs, ok: !!(j && j.ok), ans: j && j.ok ? j.answer : "" }).catch(() => null) : null;
   const logId = logged && logged.ok ? logged.id : "";
   if (!j || !j.ok) return fail((j && j.error) || "ИИ-сервис вернул ошибку (" + status + ").", { limit: !!(j && j.limit) });
   if (j.bonus && bonus > 0) {

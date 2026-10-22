@@ -268,7 +268,7 @@
   var NAV = [
     ["Обзор", [["dash", "i-home", "Сводка", "Цифры и режимы"], ["health", "i-pulse", "Состояние", "Сервисы, версии, поиск"]]],
     ["Люди", [["users", "i-users", "Пользователи", "Поиск и действия"], ["staff", "i-key", "Роли и доступ", "Модераторы и руководство"], ["queue", "i-inbox", "Заявки и сбросы", "Новички и пароли", "queue"]]],
-    ["Работа", [["reports", "i-file", "Рапорты", "Рапорты сотрудников", "reports"], ["rating", "i-trophy", "Рейтинг", "Неделя и контрольные"], ["news", "i-mega", "Рассылки", "Сообщения в программе", null, 1], ["bugs", "i-bug", "Ошибки", "Сообщения пользователей", "bugs", 1], ["ideas", "i-mega", "Идеи", "Предложения пользователей"]]],
+    ["Работа", [["reports", "i-file", "Рапорты", "Рапорты сотрудников", "reports"], ["rating", "i-trophy", "Рейтинг", "Неделя и контрольные"], ["news", "i-mega", "Рассылки", "Сообщения в программе", null, 1], ["bugs", "i-bug", "Ошибки", "Сообщения пользователей", "bugs", 1], ["ideas", "i-mega", "Идеи", "Предложения пользователей"], ["ai", "i-ai", "ИИ-помощник", "Словарь, плохие ответы, самопроверка", null, 1]]],
     ["Тестирование", [["beta", "i-shield", "Тестеры", "Роль, задания, функции"]]],
     ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1]]],
     ["Сервис", [["console", "i-term", "Консоль бота", "Любая команда"]]],
@@ -1104,6 +1104,117 @@
     el.appendChild(bar);
     el.appendChild(box);
     return load();
+  };
+
+  // 2.7: ИИ-помощник — словарь «бытовое слово → статья», ответы с 👎, эталонные вопросы для ежедневной самопроверки
+  var AI_KN = { uk: "УК", ak: "АК", dk: "ДК", pk: "ПК" };
+  function aiRef(k) { var p = String(k || "").split("|"); return AI_KN[p[0]] ? AI_KN[p[0]] + " " + p[1] : (String(k || "").indexOf("law:") === 0 ? String(k).slice(4, 70) : String(k || "") || "—"); }
+  function aiDictEdit(x, after, prefill) {
+    var f = h("form", { novalidate: true }), err = h("div", { class: "auth-err" });
+    var ph = h("input", { maxlength: 80, value: x ? x.phrase : prefill || "", placeholder: "угнал тачку", spellcheck: "false" });
+    var rf = h("input", { maxlength: 120, value: x ? x.refs.map(aiRef).join(", ") : "", placeholder: "УК 10.5", spellcheck: "false" });
+    var nt = h("input", { maxlength: 200, value: x ? x.note || "" : "", placeholder: "Необязательно: почему так" });
+    f.appendChild(h("label", { class: "fld" }, h("span", { text: "Слова из вопроса" }), ph, h("span", { class: "hint", text: "Как пишут игроки. Сработает, если в вопросе есть все эти слова в любой форме: «угнал тачку» найдёт и «угнали тачку у копа»." })));
+    f.appendChild(h("label", { class: "fld" }, h("span", { text: "Статьи" }), rf, h("span", { class: "hint", text: "Через запятую: УК 10.5, АК 3. Эти статьи ИИ получит первыми." })));
+    f.appendChild(h("label", { class: "fld" }, h("span", { text: "Заметка" }), nt));
+    f.appendChild(err);
+    f.appendChild(h("div", { class: "dlg-f" }, btn("Отмена", closeDlg), h("button", { type: "submit", class: "btn btn-p", text: x ? "Сохранить" : "Добавить" })));
+    f.addEventListener("submit", function (e) {
+      e.preventDefault();
+      api("ai_dict_save", { id: x ? x.id : 0, phrase: ph.value, refs: rf.value, note: nt.value }).then(function (y) {
+        if (!y.ok) { err.textContent = y.error; return; }
+        closeDlg(); toast(x ? "Связка сохранена." : "Связка добавлена. Программа подхватит её в течение 10–30 минут."); after();
+      });
+    });
+    dlg(x ? "Связка: " + x.phrase : "Новая связка", f, true);
+  }
+  function aiGoldEdit(x, after) {
+    var f = h("form", { novalidate: true }), err = h("div", { class: "auth-err" });
+    var q = h("input", { maxlength: 300, value: x ? x.q : "", placeholder: "угнал машину", spellcheck: "false" });
+    var ex = h("input", { maxlength: 40, value: x && x.expect ? aiRef(x.expect) : "", placeholder: "УК 10.5", spellcheck: "false" });
+    f.appendChild(h("label", { class: "fld" }, h("span", { text: "Вопрос" }), q));
+    f.appendChild(h("label", { class: "fld" }, h("span", { text: "Правильная первая статья" }), ex, h("span", { class: "hint", text: "Необязательно. Если пусто, проверка сравнивает с прошлым днём." })));
+    f.appendChild(err);
+    f.appendChild(h("div", { class: "dlg-f" }, btn("Отмена", closeDlg), h("button", { type: "submit", class: "btn btn-p", text: x ? "Сохранить" : "Добавить" })));
+    f.addEventListener("submit", function (e) {
+      e.preventDefault();
+      api("ai_gold_save", { id: x ? x.id : 0, q: q.value, expect: ex.value }).then(function (y) {
+        if (!y.ok) { err.textContent = y.error; return; }
+        closeDlg(); toast(x ? "Вопрос сохранён." : "Вопрос добавлен."); after();
+      });
+    });
+    dlg(x ? "Эталонный вопрос" : "Новый эталонный вопрос", f, true);
+  }
+  PAGES.ai = function (el) {
+    if (!ME.owner) return ownerOnly(el);
+    var dict = card("Словарь «бытовое слово → статья»", "Связки, которые ИИ получает первыми. Программа скачивает словарь сама, новая версия не нужна."),
+      bad = card("Плохие ответы", "Вопросы, где ответ отметили 👎, за 30 дней: вопрос, ответ ИИ и статьи, которые он получил."),
+      gold = card("Самопроверка", "20 эталонных вопросов. Раз в день программа владельца или модератора прогоняет их и пишет тебе в Telegram, если первая статья поменялась.");
+    var dBox = h("div"), bBox = h("div"), gBox = h("div");
+    dict.appendChild(h("div", { class: "row", style: "margin-bottom:10px" }, btn("Добавить связку", function () { aiDictEdit(null, loadDict); }, "btn-sm btn-p")));
+    dict.appendChild(dBox); bad.appendChild(bBox); gold.appendChild(gBox);
+    function loadDict() {
+      dBox.textContent = ""; dBox.appendChild(h("div", { class: "load", text: "Загружаю…" }));
+      return api("ai_dict_list").then(function (r) {
+        dBox.textContent = "";
+        if (!r.ok) return dBox.appendChild(errMsg(r));
+        if (!r.rows.length) return dBox.appendChild(h("p", { class: "muted", text: "Связок пока нет." }));
+        dBox.appendChild(h("div", { class: "tbl-wrap", style: "box-shadow:none" }, h("table", { class: "tbl" }, h("tbody", null, r.rows.map(function (x) {
+          return h("tr", { style: "cursor:default" }, h("td", null, h("b", { text: x.phrase }), x.note ? h("div", { class: "muted small", text: x.note }) : null),
+            h("td", null, h("div", { class: "pills" }, x.refs.map(function (k) { return pill(aiRef(k)); }))),
+            h("td", { class: "muted small", text: (x.author || "") + " · " + ago(x.created_at) }),
+            h("td", null, h("div", { class: "row", style: "justify-content:flex-end" }, btn("Изменить", function () { aiDictEdit(x, loadDict); }, "btn-sm"),
+              btn("Удалить", function () { confirmDlg("Удалить связку", "Удалить «" + x.phrase + "»?", "Удалить", function () { api("ai_dict_delete", { id: x.id }).then(function (y) { toast(y.ok ? "Связка удалена." : y.error, !y.ok); loadDict(); }); }, true); }, "btn-sm btn-d"))));
+        })))));
+      });
+    }
+    function loadBad() {
+      bBox.textContent = ""; bBox.appendChild(h("div", { class: "load", text: "Загружаю…" }));
+      return api("ai_bad", { days: 30 }).then(function (r) {
+        bBox.textContent = "";
+        if (!r.ok) return bBox.appendChild(errMsg(r));
+        if (!r.rows.length) return bBox.appendChild(h("p", { class: "muted", text: "За 30 дней ответов с 👎 нет." }));
+        r.rows.forEach(function (x) {
+          var ans = h("p", { class: "small", style: "white-space:pre-wrap;word-break:break-word;margin-top:8px;padding:8px 10px;border-left:3px solid var(--line);background:var(--soft)", text: x.ans || "Ответ не сохранён (вопрос задан до версии 2.7)." });
+          ans.hidden = true;
+          bBox.appendChild(h("div", { class: "card", style: "margin:0 0 10px;box-shadow:none" },
+            h("div", { class: "row", style: "justify-content:space-between" }, h("b", { text: x.q, style: "word-break:break-word" }), h("span", { class: "muted small", text: (x.login || "?") + (x.org ? " · " + x.org : "") + " · " + ago(x.at) })),
+            h("div", { class: "pills", style: "margin-top:8px" }, (x.refs || []).length ? x.refs.map(function (t) { return pill(t); }) : pill("статьи не найдены", "bad")),
+            ans,
+            h("div", { class: "row", style: "margin-top:10px" },
+              btn("Ответ ИИ", function () { ans.hidden = !ans.hidden; }, "btn-sm"),
+              btn("В словарь", function () { aiDictEdit(null, loadDict, String(x.q || "").toLowerCase().slice(0, 80)); }, "btn-sm btn-p"))));
+        });
+      });
+    }
+    function loadGold() {
+      gBox.textContent = ""; gBox.appendChild(h("div", { class: "load", text: "Загружаю…" }));
+      return api("ai_gold_list").then(function (r) {
+        gBox.textContent = "";
+        if (!r.ok) return gBox.appendChild(errMsg(r));
+        var L = r.last || {};
+        gBox.appendChild(h("p", { class: "muted small", style: "margin-bottom:10px", text: L.at ? "Последний запуск: " + fmt(new Date(L.at).toISOString()) + (L.by ? ", " + L.by : "") + (L.ver ? ", версия " + L.ver : "") + ". Изменилось: " + (L.changed || 0) + " из " + (L.n || 0) + "." : "Ещё не запускалась. Запустится в программе владельца или модератора с бета-доступом примерно через 2 минуты после входа." }));
+        gBox.appendChild(h("div", { class: "row", style: "margin-bottom:10px" },
+          btn("Добавить вопрос", function () { aiGoldEdit(null, loadGold); }, "btn-sm btn-p"),
+          btn("Закрепить все как правильные", function () { confirmDlg("Закрепить результаты", "Сделать текущую первую статью правильной для всех вопросов? Потом проверка будет писать, если ответ от неё отличается.", "Закрепить", function () { api("ai_gold_pin", {}).then(function (y) { toast(y.ok ? "Закреплено: " + y.n + "." : y.error, !y.ok); loadGold(); }); }); }, "btn-sm"),
+          btn("Проверить заново", function () { api("ai_gold_run").then(function (y) { toast(y.ok ? "Проверка запустится при следующем входе в программу владельца или модератора." : y.error, !y.ok); }); }, "btn-sm")));
+        gBox.appendChild(h("div", { class: "tbl-wrap", style: "box-shadow:none" }, h("table", { class: "tbl" }, h("tbody", null, r.rows.map(function (x) {
+          var moved = x.prev && x.last && x.prev !== x.last, wrong = x.expect && x.last && x.expect !== x.last;
+          return h("tr", { style: "cursor:default" }, h("td", null, h("b", { text: x.q })),
+            h("td", null, x.last_ref ? h("span", { class: "small", text: x.last_ref }) : h("span", { class: "muted small", text: x.checked_at ? "ничего не найдено" : "ещё не проверялся" }),
+              moved ? h("div", { class: "muted small", text: "было: " + (x.prev_ref || aiRef(x.prev)) }) : null),
+            h("td", null, wrong ? pill("ожидалась " + aiRef(x.expect), "bad") : x.expect ? pill("верно", "on") : moved ? pill("поменялась", "bad") : null),
+            h("td", null, h("div", { class: "row", style: "justify-content:flex-end" },
+              x.last ? btn("Верно", function () { api("ai_gold_pin", { id: x.id }).then(function (y) { toast(y.ok ? "Закреплено." : y.error, !y.ok); loadGold(); }); }, "btn-sm") : null,
+              btn("Изменить", function () { aiGoldEdit(x, loadGold); }, "btn-sm"),
+              btn("Удалить", function () { confirmDlg("Удалить вопрос", "Удалить «" + x.q + "» из самопроверки?", "Удалить", function () { api("ai_gold_delete", { id: x.id }).then(function (y) { toast(y.ok ? "Удалено." : y.error, !y.ok); loadGold(); }); }, true); }, "btn-sm btn-d"))));
+        })))));
+      });
+    }
+    head(el, "ИИ-помощник", "Словарь, разбор плохих ответов и ежедневная самопроверка подбора статей",
+      btn("Обновить", function () { loadDict(); loadBad(); loadGold(); }, "btn-sm", "i-refresh"));
+    el.appendChild(dict); el.appendChild(bad); el.appendChild(gold);
+    return Promise.all([loadDict(), loadBad(), loadGold()]);
   };
 
   // База данных: только разрешённые таблицы и поля; каждая правка с прежними значениями попадает в журнал

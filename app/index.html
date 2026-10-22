@@ -2793,6 +2793,10 @@ window.__senkoLawSearch = function(query){
       // «полицейский избил гражданского»: кроме самого деяния — превышение полномочий
       if(/(полицейск|сотрудник|коп|мент|офицер|шериф|агент|госслужащ|кадет|детектив)\S*.{0,30}(избил|ударил|бил|застрелил|убил|ранил|покалечил|применил\S* (силу|оружие)|превысил|пытал)/.test(low) && UK.some(function(r){ return r.code === "15.1"; })){ refRows["uk|15.1"] = 1.5; nRef++; }
       try{ if(typeof window.SA_offArts === "function") window.SA_offArts(raw).forEach(function(a){ var key = a.k + "|" + a.code; if(!refRows[key]){ refRows[key] = 1.5; nRef++; } }); }catch(e){}
+      // 2.7: словарь владельца («угнал тачку → УК 10.5») — выше подсказок диспетчера, но ниже статьи, названной номером
+      try{ if(typeof window.SA_aiDict === "function") window.SA_aiDict(raw).forEach(function(key){ if((refRows[key] || 0) < 1.8){ refRows[key] = 1.8; nRef++; } }); }catch(e){}
+      // 2.7: сотруднику FIB или SANG законы его ведомства выше общих
+      var agency = null; try{ if(typeof window.SA_aiAgency === "function") agency = window.SA_aiAgency(); }catch(e){}
       if(/(сколько|долго|время|срок).{0,30}(держ|задерж)|(держ|задерж).{0,30}(сколько|долго|времени|срок)/.test(low)) words.push("процессуальный", "час");
       if(/(жд|ожида).{0,30}(адвокат|прокурор|медик|врач)|(адвокат|прокурор|медик|врач).{0,30}(жд|ожида|не приехал|опазд)/.test(low)) words.push("минут");
       var T = words.slice(0, 10).map(function(w){ return {w: w, re: aiRe(aiAlts(w))}; });
@@ -2818,6 +2822,7 @@ window.__senkoLawSearch = function(query){
         if(pun && d.t === "c" && d.k !== "pk") s *= 1.6; // «что будет за…», «сколько дают»: сначала статьи с наказанием
         if(d.t === "c" && kAsk[d.k]) s *= 2;
         if(defQ && d.t === "c") s *= 1.5; // «что такое …»: общие нормы кодексов важнее частных статей законов отдельных ведомств
+        if(agency && d.t === "l" && agency(d.L)) s *= defQ ? 1.2 : 1.8;
         h.s = h.ref ? 100 + h.ref * 10 + s : s;
       });
       // нужно больше половины «веса» вопроса; выдержки, где есть все слова, и так стоят выше
@@ -5765,12 +5770,15 @@ render();
         var am = add("a", render(r.answer || "Пустой ответ.", r.sources));
         if(r.fid && A.vote){ am.insertAdjacentHTML("beforeend", '<div class="ai-vote"><span>Ответ помог?</span><button type="button" data-aivote="1" data-fid="' + esc2(r.fid) + '" aria-pressed="false" aria-label="Ответ помог">👍</button><button type="button" data-aivote="-1" data-fid="' + esc2(r.fid) + '" aria-pressed="false" aria-label="Ответ не помог">👎</button><small role="status"></small></div>'); log.scrollTop = log.scrollHeight; }
         if(typeof r.left === "number") left.textContent = "Осталось сегодня: " + r.left + (r.bonus ? " · дополнительных: " + r.bonus : "");
+        try { if(typeof window.SA_aiDone === "function") window.SA_aiDone(q, r, am); } catch(e) {}
       } else {
         add("e", esc2((r && r.error) || "Не удалось получить ответ."));
       }
       qEl2.focus();
     };
-    A.ask(q).then(done, function(){ done({ok:false, error:"Ошибка связи с программой."}); });
+    // 2.7: ответ на встречный вопрос ИИ уходит вместе с исходным вопросом (window.SA_aiPrep), история и быстрые вопросы — в блоке 2.7
+    var q2 = q; try { if(typeof window.SA_aiPrep === "function") q2 = window.SA_aiPrep(q) || q; } catch(e) {}
+    A.ask(q2).then(done, function(){ done({ok:false, error:"Ошибка связи с программой."}); });
   });
 
   // Кнопка отдельной строкой под поиском. Пока ИИ ни разу не открывали (и не прошло 7 дней с первого показа) — мягко пульсирует.
@@ -6287,7 +6295,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.6.6";
+var APP_VER="2.7.0-beta.1";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6376,6 +6384,15 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.7.0-beta.1",d:"23.10.2026",items:[
+  ["🧪","Только для бета-тестеров","Всё ниже включено флагом «ИИ-помощник 2.7» и пока доступно только участникам бета-теста."],
+  ["⚡","Быстрые вопросы","Над полем ввода ИИ появились кнопки-заготовки: «Что нарушил?», «Какой срок?», «Могу ли я…», «Что такое…». Нажми и допиши ситуацию."],
+  ["🕘","История вопросов","Кнопка «История» в окне ИИ: все твои прошлые вопросы с поиском и кнопкой «Спросить снова»."],
+  ["❓","ИИ переспрашивает","Если в вопросе не хватает важной детали (кто, где, при каких обстоятельствах), ИИ коротко уточнит. Ответь на уточнение, и он даст полный ответ."],
+  ["🏛️","Законы своего ведомства первыми","Сотрудникам FIB и SANG ИИ в первую очередь подбирает законы их ведомства."],
+  ["📖","Словарь владельца","Владелец может связать бытовое слово со статьёй (например, «угон» → нужная статья УК), и ИИ начинает находить её по этому слову."],
+  ["🛡️","Контроль качества ИИ","Владелец видит ответы, отмеченные 👎, а ИИ каждый день проверяет себя на контрольных вопросах."]
+ ]},
  {v:"2.6.6",d:"22.10.2026",items:[
   ["🤖","Дополнительные запросы к ИИ","Владелец может выдать аккаунту дополнительные запросы к ИИ. Они тратятся, когда закончился дневной лимит, и не сгорают. Остаток виден под ответом ИИ."],
   ["⚖️","ИИ точнее про сотрудников и понятия","«Полицейский избил гражданского» — теперь УК 6.3 и 15.1, а не Гражданский кодекс. На «что такое …» ИИ получает сначала общие статьи кодексов и по одной статье из разных законов, а не одни статьи прокуратуры."],
@@ -6542,7 +6559,9 @@ var NEWS=[
 ];
 function seenVer(){return lsGet("bos-seen-ver")}
 function newsHtml(since){
- return NEWS.map(function(n){
+ // 2.7: записи бета-версий видят только тестеры (на сайте /app/ бета открыта всем, но функции в ней только у тестеров)
+ var tst=false; try{ tst=typeof window.SA_isTester==="function"&&!!window.SA_isTester() }catch(e){}
+ return NEWS.filter(function(n){ return tst||!/-/.test(n.v) }).map(function(n){
   var fresh=vcmp(n.v,since||"0")>0;
   return '<div class="wn-ver">Версия '+n.v+' <small>'+n.d+'</small>'+(fresh?'<span class="wn-new">Новое</span>':'')+'</div><ul class="wn-list">'+
    n.items.map(function(i){return '<li><i aria-hidden="true">'+i[0]+'</i><div><b>'+esc(i[1])+'</b><span>'+esc(i[2])+'</span></div></li>'}).join("")+'</ul>';
@@ -6557,14 +6576,16 @@ function showNews(since){
 // «Новое» — всё, что вышло после версии, которой человек пользовался до обновления
 window.SA_news=function(){ var s=seenVer(); showNews(s&&vcmp(ver(),s)>0?s:(lsGet("bos-seen-prev")||"0")) };
 (function(){
- var s=seenVer(), v=ver();
- if(s&&vcmp(v,s)<=0) return;
+ var s=seenVer(), v=/-/.test(APP_VER)?APP_VER:ver(); // 2.7: на сайте не-тестер видит номер обычной версии, а сборка может быть бетой
+ if(s&&vcmp(v,s)<=0&&!(/-/.test(v)&&s!==v)) return;
  var keys=lsKeys().filter(function(k){return k!=="bos-seen-ver"});
  if(!s&&keys.length<3){ markSeen("0"); return; } // первый запуск: показывать нечего
  // 2.2: если поверх уже открыто другое окно (документы, тур, техработы), ждём, пока его закроют, и показываем потом.
  // Отметка «просмотрено» ставится только после показа, поэтому окно не теряется, даже если программу закрыли раньше.
  var busy=function(){return cur||document.querySelector(".sa-ov:not([hidden])")||document.documentElement.classList.contains("sa-boot")||document.querySelector(".tour-ov,.s9-tour,[data-tour-open]")};
- (function wait(n){ setTimeout(function(){ if(busy()) return wait(n+1); showNews(s||"1.9.0"); }, n?1500:1200); })(0);
+ // 2.7: окно о бета-версии показываем только тестерам; остальные увидят новости вместе с обычной версией
+ var betaOnly=function(){ if(!/-/.test(v)) return false; try{ return !(typeof window.SA_isTester==="function"&&window.SA_isTester()) }catch(e){ return true } };
+ (function wait(n){ setTimeout(function(){ if(busy()) return wait(n+1); if(betaOnly()){ if(n<20) return wait(n+1); return; } showNews(s||"1.9.0"); }, n?1500:1200); })(0);
 })();
 
 /* ---------- версия программы и дата законов ---------- */
@@ -8139,7 +8160,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.6.6";
+var APP_VER="2.7.0-beta.1";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
@@ -11822,14 +11843,16 @@ if(["","halloween","newyear"].indexOf(C.prev)<0)C.prev="";
 function saveC(){jset("bos-s24",C)}
 
 /* ---------- флаги функций ---------- */
-var FDEF={patrol:"beta",board:"all",mini:"all",tts:"all",mascot:"all",season:"all",card:"all",ideas:"all",events:"all"};
+var FDEF={patrol:"beta",board:"all",mini:"all",tts:"all",mascot:"all",season:"all",card:"all",ideas:"all",events:"all",ai27:"beta"};
 var FN={patrol:["Совместный патруль","Экипаж по коду: общий список задержаний и таймеров с напарниками."],board:["Тактическая доска","Рисование на схеме зон и отправка схемы ссылкой."],mini:["Мини-окно задержания","Маленькое окно поверх игры с таймерами и итогом калькулятора."],
  tts:["Озвучка статей","Кнопка 🔊 у статьи читает её вслух голосом Windows."],mascot:["Лиса Senko","Подсказки и поздравления в углу окна."],season:["Сезонное оформление","Хэллоуин и Новый год."],card:["Карточка сотрудника","Картинка со статистикой для Discord."],
- ideas:["Идеи и голосование","Раздел «Идеи» в меню."],events:["Мероприятия организаций","Учения и собрания на главной и в панели руководителя."]};
+ ideas:["Идеи и голосование","Раздел «Идеи» в меню."],events:["Мероприятия организаций","Учения и собрания на главной и в панели руководителя."],
+ ai27:["ИИ-помощник 2.7","Словарь владельца, законы своего ведомства первыми, быстрые вопросы, встречные вопросы ИИ и история вопросов."]};
 function tester(){var s=sys(),u=user();return !!(s.tester||(u&&(u.rank==="owner"||u.rank==="moderator")))}
 function mode(k){var f=sys().flags;return f&&f[k]?f[k]:FDEF[k]}
 function flag(k){var m=mode(k);if(m==="off")return false;if(m==="beta")return tester()&&C.exp[k]!==false;return true}
 window.SA_flag=flag;
+window.SA_isTester=tester;
 
 /* =================================================================== */
 /* ===================== Панель тестера ============================== */
@@ -13669,6 +13692,141 @@ var vmo=new MutationObserver(function(){ if(SUBT.indexOf(state.tab)>=0) paintSid
 vmo.observe(view,{childList:true,subtree:true,attributes:true,attributeFilter:["aria-pressed"]});
 var spy=0; window.addEventListener("scroll",function(){ if(ANC.indexOf(state.tab)<0||spy) return; spy=requestAnimationFrame(function(){ spy=0; paintSide(); }); },{passive:true});
 document.addEventListener("click",function(e){ if(e.target.closest&&e.target.closest(".roles button")) setTimeout(function(){ paintSide(); if(state.tab==="home") paintHome(); },0); });
+})();
+</script>
+<script>
+/* ===== 2.7 · ИИ-помощник =====
+   Словарь владельца «бытовое слово → статья» (window.SA_aiDict), законы своего ведомства первыми для FIB и SANG (window.SA_aiAgency),
+   быстрые вопросы под полем, встречный вопрос ИИ (window.SA_aiPrep / SA_aiDone), история своих вопросов,
+   ежедневная самопроверка подбора статей в программе владельца и модераторов. Всё по флагу ai27 (сначала только тестерам). */
+(function(){
+"use strict";
+var A=window.senkoApp;
+function st(){try{return A&&A.state?A.state():null}catch(x){return null}}
+function user(){var s=st();return s&&s.user}
+function online(){var u=user();return !!(u&&!u.offline&&A&&A.api)}
+function on(){try{return typeof window.SA_flag==="function"&&!!window.SA_flag("ai27")}catch(x){return false}}
+function api(a,d){if(!A||!A.api)return Promise.resolve({ok:false});return A.api(a,d||{}).then(function(r){return r||{ok:false}},function(){return {ok:false}})}
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(x){return d}}
+function jset(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(x){}}
+function today(){return new Date().toISOString().slice(0,10)}
+
+/* ---------- словарь владельца ---------- */
+var DICT=jget("bos-ai27dict",null);if(!DICT||!Array.isArray(DICT.items))DICT={at:0,items:[]};
+function words(s){return String(s||"").toLowerCase().replace(/ё/g,"е").replace(/[^а-яa-z0-9\s]/g," ").split(/\s+/).filter(function(w){return w.length>=3})}
+// основа слова: «тачку» → «тач», «угнал» → «угн»; совпадение с начала слова вопроса
+function stem(w){return w.length>6?w.slice(0,w.length-3):w.length>4?w.slice(0,w.length-2):w.length>3?w.slice(0,w.length-1):w}
+function hasWord(Q,w){var s=stem(w);return Q.some(function(q){return q.indexOf(s)===0||(q.length>=4&&s.indexOf(q)===0)})}
+window.SA_aiDict=function(q){
+ if(!on()||!DICT.items.length)return [];
+ var Q=words(q),out=[];
+ DICT.items.forEach(function(it){var P=words(it.p);if(!P.length||!P.every(function(w){return hasWord(Q,w)}))return;
+  (it.r||[]).forEach(function(k){if(/^(uk|ak|dk|pk)\|[\d.]+$/.test(k)&&out.indexOf(k)<0)out.push(k)})});
+ return out.slice(0,6)};
+function loadDict(force){
+ if(!online()||!on())return Promise.resolve();
+ if(!force&&Date.now()-DICT.at<10*60e3)return Promise.resolve();
+ return api("ai_dict").then(function(r){if(r&&r.ok&&Array.isArray(r.items)){DICT={at:Date.now(),items:r.items.slice(0,500)};jset("bos-ai27dict",DICT)}})}
+
+/* ---------- законы своего ведомства ---------- */
+var AGENCY={FIB:/federal investigation|фбр|(^|[^a-z])fib([^a-z]|$)/i,SANG:/national guard|нацгвард|(^|[^a-z])sang([^a-z]|$)/i};
+window.SA_aiAgency=function(){
+ if(!on())return null;var u=user(),re=u&&AGENCY[u.org];
+ return re?function(L){return re.test(String((L&&L.title)||""))}:null};
+
+/* ---------- окно ИИ: быстрые вопросы, встречный вопрос, история ---------- */
+var css=".ai27-q{display:flex;flex-wrap:wrap;gap:6px;padding:8px 14px 0}"+
+ ".ai27-q button,.ai27-hb,.ai27-h button{font:inherit;font-size:12.5px;cursor:pointer;border:1px solid var(--line,#D3D9E0);background:var(--surface,#fff);color:var(--ink,#172230);border-radius:999px;padding:3px 11px;line-height:1.5}"+
+ ".ai27-q button:hover,.ai27-hb:hover,.ai27-h button:hover{border-color:var(--accent,#1D4E89);color:var(--accent,#1D4E89)}"+
+ ".ai27-hb{border-radius:6px;padding:4px 10px;line-height:1}"+
+ ".ai27-cl{align-self:stretch;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12.5px;color:var(--muted,#5B6877);padding:2px 2px 0}"+
+ ".ai27-h{flex:1;overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px}.ai27-h[hidden]{display:none}"+
+ ".ai27-h input{font:inherit;color:inherit;background:var(--bg,#EDF0F3);border:1px solid var(--line,#D3D9E0);border-radius:8px;padding:7px 10px;width:100%;box-sizing:border-box}"+
+ ".ai27-it{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line,#D3D9E0);border-radius:8px;padding:8px 10px}"+
+ ".ai27-it p{flex:1;margin:0;overflow-wrap:anywhere}.ai27-it small{display:block;color:var(--muted,#5B6877);font-size:12px}"+
+ ".ai27-h .muted{color:var(--muted,#5B6877);font-size:13px}"+
+ ".ai27-q button:focus-visible,.ai27-hb:focus-visible,.ai27-h button:focus-visible{outline:2px solid var(--accent,#1D4E89);outline-offset:2px}";
+var sEl=document.createElement("style");sEl.textContent=css;document.head.appendChild(sEl);
+
+var QUICK=[["Что нарушил?","Что я нарушил, если "],["Какой срок?","Какой срок и штраф за "],["Могу ли я…","Могу ли я "],["Что такое…","Что такое "]];
+var PEND=null,CUR=null,HIST=null,ov=null,qa=null;
+function els(){ov=document.querySelector(".ai-ov");qa=ov&&ov.querySelector("#aiQ");return !!(ov&&qa)}
+function caret(){try{qa.focus();var n=qa.value.length;qa.setSelectionRange(n,n)}catch(x){}}
+function paint(){
+ if(!els())return;
+ var form=ov.querySelector("#aiForm"),head=ov.querySelector(".ai-head"),x=ov.querySelector(".ai-x");
+ var qb=ov.querySelector(".ai27-q"),hb=ov.querySelector(".ai27-hb"),hp=ov.querySelector(".ai27-h");
+ if(!on()){if(qb)qb.hidden=true;if(hb)hb.hidden=true;if(hp&&!hp.hidden)showHist(false);return}
+ if(!qb){qb=document.createElement("div");qb.className="ai27-q";qb.setAttribute("aria-label","Быстрые вопросы");
+  qb.innerHTML=QUICK.map(function(x,i){return '<button type="button" data-ai27q="'+i+'">'+e(x[0])+'</button>'}).join("");
+  form.parentNode.insertBefore(qb,form)}
+ qb.hidden=false;
+ if(!hb&&head&&x){hb=document.createElement("button");hb.type="button";hb.className="ai27-hb";hb.textContent="История";hb.title="Мои прошлые вопросы";head.insertBefore(hb,x)}
+ if(hb)hb.hidden=!online();
+ if(!hp){hp=document.createElement("div");hp.className="ai27-h";hp.hidden=true;var lg=ov.querySelector("#aiLog");lg.parentNode.insertBefore(hp,lg.nextSibling)}
+}
+function setPend(base){
+ PEND=base;if(!els())return;
+ var lg=ov.querySelector("#aiLog"),old=lg.querySelector(".ai27-cl");if(old)old.remove();
+ qa.placeholder=base?"Ответьте на уточнение: я учту исходный вопрос":"Например: что будет за угон автомобиля?";
+ if(base){lg.insertAdjacentHTML("beforeend",'<div class="ai27-cl" role="status"><span>↪ Ваш ответ уйдёт вместе с исходным вопросом.</span><button type="button" class="ai27-hb" data-ai27="new">Задать новый вопрос</button></div>');lg.scrollTop=lg.scrollHeight}}
+window.SA_aiPrep=function(q){
+ if(!PEND||!on()){CUR=q;return q}
+ var base=PEND;setPend(null);
+ CUR=(base+" (уточнение: "+q+")").slice(0,500);return CUR};
+window.SA_aiDone=function(q,r){
+ HIST=null;
+ if(!on()||!r||!r.ok)return;
+ if(/^\s*\**\s*уточните/i.test(String(r.answer||"")))setPend(CUR||q);};
+
+function showHist(show){
+ if(!els())return;var hp=ov.querySelector(".ai27-h"),lg=ov.querySelector("#aiLog"),hb=ov.querySelector(".ai27-hb");
+ if(!hp)return;hp.hidden=!show;lg.hidden=!!show;if(hb)hb.textContent=show?"К чату":"История";
+ if(show)renderHist()}
+function renderHist(){
+ var hp=ov.querySelector(".ai27-h");
+ if(!HIST){hp.innerHTML='<p class="muted">Загружаю историю…</p>';
+  api("ai_hist").then(function(r){if(!r.ok){hp.innerHTML='<p class="muted">'+e(r.error||"Не удалось загрузить историю. Проверьте подключение к интернету.")+'</p>';return}
+   var seen={};HIST=(r.rows||[]).filter(function(x){var k=String(x.q).toLowerCase();if(seen[k])return false;seen[k]=1;return true});renderHist()});return}
+ var f=hp.querySelector("input"),val=f?f.value:"";
+ hp.innerHTML='<input type="search" placeholder="Поиск по моим вопросам" aria-label="Поиск по истории вопросов" maxlength="80"><div class="ai27-list"></div>';
+ f=hp.querySelector("input");f.value=val;f.addEventListener("input",function(){list(f.value)});list(val);f.focus()}
+function list(v){
+ var hp=ov.querySelector(".ai27-h"),box=hp.querySelector(".ai27-list"),s=String(v||"").toLowerCase().trim();
+ var L=HIST.filter(function(x){return !s||String(x.q).toLowerCase().indexOf(s)>=0}).slice(0,60);
+ box.innerHTML=L.length?L.map(function(x){var d=new Date(x.at);
+  return '<div class="ai27-it"><p>'+e(x.q)+'<small>'+(isNaN(d)?"":d.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}))+(x.vote>0?" · 👍":x.vote<0?" · 👎":"")+'</small></p><button type="button" data-ai27r="'+e(x.q)+'">Спросить снова</button></div>'}).join("")
+  :'<p class="muted">'+(HIST.length?"Ничего не нашлось.":"Вопросов пока нет. Здесь будут ваши вопросы за последние 90 дней.")+'</p>'}
+
+document.addEventListener("click",function(ev){
+ var b=ev.target.closest&&ev.target.closest("[data-ai27q],[data-ai27r],[data-ai27],.ai27-hb");if(!b||!els()||!ov.contains(b))return;
+ if(b.dataset.ai27q!=null){var x=QUICK[+b.dataset.ai27q];if(x){qa.value=x[1];caret()}return}
+ if(b.dataset.ai27r!=null){showHist(false);setPend(null);qa.value=b.dataset.ai27r;var f=ov.querySelector("#aiForm");if(f.requestSubmit)f.requestSubmit();return}
+ if(b.dataset.ai27==="new"){setPend(null);caret();return}
+ if(b.classList.contains("ai27-hb"))showHist(ov.querySelector(".ai27-h").hidden);
+});
+// окно ИИ рисуется своим блоком; дорисовываем, когда его открывают
+function watch(){if(!els())return false;
+ new MutationObserver(function(){if(!ov.hidden){paint();loadDict(false)}else{var hp=ov.querySelector(".ai27-h");if(hp&&!hp.hidden)showHist(false)}}).observe(ov,{attributes:true,attributeFilter:["hidden"]});
+ paint();return true}
+if(!watch())setTimeout(watch,3000);
+
+/* ---------- самопроверка подбора статей (владелец и модераторы, раз в день) ---------- */
+var tries=0;
+function selfCheck(){
+ var u=user();if(!u||(u.rank!=="owner"&&u.rank!=="moderator")||!online()||!on())return;
+ if(jget("bos-ai27chk","")===today())return;
+ var ready=false;try{ready=typeof lawIndex==="function"&&lawIndex().length>0&&typeof window.__senkoAiContext==="function"}catch(x){}
+ if(!ready){if(++tries<6)setTimeout(selfCheck,5*60e3);return}
+ api("ai_check",{op:"list"}).then(function(r){
+  if(!r.ok)return;if(!r.due){jset("bos-ai27chk",today());return}
+  var res=(r.items||[]).map(function(x){var o=[];try{o=window.__senkoAiContext(x.q)||[]}catch(y){}var f=o[0];
+   return {id:x.id,top:f?(f.go||("law:"+(f.lw||f.ref))):"",ref:f?String(f.ref||"").slice(0,150):""}});
+  return api("ai_check",{op:"report",res:res,ver:(st()&&st().version)||""}).then(function(y){if(y&&y.ok)jset("bos-ai27chk",today())});
+ })}
+setTimeout(function(){loadDict(true);selfCheck()},90e3);
+setInterval(function(){loadDict(false)},30*60e3);
 })();
 </script>
 </body></html>

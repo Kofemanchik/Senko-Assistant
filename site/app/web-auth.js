@@ -20,7 +20,7 @@
 
   window.senkoAuth = {
     state: function () {
-      return Promise.resolve({ lastLogin: W.ls("sa-web-last") || "", depts: DEPTS.slice(), roles: ROLES, gov: "Government", version: W.CFG.ver || "", notice: W.notice() });
+      return Promise.resolve({ lastLogin: W.ls("sa-web-last") || "", depts: DEPTS.slice(), roles: ROLES, gov: "Government", version: W.CFG.stable || W.CFG.ver || "", notice: W.notice() });
     },
     login: function (d) {
       d = d || {};

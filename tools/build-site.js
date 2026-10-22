@@ -56,6 +56,10 @@ function docPage(key, d, other, version) {
 }
 
 const { docs, version } = loadDocs();
+// 2.7: бета-сборка сайта показывает не-тестерам номер последней обычной версии (из NEWS в app/index.html)
+const PKG_VER = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
+const STABLE_VER = !/-/.test(PKG_VER) ? PKG_VER
+  : ((fs.readFileSync(path.join(ROOT, "app", "index.html"), "utf8").split("var NEWS=[")[1] || "").match(/\{v:"(\d+\.\d+\.\d+)"/) || [])[1] || PKG_VER;
 const out = {
   "privacy.html": docPage("privacy", docs.privacy, { file: "terms.html", title: docs.terms.title }, version),
   "terms.html": docPage("terms", docs.terms, { file: "privacy.html", title: docs.privacy.title }, version),
@@ -121,7 +125,7 @@ const GUIDE = [
 {
   const ids = GUIDE.map((s, i) => "g" + (i + 1));
   out["guide.html"] = page("Как пользоваться · Senko Assistant", "Короткое руководство по программе Senko Assistant: законы, калькулятор, таймеры, экипаж, рапорты и горячие клавиши.",
-    '<div class="wrap">\n<div class="doc-hero">\n <div class="crumbs"><a href="/">Senko Assistant</a> / Руководство</div>\n <h1>Как пользоваться</h1>\n <div class="upd"><span>для версии ' + esc(JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version) + '</span></div>\n</div>\n' +
+    '<div class="wrap">\n<div class="doc-hero">\n <div class="crumbs"><a href="/">Senko Assistant</a> / Руководство</div>\n <h1>Как пользоваться</h1>\n <div class="upd"><span>для версии ' + esc(STABLE_VER) + '</span></div>\n</div>\n' +
     '<div class="doc">\n <nav class="toc" aria-label="Разделы руководства">\n   <div class="sw"><a class="btn btn-s btn-sm" href="/status.html">Состояние сервисов</a></div>\n   ' +
     GUIDE.map((s, i) => '<a href="#' + ids[i] + '">' + esc(s[0]) + "</a>").join("\n   ") + "\n </nav>\n" +
     ' <article class="doc-body">\n' + GUIDE.map((s, i) => '<h2 id="' + ids[i] + '">' + esc(s[0]) + "</h2>\n" + s[1].map((p) => "<p>" + esc(p) + "</p>").join("\n")).join("\n") +
@@ -137,7 +141,7 @@ function buildApp() {
   const ver = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
   const APP = path.join(SITE, "app");
   fs.mkdirSync(APP, { recursive: true });
-  fs.writeFileSync(path.join(APP, "config.js"), "window.SENKO_WEB=" + JSON.stringify({ api: conf.API_URL, ver, built: new Date().toISOString().slice(0, 10) }) + ";\n");
+  fs.writeFileSync(path.join(APP, "config.js"), "window.SENKO_WEB=" + JSON.stringify({ api: conf.API_URL, ver, ...(STABLE_VER !== ver ? { stable: STABLE_VER } : {}), built: new Date().toISOString().slice(0, 10) }) + ";\n");
   const stamp = "?v=" + ver + "-" + Date.now().toString(36);
   const headTags = (title) =>
     '<meta name="robots" content="noindex">\n<link rel="manifest" href="/app/manifest.webmanifest">\n<link rel="icon" href="/favicon.svg" type="image/svg+xml">\n<link rel="apple-touch-icon" href="/apple-touch-icon.png">\n' +

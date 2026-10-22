@@ -58,11 +58,14 @@ function cleanBody(b) {
     total += text.length;
     ctx.push({ ref, text });
   }
-  return { q, ctx, short: !!b.short };
+  return { q, ctx, short: !!b.short, clar: !!b.clar && !b.short };
 }
 
 const SHORT = "\nФорматирование: ответ ОЧЕНЬ короткий — не более 3 предложений (до 450 символов), без списков и заголовков; первым предложением сам ответ; ссылки на статьи сохрани.";
-const sys = (short) => SYSTEM + (short ? SHORT : "");
+// 2.7: встречный вопрос. Сервер включает его по флагу ai27 (сначала только тестерам) и не включает в голосовом помощнике
+const CLAR = "\nУточнение: если от недостающей детали зависит, какая статья или какое наказание (кто действовал — гражданский или сотрудник при исполнении; было ли оружие; где это было; умышленно или нет), а в вопросе этой детали нет, не гадай. Ответь одной строкой, которая начинается словом «Уточните:», и задай один-два коротких вопроса. Если деталь на ответ не влияет или в вопросе уже есть «уточнение:», отвечай сразу, как обычно.";
+// m — режим: { short, clar } (раньше передавался только short)
+const sys = (m) => SYSTEM + (m.short ? SHORT : "") + (m.clar ? CLAR : "");
 
 function buildUserPrompt(q, ctx) {
   const blocks = ctx.length
@@ -78,16 +81,16 @@ function cutTail(text) {
 }
 
 // ───── провайдеры ─────
-async function callGemini(env, q, ctx, short) {
+async function callGemini(env, q, ctx, m) {
   const model = env.GEMINI_MODEL || "gemini-flash-latest";
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: sys(short) }] },
+      systemInstruction: { parts: [{ text: sys(m) }] },
       contents: [{ role: "user", parts: [{ text: buildUserPrompt(q, ctx) }] }],
       // «думающие» модели Gemini тратят часть лимита на размышления: при 600 токенах ответ обрывался на полуслове
-      generationConfig: { temperature: 0.2, maxOutputTokens: short ? 1200 : 2048 }
+      generationConfig: { temperature: 0.2, maxOutputTokens: m.short ? 1200 : 2048 }
     }),
     signal: AbortSignal.timeout(25000)
   });
@@ -100,7 +103,7 @@ async function callGemini(env, q, ctx, short) {
   if (!text) throw Object.assign(new Error("gemini empty"), { status: 502 });
   return text;
 }
-async function callOpenAICompat(url, key, model, q, ctx, extraHeaders, short) {
+async function callOpenAICompat(url, key, model, q, ctx, extraHeaders, m) {
   const r = await fetch(url, {
     method: "POST",
     headers: Object.assign({ "content-type": "application/json", authorization: "Bearer " + key }, extraHeaders || {}),
@@ -108,8 +111,8 @@ async function callOpenAICompat(url, key, model, q, ctx, extraHeaders, short) {
       model,
       temperature: 0.2,
       // gpt-oss сначала «рассуждает», и рассуждение входит в max_tokens: при 500 ответ часто обрывался
-      max_tokens: short ? 1200 : 2000,
-      messages: [{ role: "system", content: sys(short) }, { role: "user", content: buildUserPrompt(q, ctx) }]
+      max_tokens: m.short ? 1200 : 2000,
+      messages: [{ role: "system", content: sys(m) }, { role: "user", content: buildUserPrompt(q, ctx) }]
     }, /gpt-oss/i.test(model) ? { reasoning_effort: "low" } : {})),
     signal: AbortSignal.timeout(25000)
   });
@@ -121,18 +124,18 @@ async function callOpenAICompat(url, key, model, q, ctx, extraHeaders, short) {
   if (ch.finish_reason === "length") text = cutTail(text);
   return text;
 }
-const callGroq = (env, q, ctx, short) => callOpenAICompat("https://api.groq.com/openai/v1/chat/completions", env.GROQ_API_KEY, env.GROQ_MODEL || "openai/gpt-oss-120b", q, ctx, null, short);
-const callOpenRouter = (env, q, ctx, short) =>
-  callOpenAICompat("https://openrouter.ai/api/v1/chat/completions", env.OPENROUTER_API_KEY, env.OPENROUTER_MODEL || "openai/gpt-oss-120b:free", q, ctx, { "x-title": "Senko Assistant" }, short);
+const callGroq = (env, q, ctx, m) => callOpenAICompat("https://api.groq.com/openai/v1/chat/completions", env.GROQ_API_KEY, env.GROQ_MODEL || "openai/gpt-oss-120b", q, ctx, null, m);
+const callOpenRouter = (env, q, ctx, m) =>
+  callOpenAICompat("https://openrouter.ai/api/v1/chat/completions", env.OPENROUTER_API_KEY, env.OPENROUTER_MODEL || "openai/gpt-oss-120b:free", q, ctx, { "x-title": "Senko Assistant" }, m);
 
 // Workers AI — модели прямо в Cloudflare: ключей нет, регион игрока и страна не важны, бесплатный лимит ~10 тыс. «нейронов» в сутки.
-async function callCloudflare(env, q, ctx, short) {
+async function callCloudflare(env, q, ctx, m) {
   const model = env.CF_MODEL || "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
   let out;
   try {
     out = await env.AI.run(model, {
-      messages: [{ role: "system", content: sys(short) }, { role: "user", content: buildUserPrompt(q, ctx) }],
-      max_tokens: short ? 600 : 1000,
+      messages: [{ role: "system", content: sys(m) }, { role: "user", content: buildUserPrompt(q, ctx) }],
+      max_tokens: m.short ? 600 : 1000,
       temperature: 0.2
     });
   } catch (e) {
@@ -252,7 +255,7 @@ async function handle(request, env, ctxW) {
   if (!list.length) return json({ ok: false, error: "ИИ-сервис не настроен." }, 503);
 
   // кэш одинаковых вопросов (бесплатный Cache API; не тратит ни квоту ИИ, ни лимит игрока)
-  const cacheKey = new Request("https://cache.senko.local/" + (await sha256Hex("v23|" + (body.short ? "s|" : "") + body.q.toLowerCase() + "|" + body.ctx.map((c) => c.ref).join(","))));
+  const cacheKey = new Request("https://cache.senko.local/" + (await sha256Hex("v23|" + (body.short ? "s|" : "") + (body.clar ? "c|" : "") + body.q.toLowerCase() + "|" + body.ctx.map((c) => c.ref).join(","))));
   const cache = typeof caches !== "undefined" ? caches.default : null;
   if (cache) {
     const hit = await cache.match(cacheKey);
@@ -271,7 +274,7 @@ async function handle(request, env, ctxW) {
     let ctxTry = body.ctx;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const answer = await fn(env, body.q, ctxTry, body.short);
+        const answer = await fn(env, body.q, ctxTry, { short: body.short, clar: body.clar });
         if (cache) ctxW.waitUntil(cache.put(cacheKey, new Response(JSON.stringify({ answer }), { headers: { "content-type": "application/json", "cache-control": "max-age=21600" } })));
         if (!quota.ok) return json({ ok: true, answer, provider: name, left: 0, bonus: true });
         return json({ ok: true, answer, provider: name, left: await commitQuota(env, uid, quota) });

@@ -483,3 +483,16 @@ revoke all on all sequences in schema public from anon, authenticated;
 alter table public.profiles add column if not exists xp_adj integer not null default 0;
 -- 2.6.6: дополнительные запросы к ИИ сверх дневного лимита (выдаёт владелец в панели)
 alter table public.profiles add column if not exists ai_bonus integer not null default 0;
+
+-- 2.7: словарь ИИ «бытовое слово → статья», эталонные вопросы для самопроверки, ответ ИИ в журнале
+-- (сервер выполняет это сам при первом запросе, см. SCHEMA_27 в functions/senko/index.ts)
+alter table public.ai_log add column if not exists ans text not null default '';
+create table if not exists public.ai_dict (
+  id bigserial primary key, phrase text not null, refs text[] not null default '{}', note text not null default '',
+  author text not null default '', created_at timestamptz not null default now());
+create table if not exists public.ai_gold (
+  id bigserial primary key, q text not null, expect text not null default '', last text not null default '', last_ref text not null default '',
+  prev text not null default '', prev_ref text not null default '', checked_at timestamptz, created_at timestamptz not null default now());
+alter table public.ai_dict enable row level security;
+alter table public.ai_gold enable row level security;
+revoke all on table public.ai_dict, public.ai_gold from anon, authenticated;
