@@ -42,7 +42,8 @@
   .lcdw { position: absolute; left: 16px; right: 16px; top: 46px; height: 190px; border-radius: 10px; padding: 6px;
     background: #0b0c0e; box-shadow: inset 0 2px 6px rgba(0,0,0,.9), 0 1px 0 rgba(255,255,255,.08); }
   .lcd { position: relative; height: 100%; border-radius: 5px; overflow: hidden; color: var(--ink);
-    background: linear-gradient(170deg, var(--lcd), var(--lcd2)); font: 600 11px/1.25 Consolas, "Cascadia Mono", "Lucida Console", monospace; padding: 4px 6px; }
+    background: linear-gradient(170deg, var(--lcd), var(--lcd2)); font: 600 11px/1.25 Consolas, "Cascadia Mono", "Lucida Console", monospace; padding: 4px 6px 17px;
+    display: flex; flex-direction: column; }
   .lcd::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,.05) 0 1px, transparent 1px 3px); }
   .sb { display: flex; align-items: center; gap: 5px; font-size: 10px; }
   .sb .sig { display: inline-flex; align-items: flex-end; gap: 1px; height: 9px; }
@@ -53,7 +54,7 @@
   .sb .bat::after { content: ""; position: absolute; right: -3px; top: 2px; width: 2px; height: 3px; background: var(--ink); }
   .sb .bat i { display: block; height: 100%; width: 80%; background: var(--ink); }
   .dt { font-size: 10px; color: var(--dim); border-bottom: 1px solid var(--dim); padding-bottom: 2px; margin-bottom: 3px; display: flex; justify-content: space-between; }
-  .dets { display: grid; gap: 2px; min-height: 66px; align-content: start; }
+  .dets { flex: 1 1 auto; min-height: 0; overflow: hidden; display: grid; gap: 2px; align-content: start; }
   .det { display: grid; grid-template-columns: 1fr auto; column-gap: 4px; padding: 1px 2px; border-radius: 2px; }
   .det.sel { background: rgba(0,0,0,.12); }
   .det .n { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
@@ -63,11 +64,13 @@
   .det.low .t { text-decoration: underline; }
   .none { color: var(--dim); text-align: center; padding-top: 18px; }
   @keyframes blink { 50% { opacity: .25; } }
-  .msg { position: absolute; left: 6px; right: 6px; bottom: 20px; min-height: 28px; border-top: 1px solid var(--dim); padding-top: 2px; font-size: 10.5px; }
+  /* 2.6.3: сообщение — две строки под списком (раньше «висело» поверх последнего задержания) */
+  .msg { flex: none; height: calc(2.5em + 3px); margin-top: 2px; border-top: 1px solid var(--dim); padding-top: 2px; font-size: 10.5px; line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
   .msg .who { font-weight: 800; }
-  .msg .tx { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .soft { position: absolute; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center; font-size: 9px; font-weight: 800;
-    background: var(--ink); color: var(--lcd); padding: 2px 0 1px; }
+  .soft { position: absolute; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); text-align: center; font-size: 9px; line-height: 12px; height: 15px; font-weight: 800;
+    background: var(--ink); color: var(--lcd); padding: 2px 0 1px; white-space: nowrap; }
+  .soft span { overflow: hidden; }
   .soft span { cursor: pointer; } .soft span:active { opacity: .6; }
   .lv { display: inline-flex; gap: 1px; align-items: flex-end; height: 9px; margin-left: 4px; vertical-align: -1px; }
   .lv i { width: 3px; background: currentColor; height: 2px; }

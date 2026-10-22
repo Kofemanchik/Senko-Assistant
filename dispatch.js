@@ -57,17 +57,38 @@ function create() {
   });
   win = w;
   w.setAlwaysOnTop(true, "screen-saver");
+  hookMouse(w);
   w.loadURL("senko-voice://app/radio.html");
   w.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   w.webContents.on("will-navigate", (e) => e.preventDefault());
   w.webContents.on("did-finish-load", () => { try { w.webContents.setZoomFactor(k()); } catch (e) {} });
-  w.once("ready-to-show", () => { if (live()) w.showInactive(); });
+  w.once("ready-to-show", () => { if (live()) { w.showInactive(); wake(); } });
   w.on("closed", () => { if (win === w) { win = null; ready = false; state = "idle"; pttStop(); stopDrag(false); } ctx.changed(); });
   return w;
 }
+// 2.6.3: в Windows окно без фокуса иногда перестаёт получать нажатия в странице (особенно после скрытия и показа).
+// Нажатия мыши ловим и на уровне окна Windows и передаём рации: если страница своё нажатие не получила, рация выполнит его сама.
+function hookMouse(w) {
+  if (process.platform !== "win32" || typeof w.hookWindowMessage !== "function") return;
+  const fwd = (t) => (wp, lp) => {
+    if (t === "up" && drag) stopDrag(true);
+    if (!ready || w.isDestroyed()) return;
+    let v = 0; try { v = lp.readInt32LE(0); } catch (e) { return; }
+    w.webContents.send("radio:mouse", { t, x: (v << 16) >> 16, y: v >> 16 });
+  };
+  try { w.hookWindowMessage(0x0201, fwd("down")); w.hookWindowMessage(0x0202, fwd("up")); } catch (e) {}
+}
+// после показа «будим» окно: снова принимать мышь и пересчитать область окна (иначе прозрачное окно бывает «сквозным»)
+function wake() {
+  if (!live()) return;
+  try { win.setIgnoreMouseEvents(false); } catch (e) {}
+  const b = win.getBounds();
+  win.setBounds({ x: b.x, y: b.y, width: b.width, height: b.height + 1 });
+  win.setBounds(b);
+}
 function show() {
   if (!live()) create();
-  else if (!win.isVisible()) { win.showInactive(); send("radio:cmd", "shown"); }
+  else if (!win.isVisible()) { win.showInactive(); wake(); send("radio:cmd", "shown"); }
   win.setAlwaysOnTop(true, "screen-saver");
   setTimeout(() => ctx.changed(), 50);
 }

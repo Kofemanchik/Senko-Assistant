@@ -478,3 +478,6 @@ alter table public.patrol_items enable row level security;
 revoke all on table public.beta_tasks, public.beta_results, public.org_hooks, public.org_events, public.ideas, public.idea_votes,
                     public.patrols, public.patrol_members, public.patrol_items from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;
+
+-- 2.6.3: поправка опыта из панели владельца (функция создаёт столбец сама, если schema.sql не запускали)
+alter table public.profiles add column if not exists xp_adj integer not null default 0;

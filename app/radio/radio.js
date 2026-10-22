@@ -280,9 +280,29 @@
   ptt.addEventListener("pointerdown", function (e) { e.preventDefault(); e.stopPropagation(); try { ptt.setPointerCapture(e.pointerId); } catch (x) {} start(); });
   function pttUp() { if (S.state === "listening" || S.state === "loading") stop(); }
   ptt.addEventListener("pointerup", pttUp); ptt.addEventListener("pointercancel", pttUp);
-  document.addEventListener("click", function (e) {
+  // 2.6.3: кнопка срабатывает сразу при нажатии (не ждём «клика» — в Windows отпускание мыши у окна без фокуса иногда теряется).
+  // Если страница нажатие не получила, его передаёт main (radio:mouse) — тогда кнопку нажимаем сами по координатам.
+  var realAt = 0, fbAt = 0, fbPtt = false;
+  window.addEventListener("pointerdown", function () { realAt = Date.now(); }, true);
+  document.addEventListener("pointerdown", function (e) {
+    if (e.button !== 0) return;
     var b = e.target.closest && e.target.closest("[data-act]"); if (!b) return;
-    var a = b.getAttribute("data-act");
+    if (Date.now() - fbAt < 1000) return; // это нажатие уже выполнено через main
+    act(b.getAttribute("data-act"));
+  });
+  api.onMouse(function (m) {
+    if (m.t === "up") { if (fbPtt) { fbPtt = false; pttUp(); } endDrag(); return; }
+    var at = Date.now();
+    setTimeout(function () {
+      if (realAt >= at - 300) return; // страница нажатие получила сама
+      var r = window.devicePixelRatio || 1, el = document.elementFromPoint(m.x / r, m.y / r);
+      if (!el) return;
+      if (el.closest("#ptt")) { fbAt = Date.now(); fbPtt = true; start(); return; }
+      var b = el.closest("[data-act]");
+      if (b) { fbAt = Date.now(); act(b.getAttribute("data-act")); }
+    }, 150);
+  });
+  function act(a) {
     keyTick(); clearTimeout(S.hideT);
     if (a === "ptt-toggle") { if (S.state === "listening") stop(); else start(); return; }
     if (a === "hide") { api.hide(); return; }
@@ -296,7 +316,7 @@
       var i = Math.max(0, T.findIndex(function (t) { return t.id === S.data.sel; })), j = (i + (a === "up" ? -1 : 1) + T.length) % T.length;
       S.data.sel = T[j].id; renderDets(); api.select(T[j].id); return;
     }
-  });
+  }
   // перетаскивание за корпус: начинается, только когда мышь с зажатой кнопкой сдвинулась на несколько пикселей,
   // поэтому нажатие рядом с кнопкой не превращается в перетаскивание. Окно двигает main по положению курсора.
   var body = $("body"), dragging = false, press = null;

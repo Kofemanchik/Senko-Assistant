@@ -431,7 +431,7 @@
     var box = h("div", { class: "load", text: "Загружаю…" });
     el.appendChild(box);
     var feed = feedBox();
-    var left = h("div"), right = h("div"), actsBox = h("div");
+    var left = h("div"), right = h("div"), actsBox = h("div"), progBox = h("div");
     var R = card("Ответы бота");
     R.style.marginTop = "14px";
     R.appendChild(feed);
@@ -460,8 +460,59 @@
             }))))));
         }
         buildActs(r);
+        if (ME.owner) { left.appendChild(progBox); progLoad(); }
         return r;
       });
+    }
+    // 2.6.3: опыт и достижения (только владелец). Опыт меняется поправкой на сервере, программа её не перебивает
+    function progLoad() { return api("prog_get", { login: login }).then(progShow); }
+    function progShow(r) {
+      progBox.textContent = "";
+      if (!r || !r.ok) { progBox.appendChild(errMsg(r)); return; }
+      var C = card("Опыт и достижения", "Изменения видны в личном кабинете программы и в рейтинге. Недельный рейтинг считает только опыт, заработанный в программе.");
+      var note = h("input", { type: "checkbox" }); note.checked = true;
+      var why = h("input", { class: "grow", maxlength: 200, placeholder: "Причина (необязательно, увидит пользователь)" });
+      var setInp = h("input", { type: "number", min: 0, max: 1000000, step: 1, style: "width:120px", "aria-label": "Опыт", value: String(r.xp) });
+      function xp(data) {
+        api("prog_xp", Object.assign({ login: login, notify: note.checked, reason: why.value.trim() }, data)).then(function (y) {
+          if (!y.ok) return toast(y.error, true);
+          toast("Опыт: " + y.xp + "."); progShow(y);
+        });
+      }
+      C.appendChild(h("p", null, h("b", { text: "Опыт: " + r.xp }), " · звание «" + r.level.name + "» (" + r.level.n + " из " + r.levels.length + ")",
+        h("span", { class: "muted small", text: "  из программы " + r.synced + (r.adj ? ", поправка " + (r.adj > 0 ? "+" : "") + r.adj : "") })));
+      C.appendChild(h("div", { class: "row", style: "flex-wrap:wrap;gap:8px;margin:8px 0" },
+        setInp, btn("Установить", function () { var v = setInp.value.trim(); if (!/^\d{1,7}$/.test(v)) return toast("Опыт: целое число от 0.", true); xp({ set: +v }); }, "btn-sm btn-p"),
+        [10, 50, 100, -50].map(function (n) { return btn((n > 0 ? "+" : "−") + Math.abs(n), function () { xp({ add: n }); }, "btn-sm"); }),
+        h("select", { class: "btn-sm", "aria-label": "Звание", style: "width:auto", on: { change: function (e) { if (e.target.value !== "") xp({ set: +e.target.value }); } } },
+          h("option", { value: "", text: "Сделать званием…" }), r.levels.map(function (l) { return h("option", { value: String(l.from), text: l.n + ". " + l.name + " (" + l.from + ")" }); }))));
+      C.appendChild(h("div", { class: "row", style: "gap:8px;margin-bottom:12px" }, why, h("label", { class: "small", style: "display:flex;align-items:center;gap:6px;white-space:nowrap" }, note, "Сообщить в программе")));
+      C.appendChild(h("h3", { text: "Достижения", style: "margin:6px 0" }));
+      C.appendChild(h("div", { class: "tbl-wrap", style: "box-shadow:none" }, h("table", { class: "tbl" }, h("tbody", null, r.ach.map(function (x) {
+        return h("tr", { style: "cursor:default" },
+          h("td", { text: x.icon, style: "width:28px;font-size:18px" }),
+          h("td", null, h("b", { text: x.name }), x.custom ? pill("особое", "acc") : null, h("div", { class: "muted small", text: x.desc || "" }),
+            h("div", { class: "small", style: "margin-top:2px", text: x.at ? "✓ получено " + fmt(x.at).slice(0, 10) : "не получено" })),
+          h("td", { style: "text-align:right;width:1%" }, btn(x.at ? "Забрать" : "Выдать", function () {
+            api("prog_ach", { login: login, code: x.code, on: !x.at, notify: note.checked }).then(function (y) {
+              if (!y.ok) return toast(y.error, true);
+              toast(x.at ? "Достижение забрано." : "Достижение выдано."); progShow(y);
+            });
+          }, "btn-sm" + (x.at ? "" : " btn-p"))));
+      })))));
+      C.appendChild(h("div", { class: "row", style: "margin-top:10px" }, btn("Новое особое достижение", function () {
+        form("Новое достижение для " + login, [
+          { k: "i", label: "Значок", max: 8, value: "🏆", hint: "Один эмодзи." },
+          { k: "n", label: "Название", req: 1, max: 60, ph: "Лучший сотрудник месяца" },
+          { k: "d", label: "За что", max: 160, ph: "Например: за помощь новичкам" }],
+          "Создать и выдать", function () { return {}; }, function (c, v) {
+            api("prog_ach_new", { login: login, icon: v.i, name: v.n, desc: v.d, notify: note.checked }).then(function (y) {
+              if (!y.ok) return toast(y.error, true);
+              toast("Достижение «" + v.n + "» выдано."); progShow(y);
+            });
+          });
+      }, "btn-sm", "i-trophy")));
+      progBox.appendChild(C);
     }
     function act(label, fields, build, opts) {
       opts = opts || {};

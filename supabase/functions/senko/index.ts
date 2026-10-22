@@ -624,6 +624,8 @@ async function userStats() {
     from sync_items group by user_id`;
   const m = {};
   for (const r of rows) m[r.user_id] = { det: r.det, det7: r.det7, tests: r.tests, avg_p: r.avg_p, xp: r.xp };
+  const adj = await xpAdjOf(null);
+  for (const id of Object.keys(adj)) if (m[id]) m[id].xp = Math.max(0, (m[id].xp || 0) + adj[id]);
   return m;
 }
 const statLine = (s) => (s ? `Задержаний: ${s.det} · тестов: ${s.tests}${s.avg_p == null ? "" : " (средний результат " + s.avg_p + "%)"} · XP: ${s.xp == null ? 0 : s.xp}` : "Данных работы пока нет");
@@ -1304,6 +1306,38 @@ const ACH = [
   { code: "lvl8", icon: "👑", name: "Звание «Легенда»", desc: "Набрать 1900 опыта", rare: true, test: (s) => s.xp >= 1900 },
 ];
 const ACH_BY = Object.fromEntries(ACH.map((x) => [x.code, x]));
+// 2.6.3: особые достижения, которые владелец создаёт в панели (bot_settings «achx»: код → значок, название, описание)
+const achAll = async () => ({ ...(await getSetting("achx", {})), ...ACH_BY });
+
+// 2.6.3: поправка опыта из панели владельца. Опыт = опыт из программы (синхронизация берёт большее значение) + поправка,
+// поэтому опыт можно и уменьшить: программа не «перебьёт» поправку своим числом
+let xpAdjReady = null;
+function ensureXpAdj() {
+  if (!xpAdjReady)
+    xpAdjReady = (async () => {
+      const sql = db();
+      const [c] = await sql`select 1 from information_schema.columns where table_schema = 'public' and table_name = 'profiles' and column_name = 'xp_adj'`;
+      if (!c) await sql.unsafe("alter table public.profiles add column if not exists xp_adj integer not null default 0");
+    })().catch((e) => {
+      xpAdjReady = null;
+      throw e;
+    });
+  return xpAdjReady;
+}
+// ids = null — все пользователи с поправкой
+async function xpAdjOf(ids) {
+  try {
+    await ensureXpAdj();
+    const sql = db();
+    const rows = ids
+      ? await sql`select id, xp_adj from profiles where xp_adj <> 0 and id = any(${ids}::uuid[])`
+      : await sql`select id, xp_adj from profiles where xp_adj <> 0`;
+    return Object.fromEntries(rows.map((r) => [r.id, r.xp_adj]));
+  } catch (e) {
+    console.error("xp_adj", e);
+    return {};
+  }
+}
 
 // Неделя с понедельника 00:00 по МСК: key — дата понедельника, start — его начало в мс
 function mskWeek(d = new Date()) {
@@ -1351,14 +1385,15 @@ async function weekStats(org, w = mskWeek(), full = false) {
            round(avg(senko_num(data->>'p')) filter (where kind = 'tests' and senko_num(data->>'t') >= ${w.start} and senko_num(data->>'t') < ${end}))::int avg_p
     from sync_items where not deleted and kind in ('thist', 'tests') and user_id = any(${ids}::uuid[]) group by user_id`;
   const ach = await sql`select user_id, count(*)::int n from achievements where user_id = any(${ids}::uuid[]) group by user_id`;
+  const ADJ = await xpAdjOf(ids);
   const X = {}, B0 = {}, B1 = {}, AC = {}, AN = {};
   xs.forEach((r) => (X[r.user_id] = r.xp));
   bs.forEach((r) => ((r.week === w.key ? B0 : B1)[r.user_id] = r.base));
   act.forEach((r) => (AC[r.user_id] = r));
   ach.forEach((r) => (AN[r.user_id] = r.n));
   return people.map((p) => {
-    const xp = X[p.id] || 0;
-    const top = full ? (B1[p.id] != null ? B1[p.id] : xp) : xp;
+    const sx = X[p.id] || 0, xp = Math.max(0, sx + (ADJ[p.id] || 0)); // опыт за неделю — только заработанный в программе
+    const top = full ? (B1[p.id] != null ? B1[p.id] : sx) : sx;
     const base = B0[p.id] != null ? B0[p.id] : top;
     const a = AC[p.id] || {};
     return { ...p, xp, wxp: Math.max(0, top - base), det: a.det || 0, tests: a.tests || 0, avg_p: a.avg_p == null ? null : a.avg_p, ach: AN[p.id] || 0, lvl: lvOf(xp) };
@@ -1378,6 +1413,7 @@ async function checkAch(p) {
            coalesce(max(senko_num(data#>>'{}')) filter (where kind = 'xp'), 0)::int xp
     from sync_items where user_id = ${p.id} and not deleted`;
   const [c] = await sql`select count(*) filter (where p >= 100)::int ctrl100 from control_results where user_id = ${p.id}`;
+  s.xp = Math.max(0, s.xp + ((await xpAdjOf([p.id]))[p.id] || 0));
   const earned = ACH.filter((x) => x.test({ ...s, ...c })).map((x) => x.code);
   if (!earned.length) return [];
   const got = (await sql`insert into achievements (user_id, code) select ${p.id}, unnest(${earned}::text[])
@@ -1413,6 +1449,8 @@ async function myStats(b) {
       if (((d && +d.end) || Number(r.u)) >= wk) det7++;
     }
   }
+  const xpAdj = (await xpAdjOf([p.id]))[p.id] || 0;
+  xp = Math.max(0, xp + xpAdj);
   tests.sort((a, c) => c.t - a.t);
   const last = tests.slice(0, 10);
   const weak = Object.keys(TOPICS)
@@ -1423,6 +1461,8 @@ async function myStats(b) {
     .slice(0, 3);
   const got = await sql`select code, at from achievements where user_id = ${p.id}`;
   const G = Object.fromEntries(got.map((r) => [r.code, r.at]));
+  const AX = await getSetting("achx", {});
+  const custom = Object.keys(G).filter((c) => !ACH_BY[c] && AX[c]).map((c) => ({ code: c, icon: AX[c].icon, name: AX[c].name, desc: AX[c].desc, rare: true, at: G[c] }));
   const w = mskWeek();
   const board = (await weekStats(p.org, w)).sort(byWxp);
   const place = board.findIndex((x) => x.id === p.id);
@@ -1433,11 +1473,11 @@ async function myStats(b) {
   return {
     ok: true,
     org: p.org,
-    xp, level: lvOf(xp), streak, det, det7,
+    xp, xpAdj, level: lvOf(xp), streak, det, det7,
     tests: tests.length,
     avg_p: last.length ? Math.round(last.reduce((s, t) => s + t.p, 0) / last.length) : null,
     weak,
-    ach: ACH.map((x) => ({ code: x.code, icon: x.icon, name: x.name, desc: x.desc, rare: !!x.rare, at: G[x.code] || null })),
+    ach: ACH.map((x) => ({ code: x.code, icon: x.icon, name: x.name, desc: x.desc, rare: !!x.rare, at: G[x.code] || null })).concat(custom),
     week: { from: w.start, wxp: place >= 0 ? board[place].wxp : 0, place: place >= 0 ? place + 1 : null, of: board.length },
     top: board.slice(0, 10).map((x, i) => ({ n: i + 1, nick: x.nick, lvl: x.lvl.name, wxp: x.wxp, me: x.id === p.id })),
     controls: ctrl.map((r) => ({ id: String(r.id), title: r.title, n: r.n, due: r.due_at, p: r.p, at: r.at })),
@@ -1968,6 +2008,7 @@ const AUDIT_ACTIONS = [
   "panel_login", "panel_key", "panel_revoke", "db_edit", "db_delete", "db_revert",
   "ad_save", "ad_toggle", "ad_delete",
   "beta", "beta_task", "flags", "hook", "event", "idea",
+  "xp_set", "ach_grant", "ach_revoke", "ach_custom",
 ];
 
 async function findProfile(login) {
@@ -2013,7 +2054,8 @@ async function fullCard(p, viewer) {
   if (notes.length) t += `\n\n📝 <b>Заметки</b>\n` + notes.map((x) => `• ${fmtDate(x.at)} · ${esc(x.author)}: ${esc(x.text)}`).join("\n");
   if (viewer === "owner") t += "\n" + statLine((await userStats())[p.id]);
   const ach = await sql`select code from achievements where user_id = ${p.id} order by at`;
-  if (ach.length) t += `\n🏆 Достижения: ${ach.map((x) => ACH_BY[x.code]).filter(Boolean).map((x) => x.icon + " " + x.name).join(", ")}`;
+  const AA = ach.length ? await achAll() : {};
+  if (ach.length) t += `\n🏆 Достижения: ${ach.map((x) => AA[x.code]).filter(Boolean).map((x) => x.icon + " " + x.name).join(", ")}`;
   return t;
 }
 
@@ -3551,7 +3593,8 @@ async function panelStaff(a) {
 async function panelApi(b, ip, ua) {
   const op = String(b.op || "");
   if (op === "login") return panelLogin(b, ip, ua);
-  const owners = ["audit", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert", "ads_list", "ads_save", "ads_toggle", "ads_delete"];
+  const owners = ["audit", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert", "ads_list", "ads_save", "ads_toggle", "ads_delete",
+    "prog_get", "prog_xp", "prog_ach", "prog_ach_new"];
   const { p, a, th, err } = await pwho(b, owners.includes(op));
   if (err) return err;
   const sql = db();
@@ -3655,8 +3698,84 @@ async function panelApi(b, ip, ua) {
     case "ideas_set":
     case "ideas_delete":
       return panelIdeas(b, a);
+    case "prog_get":
+    case "prog_xp":
+    case "prog_ach":
+    case "prog_ach_new":
+      return panelProgress(b, a);
   }
   return fail("Неизвестное действие панели.");
+}
+
+// ───────────── 2.6.3: опыт и достижения пользователя (владелец в панели) ─────────────
+async function progOf(p) {
+  const sql = db();
+  await ensureXpAdj();
+  const [{ sx }] = await sql`select coalesce(max(senko_num(data#>>'{}')), 0)::int sx from sync_items where user_id = ${p.id} and kind = 'xp' and not deleted`;
+  const [{ adj }] = await sql`select xp_adj adj from profiles where id = ${p.id}`;
+  const got = await sql`select code, at from achievements where user_id = ${p.id}`;
+  const G = Object.fromEntries(got.map((r) => [r.code, r.at]));
+  const AX = await getSetting("achx", {});
+  const list = ACH.map((x) => ({ code: x.code, icon: x.icon, name: x.name, desc: x.desc, custom: false, at: G[x.code] || null }))
+    .concat(Object.entries(AX).map(([code, x]) => ({ code, icon: x.icon, name: x.name, desc: x.desc, custom: true, at: G[code] || null })));
+  const xp = Math.max(0, sx + adj);
+  return { ok: true, login: p.login, nick: p.nick, xp, synced: sx, adj, level: lvOf(xp), levels: LVN.map((n, i) => ({ n: i + 1, name: n, from: LVT[i] })), ach: list };
+}
+async function achNotice(p, x, by) {
+  await db()`insert into broadcasts (user_id, title, author, text, expires_at)
+             values (${p.id}, '🏆 Новое достижение', ${by}, ${`${x.icon} ${x.name}${x.desc ? " — " + String(x.desc).toLowerCase() : ""}\nВсе достижения — в личном кабинете.`}, now() + interval '7 days')`;
+}
+async function panelProgress(b, a) {
+  const p = await findProfile(String(b.login || ""));
+  if (!p) return fail("Пользователь не найден.");
+  const sql = db();
+  if (b.op === "prog_get") return progOf(p);
+  if (b.op === "prog_xp") {
+    // опыт задаётся числом («сделать 500») или прибавкой («+50», «−30»)
+    const cur = await progOf(p);
+    const want = b.set != null && b.set !== "" ? Math.floor(+b.set) : cur.xp + Math.floor(+b.add || 0);
+    if (!Number.isFinite(want) || want < 0 || want > 1000000) return fail("Опыт: целое число от 0 до 1 000 000.");
+    if (want === cur.xp) return cur;
+    const adj = want - cur.synced;
+    await sql`update profiles set xp_adj = ${adj} where id = ${p.id}`;
+    await audit(a.label, "xp_set", p.login, { before: cur.xp, after: want, adj });
+    if (b.notify) await sql`insert into broadcasts (user_id, title, author, text, expires_at)
+                            values (${p.id}, ${want > cur.xp ? "⭐ Начислен опыт" : "Опыт изменён"}, ${a.label},
+                                    ${`Опыт: ${cur.xp} → ${want}${b.reason ? "\nПричина: " + clean(b.reason, 200) : ""}`}, now() + interval '7 days')`;
+    await checkAch(p).catch((e) => console.error("ach", e));
+    return progOf(p);
+  }
+  if (b.op === "prog_ach") {
+    const AA = await achAll();
+    const code = String(b.code || "").slice(0, 40);
+    const x = AA[code];
+    if (!x) return fail("Нет такого достижения.");
+    if (b.on) {
+      const got = await sql`insert into achievements (user_id, code) values (${p.id}, ${code}) on conflict do nothing returning code`;
+      if (got.length) {
+        await audit(a.label, "ach_grant", p.login, { code, name: x.name });
+        if (b.notify !== false) await achNotice(p, x, a.label);
+      }
+    } else {
+      const del = await sql`delete from achievements where user_id = ${p.id} and code = ${code} returning code`;
+      if (del.length) await audit(a.label, "ach_revoke", p.login, { code, name: x.name });
+    }
+    return progOf(p);
+  }
+  if (b.op === "prog_ach_new") {
+    const name = clean(b.name, 60), desc = clean(b.desc, 160), icon = clean(b.icon, 8) || "🏆";
+    if (!name) return fail("Напишите название достижения.");
+    const AX = await getSetting("achx", {});
+    if (Object.keys(AX).length >= 100) return fail("Особых достижений уже 100. Удалите лишние в редакторе базы (bot_settings, ключ achx).");
+    const code = "x" + Date.now().toString(36);
+    AX[code] = { icon, name, desc };
+    await setSetting("achx", AX);
+    await sql`insert into achievements (user_id, code) values (${p.id}, ${code}) on conflict do nothing`;
+    await audit(a.label, "ach_custom", p.login, { code, icon, name, desc });
+    if (b.notify !== false) await achNotice(p, AX[code], a.label);
+    return progOf(p);
+  }
+  return fail("Неизвестное действие.");
 }
 
 // ───────────── Реклама (2.3.0): баннеры на сайте и на главной в программе, правит владелец в панели ─────────────
