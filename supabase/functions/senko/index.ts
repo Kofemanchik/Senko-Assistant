@@ -1861,7 +1861,7 @@ async function aiLog(b) {
   if (!(await hit(`ai:${p.id}`, 80, 3600))) return fail(RATE_MSG, { code: "rate" });
   const q = String(b.q == null ? "" : b.q).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 500);
   if (!q) return fail("Пустой вопрос.");
-  const refs = (Array.isArray(b.refs) ? b.refs : []).slice(0, 10).map((r) => clean(r, 60)).filter(Boolean);
+  const refs = (Array.isArray(b.refs) ? b.refs : []).slice(0, 10).map((r) => clean(r, 120)).filter(Boolean); // 2.6.4: до 120 знаков, иначе номер статьи закона обрезался
   const ok = b.ok !== false;
   const [r] = await db()`insert into ai_log (user_id, q, refs, ok) values (${p.id}, ${q}, ${refs}, ${ok}) returning id`;
   const chat = await aiChat();

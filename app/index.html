@@ -2701,7 +2701,7 @@ window.__senkoLawSearch = function(query){
    Возвращает [{ref, text, go|lw}] — «ref» это подпись статьи, по которой ИИ ссылается на источник. */
 (function(){
   var AI_STOP = {};
-  ("что как это если или для при будет мне меня можно нужно какой какая какие какое каком когда где почему сколько есть был была были быть его они она там тут про без над под после перед чтобы нельзя можем могу может могут должен должна надо очень также только уже еще ещё всех весь вся все этот эта эти того этой этом чем кто кого кому ему ней них ним тоже вот вам вас нас нам наш ваш свой свою дают дадут грозит получит получить накажут сделать делать статья статье статьи статью статей закон закону какое какие скажи подскажи расскажи объясни"
+  ("что как это если или для при будет мне меня можно нужно какой какая какие какое каком когда где почему сколько есть был была были быть его они она там тут про без над под после перед чтобы нельзя можем могу может могут должен должна надо очень также только уже еще ещё всех весь вся все этот эта эти того этой этом чем кто кого кому ему ней них ним тоже вот вам вас нас нам наш ваш свой свою дают дадут грозит получит получить накажут сделать делать статья статье статьи статью статей закон закону какое какие скажи подскажи расскажи объясни такое такой такая такие таком значит означает определение понятие термин чего так тот раз весь вся там тут"
   ).split(/\s+/).forEach(function(w){ AI_STOP[w] = 1; });
   function aiFacts(r){
     var f = [];
@@ -2725,6 +2725,44 @@ window.__senkoLawSearch = function(query){
     if(p && p.length) t += " Пункты: " + p.slice(0, 8).map(function(x){ return x[0] + ") " + String(x[1]).slice(0, 90); }).join(" ");
     return t;
   }
+  // 2.6.4: подбор выдержек для ИИ. Раньше «законное» находило «НЕзаконное» (основа искалась внутри слова), все слова весили
+  // одинаково, а законы шли отдельным хвостом после кодексов. Теперь основа ищется только с начала слова, редкие слова весят
+  // больше частых, слова рядом («законное требование») дают прибавку, статьи кодексов и законов ранжируются вместе.
+  var AI_IDX = null, AI_IDX_N = -1;
+  function aiDocs(){
+    var LI = lawIndex();
+    if(AI_IDX && AI_IDX_N === LI.length && AI_IDX.src === LI) return AI_IDX;
+    var docs = [], arts = {};
+    UK.concat(AK, DK, PK).forEach(function(r){
+      var key = r.k + "|" + r.code, a = arts[key];
+      if(!a){ a = arts[key] = {t: "c", k: r.k, code: r.code, rows: [], ti: "", hay: ""}; docs.push(a); }
+      a.rows.push(r); a.ti += " " + norm(r.title); a.hay += " " + rowHay(r);
+    });
+    LI.forEach(function(e){ e.units.forEach(function(x){ docs.push({t: "l", L: e.L, u: x.u, ti: norm(String(x.u.title || "")), hay: x.hay}); }); });
+    docs.src = LI; AI_IDX = docs; AI_IDX_N = LI.length; return docs;
+  }
+  function aiRe(alts){
+    return new RegExp("(?:^|[^а-яa-z0-9])(?:" + alts.map(function(a){ return a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }).join("|") + ")", "g");
+  }
+  // основа слова для поиска выдержек: снимаем окончание («применять» → «примен», «требование» → «требован»)
+  var AI_END = "ениями ениях ением ениям ения ение ении иями ями ами ость ости ться тся ешь ете ают яют ует уют ить ать ять еть ого его ому ему ыми ими ая яя ое ее ые ие ый ий ой ую юю ом ем ам ям ах ях ов ев ей ия ью ии а я о е ы и у ю ь".split(" ");
+  function aiStem(w){
+    if(!/^[а-я]+$/.test(w)) return w;
+    for(var i = 0; i < AI_END.length; i++){ var e = AI_END[i]; if(w.length - e.length >= 4 && w.slice(-e.length) === e) return w.slice(0, -e.length); }
+    return w;
+  }
+  // близкие по смыслу слова, которыми законы называют то же самое
+  var AI_SYN = [[/^неподчин|^неповин/, ["неподчин", "неповинов", "не подчин"]], [/^обыск|^досмотр/, ["обыск", "досмотр"]], [/^машин|^авто|^тачк|^транспорт/, ["машин", "транспорт", "тс ", "автомоб"]],
+    [/^держ|^удержив|^содерж/, ["держ", "содерж", "удерж"]], [/^задерж/, ["задерж"]], [/^арест/, ["арест", "задерж"]], [/^ствол|^пушк|^пистолет|^оруж/, ["оруж", "пистолет"]],
+    [/^коп$|^мент|^полицейск|^полици/, ["полиц", "сотрудник"]], [/^штраф/, ["штраф"]], [/^прокурор|^огп$/, ["прокурор"]], [/^адвокат|^защитник/, ["адвокат", "защитник"]],
+    [/^ордер|^санкци/, ["ордер", "санкци"]], [/^жд|^ожид|^подожд/, ["ожида", "жд", "не приехал", "не прибыл"]], [/^маск/, ["маск", "маскиров"]], [/^врач|^медик|^ems$|^емс$/, ["медик", "врач", "ems", "emergency"]]];
+  function aiAlts(w){
+    var a = [aiStem(w)], sl = typeof slangAlts === "function" ? slangAlts(w) : null;
+    if(sl && sl.a && sl.a.length) a = a.concat(sl.a);
+    AI_SYN.forEach(function(x){ if(x[0].test(w)) a = a.concat(x[1]); });
+    return a.filter(function(x, i){ return x && a.indexOf(x) === i; });
+  }
+  function aiPos(re, s){ var p = [], m; re.lastIndex = 0; while(p.length < 30 && (m = re.exec(s))){ p.push(m.index); if(re.lastIndex === m.index) re.lastIndex++; } return p; }
   window.__senkoAiContext = function(question){
     var out = [];
     try{
@@ -2735,52 +2773,58 @@ window.__senkoLawSearch = function(query){
       (raw.match(/\d{1,3}(?:[.,]\d{1,3}){1,3}/g) || []).slice(0, 3).forEach(function(rf){
         var code = rf.replace(",", "."), Qr = buildQ(code);
         if(Qr.empty || !Qr.nums) return;
-        rows.forEach(function(r){ if(rowQ(r, Qr)){ refRows[r.id] = (r.code === code) ? 2 : 1; nRef++; } });
+        rows.forEach(function(r){ if(rowQ(r, Qr)){ refRows[r.k + "|" + r.code] = (r.code === code) ? 2 : 1; nRef++; } });
       });
-      // 2) ключевые слова (с учётом сленга и основы слова — как в обычном поиске)
+      // 2) слова вопроса: основа слова и сленг (как в обычном поиске), но совпадение только с начала слова
       var words = [], seen = {};
       norm(raw).replace(/[^а-яa-z0-9\s-]/g, " ").split(/\s+/).forEach(function(w){
-        if(w.length < 4 || AI_STOP[w] || /^\d+$/.test(w) || seen[w]) return;
+        if(w.length < 3 || AI_STOP[w] || /^\d+$/.test(w) || seen[w]) return;
         seen[w] = 1; words.push(w);
       });
-      words = words.slice(0, 8);
-      var Qs = words.map(function(w){ return buildQ(w); }).filter(function(Q){ return !Q.empty && !Q.nums && Q.groups.length; });
-      var arts = {};
-      rows.forEach(function(r){
-        var s = refRows[r.id] === 2 ? 110 : (refRows[r.id] ? 100 : 0), ti = null;
-        Qs.forEach(function(Q){
-          if(!rowQ(r, Q)) return;
-          if(ti === null) ti = norm(r.title);
-          s += (Q.slang.length ? 3 : 0) + (Q.groups.every(function(g){ return g.some(function(a){ return ti.indexOf(a) > -1; }); }) ? 3 : 1);
-        });
-        if(!s) return;
-        var key = r.k + "|" + r.code, a = arts[key] || (arts[key] = {k: r.k, code: r.code, s: 0, rows: []});
-        if(s > a.s) a.s = s;
-        a.rows.push(r);
+      // как это называется в законах: «сколько держать задержанного» — «процессуальный час»
+      var low = norm(raw), pun = /(сколько дают|что будет|что грозит|чем грозит|наказан|штраф|срок за|какая статья|по какой статье|сажают|посадят|розыск)/.test(low);
+      if(/(сколько|долго|время|срок).{0,30}(держ|задерж)|(держ|задерж).{0,30}(сколько|долго|времени|срок)/.test(low)) words.push("процессуальный", "час");
+      if(/(жд|ожида).{0,30}(адвокат|прокурор|медик|врач)|(адвокат|прокурор|медик|врач).{0,30}(жд|ожида|не приехал|опазд)/.test(low)) words.push("минут");
+      var T = words.slice(0, 10).map(function(w){ return {w: w, re: aiRe(aiAlts(w))}; });
+      var docs = aiDocs(), N = docs.length, hits = [];
+      var df = T.map(function(){ return 0; });
+      docs.forEach(function(d){
+        var m = T.map(function(t, i){ var p = aiPos(t.re, d.hay); if(p.length) df[i]++; return p; });
+        var ref = d.t === "c" ? refRows[d.k + "|" + d.code] || 0 : 0;
+        if(ref || m.some(function(p){ return p.length; })) hits.push({d: d, m: m, ref: ref});
       });
-      var need = Qs.length > 2 ? 2 : 1, needLaw = Qs.length <= 2 ? Qs.length : Math.ceil(Qs.length * 0.6);
-      Object.keys(arts).map(function(k){ return arts[k]; })
-        .filter(function(a){ return a.s >= need || a.s >= 100; })
-        .sort(function(a, b){ var wa = a.s + (a.s >= 100 ? 0 : (a.k === "uk" ? 1 : a.k === "pk" ? 0 : 0.5)), wb = b.s + (b.s >= 100 ? 0 : (b.k === "uk" ? 1 : b.k === "pk" ? 0 : 0.5)); return (wb - wa) || (a.rows.length - b.rows.length); })
-        .slice(0, 6).forEach(function(a){
-          var text = a.rows.slice(0, 4).map(aiRowText).join(" ").slice(0, 1400);
-          out.push({ref: KN[a.k] + " ст. " + a.code + " — " + String(a.rows[0].title || "").replace(/\s+/g, " ").slice(0, 80), text: text, go: a.k + "|" + a.code});
-        });
-      // 3) остальные законы
-      if(Qs.length && !nRef){
-        var best = [];
-        lawIndex().forEach(function(e){
-          e.units.forEach(function(x){
-            var s = 0; Qs.forEach(function(Q){ if(qHit(Q, x.hay)) s++; });
-            if(s >= needLaw) best.push({L: e.L, u: x.u, s: s});
-          });
-        });
-        best.sort(function(a, b){ return b.s - a.s; });
-        best.slice(0, Math.max(0, 10 - out.length > 4 ? 4 : 10 - out.length)).forEach(function(b){
-          var body = String(b.u.text || "").split("\n").slice(1).join(" ").replace(/\s+/g, " ").replace(/[​]/g, "").trim();
-          out.push({ref: lawShort(b.L).slice(0, 60) + " ст. " + b.u.n, text: (String(b.u.title || "") + ". " + body).slice(0, 1400), lw: b.L.id + "|" + b.u.key});
-        });
-      }
+      // слово, которого нет ни в одной статье («надеть»), не должно мешать найти остальные
+      var W = df.map(function(n){ return n ? Math.log(1 + N / (1 + n)) : 0; }), WT = W.reduce(function(s, x){ return s + x; }, 0);
+      hits.forEach(function(h){
+        var s = 0, cov = 0, d = h.d;
+        h.m.forEach(function(p, i){ if(!p.length) return; cov += W[i]; s += W[i] * (aiPos(T[i].re, d.ti).length ? 2 : 1) + Math.min(p.length - 1, 3) * 0.15 * W[i]; });
+        // слова рядом и в том же порядке, что в вопросе («законное требование»): прибавка за каждую пару
+        for(var i = 0; i + 1 < T.length; i++){
+          var a = h.m[i], b = h.m[i + 1]; if(!a.length || !b.length) continue;
+          var near = a.some(function(x){ return b.some(function(y){ return y > x && y - x <= 40; }); });
+          if(near) s += W[i] + W[i + 1];
+        }
+        h.cov = WT ? cov / WT : 0; s *= 0.5 + h.cov;
+        if(pun && d.t === "c" && d.k !== "pk") s *= 1.6; // «что будет за…», «сколько дают»: сначала статьи с наказанием
+        h.s = h.ref ? 100 + h.ref * 10 + s : s;
+      });
+      // нужно больше половины «веса» вопроса; выдержки, где есть все слова, и так стоят выше
+      var good = hits.filter(function(h){ return h.ref || h.cov >= 0.4; });
+      good.sort(function(a, b){ return (b.s - a.s) || ((b.d.t === "c") - (a.d.t === "c")); });
+      var perLaw = {}, nc = 0;
+      good.forEach(function(h){
+        if(out.length >= 8) return;
+        var d = h.d;
+        if(d.t === "c"){
+          if(nc >= 6) return; nc++;
+          var text = d.rows.slice(0, 4).map(aiRowText).join(" ").slice(0, 1400);
+          out.push({ref: KN[d.k] + " ст. " + d.code + " — " + String(d.rows[0].title || "").replace(/\s+/g, " ").slice(0, 80), text: text, go: d.k + "|" + d.code});
+        } else {
+          if((perLaw[d.L.id] = (perLaw[d.L.id] || 0) + 1) > 3) return;
+          var body = String(d.u.text || "").split("\n").slice(1).join(" ").replace(/\s+/g, " ").replace(/[​]/g, "").trim();
+          out.push({ref: lawShort(d.L).slice(0, 60) + " ст. " + d.u.n, text: (String(d.u.title || "") + ". " + body).slice(0, 1400), lw: d.L.id + "|" + d.u.key});
+        }
+      });
     }catch(e){}
     return out;
   };
@@ -6231,7 +6275,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.6.3";
+var APP_VER="2.6.4";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6320,6 +6364,11 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.6.4",d:"22.10.2026",items:[
+  ["🤖","ИИ точнее находит статьи","«Законное требование» больше не находит статьи про «незаконное»: слово ищется только с начала. Редкие слова вопроса важнее частых, слова рядом («законное требование») поднимают статью выше, кодексы и законы сравниваются вместе."],
+  ["⚖️","УК не пропадает из ответа","На «сколько дают за незаконное оружие» ИИ снова видит ст. 12.8 УК: раньше слово «оружие» оставляло только закон об обороте оружия. На вопросы «что будет за…», «штраф за…» статьи с наказанием идут первыми."],
+  ["🔎","Понимает, как сказано в законах","«Сколько держать задержанного» ищет «процессуальный час», «неподчинение» находит «неповиновение», «ждать адвоката» находит сроки ожидания."]
+ ]},
  {v:"2.6.3",d:"22.10.2026",items:[
   ["⚖️","Статья по описанию нарушения","Скажите в рацию, что сделал гражданин: «оскорбил меня», «найдено незаконное оружие», «выдал себя за должностное лицо», «превысил скорость». Диспетчер сам находит статью УК, АК или ДК, называет санкцию (розыск, срок, штраф) и добавляет статью в задержание или калькулятор."],
   ["❓","Санкция по вопросу","«Какой штраф за превышение скорости?», «что грозит за угон?», «какая санкция по статье 29 ДК?»: диспетчер отвечает и ничего не добавляет. Номер статьи АК и ДК теперь тоже называется вместе со штрафом."],
@@ -8070,7 +8119,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.6.3";
+var APP_VER="2.6.4";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
@@ -11465,7 +11514,10 @@ if(typeof C0==="function")window.__senkoAiContext=function(question){
  try{
   var a=aliasScan(question);if(!a.kinds.length&&!a.laws.length)return out;
   var codex=out.filter(function(x){return x.go&&(!a.kinds.length||a.kinds.indexOf(x.go.split("|")[0])>=0)});
-  if(a.laws.length&&!a.kinds.length)codex=[];
+  // 2.6.4: кодексы убираем, только если акт назван прямо («по ТК», «в законе о масках»). Слова темы («оружие», «маска», «адвокат»)
+  // раньше тоже убирали УК, и на «сколько дают за незаконное оружие» ИИ не видел статью 12.8 УК
+  var named=a.words.some(function(x){return /^(тк|гк|ск|вк|нк|кэ|кэсп|орд|нпа|закон\S*|кодекс\S*|конституц\S*|трудов\S*|гражданск\S*|семейн\S*|воздушн\S*|налогов\S*|этик\S*)$/.test(x)});
+  if(a.laws.length&&!a.kinds.length&&named)codex=[];
   var lawsOut=[];
   if(a.laws.length){
    var nums=(String(question).match(/\d{1,3}(?:[.,]\d{1,3}){0,3}/g)||[]).slice(0,3).map(function(x){return x.replace(",",".")});
@@ -11478,6 +11530,10 @@ if(typeof C0==="function")window.__senkoAiContext=function(question){
    best.sort(function(p,q){return q.s-p.s});
    if(!best.length&&!nums.length)a.laws.forEach(function(en){en.units.slice(0,2).forEach(function(x){best.push({L:en.L,u:x.u,s:0})})});
    lawsOut=best.slice(0,6).map(function(b){return lawItem(b.L,b.u)});
+  }
+  if(a.laws.length&&!a.kinds.length&&!named){ // тема, а не акт: общий подбор впереди, статьи найденного закона добавляются следом
+   var seenR={},mix=[];out.concat(lawsOut).forEach(function(x){if(!seenR[x.ref]&&mix.length<8){seenR[x.ref]=1;mix.push(x)}});
+   return mix;
   }
   var res=lawsOut.concat(codex).slice(0,8);
   return res.length?res:out;
