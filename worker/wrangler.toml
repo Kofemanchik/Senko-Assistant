@@ -1,14 +1,16 @@
 name = "senko-ai"
 main = "ai-proxy.js"
 compatibility_date = "2025-01-01"
+# Переменные, заданные в панели Cloudflare, при заливке из GitHub не стираются
+keep_vars = true
 
 # Где выполняется прокси. Gemini и Groq блокируют запросы из ряда стран, а Worker по умолчанию запускается в
 # дата-центре рядом с игроком. Закрепляем США: оттуда оба провайдера доступны, и от места игрока это не зависит.
 [placement]
 region = "aws:us-east-1"
 
-# KV для счётчиков вопросов. Создайте: npx wrangler kv namespace create LIMITS
-# и вставьте полученный id сюда:
+# KV для счётчиков вопросов. Workflow «Deploy AI worker» сам подставляет id KV, подключённого к работающему worker
+# (или создаёт senko-ai-LIMITS). Вручную: npx wrangler kv namespace create LIMITS и вставьте id сюда:
 [[kv_namespaces]]
 binding = "LIMITS"
 id = "14350645f5c243118b63ec5d4fa9f3ad"

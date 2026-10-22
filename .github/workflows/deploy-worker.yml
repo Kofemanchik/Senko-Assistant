@@ -30,5 +30,28 @@ jobs:
         working-directory: worker
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "::error::Не задан секрет CLOUDFLARE_API_TOKEN"; exit 1; fi
-          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || unset CLOUDFLARE_ACCOUNT_ID
+          API=https://api.cloudflare.com/client/v4
+          H="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            CLOUDFLARE_ACCOUNT_ID=$(curl -sS -H "$H" "$API/accounts?per_page=5" | jq -r '.result[0].id // empty')
+            [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || { echo "::error::Не удалось узнать Account ID: добавьте секрет CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+            export CLOUDFLARE_ACCOUNT_ID
+          fi
+          # KV для счётчиков: берём тот, что уже подключён к работающему worker; если его нет, ищем по имени или создаём
+          curl -sS -H "$H" "$API/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/senko-ai/settings" > /tmp/ws.json
+          if [ "$(jq -r '.success' /tmp/ws.json)" != "true" ]; then
+            echo "::error::В аккаунте $CLOUDFLARE_ACCOUNT_ID нет worker senko-ai (или у токена нет доступа к нему): $(jq -c '.errors' /tmp/ws.json). Если аккаунтов несколько, добавьте секрет CLOUDFLARE_ACCOUNT_ID того, где работает senko-ai."
+            exit 1
+          fi
+          KV=$(jq -r '[.result.bindings[]? | select(.name=="LIMITS") | .namespace_id][0] // empty' /tmp/ws.json)
+          if [ -z "$KV" ]; then
+            KV=$(curl -sS -H "$H" "$API/accounts/$CLOUDFLARE_ACCOUNT_ID/storage/kv/namespaces?per_page=100" | jq -r '[.result[]? | select(.title|test("LIMITS";"i")) | .id][0] // empty')
+          fi
+          if [ -z "$KV" ]; then
+            KV=$(curl -sS -X POST -H "$H" -H "Content-Type: application/json" "$API/accounts/$CLOUDFLARE_ACCOUNT_ID/storage/kv/namespaces" --data '{"title":"senko-ai-LIMITS"}' | jq -r '.result.id // empty')
+            echo "Создан KV senko-ai-LIMITS"
+          fi
+          [ -n "$KV" ] || { echo "::error::Не удалось найти или создать KV для счётчиков"; exit 1; }
+          echo "KV для счётчиков: $KV"
+          sed -i -E "s/^id = \"[0-9a-f]{32}\"/id = \"$KV\"/" wrangler.toml
           npx -y wrangler@4 deploy
