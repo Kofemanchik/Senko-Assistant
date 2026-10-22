@@ -3221,8 +3221,8 @@ async function setup(url) {
 // Вход: логин и пароль аккаунта + отдельный пароль панели из 32 знаков (его выдаёт бот: /panel).
 // В базе только хэши. Действия панели выполняют те же функции, что и команды бота:
 // ответы бота для «чата» panel:… не уходят в Telegram, а возвращаются в браузер (см. tg() и sendFile()).
-// Секрет SITE_URL (необязательно): адрес сайта, если он не https://senko-assistant.pages.dev
-const SITE_URL = String(Deno.env.get("SITE_URL") || "https://senko-assistant.pages.dev").replace(/\/+$/, "");
+// Секрет SITE_URL (необязательно): адрес сайта, если он не https://senko-assistant.site (с 2.6.6; старый адрес senko-assistant.pages.dev часть провайдеров режет)
+const SITE_URL = String(Deno.env.get("SITE_URL") || "https://senko-assistant.site").replace(/\/+$/, "");
 const PANEL_HOURS = 12; // сессия панели живёт не дольше 12 часов
 const PANEL_IDLE_MIN = 120; // и закрывается после 2 часов без действий
 const PANEL_RANKS = ["owner", "moderator"];
@@ -4479,12 +4479,12 @@ async function panelIdeas(b, a) {
 // Секреты (Edge Functions → Secrets). С 2.2.1 ключей нет ни в программе, ни на сайте, оба ходят сюда:
 //   LAWS_KEY   ключ расшифровки законов, тот же, что секрет LAWS_KEY на GitHub (им шифрует sync-laws)
 //   AI_KEY     ключ доступа к ИИ-прокси, тот же, что APP_KEY (или WEB_KEY) у Worker
-//   SITE_ORIGINS  необязательно: адреса сайта через запятую, если он не на senko-assistant.pages.dev
+//   SITE_ORIGINS  необязательно: ещё адреса сайта через запятую (senko-assistant.site, www и pages.dev разрешены всегда)
 const LAWS_KEY = Deno.env.get("LAWS_KEY") || "";
 const AI_KEY = Deno.env.get("AI_KEY") || "";
 const AI_URL = (Deno.env.get("AI_URL") || "https://senko-ai.senko-assistant.workers.dev").replace(/\/+$/, "");
 const LAWS_BASE = Deno.env.get("LAWS_BASE") || "https://raw.githubusercontent.com/Kofemanchik/Senko-Assistant/main/update/";
-const SITE_ORIGINS = ["https://senko-assistant.pages.dev", ...String(Deno.env.get("SITE_ORIGINS") || "").split(",").map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean)];
+const SITE_ORIGINS = ["https://senko-assistant.site", "https://www.senko-assistant.site", "https://senko-assistant.pages.dev", ...String(Deno.env.get("SITE_ORIGINS") || "").split(",").map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean)];
 
 function corsOrigin(req) {
   const o = String(req.headers.get("origin") || "");
