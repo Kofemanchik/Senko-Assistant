@@ -6,6 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
 const voice = require("./voice"); // голосовой ввод и оверлей
+const radio = require("./dispatch"); // 2.6: рация диспетчера
 const mini = require("./mini"); // 2.4: мини-окно задержания поверх игры
 const trayMenu = require("./traymenu"); // 2.5: своё меню значка в трее вместо системного
 const ai = require("./ai");       // ИИ-помощник (через прокси)
@@ -189,7 +190,17 @@ const DEFAULTS = {
   miniOpacity: 90,           // непрозрачность мини-окна, %
   miniWidth: 320,            // ширина мини-окна: 260 | 320 | 400
   miniPos: null,             // позиция мини-окна {x, y}
-  betaUpdates: false         // 2.4: бета-версии через автообновление (только для тестеров)
+  betaUpdates: false,        // 2.4: бета-версии через автообновление (только для тестеров)
+  radioEnabled: true,        // 2.6: рация диспетчера (говорить, пока зажата клавиша)
+  radioHotkey: "Ctrl+Alt+R",
+  radioPin: false,           // рация всегда на экране (иначе прячется после ответа)
+  radioHide: 20,             // через сколько секунд прятать рацию (5–120)
+  radioVoice: true,          // диспетчер отвечает голосом
+  radioVoiceName: "",        // голос Windows (пусто — первый русский)
+  radioRate: 105,            // скорость речи, % (60–180)
+  radioSfx: true,            // щелчки и шипение рации
+  radioSize: "m",            // размер рации s | m | l
+  radioPos: null             // позиция рации {x, y}
 };
 // 2.2: режимы окна (призрак по курсору, полоска, прилипание, профили, реакция на программу, поиск OBS и т. п.)
 const winx = require("./winx")({
@@ -203,7 +214,13 @@ const cfgFile = () => path.join(app.getPath("userData"), "app-settings.json");
 function loadCfg() {
   const j = readJson(cfgFile()) || {};
   cfg = { ...DEFAULTS, ...j };
-  for (const k of ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "maximized", "voiceEnabled", "ghost", "voicePtt", "miniEnabled", "betaUpdates"]) cfg[k] = !!cfg[k];
+  for (const k of ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "maximized", "voiceEnabled", "ghost", "voicePtt", "miniEnabled", "betaUpdates", "radioEnabled", "radioPin", "radioVoice", "radioSfx"]) cfg[k] = !!cfg[k];
+  if (!validHotkey(cfg.radioHotkey)) cfg.radioHotkey = DEFAULTS.radioHotkey;
+  cfg.radioHide = Math.min(120, Math.max(5, Math.round(+cfg.radioHide || DEFAULTS.radioHide)));
+  cfg.radioRate = Math.min(180, Math.max(60, Math.round(+cfg.radioRate || DEFAULTS.radioRate)));
+  if (!["s", "m", "l"].includes(cfg.radioSize)) cfg.radioSize = "m";
+  cfg.radioVoiceName = typeof cfg.radioVoiceName === "string" ? cfg.radioVoiceName.slice(0, 200) : "";
+  { const rp = cfg.radioPos; cfg.radioPos = rp && Number.isFinite(+rp.x) && Number.isFinite(+rp.y) ? { x: Math.round(+rp.x), y: Math.round(+rp.y) } : null; }
   cfg.miniOpacity = Math.min(100, Math.max(30, Math.round(+cfg.miniOpacity || DEFAULTS.miniOpacity)));
   if (!validHotkey(cfg.miniHotkey)) cfg.miniHotkey = DEFAULTS.miniHotkey;
   const mp = cfg.miniPos;
@@ -630,13 +647,14 @@ function trayState() {
     alwaysOnTop: !!cfg.alwaysOnTop, compact: !!cfg.compact,
     voiceEnabled: !!cfg.voiceEnabled, voiceHotkey: cfg.voiceHotkey,
     mini: mini.isOpen(), miniHotkey: cfg.miniHotkey,
+    radio: radio.isOpen(), radioEnabled: !!cfg.radioEnabled, radioHotkey: cfg.radioHotkey,
     profiles: [["game", "В игре"], ["desk", "За столом"]].filter(([k]) => P[k]).map(([k, n]) => ({ k, n, on: cfg.winProfile === k })),
     staff: accounts.isStaff()
   };
 }
 // действие из меню трея; true — меню остаётся открытым (переключатели), false — закрывается
 function trayAct(k, v) {
-  if (["alwaysOnTop", "compact", "voiceEnabled", "mini"].includes(k)) { applySet(k, !!v); return true; }
+  if (["alwaysOnTop", "compact", "voiceEnabled", "mini", "radio"].includes(k)) { applySet(k, !!v); return true; }
   if (k === "profile") { if (cfg.winProfiles && cfg.winProfiles[v]) { winx.profUse(v); updateTrayMenu(); } return true; }
   if (k === "toggle") {
     if (win && !win.isDestroyed() && win.isVisible() && !win.isMinimized()) { if (cfg.tray) win.hide(); else win.minimize(); }
@@ -661,6 +679,7 @@ function updateTrayMenu() {
       ...(cfg.winProfiles.game || cfg.winProfiles.desk ? [{ label: "Профиль окна", submenu: [["game", "В игре"], ["desk", "За столом"]].filter(([k]) => cfg.winProfiles[k]).map(([k, n]) => ({ label: n, type: "radio", checked: cfg.winProfile === k, click: () => { winx.profUse(k); updateTrayMenu(); } })) }] : []),
       { label: `Голосовой ввод (${cfg.voiceHotkey})`, type: "checkbox", checked: cfg.voiceEnabled, click: (m) => applySet("voiceEnabled", m.checked) },
       { label: `Мини-окно задержания (${cfg.miniHotkey})`, type: "checkbox", checked: mini.isOpen(), click: (m) => applySet("mini", m.checked) },
+      ...(cfg.radioEnabled ? [{ label: `Рация диспетчера (${cfg.radioHotkey})`, type: "checkbox", checked: radio.isOpen(), click: (m) => applySet("radio", m.checked) }] : []),
       { type: "separator" },
       ...(accounts.isStaff() ? [{ label: "Список сотрудников", click: openStaff }] : []),
       { label: "О программе", click: showAbout },
@@ -718,9 +737,13 @@ function getState() {
       voiceEnabled: cfg.voiceEnabled, voiceHotkey: cfg.voiceHotkey, voiceOpacity: cfg.voiceOpacity, voiceMode: cfg.voiceMode,
       voiceHide: cfg.voiceHide, voiceSize: cfg.voiceSize, voiceFont: cfg.voiceFont, voicePtt: cfg.voicePtt, voiceMic: cfg.voiceMic,
       ghostBy: cfg.ghostBy, strip: cfg.strip, snap: cfg.snap, watchApps: cfg.watchApps.slice(), watchMode: cfg.watchMode, watchOpacity: cfg.watchOpacity, streamAuto: cfg.streamAuto,
-      miniEnabled: cfg.miniEnabled, miniHotkey: cfg.miniHotkey, miniOpacity: cfg.miniOpacity, betaUpdates: cfg.betaUpdates
+      miniEnabled: cfg.miniEnabled, miniHotkey: cfg.miniHotkey, miniOpacity: cfg.miniOpacity, betaUpdates: cfg.betaUpdates,
+      radioEnabled: cfg.radioEnabled, radioHotkey: cfg.radioHotkey, radioPin: cfg.radioPin, radioHide: cfg.radioHide, radioVoice: cfg.radioVoice,
+      radioVoiceName: cfg.radioVoiceName, radioRate: cfg.radioRate, radioSfx: cfg.radioSfx, radioSize: cfg.radioSize
     },
     miniOpen: mini.isOpen(),
+    radioOpen: radio.isOpen(),
+    radioError: radio.hotkeyError(),
     miniError: mini.hotkeyError(),
     win: winx.state(),
     platform: process.platform,
@@ -742,7 +765,7 @@ function pushState() {
 }
 
 function applySet(key, val) {
-  const bools = ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "voiceEnabled", "ghost", "voicePtt", "miniEnabled", "betaUpdates"];
+  const bools = ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "voiceEnabled", "ghost", "voicePtt", "miniEnabled", "betaUpdates", "radioEnabled", "radioPin", "radioVoice", "radioSfx"];
   let result = { ok: true };
   if (key === "autostart") {
     if (!app.isPackaged) return { ok: false, error: "Автозапуск доступен только в установленной версии." };
@@ -772,6 +795,12 @@ function applySet(key, val) {
       if (!result.ok) { cfg.miniEnabled = false; mini.registerHotkey(); }
       if (!val) mini.toggle(false);
     }
+    if (key === "radioEnabled") {
+      result = radio.registerHotkey();
+      if (!result.ok) { cfg.radioEnabled = false; radio.registerHotkey(); }
+      if (!cfg.radioEnabled) radio.toggle(false);
+    }
+    if (key === "radioPin" || key === "radioVoice" || key === "radioSfx") radio.applyOpts();
     if (key === "betaUpdates") {
       if (updater) updater.allowPrerelease = val;
       if (val) setTimeout(() => checkForAppUpdate(false), 1500);
@@ -787,6 +816,33 @@ function applySet(key, val) {
       result = mini.registerHotkey();
       if (!result.ok) { cfg.miniHotkey = oldM; mini.registerHotkey(); }
     }
+  } else if (key === "radio") {
+    if (!cfg.radioEnabled) return { ok: false, error: "Рация выключена в настройках." };
+    radio.toggle(val === undefined || val === null ? undefined : !!val);
+  } else if (key === "radioHotkey") {
+    if (!validHotkey(val)) return { ok: false, error: "Нужно сочетание с Ctrl, Alt или Win и обычной клавишей." };
+    if ((val === cfg.hotkey && cfg.hotkeyEnabled) || (val === cfg.voiceHotkey && cfg.voiceEnabled) || (val === cfg.miniHotkey && cfg.miniEnabled)) return { ok: false, error: "Это сочетание уже занято в программе." };
+    const oldR = cfg.radioHotkey;
+    cfg.radioHotkey = val;
+    if (cfg.radioEnabled) {
+      result = radio.registerHotkey();
+      if (!result.ok) { cfg.radioHotkey = oldR; radio.registerHotkey(); }
+    }
+    radio.applyOpts();
+  } else if (key === "radioHide") {
+    cfg.radioHide = Math.min(120, Math.max(5, Math.round(+val || DEFAULTS.radioHide)));
+    radio.applyOpts();
+  } else if (key === "radioRate") {
+    cfg.radioRate = Math.min(180, Math.max(60, Math.round(+val || DEFAULTS.radioRate)));
+    radio.applyOpts();
+  } else if (key === "radioVoiceName") {
+    cfg.radioVoiceName = typeof val === "string" ? val.slice(0, 200) : "";
+    radio.applyOpts();
+  } else if (key === "radioSize") {
+    cfg.radioSize = ["s", "m", "l"].includes(val) ? val : "m";
+    radio.applyOpts();
+  } else if (key === "radioPosReset") {
+    cfg.radioPos = null;
   } else if (key === "miniOpacity") {
     cfg.miniOpacity = Math.min(100, Math.max(30, Math.round(+val || DEFAULTS.miniOpacity)));
     mini.applyOpacity();
@@ -843,7 +899,7 @@ function applySet(key, val) {
   }
   saveCfg();
   // ползунки прозрачности шлют значение на каждом шаге: окно меняется сразу, а меню трея и страница обновляются после паузы
-  if (key === "opacity" || key === "ghostOpacity" || key === "voiceOpacity" || key === "watchOpacity" || key === "voiceHide" || key === "voiceFont" || key === "miniOpacity") {
+  if (key === "opacity" || key === "ghostOpacity" || key === "voiceOpacity" || key === "watchOpacity" || key === "voiceHide" || key === "voiceFont" || key === "miniOpacity" || key === "radioRate" || key === "radioHide") {
     clearTimeout(slideTimer);
     slideTimer = setTimeout(() => { updateTrayMenu(); pushState(); }, 250);
     return result;
@@ -1477,6 +1533,7 @@ function initSystem() {
   registerHotkey();
   voice.registerHotkey();
   mini.registerHotkey();
+  radio.registerHotkey();
   applyWindowCfg();
   updateTrayMenu();
 }
@@ -1487,6 +1544,7 @@ function tearDownSystem() {
   hotkeyActive = null;
   voice.destroy();
   mini.destroy();
+  radio.destroy();
   mini.registerHotkey(); // сбросить запомненную клавишу (все уже сняты выше); снова включится в initSystem
 
 }
@@ -1611,10 +1669,23 @@ app.whenReady().then(() => {
     },
     showMain: () => { if (win && !win.isDestroyed()) showWindow(); },
     sendMain: (ch, data) => { if (win && !win.isDestroyed()) win.webContents.send(ch, data); },
-    aiAvailable: ai.configured   // подключён ли ИИ-сервис (иначе переключатель режима неактивен)
+    aiAvailable: ai.configured,  // подключён ли ИИ-сервис (иначе переключатель режима неактивен)
+    micOk: (wc) => radio.isWc(wc) // 2.6: микрофон и окну рации
   });
   trayMenu.init({ state: trayState, act: trayAct });
   mini.init({
+    getCfg: () => cfg,
+    saveCfg,
+    changed: () => { updateTrayMenu(); pushState(); },
+    fromMain,
+    openTarget: (t) => {
+      if (!win || win.isDestroyed()) return;
+      showWindow();
+      if (OPEN_RE.test(t)) win.webContents.send("senko:open", t);
+    }
+  });
+  radio.init({
+    getWin: () => (win && !win.isDestroyed() ? win : null),
     getCfg: () => cfg,
     saveCfg,
     changed: () => { updateTrayMenu(); pushState(); },

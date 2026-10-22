@@ -39,6 +39,8 @@ function fileMap() {
     "overlay.js": path.join(dir, "overlay.js"),
     "numbers.js": path.join(dir, "numbers.js"),
     "vosk.js": path.join(dir, "vosk.js"),
+    "radio.html": path.join(__dirname, "app", "radio", "radio.html"), // 2.6: окно рации диспетчера
+    "radio.js": path.join(__dirname, "app", "radio", "radio.js"),
     "model.tar.gz": path.join(modelDir, "model.tar.gz")
   };
 }
@@ -108,7 +110,8 @@ async function runSearch(cands) {
 
 function setupPermissions() {
   const ses = session.defaultSession;
-  const isOverlay = (wc) => live() && !!wc && wc === overlay.webContents;
+  // 2.6: микрофон нужен и окну рации диспетчера (ctx.micOk)
+  const isOverlay = (wc) => (live() && !!wc && wc === overlay.webContents) || (!!wc && typeof ctx.micOk === "function" && ctx.micOk(wc));
   // Микрофон — только окну оверлея. Остальное ведёт себя как раньше (по умолчанию разрешено).
   ses.setPermissionRequestHandler((wc, permission, cb) => cb(permission === "media" ? isOverlay(wc) : true));
   ses.setPermissionCheckHandler((wc, permission) => (permission === "media" ? isOverlay(wc) : true));

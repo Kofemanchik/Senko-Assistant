@@ -155,6 +155,8 @@ contextBridge.exposeInMainWorld("senkoApp", {
   bug: (text, log, shot) => ipcRenderer.invoke("senko:bug", String(text || "").slice(0, 2000), typeof log === "string" ? log.slice(0, 60000) : "", typeof shot === "string" ? shot : ""), // сообщение об ошибке (+ журнал, + снимок окна с 2.4)
   shot: () => ipcRenderer.invoke("senko:shot"), // 2.4: снимок окна программы (data:image/jpeg)
   miniState: (d) => ipcRenderer.send("senko:mini-state", d && typeof d === "object" ? d : {}), // 2.4: данные для мини-окна задержания
+  radioState: (d) => ipcRenderer.send("senko:radio-state", d && typeof d === "object" ? d : {}), // 2.6: задержания для экрана рации
+  radioSay: (r) => ipcRenderer.send("senko:radio-say", r && typeof r === "object" ? r : {}), // 2.6: ответ диспетчера голосом рации
   // 2.2: журнал и экран «Состояние», откат данных, ярлыки на вкладку или статью
   diag: () => ipcRenderer.invoke("senko:diag"),
   diagLog: () => ipcRenderer.invoke("senko:diag-log"),

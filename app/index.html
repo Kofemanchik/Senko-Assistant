@@ -1970,9 +1970,19 @@ function applyPreset(i){
   return p;
 }
 
-function drugVerdict(g,b,s){
-  var onlySeeds = s>0 && !g && !b;
-  var total = g + b*5 + s*2;
+/* 2.6: наркотики в калькуляторе запоминаются (их заполняет и диспетчер «Рации»), пакетики считаются по весу из настроек */
+var DRUG={g:0,b:0,s:0,p:0};try{var _d=JSON.parse(localStorage.getItem("bos-drug")||"null");if(_d)["g","b","s","p"].forEach(function(k){DRUG[k]=Math.max(0,+_d[k]||0)})}catch(e){}
+var DRUG_PKG=+localStorage.getItem("bos-drug-pkg")||1;
+function drugTotal(d){d=d||DRUG;return Math.round(((+d.g||0)+(+d.b||0)*5+(+d.s||0)*2+(+d.p||0)*DRUG_PKG)*10)/10}
+window.SA_drug={
+  get:function(){return {g:DRUG.g,b:DRUG.b,s:DRUG.s,p:DRUG.p}},
+  set:function(d){["g","b","s","p"].forEach(function(k){DRUG[k]=Math.max(0,+(d&&d[k])||0)});try{localStorage.setItem("bos-drug",JSON.stringify(DRUG))}catch(e){}},
+  total:drugTotal,
+  pkg:function(v){if(v!==undefined&&+v>0){DRUG_PKG=Math.min(50,Math.round(+v*10)/10);try{localStorage.setItem("bos-drug-pkg",String(DRUG_PKG))}catch(e){}}return DRUG_PKG}
+};
+function drugVerdict(g,b,s,p){
+  var onlySeeds = s>0 && !g && !b && !p;
+  var total = drugTotal({g:g,b:b,s:s,p:p});
   if(onlySeeds){
     if(total<=3) return "Семена Green до 3 г включительно легальны, ответственности нет (ст. 5.13 ч.4). У вас "+total+" г.";
     return total+" г семян Green: ответственность по ст. 13.2"+(total>25?" и выше 25 г — ст. 13.2.1":"")+".";
@@ -2051,10 +2061,11 @@ function renderCalc(){
       '<p class="rowbtn" style="margin:10px 0 0"><button class="btn primary" type="button" data-rpopen="calc">📝 Оформить рапорт</button><button class="btn" type="button" data-copy="rep">Скопировать для рации</button></p></section>';
   }
   if(chist.length) h+='<section class="panel"><h2>История расчётов</h2><p class="sub">Откройте прошлый расчёт, чтобы повторить его: набор статей вернётся в калькулятор.</p><ul class="basket">'+chist.map(function(e,i){return '<li><span class="t"><b>'+esc(e.d)+'</b>'+(e.s?esc(e.s)+" · ":"")+e.ids.length+' п.: '+esc(e.l)+'</span><button class="btn" type="button" data-chopen="'+i+'">Открыть</button><button class="ic" data-chdel="'+i+'" aria-label="Удалить">×</button></li>'}).join("")+'</ul><p style="margin:10px 0 0"><button class="btn" type="button" id="chClear">Очистить историю</button></p></section>';
-  h+='<section class="panel"><h2>Вес наркотиков</h2><p class="sub">Один куст Green равен 5 г, одно семечко 2 г (ст. 5.13).</p>'+
-    '<div class="fields"><label for="dg">Граммы<input id="dg" type="number" min="0" inputmode="numeric" value="0"></label>'+
-    '<label for="db">Кусты<input id="db" type="number" min="0" inputmode="numeric" value="0"></label>'+
-    '<label for="ds">Семена<input id="ds" type="number" min="0" inputmode="numeric" value="0"></label></div>'+
+  h+='<section class="panel"><h2>Вес наркотиков</h2><p class="sub">Один куст Green равен 5 г, одно семечко 2 г (ст. 5.13), один пакетик '+String(DRUG_PKG).replace(".",",")+' г (меняется в «Рация» → «Диспетчер»).</p>'+
+    '<div class="fields"><label for="dg">Граммы<input id="dg" type="number" min="0" inputmode="numeric" value="'+DRUG.g+'"></label>'+
+    '<label for="db">Кусты<input id="db" type="number" min="0" inputmode="numeric" value="'+DRUG.b+'"></label>'+
+    '<label for="ds">Семена<input id="ds" type="number" min="0" inputmode="numeric" value="'+DRUG.s+'"></label>'+
+    '<label for="dp">Пакетики<input id="dp" type="number" min="0" inputmode="numeric" value="'+DRUG.p+'"></label></div>'+
     '<div class="verdict" id="drugOut" aria-live="polite"></div>'+
     '<p class="hint">Если найдено несколько видов, вес складывается и применяется статья главы 13 УК.</p></section>';
   h+='<section class="panel"><h2>Заметки и пометки: обмен</h2><p class="sub">Чтобы передать заметки и избранное коллеге, нажмите «Экспорт», отправьте текст, а получатель вставит его и нажмёт «Импорт». На свои компьютеры переносить не нужно: в программе они синхронизируются через аккаунт, а все данные целиком можно сохранить в файл в «Настройках».</p>'+
@@ -2062,8 +2073,8 @@ function renderCalc(){
     '<div class="rowbtn"><button class="btn" type="button" id="exportBtn">Экспорт</button><button class="btn" type="button" data-copy="bk">Скопировать</button><button class="btn primary" type="button" id="importBtn">Импорт</button></div>'+
     '<p class="hint" id="bkMsg" aria-live="polite"></p></section></div>';
   view.innerHTML=h;
-  var upd=function(){ $("#drugOut").textContent = drugVerdict(+$("#dg").value||0,+$("#db").value||0,+$("#ds").value||0); };
-  ["dg","db","ds"].forEach(function(i){$("#"+i).addEventListener("input",upd)});
+  var upd=function(save){ var d={g:+$("#dg").value||0,b:+$("#db").value||0,s:+$("#ds").value||0,p:+$("#dp").value||0}; if(save) SA_drug.set(d); $("#drugOut").textContent = drugVerdict(d.g,d.b,d.s,d.p); };
+  ["dg","db","ds","dp"].forEach(function(i){$("#"+i).addEventListener("input",function(){upd(true)})});
   upd();
   updRep();
 }
@@ -2783,7 +2794,8 @@ render();
 try{localStorage.removeItem("bos-flags")}catch(e){} flags={};
 var TABS={
  tools:["Проверки",[["legal","Законность"],["s17","Сверка ст. 17"],["force","Сила"]]],
- field:["На месте",[["f_dk","Нарушения ДК"],["f_seize","Изъятие"],["f_guns","Оружие и предметы"],["f_radio","Рация"],["f_talk","Формулировки"],["f_law","Адвокат и прокурор"],["f_map","Зоны и места"]]],
+ field:["На месте",[["f_dk","Нарушения ДК"],["f_seize","Изъятие"],["f_guns","Оружие и предметы"],["f_talk","Формулировки"],["f_law","Адвокат и прокурор"],["f_map","Зоны и места"]]],
+ radio:["Рация",[["r_disp","Диспетчер"],["r_phr","Фразы для рации"]]],
  sup:["Надзор",[["sup","Проверка"],["legal","Законность"]]],
  def:["Защита",[["def","Режим защиты"],["legal","Законность"]]],
 
@@ -2792,12 +2804,12 @@ var TABS={
 var ROLES={off:["Сотрудник",["timer","calc","tools","ref","learn"]],pros:["Прокурор",["sup","ref","learn"]],adv:["Адвокат",["def","ref","learn"]]};
 var BUILTIN=["off","pros","adv"];
 var BASE=["uk","ak","dk","pk","gen","laws"];
-var X={sub:{tools:"legal",field:"f_dk",sup:"sup",def:"def",learn:"quiz",ref:"print"},bm:"sum",quiz:null,fs:"",role:"off",rq:""};
+var X={sub:{tools:"legal",field:"f_dk",radio:"r_disp",sup:"sup",def:"def",learn:"quiz",ref:"print"},bm:"sum",quiz:null,fs:"",role:"off",rq:""};
 /* ---- Роли: свои роли, видимые разделы, формы рапортов и последний раздел каждой роли (localStorage bos-roles) ----
    {custom:[{id,name,tabs:[...],forms:[...]}], tabs:{off:[...]}, forms:{off:[...]}, last:{off:"calc"}} */
-var POOL=BASE.concat(["timer","calc","tools","field","sup","def","rp","dept","apps","ref","learn"]);
+var POOL=BASE.concat(["timer","calc","tools","field","radio","sup","def","rp","dept","apps","ref","learn"]);
 var GOVT={sup:1,def:1};                       // разделы и формы только для Government
-var DEFTABS={off:BASE.concat(["timer","calc","tools","field","rp","dept","apps","ref","learn"]),pros:BASE.concat(["sup","field","rp","dept","apps","ref","learn"]),adv:BASE.concat(["def","field","rp","dept","apps","ref","learn"])};
+var DEFTABS={off:BASE.concat(["timer","calc","tools","field","radio","rp","dept","apps","ref","learn"]),pros:BASE.concat(["sup","field","radio","rp","dept","apps","ref","learn"]),adv:BASE.concat(["def","field","radio","rp","dept","apps","ref","learn"])};
 var DEFFORMS={off:["arrest","force","incident","service"],pros:["sup","service"],adv:["def","service"]};
 var RC=loadRC();
 function loadRC(){var o=null;try{o=JSON.parse(localStorage.getItem("bos-roles")||"null")}catch(e){}
@@ -2811,6 +2823,9 @@ function loadRC(){var o=null;try{o=JSON.parse(localStorage.getItem("bos-roles")|
  // 2.2: новый раздел «На месте» один раз добавляется и в уже настроенные наборы разделов
  if(!o.v11){var add=function(L){if(Array.isArray(L)&&L.indexOf("field")<0){var i=L.indexOf("tools");if(i<0)i=L.indexOf("calc");if(i<0)i=L.indexOf("timer");L.splice(i>=0?i+1:L.length,0,"field")}};
   o.custom.forEach(function(c){add(c.tabs)});Object.keys(o.tabs).forEach(function(k){add(o.tabs[k])});o.v11=1;try{localStorage.setItem("bos-roles",JSON.stringify(o))}catch(e){}}
+ // 2.6: новый раздел «Рация» (диспетчер и фразы) встаёт сразу после «На месте»
+ if(!o.v26){var addR=function(L){if(Array.isArray(L)&&L.indexOf("radio")<0){var i=L.indexOf("field");if(i<0)i=L.indexOf("tools");if(i<0)i=L.indexOf("calc");if(i<0)i=L.indexOf("timer");L.splice(i>=0?i+1:L.length,0,"radio")}};
+  o.custom.forEach(function(c){addR(c.tabs)});Object.keys(o.tabs).forEach(function(k){addR(o.tabs[k])});o.v26=1;try{localStorage.setItem("bos-roles",JSON.stringify(o))}catch(e){}}
  return o}
 function saveRC(){try{localStorage.setItem("bos-roles",JSON.stringify(RC))}catch(e){}}
 function custom(id){for(var i=0;i<RC.custom.length;i++)if(RC.custom[i].id===id)return RC.custom[i];return null}
@@ -6213,7 +6228,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.5.0";
+var APP_VER="2.6.0";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6302,6 +6317,14 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.6.0",d:"22.10.2026",items:[
+  ["📻","Рация диспетчера","В углу экрана появляется рация в стиле Motorola: дата, время по МСК, ваши задержания и оставшееся время. Зажмите Ctrl+Alt+R (или кнопку PTT на рации) и говорите, отпустите, и диспетчер ответит голосом по уставу: «Принято», «Так точно», «Повторите»."],
+  ["🎙","Задержание голосом","Скажите «задержан гражданин Иван Петров, паспорт 42051, статья 12.8 часть 1», и диспетчер сам заведёт задержание с именем, паспортом и статьёй. «В ходе обыска 12.1 часть 1» добавит статью в текущее задержание."],
+  ["⏸","Паузы и наркотики голосом","«Вызван адвокат» ставит паузу и запускает отсчёт, «адвокат прибыл» продолжает задержание. «Найдено 2 куста и 7 пакетиков» заполнит калькулятор и добавит статью 13.2 или 13.2.1."],
+  ["🕒","Другие команды","«Время», «дата», «сколько осталось», «доклад», «следующее задержание», «мера избрана», «Миранда», «отставить» (отменяет последнюю команду) и «отбой». Полный список в разделе «Рация»."],
+  ["🧭","Раздел «Рация»","Новый раздел в «Работе»: диспетчер с журналом, командой текстом и настройками (клавиша, голос, скорость речи, звуки, размер рации, вес пакетика). Фразы для рации переехали сюда из «На месте»."],
+  ["🌿","Пакетики в калькуляторе","В «Весе наркотиков» появилось поле «Пакетики», а введённые значения больше не сбрасываются."]
+ ]},
  {v:"2.5.0",d:"22.10.2026",items:[
   ["📂","Подвкладки в левом меню","Нажмите на раздел слева, и под ним откроются его вкладки, например «Рация» или «Зоны и места». Повторное нажатие сворачивает список."],
   ["⚙","Новые настройки","Настройки разложены по вкладкам: Внешний вид, Статьи, Меню, Клавиши, Окно, Мини-окно, Аккаунт, Данные, О программе. Сверху есть поиск по всем настройкам."],
@@ -7091,9 +7114,9 @@ var R=window.SA_ROLES, A=window.senkoApp;
 if(!R) return;
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
-var NAMES={uk:"УК",ak:"АК",dk:"ДК",pk:"ПК",gen:"Общая часть",laws:"Законы",timer:"Задержание",calc:"Калькулятор",tools:"Проверки",field:"На месте",sup:"Надзор",def:"Защита",rp:"Рапорты",dept:"Моё ведомство",learn:"Обучение",apps:"Мои инструменты",ref:"Справочник"};
+var NAMES={uk:"УК",ak:"АК",dk:"ДК",pk:"ПК",gen:"Общая часть",laws:"Законы",timer:"Задержание",calc:"Калькулятор",tools:"Проверки",field:"На месте",radio:"Рация",sup:"Надзор",def:"Защита",rp:"Рапорты",dept:"Моё ведомство",learn:"Обучение",apps:"Мои инструменты",ref:"Справочник"};
 var FORMS={arrest:"О задержании",force:"О применении силы",incident:"О происшествии",service:"Служебный",sup:"Заключение прокурора",def:"Жалоба адвоката"};
-var GROUPS=[["Кодексы и законы",["uk","ak","dk","pk","gen","laws"]],["Работа",["timer","calc","tools","field","sup","def","rp","dept","apps"]],["Развитие",["ref","learn"]]];
+var GROUPS=[["Кодексы и законы",["uk","ak","dk","pk","gen","laws"]],["Работа",["timer","calc","tools","field","radio","sup","def","rp","dept","apps"]],["Развитие",["ref","learn"]]];
 var KNM={uk:"УК",ak:"АК",dk:"ДК",pk:"ПК"};
 
 /* ---------- всплывающая подсказка внизу ---------- */
@@ -8031,7 +8054,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.5.0";
+var APP_VER="2.6.0";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
@@ -8447,7 +8470,8 @@ var TOUR=[["#sdNav","Меню разделов","Кодексы, работа и
  ["#q","Поиск","Номер статьи или слово: 12.8, ствол, тачка. Ищет сразу по всем кодексам."],
  [".aibtn","ИИ-помощник","Вопрос по законам своими словами. В ответе будут ссылки на статьи."],
  ['.side [data-nav="timer"]',"Задержание","Таймер на 1 час, паузы, чек-лист, фото и карточки задержанных. "+window.SA_HK.get("timer")+" запускает таймер с любой вкладки."],
- ['.side [data-nav="field"]',"На месте","Нарушение ДК по описанию, что изымать, оружие, фразы для рации, вежливые формулировки и схема зон."],
+ ['.side [data-nav="field"]',"На месте","Нарушение ДК по описанию, что изымать, оружие, вежливые формулировки и схема зон."],
+ ['.side [data-nav="radio"]',"Рация","Голосовой диспетчер: зажмите клавишу рации (сначала Ctrl+Alt+R) и скажите «задержан гражданин …, паспорт …, статья …». Здесь же фразы для рации."],
  ['.side [data-nav="calc"]',"Калькулятор","Статьи кнопкой «+», готовые и свои наборы, смягчающие и отягчающие обстоятельства, залог."],
  ['.side [data-nav="ref"]',"Справочник","Шпаргалка, неприкосновенные, охраняемые места, передача дел, сравнение статей и изменения в законах."],
  ['.side [data-nav="apps"]',"Мои инструменты","Свои памятки, калькуляторы по формуле и наборы статей."],
@@ -8489,7 +8513,8 @@ var FEAT=[["🔎","Поиск по кодексам","Номер статьи, �
  ["⏱️","Задержание","До 10 таймеров сразу, паузы по ст. 20, чек-лист ст. 17, фото и ссылки, журнал событий. "+window.SA_HK.get("timer")+" запускает таймер.","timer"],
  ["🗂️","Карточки задержанных","При повторном задержании видно прошлые дела: статьи, основание, изъятое и итог.","timer"],
  ["🧮","Калькулятор","Срок, штраф, залог, готовые и свои наборы по УК, АК и ДК, смягчающие и отягчающие обстоятельства.","calc"],
- ["📍","На месте","Нарушения ДК по ситуации, изъятие, оружие и лицензии, рация, формулировки, адвокат и прокурор, зоны и места.","field"],
+ ["📍","На месте","Нарушения ДК по ситуации, изъятие, оружие и лицензии, формулировки, адвокат и прокурор, зоны и места.","field"],
+ ["📻","Рация","Голосовой диспетчер по клавише: начинает задержание, добавляет статьи и наркотики, ставит паузы, называет время. Фразы для рации.","radio"],
  ["📝","Рапорты","Рапорт заполняется из задержания и калькулятора, рядом видна «бумажка».","rp"],
  ["📖","Справочник","Шпаргалка для печати, неприкосновенные, охраняемые места, передача дел, сравнение статей, изменения.","ref"],
  ["🧰","Мои инструменты","Свои памятки, калькуляторы по формуле и наборы статей.","apps"],
@@ -9801,7 +9826,7 @@ var PROSEC=[
 var TALKTIPS=["Представьтесь и назовите основание задержания и статьи сразу, не дожидаясь вопросов.","Говорите с адвокатом и прокурором как с коллегами: спокойно, без перебиваний и споров на повышенных тонах.","Засекайте паузы в задержании: «Адвокат» и «ОГП» на таймере не считаются в процессуальный час.","Доказательства держите под рукой: видео, фото, показания. Ссылки на них лучше сразу внести в задержание.","Не согласны с адвокатом: не спорьте о трактовке на месте, решает прокурор или суд.","Всё время ведите видеозапись задержания (ПК ст. 23 ч. 1 п. «а»)."];
 function cards(L){return '<ul class="s11-cards">'+L.map(function(x){return '<li><b>'+e(x[0])+'</b><span>'+e(x[1])+'</span>'+ref(x[2])+'</li>'}).join("")+'</ul>'}
 P.f_law=function(){
- return sec("Как общаться","",'<ul class="s11-ul">'+TALKTIPS.map(function(t){return '<li>'+lnk(t)+'</li>'}).join("")+'</ul><div class="rowbtn"><button type="button" class="btn" data-s11go="timer">Открыть задержание</button><button type="button" class="btn" data-s11go="field|f_radio">Вызвать прокурора по рации</button><button type="button" class="btn" data-s11go="field|f_talk">Формулировки</button></div>')+
+ return sec("Как общаться","",'<ul class="s11-ul">'+TALKTIPS.map(function(t){return '<li>'+lnk(t)+'</li>'}).join("")+'</ul><div class="rowbtn"><button type="button" class="btn" data-s11go="timer">Открыть задержание</button><button type="button" class="btn" data-s11go="radio|r_phr">Вызвать прокурора по рации</button><button type="button" class="btn" data-s11go="field|f_talk">Формулировки</button></div>')+
   sec("Адвокат","Сроки, права и что адвокату нужно сообщить.",cards(LAWYER))+
   sec("Прокурор (ОГП)","Когда вызывать, сколько ждать и кто принимает решение.",cards(PROSEC))};
 
@@ -10100,7 +10125,7 @@ var DET_GOV=[
 function detCard(kind){var G=kind==="gov",L=G?DET_GOV:DET_CIV;
  return '<section class="card s11-det"><h3>'+(G?"Порядок задержания госслужащего":"Порядок задержания гражданского")+'</h3><span class="ref">'+gref(G?"ПК ст. 19, 20":"ПК ст. 16, 17, 20, 27")+'</span>'+
   '<ol class="s11-steps">'+L.map(function(s){return '<li><b>'+e(s[0])+'</b><span>'+lnk(s[1])+'</span>'+ref(s[2])+'</li>'}).join("")+'</ol>'+
-  '<div class="rowbtn"><button type="button" class="btn" data-s11go="timer">Открыть задержание</button>'+(G?'<button type="button" class="btn" data-s11go="field|f_radio">Вызов прокурора по рации</button>':'<button type="button" class="btn" data-s11go="field|f_seize">Что изымать</button>')+'</div></section>'}
+  '<div class="rowbtn"><button type="button" class="btn" data-s11go="timer">Открыть задержание</button>'+(G?'<button type="button" class="btn" data-s11go="radio|r_phr">Вызов прокурора по рации</button>':'<button type="button" class="btn" data-s11go="field|f_seize">Что изымать</button>')+'</div></section>'}
 var RG=window.renderGen;
 if(typeof RG==="function"){
  window.renderGen=renderGen=function(){RG.apply(this,arguments);
@@ -10484,7 +10509,7 @@ function diagPaint(){
  w.innerHTML=h}
 
 /* ================= ярлык, который открывает нужный раздел или статью ================= */
-var TN={home:"Главная",uk:"УК",ak:"АК",dk:"ДК",pk:"ПК",gen:"Общая часть",laws:"Законы",timer:"Задержание",calc:"Калькулятор",tools:"Проверки",field:"На месте",sup:"Надзор",def:"Защита",rp:"Рапорты",dept:"Моё ведомство",learn:"Обучение",apps:"Мои инструменты",ref:"Справочник"};
+var TN={home:"Главная",uk:"УК",ak:"АК",dk:"ДК",pk:"ПК",gen:"Общая часть",laws:"Законы",timer:"Задержание",calc:"Калькулятор",tools:"Проверки",field:"На месте",radio:"Рация",sup:"Надзор",def:"Защита",rp:"Рапорты",dept:"Моё ведомство",learn:"Обучение",apps:"Мои инструменты",ref:"Справочник"};
 function gov(){try{var s=A&&A.state?A.state():null;return ((s&&s.user&&s.user.org)||dept)==="Government"}catch(x){return false}}
 function targets(){var L=[];Object.keys(TN).forEach(function(t){if((t==="sup"||t==="def")&&!gov())return;L.push([t,TN[t]]);var T=TABS[t];if(T&&T[1])T[1].forEach(function(s){L.push([t+":"+s[0],TN[t]+" → "+s[1]])})});return L}
 var KC={"ук":"uk","ак":"ak","дк":"dk","пк":"pk",uk:"uk",ak:"ak",dk:"dk",pk:"pk"};
@@ -10720,8 +10745,8 @@ document.addEventListener("keydown",function(ev){
 });
 
 /* ================= порядок разделов для роли ================= */
-var GR=[["Кодексы и законы",["uk","ak","dk","pk","gen","laws"]],["Работа",["timer","calc","tools","field","sup","def","rp","dept","apps"]],["Развитие",["ref","learn"]]];
-var TN={uk:"УК",ak:"АК",dk:"ДК",pk:"ПК",gen:"Общая часть",laws:"Законы",timer:"Задержание",calc:"Калькулятор",tools:"Проверки",field:"На месте",sup:"Надзор",def:"Защита",rp:"Рапорты",dept:"Моё ведомство",apps:"Мои инструменты",ref:"Справочник",learn:"Обучение"};
+var GR=[["Кодексы и законы",["uk","ak","dk","pk","gen","laws"]],["Работа",["timer","calc","tools","field","radio","sup","def","rp","dept","apps"]],["Развитие",["ref","learn"]]];
+var TN={uk:"УК",ak:"АК",dk:"ДК",pk:"ПК",gen:"Общая часть",laws:"Законы",timer:"Задержание",calc:"Калькулятор",tools:"Проверки",field:"На месте",radio:"Рация",sup:"Надзор",def:"Защита",rp:"Рапорты",dept:"Моё ведомство",apps:"Мои инструменты",ref:"Справочник",learn:"Обучение"};
 function role(){var R=window.SA_ROLES;return R?R.cur():(X.role||"off")}
 window.SA_tabOrder=function(){var O=obj(jget("bos-taborder",{}));return Array.isArray(O[role()])?O[role()]:null};
 function visTabs(){var R=window.SA_ROLES;return R?R.visible(role()):[]}
@@ -12602,6 +12627,316 @@ document.addEventListener("keydown",function(e){
 });
 })();
 </script>
+<style id="s26-style">
+/* 2.6: раздел «Рация»: голосовой диспетчер */
+.r26-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,380px);gap:16px;align-items:start}
+@media (max-width:980px){.r26-grid{grid-template-columns:1fr}}
+.r26-st{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);margin-bottom:12px}
+.r26-st .dot{width:10px;height:10px;border-radius:50%;background:#9aa0a6;flex:none}
+.r26-st .dot.on{background:#2e9e5b;box-shadow:0 0 0 4px color-mix(in srgb,#2e9e5b 22%,transparent)}
+.r26-st .t{flex:1;min-width:180px;display:grid;gap:2px}
+.r26-st .t small{color:var(--muted)}
+.r26-kbd{display:inline-block;padding:1px 7px;border-radius:6px;border:1px solid var(--line);border-bottom-width:2px;background:var(--surface);font:600 12.5px var(--f-mono,monospace)}
+.r26-cmd{display:flex;gap:8px;margin:4px 0 10px}
+.r26-cmd input{flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:9px 12px;font:inherit}
+.r26-log{list-style:none;margin:0;padding:0;display:grid;gap:6px;max-height:360px;overflow:auto}
+.r26-log li{padding:8px 11px;border-radius:12px;border:1px solid var(--line);background:var(--bg);font-size:13.5px;line-height:1.45;max-width:92%}
+.r26-log li.me{justify-self:end;background:var(--soft,var(--chip));border-color:transparent}
+.r26-log li .w{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:1px}
+.r26-log li.d .w{color:var(--accent)}
+.r26-empty{color:var(--muted);font-size:13.5px;padding:6px 0}
+.r26-help{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.r26-help li{display:grid;gap:3px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.r26-help li b{font-size:13.5px}
+.r26-help li q{font-size:13px;color:var(--muted);quotes:"«" "»"}
+.r26-set .srow:last-child{border-bottom:0}
+.r26-set select,.r26-set input[type=number]{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:6px 8px;font:inherit;max-width:190px}
+.r26-seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.r26-seg button{border:0;background:var(--surface);color:var(--ink);padding:6px 12px;font:inherit;cursor:pointer}
+.r26-seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+</style>
+<script>
+/* ===================== 2.6: голосовой диспетчер «Рация» ===================== */
+(function(){
+"use strict";
+var A=window.senkoApp,DESK=!!(A&&A.radioState);
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function st(){try{return A&&A.state?A.state():null}catch(x){return null}}
+function toast(m){if(window.SA_toast)SA_toast(m)}
+function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(x){return d}}
+function jset(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(x){}}
+function aset(k,v){var r=A&&A.set?A.set(k,v):null;if(r&&r.ok===false&&r.error)toast(r.error);return r}
+function rr(){if(typeof render==="function"&&state.tab==="radio"){var y=window.pageYOffset;render();window.scrollTo(0,y)}}
+function plural(n,f){n=Math.abs(n)%100;var n1=n%10;return n>10&&n<20?f[2]:n1>1&&n1<5?f[1]:n1===1?f[0]:f[2]}
+var MIN=["минута","минуты","минут"],HRS=["час","часа","часов"];
+
+/* ---------- разбор речи: слова → числа ---------- */
+var UN={"ноль":0,"нуль":0,"один":1,"одна":1,"одно":1,"одну":1,"два":2,"две":2,"три":3,"четыре":4,"пять":5,"шесть":6,"семь":7,"восемь":8,"девять":9};
+var TE={"десять":10,"одиннадцать":11,"двенадцать":12,"тринадцать":13,"четырнадцать":14,"пятнадцать":15,"шестнадцать":16,"семнадцать":17,"восемнадцать":18,"девятнадцать":19};
+var TN={"двадцать":20,"тридцать":30,"сорок":40,"пятьдесят":50,"шестьдесят":60,"семьдесят":70,"восемьдесят":80,"девяносто":90};
+var HU={"сто":100,"двести":200,"триста":300,"четыреста":400,"пятьсот":500,"шестьсот":600,"семьсот":700,"восемьсот":800,"девятьсот":900};
+var TH={"тысяча":1,"тысячи":1,"тысяч":1,"тысячу":1};
+function cls(w){if(UN.hasOwnProperty(w))return ["U",UN[w]];if(TE.hasOwnProperty(w))return ["E",TE[w]];if(TN.hasOwnProperty(w))return ["T",TN[w]];if(HU.hasOwnProperty(w))return ["H",HU[w]];if(TH[w])return ["K",1000];return null}
+function ext(a,b){return (a==="H"&&(b==="T"||b==="E"||b==="U"))||(a==="T"&&b==="U")||(a==="K"&&b!=="K")}
+function toks(text){
+ var s=String(text||"").toLowerCase().replace(/ё/g,"е").replace(/(\d)\s*[.,]\s*(?=\d)/g,"$1.").replace(/\bч\s*\.?\s*(?=\d)/g," часть ").replace(/\bст\s*\.\s*/g," статья ").replace(/[,;]/g," , ").replace(/[^a-zа-я0-9.,\s-]/g," ");
+ var W=s.split(/\s+/).filter(Boolean),out=[],i=0;
+ while(i<W.length){var w=W[i];
+  if(/^\d+(\.\d+)*$/.test(w)){out.push(w.indexOf(".")>0?{t:"ref",s:w}:{t:"num",v:+w,s:w});i++;continue}
+  var c=cls(w);
+  if(c){var total=0,cur=0,last=null,hasK=false; // «сорок две тысячи пятьдесят один» = 42051, «четыре два ноль» = 4, 2, 0
+   while(i<W.length){var c2=cls(W[i]);if(!c2)break;
+    if(last){if(c2[0]==="K"){if(hasK)break}else if(last!=="K"&&!ext(last,c2[0]))break}
+    if(c2[0]==="K"){total=(cur||1)*1000;cur=0;hasK=true}else cur+=c2[1];last=c2[0];i++}
+   var v=total+cur;out.push({t:"num",v:v,s:String(v)});continue}
+  if(w==="точка"||w==="запятая"||w==="дробь"||w==="."){out.push({t:"dot"});i++;continue}
+  if(w===","){out.push({t:"sep"});i++;continue}
+  out.push({t:"w",s:w.replace(/^-+|-+$/g,"")});i++}
+ return out}
+
+/* ---------- статьи ---------- */
+var CODEW=[[/^(ук|уголовн)/,"УК"],[/^(ак|административн|коап)/,"АК"],[/^(дк|дорожн)/,"ДК"],[/^(пк|процессуальн)/,"ПК"]];
+function codeOf(w){for(var i=0;i<CODEW.length;i++)if(CODEW[i][0].test(w))return CODEW[i][1];return ""}
+var STOPREF=/^(паспорт|паспорта|номер|статик|айди|имя|зовут|найден|найдено|изъят|обнаружен|куст|семя|семен|пакет|грамм)/;
+function refsOf(T,force){ // force: в фразе было слово «статья» — тогда и одиночное число считается статьёй
+ var R=[],i=0,ctx=!!force;
+ while(i<T.length){var t=T[i];
+  if(t.t==="w"&&/^(стать|ст$|статей)/.test(t.s)){ctx=true;i++;continue}
+  if(t.t==="w"&&STOPREF.test(t.s)){ctx=false;i++;continue}
+  if(t.t==="ref"||t.t==="num"){
+   var ref=t.t==="ref"?t.s:t.s,j=i+1,dotted=t.t==="ref";
+   if(t.t==="num"){while(j<T.length){if(T[j].t==="dot"&&T[j+1]&&T[j+1].t==="num"){ref+="."+T[j+1].s;j+=2;dotted=true}else if(ctx&&T[j].t==="num"&&T[j].v<100&&!dotted&&!(T[j-1]&&T[j-1].t==="w")){ref+="."+T[j].s;j++;dotted=true}else break}}
+   var part="";if(T[j]&&T[j].t==="w"&&/^(часть|части|ч)$/.test(T[j].s)&&T[j+1]&&T[j+1].t==="num"){part=T[j+1].s;j+=2}
+   var code="";if(T[j]&&T[j].t==="w"&&codeOf(T[j].s)){code=codeOf(T[j].s);j++}
+   if(T[j]&&T[j].t==="w"&&/^кодекс/.test(T[j].s))j++;
+   if((dotted||part||ctx)&&+ref.split(".")[0]>0&&+ref.split(".")[0]<200)R.push({ref:ref,part:part,code:code});
+   i=j;continue}
+  i++}
+ return R}
+function idsOf(R){
+ var ids=[],bad=[],lastCode="УК";
+ R.forEach(function(r){var code=r.code||lastCode;lastCode=code;var q=r.ref+(r.part?" ч."+r.part:"")+" "+code,p=window.SA_parseRefs?SA_parseRefs(q):{ids:[],bad:[q]};
+  if(!p.ids.length&&r.part){p=SA_parseRefs(r.ref+" "+code)}
+  if(p.ids.length)p.ids.forEach(function(id){if(ids.indexOf(id)<0)ids.push(id)});else bad.push(r.ref+(r.part?" ч."+r.part:""))});
+ return {ids:ids,bad:bad}}
+function lab(id){var r=BYID[id];return r?labK(r):id}
+function sayLab(id){var r=BYID[id];if(!r)return id;return "статья "+r.code+(r.part?" часть "+r.part:"")+" "+({uk:"УК",ak:"АК",dk:"ДК",pk:"ПК"}[r.k]||"")}
+
+/* ---------- имя и паспорт ---------- */
+var TR={"а":"a","б":"b","в":"v","г":"g","д":"d","е":"e","ж":"zh","з":"z","и":"i","й":"y","к":"k","л":"l","м":"m","н":"n","о":"o","п":"p","р":"r","с":"s","т":"t","у":"u","ф":"f","х":"h","ц":"ts","ч":"ch","ш":"sh","щ":"sch","ъ":"","ы":"y","ь":"","э":"e","ю":"yu","я":"ya"};
+function latin(){return jget("bos-radio-latin",true)!==false}
+function nameFix(words){return words.map(function(w){var s=latin()&&/[а-я]/.test(w)?w.split("").map(function(c){return TR.hasOwnProperty(c)?TR[c]:c}).join(""):w;return s.charAt(0).toUpperCase()+s.slice(1)}).join(" ")}
+var NAMESTOP=/^(паспорт|номер|статик|айди|стать|часть|обвиня|подозрева|возраст|адвокат|прокурор|найден|изъят|обнаруж|ранее|задерж)/,NAMEW=/^(id|ст|по|за|с|и|в|на|у|лет|его|ее|её|он|она|который|которая)$/;
+var HUMAN=/^(гражданин|гражданка|гражданина|гражданки|подозреваем|человек|мужчина|женщина|лицо|некий|некто|сотрудник|по имени|имени)/;
+function nameAfter(T,from){var W=[],i=from;while(i<T.length&&T[i].t==="w"&&HUMAN.test(T[i].s))i++;
+ while(i<T.length&&W.length<3){var t=T[i];if(t.t!=="w"||NAMESTOP.test(t.s)||NAMEW.test(t.s)||t.s.length<2)break;W.push(t.s);i++}return W.length?nameFix(W):""}
+function passOf(T){for(var i=0;i<T.length;i++){if(T[i].t==="w"&&/^(паспорт|статик|айди|id)/.test(T[i].s)){var j=i+1,s="";while(T[j]&&T[j].t==="w"&&/^(номер|номером|n|№)$/.test(T[j].s))j++;while(T[j]&&T[j].t==="num"&&s.length<9){s+=T[j].s;j++}if(s)return s}}return ""}
+
+/* ---------- наркотики ---------- */
+function drugsOf(T){var o={g:0,b:0,s:0,p:0},hit=false;
+ for(var i=0;i<T.length;i++){var t=T[i];if(t.t!=="num")continue;var w=T[i+1]&&T[i+1].t==="w"?T[i+1].s:"";
+  if(w&&!/^(куст|семеч|семян|семя|семен|пакет|грамм|гр$|г$)/.test(w)&&T[i+2]&&T[i+2].t==="w"&&/^(куст|семеч|семян|семя|семен|пакет|грамм)/.test(T[i+2].s))w=T[i+2].s; // «7 пакетиков наркотиков», «2 больших куста»
+  if(/^куст/.test(w)){o.b+=t.v;hit=true}else if(/^(семеч|семян|семя|семен)/.test(w)){o.s+=t.v;hit=true}else if(/^пакет/.test(w)){o.p+=t.v;hit=true}else if(/^(грамм|гр$|г$)/.test(w)){o.g+=t.v;hit=true}}
+ return hit?o:null}
+function drugWords(o){var L=[];if(o.b)L.push(o.b+" "+plural(o.b,["куст","куста","кустов"]));if(o.p)L.push(o.p+" "+plural(o.p,["пакетик","пакетика","пакетиков"]));if(o.s)L.push(o.s+" "+plural(o.s,["семечко","семечка","семечек"]));if(o.g)L.push(o.g+" "+plural(o.g,["грамм","грамма","граммов"]));
+ return L.length>1?L.slice(0,-1).join(", ")+" и "+L[L.length-1]:L[0]||""}
+
+/* ---------- время ---------- */
+var MON=["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"],WD=["воскресенье","понедельник","вторник","среда","четверг","пятница","суббота"];
+function msk(){var d=new Date(Date.now()+3*3600000);return {h:d.getUTCHours(),m:d.getUTCMinutes(),D:d.getUTCDate(),M:d.getUTCMonth(),Y:d.getUTCFullYear(),w:d.getUTCDay()}}
+function mins(ms){var m=Math.max(0,Math.round(ms/60000));return m+" "+plural(m,MIN)}
+
+/* ---------- журнал и отмена ---------- */
+var LOG=jget("bos-radio-log",[]);if(!Array.isArray(LOG))LOG=[];
+function log(who,text){LOG.push({w:who,t:String(text||"").slice(0,300),at:Date.now()});if(LOG.length>40)LOG=LOG.slice(-40);jset("bos-radio-log",LOG);var el=document.getElementById("r26log");if(el){el.innerHTML=logHtml();el.scrollTop=el.scrollHeight}}
+var UNDO=null;
+function snap(what){UNDO={what:what,tms:JSON.stringify(tms),sel:selId,idle:JSON.stringify(idleTm),basket:JSON.stringify(basket),drug:JSON.stringify(window.SA_drug?SA_drug.get():null)}}
+function restore(){if(!UNDO)return false;try{tms=JSON.parse(UNDO.tms);selId=UNDO.sel;idleTm=JSON.parse(UNDO.idle);pickTm();saveTm();basket=JSON.parse(UNDO.basket);save();if(typeof updateBadge==="function")updateBadge();var d=JSON.parse(UNDO.drug);if(d&&window.SA_drug)SA_drug.set(d)}catch(x){return false}UNDO=null;return true}
+
+/* ---------- действия ---------- */
+function cur(){return tms.filter(function(t){return t.id===selId})[0]||tms[tms.length-1]||null}
+function refreshAll(){if(typeof render==="function"&&(state.tab==="timer"||state.tab==="calc"||state.tab==="radio")){var y=window.pageYOffset;render();window.scrollTo(0,y)}if(typeof updateBadge==="function")updateBadge()}
+function addArts(t,ids){var have=String(t.arts||""),add=[];ids.forEach(function(id){var l=lab(id);if(have.indexOf(l)<0)add.push(l);basket[id]=1});
+ t.arts=have?(add.length?have+", "+add.join(", "):have):add.join(", ");save();return add}
+var PZ=[["adv",/^(адвокат|защитник)/,"адвоката"],["pros",/^(прокурор|огп$)/,"прокурора"],["head",/^(руководств|начальств|руководител)/,"руководство"],["ems",/^(медик|врач|скор|ems|емс|ембуланс|санитар)/,"медиков"],["int",/^допрос/,"допрос"],["srch",/^имуществ/,"обыск имущества"],["vid",/^(видео|запис)/,"просмотр видео"]];
+var PZN={adv:"Адвокат",pros:"Прокурор",head:"Руководство",ems:"Медики",int:"Допрос",srch:"Обыск имущества",vid:"Просмотр видео"};
+function pzOf(T){for(var i=0;i<T.length;i++){if(T[i].t!=="w")continue;for(var k=0;k<PZ.length;k++)if(PZ[k][1].test(T[i].s))return PZ[k]}return null}
+function has(T,re){return T.some(function(t){return t.t==="w"&&re.test(t.s)})}
+function R(say,show,o){var r={say:say,show:show||say};if(o)for(var k in o)r[k]=o[k];return r}
+
+function cmd(text){
+ var raw=String(text||"").trim(),low=raw.toLowerCase().replace(/ё/g,"е"),T=toks(raw);
+ if(!raw)return R("Повторите, не расслышал.");
+ // связь
+ if(/^(отбой|конец связи|спасибо отбой|все отбой)$/.test(low))return R("Принято. Конец связи.","Конец связи.",{close:true});
+ if(/(отставить|отмена|отмени|отменить последн)/.test(low)){var w=UNDO&&UNDO.what;return restore()?(refreshAll(),R("Принято. Отставить. Отменено: "+(w||"последнее действие").toLowerCase()+".")):R("Никак нет. Отменять нечего.")}
+ if(/(что (ты )?умеешь|помощь|список команд|какие команды)/.test(low))return R("Диспетчер на связи. Докладывайте задержание: задержан гражданин, имя, паспорт и статья. Добавляйте статьи, найденные наркотики, вызов и прибытие адвоката. Спрашивайте время, дату, остаток и доклад.","Задержание, статьи, наркотики, адвокат, время, дата, остаток, доклад, отмена, отбой.");
+ if(/(миранд|зачитай права|правило миранды)/.test(low))return R(typeof MIRANDA==="string"?MIRANDA:"Вы имеете право хранить молчание.","Зачитываю правило Миранды.");
+ if(/(какое сегодня число|какое число|какая дата|^дата|сегодня какой день|какой сегодня день|какой день недели)/.test(low)){var d=msk();return R("Так точно. Сегодня "+WD[d.w]+", "+d.D+" "+MON[d.M]+" "+d.Y+" года.",WD[d.w]+", "+d.D+" "+MON[d.M]+" "+d.Y)}
+ if(/(который час|сколько времени$|^время$|^время\b(?!.*задерж)|точное время|московское время)/.test(low)&&!/(осталось|прошло|задержан)/.test(low)){var m=msk();return R("Так точно. Московское время "+m.h+" "+plural(m.h,HRS)+" "+m.m+" "+plural(m.m,MIN)+".","МСК "+(m.h<10?"0":"")+m.h+":"+(m.m<10?"0":"")+m.m)}
+ var t=cur();
+ if(/(сколько осталось|осталось времени|остаток|сколько прошло|сколько идет|время задержания)/.test(low)){
+  if(!t)return R("Никак нет. Активных задержаний нет.");
+  if(t.decidedAt)return R("Так точно. По задержанию "+(t.nick||"без имени")+" мера избрана на "+mins(t.decidedAt)+".");
+  var el=elapsed(t);return R("Так точно. "+(t.nick?t.nick+": ":"")+"прошло "+mins(el)+", осталось "+mins(LIM-el)+(t.paused?". Сейчас пауза: "+(PZN[t.paused.k]||"пауза").toLowerCase():"")+".")}
+ if(/(доклад|сводка|статус|обстановк|сколько задержан|список задержан|кто задержан)/.test(low)){
+  var L=tms.filter(function(x){return x.start});if(!L.length)return R("Так точно. Активных задержаний нет.");
+  return R("Так точно. Задержаний: "+L.length+". "+L.slice(0,4).map(function(x,i){return (i+1)+". "+(x.nick||"Без имени")+(x.decidedAt?", мера избрана":x.paused?", пауза, "+(PZN[x.paused.k]||"").toLowerCase():", осталось "+mins(LIM-elapsed(x)))}).join(". ")+".")}
+ // выбрать задержание
+ var ORD={"перв":1,"втор":2,"трет":3,"четверт":4,"пят":5,"шест":6,"седьм":7,"восьм":8,"девят":9,"десят":10};
+ if(/(переключ|выбери|выбрать|перейди к задержанию|задержание номер|текущее задержание)/.test(low)){
+  var n=0;T.forEach(function(x){if(x.t==="num"&&!n)n=x.v;if(x.t==="w")for(var o in ORD)if(x.s.indexOf(o)===0&&!n)n=ORD[o]});
+  var L2=tms.filter(function(x){return x.start}),pick=null;
+  if(n&&L2[n-1])pick=L2[n-1];else{L2.forEach(function(x){if(x.nick&&low.indexOf(x.nick.toLowerCase().split(" ")[0])>=0)pick=x})}
+  if(!pick)return R("Никак нет. Такого задержания нет. Повторите номер.");
+  selId=pick.id;pickTm();saveTm();refreshAll();return R("Принято. Работаем по задержанию "+(pick.nick||"номер "+(L2.indexOf(pick)+1))+".")}
+ // мера избрана / задержание окончено
+ if(/(мера (избрана|определена|выбрана)|задержание (окончено|завершено|закончено|закрыто)|закрой задержание|заверши задержание)/.test(low)){
+  if(!t)return R("Никак нет. Активных задержаний нет.");if(t.decidedAt)return R("Так точно. Мера уже избрана.");
+  snap("Избрание меры");endPause(t);t.decidedAt=Math.max(1,elapsed(t));ev(t,"decide","Мера избрана · "+fmt(t.decidedAt)+" (диспетчер)");saveTm();refreshAll();
+  return R("Так точно. Мера избрана, таймер остановлен на "+mins(t.decidedAt)+".")}
+ // конец паузы
+ var pz=pzOf(T);
+ var endV=/(прибыл|приехал|подъехал|пришел|пришла|прибыла|на месте|закончен|окончен|завершен|закончил|продолж|сними с паузы|снять паузу|конец паузы|пауза окончена|не ответил|не прибыл|отказался)/.test(low);
+ if(endV&&(pz||/(пауз|продолж)/.test(low))){
+  if(!t||!t.paused)return R("Никак нет. Задержание не на паузе.");
+  var pk=t.paused.k,dur=Date.now()-t.paused.at;snap("Конец паузы");endPause(t);saveTm();refreshAll();
+  var miss=/(не ответил|не прибыл|отказался)/.test(low);
+  return R((miss?"Принято. Право на адвоката считается реализованным. ":"Так точно. "+(PZN[pk]||"Пауза")+(pk==="adv"||pk==="pros"?" прибыл. ":" — закончено. "))+"Задержание продолжено. Пауза длилась "+mins(dur)+". Осталось "+mins(LIM-elapsed(t))+".")}
+ // новое задержание
+ var newDet=/(^|\s)(задержан|задержана|задержаны|задерживаю|задержал|задержала|новое задержание|начинаю задержание|начать задержание|начни задержание|оформляю задержание)/.test(low)&&!/(вызван|вызвал|прибыл)/.test(low);
+ if(newDet){
+  var at=-1;T.some(function(x,i){if(x.t==="w"&&/^(задерж|оформля)/.test(x.s)){at=i;return true}return false});
+  var nm=at>=0?nameAfter(T,at+1):"",ps=passOf(T),refs=refsOf(T,false),ids=idsOf(refs);
+  snap("Начало задержания");
+  var keep=JSON.stringify(basket);basket={};
+  var nt=startTm();if(!nt){basket=JSON.parse(keep);return R("Никак нет. Уже "+(window.TM_MAX||10)+" задержаний. Отправьте одно в архив.")}
+  nt.nick=nm;nt.st=ps;nt.arts="";var added=addArts(nt,ids.ids);ev(nt,"radio","Начато голосом диспетчеру");saveTm();refreshAll();
+  var parts=[],fem=/(задержана|гражданка|гражданку|женщина|подозреваемая)/.test(low);if(nm)parts.push((fem?"гражданка ":"гражданин ")+nm);if(ps)parts.push("паспорт "+ps.split("").join(" "));if(ids.ids.length)parts.push(ids.ids.map(sayLab).join(", "));
+  return R("Принято. Задержание начато"+(parts.length?": "+parts.join(", "):"")+". Время пошло."+(ids.bad.length?" Статью "+ids.bad[0]+" не нашёл, повторите.":"")+(!nm?" Имя не расслышал, назовите имя.":""),
+   "Задержание начато: "+[nm||"имя?",ps?"паспорт "+ps:"",added.join(", ")].filter(Boolean).join(" · "))}
+ // начало паузы
+ var startV=/(вызван|вызвал|вызываю|вызвали|вызвать|ожида|ждем|жду|звонит|позвонил|звонок|запрос|начинаю|начат|на паузу|пауза|поставь паузу)/.test(low);
+ if(pz&&startV){
+  if(!t)return R("Никак нет. Активных задержаний нет.");if(t.decidedAt)return R("Никак нет. Мера уже избрана, таймер остановлен.");
+  if(t.paused&&t.paused.k===pz[0])return R("Так точно. Задержание уже на паузе: "+PZN[pz[0]].toLowerCase()+".");
+  snap("Пауза");endPause(t);t.paused={k:pz[0],at:Date.now(),note:"диспетчер"};ev(t,"pause","Пауза: "+pauseName(pz[0])+" (диспетчер)");saveTm();refreshAll();
+  var tip=pz[0]==="adv"?" Если адвокат не ответит за 3 минуты, право считается реализованным.":pz[0]==="pros"?" Ждём не более 15 минут.":"";
+  return R("Принято. "+(pz[0]==="int"||pz[0]==="srch"||pz[0]==="vid"?PZN[pz[0]]+" начат.":"Ожидаем "+pz[2]+".")+" Задержание на паузе, отсчёт пошёл."+tip)}
+ // наркотики
+ var dg=drugsOf(T);
+ if(dg){
+  snap("Наркотики");var D0=window.SA_drug?SA_drug.get():{g:0,b:0,s:0,p:0};var D1={g:dg.g,b:dg.b,s:dg.s,p:dg.p};if(window.SA_drug)SA_drug.set(D1);
+  var tot=window.SA_drug?SA_drug.total(D1):dg.g+dg.b*5+dg.s*2+dg.p,art=tot>25?"uk13.2.1-":tot>3?"uk13.2-":"",addd=[];
+  if(art==="uk13.2.1-"&&BYID["uk13.2-"]){delete basket["uk13.2-"];if(t&&!t.decidedAt)t.arts=String(t.arts||"").split(", ").filter(function(a){return a&&a!==lab("uk13.2-")}).join(", ")} // больше 25 г: 13.2.1 вместо 13.2
+  if(art&&t&&!t.decidedAt&&BYID[art]){addd=addArts(t,[art]);saveTm()}else if(art&&BYID[art]){basket[art]=1;save()}
+  refreshAll();
+  var one=(dg.g?1:0)+(dg.b?1:0)+(dg.s?1:0)+(dg.p?1:0)===1&&dg.g;
+  return R("Принято. "+drugWords(dg)+(one?"":", итого "+tot+" "+plural(tot,["грамм","грамма","граммов"]))+". "+(tot<=3?"До трёх граммов: изъятие без ответственности.":(art==="uk13.2.1-"?"Статья 13.2.1 УК":"Статья 13.2 УК")+(addd.length?" добавлена в задержание.":" внесена в калькулятор.")),
+   "Наркотики: "+drugWords(dg)+" = "+tot+" г"+(art?" · "+lab(art):""))}
+ // статьи в текущее задержание
+ var refs2=refsOf(T,/(стать|^ст\b)/.test(low));
+ if(refs2.length){
+  var ids2=idsOf(refs2);if(!ids2.ids.length)return R("Никак нет. Статью "+(ids2.bad[0]||"")+" не нашёл. Повторите номер статьи.");
+  snap("Статьи");var added2;
+  if(t&&!t.decidedAt){added2=addArts(t,ids2.ids);saveTm()}else{ids2.ids.forEach(function(id){basket[id]=1});save();added2=ids2.ids.map(lab)}
+  refreshAll();var ft=typeof finalTerm==="function"?finalTerm(basketItems()):{m:0};
+  var sl=ids2.ids.map(sayLab).join(", ");sl=sl.charAt(0).toUpperCase()+sl.slice(1);
+  return R("Принято. "+sl+(t&&!t.decidedAt?" добавлен"+(ids2.ids.length>1?"ы":"а")+" в задержание"+(t.nick?" "+t.nick:""):" внесен"+(ids2.ids.length>1?"ы":"а")+" в калькулятор")+"."+(ft.m?" По калькулятору срок "+ft.m+" "+plural(ft.m,["месяц","месяца","месяцев"])+".":"")+(ids2.bad.length?" Статью "+ids2.bad[0]+" не нашёл.":""),
+   (t&&!t.decidedAt?"В задержание: ":"В калькулятор: ")+(added2.length?added2.join(", "):"уже есть"))}
+ // поправки: паспорт, имя
+ var ps2=passOf(T);
+ if(ps2){if(!t)return R("Никак нет. Активных задержаний нет.");snap("Паспорт");t.st=ps2;saveTm();refreshAll();return R("Принято. Паспорт "+ps2.split("").join(" ")+" записан.","Паспорт: "+ps2)}
+ var ni=-1;T.some(function(x,i){if(x.t==="w"&&/^(имя|зовут|фамилия|ник)$/.test(x.s)){ni=i;return true}return false});
+ if(ni>=0){var nm2=nameAfter(T,ni+1);if(!nm2)return R("Повторите имя.");if(!t)return R("Никак нет. Активных задержаний нет.");snap("Имя");t.nick=nm2;saveTm();refreshAll();return R("Принято. Имя "+nm2+" записано.","Имя: "+nm2)}
+ if(/(сколько дают|итог|калькулятор|посчитай|какой срок)/.test(low)){var it=basketItems();if(!it.length)return R("Никак нет. Калькулятор пуст.");var f2=finalTerm(it);return R("Так точно. Статей: "+it.length+". Срок "+f2.m+" "+plural(f2.m,["месяц","месяца","месяцев"])+(f2.cut?", с учётом ограничения.":"."))}
+ return R("Повторите, не расслышал.","Не понял: «"+raw.slice(0,80)+"»",{miss:true})}
+
+window.SA_radioCmd=function(o){var text=String((o&&o.text)||"").slice(0,400),alt=String((o&&o.alt)||"").slice(0,400),r;
+ try{r=cmd(text);if(r.miss&&alt&&alt!==text){var r2=cmd(alt);if(!r2.miss){r=r2;text=alt}}}catch(x){r=R("Повторите. Ошибка обработки.","Ошибка: "+String(x&&x.message||x).slice(0,80))}
+ log("me",text);log("d",r.show||r.say);return r};
+window.SA_radioSel=function(id){if(tms.some(function(t){return t.id===id})){selId=id;pickTm();saveTm();refreshAll()}return true};
+window.SA_radioParse=function(t){return {toks:toks(t),refs:refsOf(toks(t),true),drugs:drugsOf(toks(t)),pass:passOf(toks(t))}}; // для проверки
+
+/* ---------- экран рации: данные ---------- */
+var RS={sig:"",at:0};
+function radioPush(){
+ if(!DESK)return;var s=st(),c=(s&&s.cfg)||{};if(!c.radioEnabled)return;
+ var T=tms.filter(function(t){return t.start}).map(function(t){return {id:t.id,nick:t.nick||"",st:t.st||"",arts:String(t.arts||"").replace(/ст\. /g,"").replace(/ УК/g,""),start:t.start,pausedTotal:t.pausedTotal||0,pausedAt:t.paused&&t.paused.at||0,pk:t.paused&&t.paused.k||"",decidedAt:t.decidedAt||0}});
+ var d={timers:T,sel:selId};var sig=JSON.stringify(d);if(sig===RS.sig&&Date.now()-RS.at<20000)return;RS.sig=sig;RS.at=Date.now();A.radioState(d)}
+if(DESK)setInterval(radioPush,1000);
+
+/* ---------- раздел «Рация» ---------- */
+function logHtml(){if(!LOG.length)return '<li class="r26-empty">Здесь появятся ваши команды и ответы диспетчера.</li>';
+ return LOG.slice(-30).map(function(x){return '<li class="'+(x.w==="me"?"me":"d")+'"><span class="w">'+(x.w==="me"?"Вы":"Диспетчер")+'</span>'+e(x.t)+'</li>'}).join("")}
+var REC=false;
+function row(t,d,c){return '<div class="srow"><div class="sl"><b>'+t+'</b>'+(d?'<small>'+d+'</small>':'')+'</div>'+c+'</div>'}
+function sw(k,on,l){return '<button type="button" class="sw" role="switch" data-r26="'+k+'" aria-checked="'+(!!on)+'" aria-label="'+e(l)+'"></button>'}
+function voicesSel(c){var vs=[];try{vs=(window.speechSynthesis&&speechSynthesis.getVoices()||[]).filter(function(v){return /^ru/i.test(v.lang)})}catch(x){}
+ return '<select data-r26in="radioVoiceName" aria-label="Голос диспетчера"><option value="">Первый русский голос</option>'+vs.map(function(v){return '<option value="'+e(v.name)+'"'+(v.name===c.radioVoiceName?" selected":"")+'>'+e(v.name.replace(/^Microsoft\s+/,"").replace(/\s+-.*$/,""))+'</option>'}).join("")+'</select>'}
+function setHtml(){
+ var s=st()||{},c=s.cfg||{};
+ if(!DESK)return '<p class="hint">Рация поверх игры работает в программе для Windows. Здесь можно проверить команды текстом.</p>';
+ var h='<div class="r26-set">';
+ h+=row("Рация включена",s.radioError?e(s.radioError):"Говорите, пока держите клавишу.",sw("radioEnabled",c.radioEnabled,"Рация"));
+ h+=row("Клавиша рации",REC?"Нажмите сочетание… (Esc — отмена)":"Зажмите и говорите, отпустите — диспетчер ответит.",'<button type="button" class="btn" data-r26="rec">'+(REC?"Ждём сочетание…":'<span class="r26-kbd">'+e(c.radioHotkey||"—")+'</span>')+'</button>');
+ h+=row("Всегда на экране","Иначе рация прячется после ответа.",sw("radioPin",c.radioPin,"Всегда на экране"));
+ if(!c.radioPin)h+=row("Прятать через",'<output>'+(c.radioHide||20)+' с</output>','<input type="range" min="5" max="120" step="5" value="'+(c.radioHide||20)+'" data-r26in="radioHide" aria-label="Прятать через, секунд">');
+ h+=row("Ответ голосом","Диспетчер отвечает по уставу: «Принято», «Так точно», «Никак нет», «Повторите».",sw("radioVoice",c.radioVoice,"Ответ голосом"));
+ if(c.radioVoice){h+=row("Голос","Голоса Windows. Новые добавляются в Параметрах Windows → Время и язык → Речь.",voicesSel(c));
+  h+=row("Скорость речи",'<output>'+(c.radioRate||105)+'%</output>','<input type="range" min="60" max="180" step="5" value="'+(c.radioRate||105)+'" data-r26in="radioRate" aria-label="Скорость речи">')}
+ h+=row("Звуки рации","Шипение и сигнал в конце передачи.",sw("radioSfx",c.radioSfx,"Звуки рации"));
+ h+=row("Имена латиницей","«ханами сенко» запишется как «Hanami Senko».",sw("latin",latin(),"Имена латиницей"));
+ h+=row("Размер рации","",'<div class="r26-seg">'+[["s","S"],["m","M"],["l","L"]].map(function(x){return '<button type="button" data-r26size="'+x[0]+'" aria-pressed="'+((c.radioSize||"m")===x[0])+'">'+x[1]+'</button>'}).join("")+'</div>');
+ h+=row("Вес пакетика","Сколько граммов считать за один пакетик в калькуляторе.",'<input type="number" min="0.1" max="50" step="0.1" value="'+(window.SA_drug?SA_drug.pkg():1)+'" data-r26in="pkg" aria-label="Граммов в пакетике">');
+ h+=row("Место рации","Рацию можно перетащить за корпус.",'<button type="button" class="btn" data-r26="pos">Вернуть в угол</button>');
+ return h+'</div>'}
+var HELP=[["Начать задержание","задержан гражданин Hanami Senko, паспорт 42051, статья 12.8 часть 1"],["Добавить статью","в ходе обыска 12.1 часть 1"],["Наркотики в калькулятор","найдено 2 куста и 7 пакетиков"],
+ ["Пауза и продолжение","вызван адвокат … адвокат прибыл · адвокат не ответил"],["Другие паузы","вызван прокурор, ждём медиков, начинаю допрос … допрос окончен"],["Мера избрана","мера избрана · задержание окончено"],
+ ["Поправить данные","паспорт 42051 · имя Hanami Senko"],["Переключиться","второе задержание · переключись на Hanami"],["Справки","время · дата · сколько осталось · доклад · какой срок"],["Служебные","зачитай Миранду · отставить (отмена) · отбой"]];
+window.SA_P=window.SA_P||{};
+SA_P.r_disp=function(){
+ var s=st()||{},c=s.cfg||{};
+ var stat=DESK?'<div class="r26-st"><span class="dot'+(c.radioEnabled?" on":"")+'"></span><span class="t"><b>'+(c.radioEnabled?"Рация на связи":"Рация выключена")+'</b><small>'+(c.radioEnabled?'Держите <span class="r26-kbd">'+e(c.radioHotkey)+'</span> или кнопку PTT на рации и говорите.':"Включите её в настройках справа.")+'</small></span>'+
+  (c.radioEnabled?'<button type="button" class="btn primary" data-r26="show">'+(s.radioOpen?"Спрятать рацию":"Показать рацию")+'</button>':'')+'</div>':'';
+ return '<div class="r26-grid"><div>'+
+  '<section class="panel"><h2>Голосовой диспетчер</h2><p class="sub">Докладывайте как по рации: диспетчер начнёт задержание, заполнит имя, паспорт и статьи, внесёт наркотики в калькулятор, поставит паузу на время адвоката и ответит по уставу.</p>'+stat+
+  '<div class="r26-cmd"><input id="r26q" maxlength="300" placeholder="Сказать текстом, например «время» или «вызван адвокат»" aria-label="Команда диспетчеру"><button type="button" class="btn primary" data-r26="send">Передать</button></div>'+
+  '<ul class="r26-log" id="r26log" aria-live="polite">'+logHtml()+'</ul>'+(LOG.length?'<div class="rowbtn"><button type="button" class="btn" data-r26="clear">Очистить журнал</button></div>':'')+'</section>'+
+  '<section class="panel"><h2>Что понимает диспетчер</h2><p class="sub">Говорите обычными словами, числа можно называть словами. Имена распознаются по звучанию, поэтому проверьте их на экране рации и при необходимости поправьте: «имя …».</p><ul class="r26-help">'+
+  HELP.map(function(x){return '<li><b>'+e(x[0])+'</b><q>'+e(x[1])+'</q></li>'}).join("")+'</ul></section></div>'+
+  '<section class="panel"><h2>Настройки рации</h2>'+setHtml()+'</section></div>'};
+SA_P.r_phr=function(){return SA_P.f_radio?SA_P.f_radio():'<section class="panel"><p>Фразы для рации недоступны.</p></section>'};
+
+function sendQ(){var q=document.getElementById("r26q");if(!q||!q.value.trim())return;var r=SA_radioCmd({text:q.value});q.value="";
+ if(DESK&&A.radioSay&&((st()||{}).cfg||{}).radioEnabled)A.radioSay(r);else if(window.SA_speak&&r.say)try{SA_speak(r.say)}catch(x){}
+ if(r.close){}var el=document.getElementById("r26log");if(el)el.scrollTop=el.scrollHeight;var q2=document.getElementById("r26q");if(q2)q2.focus()}
+document.addEventListener("keydown",function(ev){if(ev.target&&ev.target.id==="r26q"&&ev.key==="Enter"){ev.preventDefault();sendQ()}});
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-r26],[data-r26size]");if(!b)return;
+ if(b.dataset.r26size){aset("radioSize",b.dataset.r26size);setTimeout(rr,60);return}
+ var k=b.dataset.r26;
+ if(k==="send"){sendQ();return}
+ if(k==="clear"){LOG=[];jset("bos-radio-log",LOG);rr();return}
+ if(k==="show"){aset("radio",!((st()||{}).radioOpen));setTimeout(rr,150);return}
+ if(k==="rec"){REC=!REC;rr();return}
+ if(k==="pos"){aset("radioPosReset",1);toast("Рация вернётся в правый нижний угол");return}
+ if(k==="latin"){jset("bos-radio-latin",!latin());rr();return}
+ if(["radioEnabled","radioPin","radioVoice","radioSfx"].indexOf(k)>=0){aset(k,b.getAttribute("aria-checked")!=="true");setTimeout(rr,60);return}});
+document.addEventListener("input",function(ev){var t=ev.target;if(!t||!t.dataset||!t.dataset.r26in)return;var k=t.dataset.r26in,o=t.closest(".srow")&&t.closest(".srow").querySelector("output");
+ if(k==="radioHide"){if(o)o.textContent=t.value+" с";aset(k,+t.value)}
+ if(k==="radioRate"){if(o)o.textContent=t.value+"%";aset(k,+t.value)}
+ if(k==="pkg"&&window.SA_drug){SA_drug.pkg(+t.value)}});
+document.addEventListener("change",function(ev){var t=ev.target;if(t&&t.dataset&&t.dataset.r26in==="radioVoiceName")aset("radioVoiceName",t.value)});
+document.addEventListener("keydown",function(ev){if(!REC)return;ev.preventDefault();ev.stopPropagation();
+ if(ev.key==="Escape"){REC=false;rr();return}
+ if(["Control","Shift","Alt","Meta"].indexOf(ev.key)>=0)return;
+ var key=ev.code&&/^Key[A-Z]$/.test(ev.code)?ev.code.slice(3):ev.code&&/^Digit\d$/.test(ev.code)?ev.code.slice(5):/^F\d{1,2}$/.test(ev.key)?ev.key:"";
+ REC=false;var mods=[];if(ev.ctrlKey)mods.push("Ctrl");if(ev.altKey)mods.push("Alt");if(ev.shiftKey)mods.push("Shift");if(ev.metaKey)mods.push("Super");
+ if(!key||!mods.length){toast("Нужно сочетание с Ctrl, Alt или Win и буквой, цифрой или F1–F12");rr();return}
+ var r=aset("radioHotkey",mods.concat(key).join("+"));if(r&&r.ok)toast("Рация: "+mods.concat(key).join("+"));rr()},true);
+try{if(window.speechSynthesis)speechSynthesis.addEventListener("voiceschanged",function(){if(state.tab==="radio")rr()})}catch(x){}
+})();
+</script>
 <style>
 /* ===== Новый дизайн (2.0): меню слева, главный экран, тёплая палитра ===== */
 :root{
@@ -12791,6 +13126,7 @@ var I={
  calc:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"/>',
  tools:'<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/>',
  field:'<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+ radio:'<path d="M9 7V2"/><rect x="6" y="7" width="12" height="15" rx="2.5"/><rect x="9" y="10" width="6" height="4" rx="1"/><path d="M9 17.5h6M9 19.5h6"/>',
  rp:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
  dept:'<path d="M12 2.5 19 6v6c0 4.500-3 8-7 9.500-4-1.500-7-5-7-9.500V6z"/><path d="m12 8 1.200 2.400 2.600.4-1.900 1.800.5 2.600L12 14l-2.400 1.200.5-2.600-1.900-1.800 2.600-.4z"/>',
  rights:'<path d="M6 3h12v18l-6-4-6 4z"/><path d="M9 8h6M9 12h4"/>',
@@ -12826,7 +13162,8 @@ var D={
  timer:["Задержание","Таймер и чек-лист","Задержание","Таймер на 1 час с паузами по ст. 20 ПК и чек-лист порядка по ст. 17 ПК."],
  calc:["Калькулятор","Срок, штраф, залог","Калькулятор наказания","Добавьте статьи кнопкой «+» и получите итоговый срок, штраф, залог и текст для доклада."],
  tools:["Проверки","Законность, ст. 17, сила","Проверки","Законно ли задержание, сверка ст. 17, стадии применения силы."],
- field:["На месте","ДК, изъятие, рация","На месте","Подбор нарушения ДК по ситуации, что изымать, оружие и лицензии, фразы для рации, вежливые формулировки, адвокат и прокурор, зоны и места."],
+ radio:["Рация","Диспетчер, фразы","Рация","Голосовой диспетчер: начните задержание голосом, добавьте статьи, наркотики и паузы, спросите время. Здесь же фразы для рации и настройки."],
+ field:["На месте","ДК, изъятие, формулировки","На месте","Подбор нарушения ДК по ситуации, что изымать, оружие и лицензии, вежливые формулировки, адвокат и прокурор, зоны и места."],
  sup:["Надзор","Проверка задержаний","Надзор","Проверка задержания для прокурора: что нарушено и чем это грозит."],
  def:["Защита","Режим адвоката","Защита","Режим адвоката: нарушения при задержании и что заявить."],
  rp:["Рапорты","Написать, мои рапорты","Рапорты","Рапорт о задержании, применении силы, происшествии или служебный."],
@@ -12839,9 +13176,9 @@ var D={
  tester:["Панель тестера","Задания и бета-версии","Панель тестера","Задания от разработчика, экспериментальные функции и ранние версии программы."]
 };
 var X=window.SA_X||{role:"off"};
-var CODES=["uk","ak","dk","pk","gen","laws"], WORKS=["timer","calc","tools","field","sup","def","rp","dept","apps"], DEV=["ref","learn"];
+var CODES=["uk","ak","dk","pk","gen","laws"], WORKS=["timer","calc","tools","field","radio","sup","def","rp","dept","apps"], DEV=["ref","learn"];
 // разделы текущей роли (свои роли и скрытые разделы: SA_ROLES в блоке «Проверки, юристы…»)
-function vis(){var R=window.SA_ROLES;var L=R?R.visible(R.cur()):CODES.concat(["timer","calc","tools","field","rp","apps","ref","learn"]);
+function vis(){var R=window.SA_ROLES;var L=R?R.visible(R.cur()):CODES.concat(["timer","calc","tools","field","radio","rp","apps","ref","learn"]);
  return L.filter(function(t){return D[t]&&(t!=="rp"||window.SA_RP)&&(t!=="dept"||window.SA_DEPT)&&(t!=="apps"||window.SA_APPS)})}
 
 /* ---------- каркас ---------- */
@@ -12866,7 +13203,7 @@ function tabBtn(t){return document.querySelector('.tab[data-tab="'+t+'"]')}
 function cntOf(t){var b=tabBtn(t),c=b&&b.querySelector(".cnt");return c&&!c.hidden&&c.textContent.trim()?c.textContent.trim():""}
 function bossOk(){var b=document.getElementById("bossBtn");return !!(b&&b.isConnected)}
 /* 2.5: подвкладки. Берутся со страницы: переключатель разделов (.subnav) или заголовки блоков для разделов из ANC */
-var SUBT=["tools","field","ref","learn","boss","timer","calc","tester"], ANC=["timer","calc","tester"], SUBC={};
+var SUBT=["tools","field","radio","ref","learn","boss","timer","calc","tester"], ANC=["timer","calc","tester"], SUBC={};
 function ancHeads(){
  return [].slice.call(view.querySelectorAll("h2,h3")).filter(function(h){
   return h.offsetParent&&!h.closest(".art,.dli,.s24-card,details,.hm,.sa-modal,.s24-pti,.s24-bd")&&h.textContent.trim();
