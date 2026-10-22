@@ -2755,7 +2755,8 @@ window.__senkoLawSearch = function(query){
   var AI_SYN = [[/^неподчин|^неповин/, ["неподчин", "неповинов", "не подчин"]], [/^обыск|^досмотр/, ["обыск", "досмотр"]], [/^машин|^авто|^тачк|^транспорт/, ["машин", "транспорт", "тс ", "автомоб"]],
     [/^держ|^удержив|^содерж/, ["держ", "содерж", "удерж"]], [/^задерж/, ["задерж"]], [/^арест/, ["арест", "задерж"]], [/^ствол|^пушк|^пистолет|^оруж/, ["оруж", "пистолет"]],
     [/^коп$|^мент|^полицейск|^полици/, ["полиц", "сотрудник"]], [/^штраф/, ["штраф"]], [/^прокурор|^огп$/, ["прокурор"]], [/^адвокат|^защитник/, ["адвокат", "защитник"]],
-    [/^ордер|^санкци/, ["ордер", "санкци"]], [/^жд|^ожид|^подожд/, ["ожида", "жд", "не приехал", "не прибыл"]], [/^маск/, ["маск", "маскиров"]], [/^врач|^медик|^ems$|^емс$/, ["медик", "врач", "ems", "emergency"]]];
+    [/^ордер|^санкци/, ["ордер", "санкци"]], [/^жд|^ожид|^подожд/, ["ожида", "жд", "не приехал", "не прибыл"]], [/^маск/, ["маск", "маскиров"]], [/^врач|^медик|^ems$|^емс$/, ["медик", "врач", "ems", "emergency"]],
+    [/^требов|^распоряж|^приказ/, ["требован", "распоряжен", "приказ"]], [/^лиценз|^разрешен/, ["лиценз", "разрешен"]]];
   function aiAlts(w){
     var a = [aiStem(w)], sl = typeof slangAlts === "function" ? slangAlts(w) : null;
     if(sl && sl.a && sl.a.length) a = a.concat(sl.a);
@@ -2783,6 +2784,12 @@ window.__senkoLawSearch = function(query){
       });
       // как это называется в законах: «сколько держать задержанного» — «процессуальный час»
       var low = norm(raw), pun = /(сколько дают|что будет|что грозит|чем грозит|наказан|штраф|срок за|какая статья|по какой статье|сажают|посадят|розыск)/.test(low);
+      // «что я нарушил», «нарушаю ли я УК»: спрашивают, какая статья, само слово «нарушил» искать не нужно
+      if(/(что|какую|какие|как(ой|ое)).{0,20}наруш|наруша\S*.{0,6}(ук|ак|дк|закон)|наруш\S* ли/.test(low)){ pun = true; words = words.filter(function(w){ return !/^наруш/.test(w); }); }
+      // назван кодекс («нарушаю ли я УК»): его статьи выше
+      var kAsk = {}; (" " + low.replace(/[^а-яa-z0-9]+/g, " ") + " ").replace(/ (ук|ак|дк|пк) /g, function(m, k){ kAsk[k] = 1; return " "; });
+      // 2.6.5: бытовые слова («убил», «без лицензии», «ударил копа») переводим в статьи так же, как диспетчер в рации
+      try{ if(typeof window.SA_offArts === "function") window.SA_offArts(raw).forEach(function(a){ var key = a.k + "|" + a.code; if(!refRows[key]){ refRows[key] = 1.5; nRef++; } }); }catch(e){}
       if(/(сколько|долго|время|срок).{0,30}(держ|задерж)|(держ|задерж).{0,30}(сколько|долго|времени|срок)/.test(low)) words.push("процессуальный", "час");
       if(/(жд|ожида).{0,30}(адвокат|прокурор|медик|врач)|(адвокат|прокурор|медик|врач).{0,30}(жд|ожида|не приехал|опазд)/.test(low)) words.push("минут");
       var T = words.slice(0, 10).map(function(w){ return {w: w, re: aiRe(aiAlts(w))}; });
@@ -2806,6 +2813,7 @@ window.__senkoLawSearch = function(query){
         }
         h.cov = WT ? cov / WT : 0; s *= 0.5 + h.cov;
         if(pun && d.t === "c" && d.k !== "pk") s *= 1.6; // «что будет за…», «сколько дают»: сначала статьи с наказанием
+        if(d.t === "c" && kAsk[d.k]) s *= 2;
         h.s = h.ref ? 100 + h.ref * 10 + s : s;
       });
       // нужно больше половины «веса» вопроса; выдержки, где есть все слова, и так стоят выше
@@ -6275,7 +6283,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.6.4";
+var APP_VER="2.6.5";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6364,6 +6372,10 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.6.5",d:"22.10.2026",items:[
+  ["⚖️","ИИ называет нужную статью кодекса","На «я убил человека, что я нарушил» ИИ теперь видит УК 6.1, на «оружие без лицензии» — УК 12.8, на «законное требование» — УК 17.6. Бытовые слова («убил», «ударил копа», «угнал») переводятся в статьи так же, как в рации."],
+  ["🧠","ИИ не делает лишних выводов","ИИ больше не выдаёт частную норму за общее правило и не называет нарушенной статью закона о судебной власти или о документах. Если нужной статьи кодекса нет, ИИ так и говорит."],
+  ["🔎","Названный кодекс идёт первым","В вопросе «нарушаю ли я УК» статьи УК стоят выше статей других законов."]]},
  {v:"2.6.4",d:"22.10.2026",items:[
   ["🤖","ИИ точнее находит статьи","«Законное требование» больше не находит статьи про «незаконное»: слово ищется только с начала. Редкие слова вопроса важнее частых, слова рядом («законное требование») поднимают статью выше, кодексы и законы сравниваются вместе."],
   ["⚖️","УК не пропадает из ответа","На «сколько дают за незаконное оружие» ИИ снова видит ст. 12.8 УК: раньше слово «оружие» оставляло только закон об обороте оружия. На вопросы «что будет за…», «штраф за…» статьи с наказанием идут первыми."],
@@ -8119,7 +8131,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.6.4";
+var APP_VER="2.6.5";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
@@ -11516,7 +11528,7 @@ if(typeof C0==="function")window.__senkoAiContext=function(question){
   var codex=out.filter(function(x){return x.go&&(!a.kinds.length||a.kinds.indexOf(x.go.split("|")[0])>=0)});
   // 2.6.4: кодексы убираем, только если акт назван прямо («по ТК», «в законе о масках»). Слова темы («оружие», «маска», «адвокат»)
   // раньше тоже убирали УК, и на «сколько дают за незаконное оружие» ИИ не видел статью 12.8 УК
-  var named=a.words.some(function(x){return /^(тк|гк|ск|вк|нк|кэ|кэсп|орд|нпа|закон\S*|кодекс\S*|конституц\S*|трудов\S*|гражданск\S*|семейн\S*|воздушн\S*|налогов\S*|этик\S*)$/.test(x)});
+  var named=a.words.some(function(x){return /^(тк|гк|ск|вк|нк|кэ|кэсп|орд|нпа|закон|закона|законе|законы|законов|законом|законах|законам|кодекс\S*|конституц\S*|трудов\S*|гражданск\S*|семейн\S*|воздушн\S*|налогов\S*|этик\S*)$/.test(x)});
   if(a.laws.length&&!a.kinds.length&&named)codex=[];
   var lawsOut=[];
   if(a.laws.length){
@@ -11535,7 +11547,7 @@ if(typeof C0==="function")window.__senkoAiContext=function(question){
    var seenR={},mix=[];out.concat(lawsOut).forEach(function(x){if(!seenR[x.ref]&&mix.length<8){seenR[x.ref]=1;mix.push(x)}});
    return mix;
   }
-  var res=lawsOut.concat(codex).slice(0,8);
+  var res=(a.kinds.length?codex.concat(lawsOut):lawsOut.concat(codex)).slice(0,8); // «нарушаю ли я УК»: сначала названный кодекс
   return res.length?res:out;
  }catch(x){return out}};
 
@@ -12926,6 +12938,8 @@ function offOf(text){
  for(var g in OFFSKIP)if(seen[g])OFFSKIP[g].forEach(function(x){if(seen[x]){ids=ids.filter(function(id){return id!==seen[x]})}});
  var fz=false;if(!ids.length){ids=offFuzzy(low);fz=ids.length>0}
  return ids.length?{ids:ids,alts:alts,q:OFFQ.test(low),fuzzy:fz}:null}
+// ИИ в законах: те же бытовые фразы → статьи (без нечёткого подбора)
+window.SA_offArts=function(text){var o=offOf(text);if(!o||o.fuzzy)return [];return o.ids.concat(o.alts).map(function(id){var r=BYID[id];return r?{k:r.k,code:r.code}:null}).filter(Boolean)};
 // санкция вслух и коротко
 function sayMoney(n){n=+n||0;return n>=1000&&n%1000===0?n/1000+" "+plural(n/1000,["тысяча","тысячи","тысяч"]):n+" "+plural(n,["доллар","доллара","долларов"])}
 function sayFine(r){if(!r.fmax&&!r.fmin)return "";var a=+r.fmin||0,b=+r.fmax||0;if(a&&b&&a!==b)return "штраф от "+(a%1000===0&&b%1000===0?a/1000:sayMoney(a))+" до "+sayMoney(b);return "штраф "+sayMoney(b||a)}
