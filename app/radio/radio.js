@@ -15,7 +15,7 @@
     "время дата какое число сегодня который час московское сколько осталось прошло доклад сводка миранда миранды зачитай права отставить отмена отбой помощь " +
     "мера избрана задержание окончено новое переключи переключись выбери первое второе третье пятое следующее задержание " +
     "имя зовут фамилия ук ак дк пк кодекс кодекса уголовный уголовного административный административного дорожный по калькулятор срок какой итог " +
-    "начато начинаю оформляю подтверждаю первая вторая третья " +
+    "начато начинаю оформляю подтверждаю первая вторая третья кусты кустами семечки семечками семенами штук штуки штука ещё " +
     "ноль один одна два две три четыре пять шесть семь восемь девять десять одиннадцать двенадцать тринадцать четырнадцать пятнадцать шестнадцать " +
     "семнадцать восемнадцать девятнадцать двадцать тридцать сорок пятьдесят шестьдесят семьдесят восемьдесят девяносто сто двести триста четыреста " +
     "пятьсот шестьсот семьсот восемьсот девятьсот тысяча тысячи тысяч").split(" ");
@@ -122,6 +122,11 @@
   /* ───── звуки рации ───── */
   var AC = null;
   function ac() { if (!AC) AC = new AudioContext(); return AC; }
+  function keyTick() { // щелчок клавиши: видно и слышно, что нажатие дошло
+    if (!S.opts.sfx || !vol) return;
+    try { var a = ac(), t = a.currentTime, g = a.createGain(), o = a.createOscillator(); o.type = "square"; o.frequency.value = 2100;
+      g.gain.setValueAtTime(vol / 100 * 0.12, t); g.gain.setValueAtTime(0, t + 0.025); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + 0.03); } catch (e) {}
+  }
   function sfx(kind) {
     if (!S.opts.sfx || !vol) return Promise.resolve();
     return new Promise(function (ok) {
@@ -174,7 +179,7 @@
   function scheduleHide() {
     clearTimeout(S.hideT);
     if (S.opts.pin || S.over || S.state !== "idle" || S.speaking) return;
-    S.hideT = setTimeout(function () { if (!S.over && S.state === "idle" && !S.speaking && !S.opts.pin) api.hide(); }, Math.max(5, +S.opts.hide || 20) * 1000);
+    S.hideT = setTimeout(function () { if (!S.over && S.state === "idle" && !S.speaking && !S.opts.pin && !dragging) api.hide(true); }, Math.max(5, +S.opts.hide || 20) * 1000);
   }
   document.addEventListener("mouseenter", function () { S.over = true; clearTimeout(S.hideT); });
   document.addEventListener("mouseleave", function () { S.over = false; scheduleHide(); });
@@ -278,26 +283,35 @@
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest("[data-act]"); if (!b) return;
     var a = b.getAttribute("data-act");
+    keyTick(); clearTimeout(S.hideT);
     if (a === "ptt-toggle") { if (S.state === "listening") stop(); else start(); return; }
     if (a === "hide") { api.hide(); return; }
-    if (a === "det") { api.open("timer"); return; }
-    if (a === "menu") { api.open("radio"); return; }
-    if (a === "vol") { vol = vol >= 100 ? 70 : vol >= 70 ? 40 : vol >= 40 ? 0 : 100; lset("radio-vol", vol); $("volT").textContent = vol ? "ГР " + vol : "ТИХО"; return; }
-    if (a === "lcd") { lcd = (lcd + 1) % 3; lset("radio-lcd", lcd); applyLcd(); return; }
+    if (a === "det") { msg("РАЦИЯ", "Открываю задержания в программе."); api.open("timer"); scheduleHide(); return; }
+    if (a === "menu") { msg("РАЦИЯ", "Открываю раздел «Рация»."); api.open("radio"); scheduleHide(); return; }
+    if (a === "vol") { vol = vol >= 100 ? 70 : vol >= 70 ? 40 : vol >= 40 ? 0 : 100; lset("radio-vol", vol); $("volT").textContent = vol ? "ГР " + vol : "ТИХО"; msg("РАЦИЯ", vol ? "Громкость " + vol + "%." : "Звук выключен."); if (vol) sfx("beep"); scheduleHide(); return; }
+    if (a === "lcd") { lcd = (lcd + 1) % 3; lset("radio-lcd", lcd); applyLcd(); msg("РАЦИЯ", "Экран: " + ["зелёный", "янтарный", "ночной"][lcd] + "."); scheduleHide(); return; }
     if (a === "up" || a === "down") {
-      var T = (S.data && S.data.timers) || []; if (!T.length) return;
+      var T = (S.data && S.data.timers) || [];
+      if (T.length < 2) { msg("РАЦИЯ", T.length ? "Задержание одно, переключать не на что." : "Задержаний нет."); scheduleHide(); return; }
       var i = Math.max(0, T.findIndex(function (t) { return t.id === S.data.sel; })), j = (i + (a === "up" ? -1 : 1) + T.length) % T.length;
       S.data.sel = T[j].id; renderDets(); api.select(T[j].id); return;
     }
   });
-  // перетаскивание за корпус
-  var body = $("body"), dragging = false;
-  body.addEventListener("pointerdown", function (e) {
+  // перетаскивание за корпус: начинается, только когда мышь с зажатой кнопкой сдвинулась на несколько пикселей,
+  // поэтому нажатие рядом с кнопкой не превращается в перетаскивание. Окно двигает main по положению курсора.
+  var body = $("body"), dragging = false, press = null;
+  body.addEventListener("mousedown", function (e) {
     if (e.button !== 0 || (e.target.closest && e.target.closest("button,[data-act],.lcdw"))) return;
-    dragging = true; body.classList.add("drag"); try { body.setPointerCapture(e.pointerId); } catch (x) {} api.dragStart(); e.preventDefault();
+    press = { x: e.screenX, y: e.screenY }; e.preventDefault();
   });
-  function endDrag() { if (!dragging) return; dragging = false; body.classList.remove("drag"); api.dragEnd(); }
-  body.addEventListener("pointerup", endDrag); body.addEventListener("pointercancel", endDrag); body.addEventListener("lostpointercapture", endDrag);
+  window.addEventListener("mousemove", function (e) {
+    if (!press || dragging) return;
+    if (!(e.buttons & 1)) { press = null; return; }
+    if (Math.abs(e.screenX - press.x) + Math.abs(e.screenY - press.y) < 5) return;
+    dragging = true; body.classList.add("drag"); api.dragStart();
+  });
+  function endDrag() { press = null; if (!dragging) return; dragging = false; body.classList.remove("drag"); api.dragEnd(); scheduleHide(); }
+  window.addEventListener("mouseup", endDrag); window.addEventListener("blur", endDrag);
   body.addEventListener("dblclick", function (e) { if (!(e.target.closest && e.target.closest("button,[data-act]"))) api.resetPos(); });
 
   api.onState(function (d) { S.data = d || {}; renderDets(); });

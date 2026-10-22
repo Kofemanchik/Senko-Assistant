@@ -123,8 +123,14 @@ function registerHotkey() {
 }
 
 // ───── перетаскивание ─────
+function cursorOver() {
+  if (!live() || !win.isVisible()) return false;
+  const c = screen.getCursorScreenPoint(), b = win.getBounds();
+  return c.x >= b.x && c.x < b.x + b.width && c.y >= b.y && c.y < b.y + b.height;
+}
 function tickDrag() {
   if (!drag || !live()) { stopDrag(false); return; }
+  if (Date.now() - drag.t0 > 20000) { stopDrag(true); return; } // страховка: отпускание мыши не дошло — не таскаем окно бесконечно
   const c = screen.getCursorScreenPoint();
   const p = clampPos(drag.origin.x + c.x - drag.start.x, drag.origin.y + c.y - drag.start.y, c);
   if (p.x === drag.last.x && p.y === drag.last.y) return;
@@ -135,7 +141,7 @@ function startDrag() {
   if (!live()) return;
   stopDrag(false);
   const b = win.getBounds();
-  drag = { origin: { x: b.x, y: b.y }, start: screen.getCursorScreenPoint(), last: { x: b.x, y: b.y }, moved: false, timer: setInterval(tickDrag, 15) };
+  drag = { t0: Date.now(), origin: { x: b.x, y: b.y }, start: screen.getCursorScreenPoint(), last: { x: b.x, y: b.y }, moved: false, timer: setInterval(tickDrag, 15) };
 }
 function stopDrag(save) {
   if (!drag) return;
@@ -180,7 +186,12 @@ function init(c) {
     catch (x) { return { ok: false }; }
   });
   ipcMain.on("radio:select", (e, id) => { if (own(e)) page("SA_radioSel", +id || 0); });
-  ipcMain.on("radio:hide", (e) => { if (own(e)) hide(); });
+  // автоскрытие: пока курсор над рацией, не прячем (события мыши у окна без фокуса в Windows приходят не всегда)
+  ipcMain.on("radio:hide", (e, auto) => {
+    if (!own(e)) return;
+    if (auto && (drag || cursorOver())) { send("radio:cmd", "shown"); return; }
+    hide();
+  });
   ipcMain.on("radio:open", (e, t) => { if (own(e)) ctx.openTarget(clip(t, 40) || "radio"); });
   ipcMain.on("radio:drag-start", (e) => { if (own(e)) startDrag(); });
   ipcMain.on("radio:drag-end", (e) => { if (own(e)) stopDrag(true); });

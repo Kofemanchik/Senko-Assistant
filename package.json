@@ -1,7 +1,7 @@
 {
   "name": "senko-assistant",
   "productName": "Senko Assistant",
-  "version": "2.6.1",
+  "version": "2.6.2",
   "description": "Senko Assistant — памятка по законодательству Majestic RP Boston",
   "main": "main.js",
   "author": "Hanami Senko | Senko Corporation",

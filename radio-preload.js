@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld("senkoRadio", {
   text: (t, alt) => ipcRenderer.invoke("radio:text", String(t || ""), String(alt || "")),
   stt: (b64) => ipcRenderer.invoke("radio:stt", String(b64 || "")),
   select: (id) => ipcRenderer.send("radio:select", +id || 0),
-  hide: () => ipcRenderer.send("radio:hide"),
+  hide: (auto) => ipcRenderer.send("radio:hide", !!auto),
   open: (t) => ipcRenderer.send("radio:open", String(t || "")),
   dragStart: () => ipcRenderer.send("radio:drag-start"),
   dragEnd: () => ipcRenderer.send("radio:drag-end"),

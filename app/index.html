@@ -6228,7 +6228,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.6.1";
+var APP_VER="2.6.2";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6317,6 +6317,10 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.6.2",d:"22.10.2026",items:[
+  ["🌿","Кусты и семечки голосом","«Найдено 3 куста и 5 семечек» вносит в калькулятор оба вида. Если сказать «кусты с семечками» без числа, диспетчер спросит, сколько. «Ещё 7 пакетиков» прибавляет к уже найденному, а новое задержание начинается с пустого калькулятора наркотиков."],
+  ["📻","Рация надёжнее","Рация не прячется, пока над ней курсор. Перетаскивание начинается, только если сдвинуть мышь с зажатой кнопкой, поэтому нажатие мимо кнопки больше не «хватает» рацию. Каждая кнопка щёлкает и пишет на экране, что сделала. Надписи ЗАДЕРЖ, ПРД и МЕНЮ на экране тоже нажимаются."]
+ ]},
  {v:"2.6.1",d:"22.10.2026",items:[
   ["🎯","Точное распознавание рации","Рация распознаёт речь онлайн через Whisper: имена, номера статей, части и паспорта понимаются намного точнее. Без интернета рация, как раньше, распознаёт офлайн. Выключается в «Рация» → «Диспетчер» → «Точное распознавание»."],
   ["📻","Диспетчер понимает больше","Фраза «задержание начато Hanami Senko, статья 12.8 часть 1» больше не путает имя, «часть первая» понимается как ч.1. Если «мера избрана» прозвучит в первые 2 минуты задержания, диспетчер переспросит, а не остановит таймер."]
@@ -8058,7 +8062,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.6.1";
+var APP_VER="2.6.2";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
@@ -12738,10 +12742,17 @@ function nameAfter(T,from){var W=[],i=from;while(i<T.length&&T[i].t==="w"&&HUMAN
 function passOf(T){for(var i=0;i<T.length;i++){if(T[i].t==="w"&&/^(паспорт|статик|айди|id)/.test(T[i].s)){var j=i+1,s="";while(T[j]&&T[j].t==="w"&&/^(номер|номером|n|№)$/.test(T[j].s))j++;while(T[j]&&T[j].t==="num"&&s.length<9){s+=T[j].s;j++}if(s)return s}}return ""}
 
 /* ---------- наркотики ---------- */
-function drugsOf(T){var o={g:0,b:0,s:0,p:0},hit=false;
- for(var i=0;i<T.length;i++){var t=T[i];if(t.t!=="num")continue;var w=T[i+1]&&T[i+1].t==="w"?T[i+1].s:"";
-  if(w&&!/^(куст|семеч|семян|семя|семен|пакет|грамм|гр$|г$)/.test(w)&&T[i+2]&&T[i+2].t==="w"&&/^(куст|семеч|семян|семя|семен|пакет|грамм)/.test(T[i+2].s))w=T[i+2].s; // «7 пакетиков наркотиков», «2 больших куста»
-  if(/^куст/.test(w)){o.b+=t.v;hit=true}else if(/^(семеч|семян|семя|семен)/.test(w)){o.s+=t.v;hit=true}else if(/^пакет/.test(w)){o.p+=t.v;hit=true}else if(/^(грамм|гр$|г$)/.test(w)){o.g+=t.v;hit=true}}
+var DRK=[["b",/^куст/],["s",/^(семеч|семян|семя$|семен)/],["p",/^пакет/],["g",/^(грамм|гр$|г$)/]];
+function drugKind(w){for(var k=0;k<DRK.length;k++)if(DRK[k][1].test(w))return DRK[k][0];return ""}
+// Что найдено: количество по видам. o.has — названные виды (их значения заменяют прежние, остальные виды в калькуляторе сохраняются),
+// o.ask — вид, названный без количества во множественном числе («кусты с семечками»): его количество нужно переспросить
+function drugsOf(T){var o={g:0,b:0,s:0,p:0,has:{},ask:""},hit=false,used={};
+ for(var i=0;i<T.length;i++){var t=T[i];if(t.t!=="num")continue;var w=T[i+1]&&T[i+1].t==="w"?T[i+1].s:"",at=i+1;
+  if(w&&!drugKind(w)&&T[i+2]&&T[i+2].t==="w"&&drugKind(T[i+2].s)){w=T[i+2].s;at=i+2} // «7 пакетиков наркотиков», «2 больших куста»
+  var k=drugKind(w);if(k){o[k]+=t.v;o.has[k]=1;used[at]=1;hit=true}}
+ for(var j=0;j<T.length;j++){if(used[j]||T[j].t!=="w")continue;var k2=drugKind(T[j].s);if(!k2||k2==="g"||o.has[k2])continue;
+  if(/^(куст|семечко|семя|пакетик|пакет)$/.test(T[j].s)){o[k2]=1;o.has[k2]=1;hit=true} // «найден куст»: один
+  else if(hit||/^(найден|изъят|обнаруж|нашли|при)/.test((T[0]&&T[0].s)||"")){o.ask=o.ask||k2;hit=true}}
  return hit?o:null}
 function drugWords(o){var L=[];if(o.b)L.push(o.b+" "+plural(o.b,["куст","куста","кустов"]));if(o.p)L.push(o.p+" "+plural(o.p,["пакетик","пакетика","пакетиков"]));if(o.s)L.push(o.s+" "+plural(o.s,["семечко","семечка","семечек"]));if(o.g)L.push(o.g+" "+plural(o.g,["грамм","грамма","граммов"]));
  return L.length>1?L.slice(0,-1).join(", ")+" и "+L[L.length-1]:L[0]||""}
@@ -12817,7 +12828,7 @@ function cmd(text){
   var at=-1;T.some(function(x,i){if(x.t==="w"&&/^(задерж|оформля)/.test(x.s)){at=i;return true}return false});
   var nm=at>=0?nameAfter(T,at+1):"",ps=passOf(T),refs=refsOf(T,false),ids=idsOf(refs);
   snap("Начало задержания");
-  var keep=JSON.stringify(basket);basket={};
+  var keep=JSON.stringify(basket);basket={};if(window.SA_drug)SA_drug.set({g:0,b:0,s:0,p:0});
   var nt=startTm();if(!nt){basket=JSON.parse(keep);return R("Никак нет. Уже "+(window.TM_MAX||10)+" задержаний. Отправьте одно в архив.")}
   nt.nick=nm;nt.st=ps;nt.arts="";var added=addArts(nt,ids.ids);ev(nt,"radio","Начато голосом диспетчеру");saveTm();refreshAll();
   var parts=[],fem=/(задержана|гражданка|гражданку|женщина|подозреваемая)/.test(low);if(nm)parts.push((fem?"гражданка ":"гражданин ")+nm);if(ps)parts.push("паспорт "+ps.split("").join(" "));if(ids.ids.length)parts.push(ids.ids.map(sayLab).join(", "));
@@ -12834,14 +12845,19 @@ function cmd(text){
  // наркотики
  var dg=drugsOf(T);
  if(dg){
-  snap("Наркотики");var D0=window.SA_drug?SA_drug.get():{g:0,b:0,s:0,p:0};var D1={g:dg.g,b:dg.b,s:dg.s,p:dg.p};if(window.SA_drug)SA_drug.set(D1);
+  snap("Наркотики");var D1=window.SA_drug?SA_drug.get():{g:0,b:0,s:0,p:0};var more=/(^|\s)(еще|плюс|также|дополнительно)(\s|$)/.test(low); // «ещё 7 пакетиков» прибавляет, иначе названный вид заменяется
+  ["g","b","s","p"].forEach(function(k){if(dg.has[k])D1[k]=more?D1[k]+dg[k]:dg[k]});if(window.SA_drug)SA_drug.set(D1);
+  var ASKW={b:"кустов",s:"семечек",p:"пакетиков"},askT=dg.ask?" Сколько "+ASKW[dg.ask]+"? Назовите число, например: 5 "+ASKW[dg.ask]+".":"";
+  if(!dg.has.b&&!dg.has.s&&!dg.has.p&&!dg.has.g)return R("Принято. Сколько "+ASKW[dg.ask]+"? Назовите число, например: 5 "+ASKW[dg.ask]+".","Сколько "+ASKW[dg.ask]+"?");
+  dg=D1;
   var tot=window.SA_drug?SA_drug.total(D1):dg.g+dg.b*5+dg.s*2+dg.p,art=tot>25?"uk13.2.1-":tot>3?"uk13.2-":"",addd=[];
   if(art==="uk13.2.1-"&&BYID["uk13.2-"]){delete basket["uk13.2-"];if(t&&!t.decidedAt)t.arts=String(t.arts||"").split(", ").filter(function(a){return a&&a!==lab("uk13.2-")}).join(", ")} // больше 25 г: 13.2.1 вместо 13.2
-  if(art&&t&&!t.decidedAt&&BYID[art]){addd=addArts(t,[art]);saveTm()}else if(art&&BYID[art]){basket[art]=1;save()}
+  var inDet=!!(art&&t&&!t.decidedAt&&BYID[art]);
+  if(inDet){addd=addArts(t,[art]);saveTm()}else if(art&&BYID[art]){basket[art]=1;save()}
   refreshAll();
   var one=(dg.g?1:0)+(dg.b?1:0)+(dg.s?1:0)+(dg.p?1:0)===1&&dg.g;
-  return R("Принято. "+drugWords(dg)+(one?"":", итого "+tot+" "+plural(tot,["грамм","грамма","граммов"]))+". "+(tot<=3?"До трёх граммов: изъятие без ответственности.":(art==="uk13.2.1-"?"Статья 13.2.1 УК":"Статья 13.2 УК")+(addd.length?" добавлена в задержание.":" внесена в калькулятор.")),
-   "Наркотики: "+drugWords(dg)+" = "+tot+" г"+(art?" · "+lab(art):""))}
+  return R("Принято. "+drugWords(dg)+(one?"":", итого "+tot+" "+plural(tot,["грамм","грамма","граммов"]))+". "+(tot<=3?"До трёх граммов: изъятие без ответственности.":(art==="uk13.2.1-"?"Статья 13.2.1 УК":"Статья 13.2 УК")+(inDet?(addd.length?" добавлена в задержание.":" уже в задержании."):" внесена в калькулятор."))+askT,
+   "Наркотики: "+drugWords(dg)+" = "+tot+" г"+(art?" · "+lab(art):"")+(askT?" · сколько "+askT.split(" ")[2]:""))}
  // статьи в текущее задержание
  var refs2=refsOf(T,/(стать|^ст\b)/.test(low));
  if(refs2.length){
