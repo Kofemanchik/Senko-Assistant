@@ -101,6 +101,9 @@ ipcRenderer.on("senko:cfg", (_e, state) => {
 
 const openListeners = new Set();
 ipcRenderer.on("senko:open", (_e, target) => { openListeners.forEach((f) => { try { f(String(target || "")); } catch (e) {} }); });
+// 2.8: галочка блокнота, нажатая в мини-окне (-1 — открыть блокнот)
+const padListeners = new Set();
+ipcRenderer.on("senko:pad-check", (_e, i) => { padListeners.forEach((f) => { try { f(Number.isInteger(i) ? i : -1); } catch (e) {} }); });
 const levelListeners = new Set();
 ipcRenderer.on("senko:voice-level", (_e, v) => { levelListeners.forEach((f) => { try { f(v || {}); } catch (e) {} }); });
 const lawsListeners = new Set();
@@ -169,6 +172,7 @@ contextBridge.exposeInMainWorld("senkoApp", {
   onVoiceLevel: (f) => { if (typeof f === "function") levelListeners.add(f); },
   openArg: () => ipcRenderer.sendSync("senko:open-arg"),
   onOpen: (f) => { if (typeof f === "function") openListeners.add(f); },
+  onPadCheck: (f) => { if (typeof f === "function") padListeners.add(f); }, // 2.8
   shortcut: (target, name) => ipcRenderer.invoke("senko:shortcut", { target: String(target || ""), name: String(name || "") }),
   // 2.2: размер данных и «Сохранить сейчас», профили окна «в игре» / «за столом»
   saveInfo: () => ipcRenderer.invoke("senko:save-info"),

@@ -37,6 +37,14 @@
   .calc b { color: #f2f5fa; font-size: 13px; }
   .empty { padding: 8px 4px 4px; color: #9a948b; font-size: 12px; }
   .more { margin-top: 5px; color: #9a948b; font-size: 12px; text-align: center; }
+  .pad { margin-top: 7px; padding-top: 7px; border-top: 1px solid rgba(255,255,255,.1); font-size: 12.5px; }
+  .pad .ph { display: flex; justify-content: space-between; color: #b9b2a8; font-size: 12px; margin-bottom: 3px; cursor: pointer; }
+  .pad .ln { padding: 2px 0; overflow-wrap: anywhere; color: #e7e1d8; }
+  .pad .ci { display: flex; gap: 6px; align-items: flex-start; padding: 2px 4px; margin: 0 -4px; border-radius: 6px; cursor: pointer; }
+  .pad .ci:hover { background: rgba(255,255,255,.07); }
+  .pad .ci i { flex: none; font-style: normal; width: 14px; height: 14px; margin-top: 1px; border: 1.5px solid #b9b2a8; border-radius: 4px; font-size: 11px; line-height: 11px; text-align: center; }
+  .pad .ci.on i { background: var(--ac); border-color: var(--ac); color: #111; }
+  .pad .ci.on span { text-decoration: line-through; color: #9a948b; }
 </style>
 </head>
 <body>
@@ -49,6 +57,7 @@
   </div>
   <div id="list"></div>
   <div id="calc" class="calc" style="display:none" title="Открыть калькулятор"></div>
+  <div id="pad" class="pad" style="display:none"></div>
 </div>
 <script>
 (function () {
@@ -90,6 +99,7 @@
       if (k.fine) calc.appendChild(el("span", null, "Штраф: ")).appendChild(el("b", null, "до " + money(k.fine)));
       calc.style.display = "";
     } else calc.style.display = "none";
+    padRender();
     tick(); fitSoon();
   }
   function tick() {
@@ -100,6 +110,25 @@
       n.ck.textContent = t.decidedAt ? "мера · " + fmt(t.decidedAt) : (left <= 0 ? "+" + fmt(-left) : fmt(left)) + (t.pausedAt ? " ⏸" : "");
       n.bar.style.width = Math.min(100, e / LIM * 100) + "%";
     });
+  }
+  // 2.8: блокнот: строки и пункты с галочками, клик по пункту отмечает его в программе
+  var pad = document.getElementById("pad");
+  function padRender() {
+    var p = S.pad;
+    if (!p || !p.lines || !api.padCheck) { pad.style.display = "none"; return; }
+    pad.textContent = "";
+    var h = el("div", "ph"); h.appendChild(el("span", null, "Блокнот")); h.appendChild(el("span", null, p.rem ? "⏰ " + p.rem : "открыть ↗"));
+    h.onclick = function () { api.padCheck(-1); };
+    pad.appendChild(h);
+    p.lines.forEach(function (x) {
+      if (x.ck == null) { pad.appendChild(el("div", "ln", x.t)); return; }
+      var c = el("div", "ci" + (x.ck ? " on" : "")); c.appendChild(el("i", null, x.ck ? "✓" : "")); c.appendChild(el("span", null, x.t || "пункт"));
+      c.onclick = function () { api.padCheck(x.i); };
+      pad.appendChild(c);
+    });
+    if (p.more) pad.appendChild(el("div", "more", "и ещё " + p.more + " строк в программе"));
+    if (!p.lines.length) pad.appendChild(el("div", "empty", "Блокнот пуст."));
+    pad.style.display = "";
   }
   api.onState(function (d) {
     S = d || {};

@@ -1149,7 +1149,7 @@ ipcMain.handle("senko:sync-rebase", async (e) => {
 // Прогресс, рейтинг недели, смены и контрольные тесты (этап 4): только перечисленные действия сервера
 const PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password", "ads",
   "status", "beta", "hooks", "events", "ideas", "patrol", // 2.4
-  "ai_dict", "ai_hist", "ai_check"]; // 2.7
+  "ai_dict", "ai_hist", "ai_check", "colleagues", "handoff"]; // 2.7, 2.8: коллеги, передача задержанного
 // 2.3: список микрофонов и проверка уровня для настроек (микрофон доступен только окну оверлея)
 ipcMain.handle("senko:voice-mics", async (e) => (fromMain(e) ? voice.mics() : { ok: false, error: "Недоступно." }));
 ipcMain.handle("senko:voice-test", async (e, on) => (fromMain(e) ? voice.test(!!on) : { ok: false, error: "Недоступно." }));
@@ -1684,6 +1684,11 @@ app.whenReady().then(() => {
       if (!win || win.isDestroyed()) return;
       showWindow();
       if (OPEN_RE.test(t)) win.webContents.send("senko:open", t);
+    },
+    padCheck: (i) => { // 2.8: блокнот в мини-окне: галочка или -1 — открыть блокнот
+      if (!win || win.isDestroyed()) return;
+      if (i < 0) showWindow();
+      win.webContents.send("senko:pad-check", i);
     }
   });
   radio.init({

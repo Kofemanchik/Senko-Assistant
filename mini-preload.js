@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld("senkoMini", {
   fit: (h) => ipcRenderer.send("mini:fit", +h || 0),
   width: () => ipcRenderer.send("mini:width"),
   dragStart: () => ipcRenderer.send("mini:drag-start"),
-  dragEnd: () => ipcRenderer.send("mini:drag-end")
+  dragEnd: () => ipcRenderer.send("mini:drag-end"),
+  padCheck: (i) => ipcRenderer.send("mini:pad-check", Number.isInteger(i) ? i : -1) // 2.8: галочка в блокноте или -1 — открыть блокнот
 });

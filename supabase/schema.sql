@@ -496,3 +496,19 @@ create table if not exists public.ai_gold (
 alter table public.ai_dict enable row level security;
 alter table public.ai_gold enable row level security;
 revoke all on table public.ai_dict, public.ai_gold from anon, authenticated;
+
+-- 2.8: должность и «о себе» в профиле, время смены организации (24 часа без профилей коллег), аватары для профилей коллег
+alter table public.profiles add column if not exists post text not null default '';
+alter table public.profiles add column if not exists bio text not null default '';
+alter table public.profiles add column if not exists hide_discord boolean not null default false;
+alter table public.profiles add column if not exists org_at timestamptz;
+create table if not exists public.avatars (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  img text not null, updated_at timestamptz not null default now());
+alter table public.avatars enable row level security;
+revoke all on table public.avatars from anon, authenticated;
+create table if not exists public.handoffs (
+  code text primary key, from_id uuid not null references public.profiles(id) on delete cascade,
+  data jsonb not null, created_at timestamptz not null default now(), expires_at timestamptz not null);
+alter table public.handoffs enable row level security;
+revoke all on table public.handoffs from anon, authenticated;

@@ -124,6 +124,7 @@ function init(c) {
   ipcMain.on("mini:fit", (e, h) => { if (own(e)) fit(h); });
   ipcMain.on("mini:drag-start", (e) => { if (own(e)) startDrag(); });
   ipcMain.on("mini:drag-end", (e) => { if (own(e)) stopDrag(true); });
+  ipcMain.on("mini:pad-check", (e, i) => { if (own(e) && ctx.padCheck) ctx.padCheck(Number.isInteger(i) && i >= -1 && i < 5000 ? i : -1); });
   ipcMain.on("mini:width", (e) => {
     if (!own(e)) return;
     const cfg = ctx.getCfg();

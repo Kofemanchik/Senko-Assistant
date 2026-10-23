@@ -162,7 +162,7 @@ function card(p, viewer) {
     `👤 <b>${esc(p.login)}</b> — ${RANKS[p.rank] || p.rank}${p.banned ? " 🚫 ЗАБЛОКИРОВАН" : ""}`,
     `Ник: ${esc(p.nick)}`,
     `Статик: <code>${esc(p.static_id)}</code>`,
-    `Организация: ${esc(p.org)}`,
+    `Организация: ${esc(p.org)}${p.post ? " · " + esc(p.post) : ""}`,
     `Роль в игре: ${GAME_ROLES[gameRole(p)] || gameRole(p)}`,
     `Дискорд: ${esc(p.discord)}`,
     `Номер в игре: ${esc(p.phone || "—")}`,
@@ -172,6 +172,7 @@ function card(p, viewer) {
     L.push(`Telegram ID: ${p.tg_id == null ? "—" : p.tg_id}`);
     L.push(`Принял документы: ${p.legal_version || "—"}`);
   }
+  if (p.bio) L.push(`О себе: ${esc(p.bio)}`);
   if (p.approval && p.approval !== "ok") L.push(p.approval === "pending" ? "⏳ Заявка ждёт подтверждения руководства" : "❌ Заявка отклонена руководством");
   L.push(`Регистрация: ${fmtDate(p.created_at)}`);
   L.push(`Был в сети: ${fmtDate(p.last_seen)}`);
@@ -207,6 +208,9 @@ function pub(p) {
     phone: p.phone,
     needLegal: p.legal_version !== LEGAL_VERSION,
     beta: !!p.beta,
+    post: p.post || "",
+    bio: p.bio || "",
+    hideDiscord: !!p.hide_discord,
   };
 }
 
@@ -499,7 +503,8 @@ async function updateProfile(b) {
   const sql = db();
   const orgChanged = v.org !== p.org;
   const [np] = await sql`update profiles set nick = ${v.nick}, static_id = ${v.st}, discord = ${v.discord}, telegram = ${v.telegram}, phone = ${v.phone},
-                           org = ${v.org}, dept = ${orgChanged ? v.org : p.dept}
+                           org = ${v.org}, dept = ${orgChanged ? v.org : p.dept},
+                           org_at = ${orgChanged ? new Date() : p.org_at || null}
                          where id = ${p.id} returning *`;
   await audit(p.login, "profile_update", p.login, { changes });
   // Уведомление владельцу о каждой смене — сбой Telegram не должен ломать сохранение
@@ -812,7 +817,7 @@ async function api(req) {
     return J(fail("Некорректный запрос."), 400);
   }
   if (!b || typeof b !== "object") return J(fail("Некорректный запрос."), 400);
-  if (b.action !== "sync" && b.action !== "xfer" && !((b.action === "ai_ask" || b.action === "panel") && raw.length <= 40000) && !(b.action === "panel" && b.op === "ads_save" && raw.length <= 700000) && !(b.action === "bug_report" && raw.length <= 700000) && !(b.action === "stt" && raw.length <= 1200000) && !(b.action === "share" && raw.length <= 40000) && raw.length > 8192) return J(fail("Слишком большой запрос."), 413);
+  if (b.action !== "sync" && b.action !== "xfer" && !((b.action === "ai_ask" || b.action === "panel") && raw.length <= 40000) && !(b.action === "panel" && b.op === "ads_save" && raw.length <= 700000) && !(b.action === "bug_report" && raw.length <= 700000) && !(b.action === "stt" && raw.length <= 1200000) && !(b.action === "share" && raw.length <= 40000) && !(b.action === "colleagues" && raw.length <= 40000) && !(b.action === "handoff" && raw.length <= 70000) && raw.length > 8192) return J(fail("Слишком большой запрос."), 413);
   const ip = req.headers.get("cf-connecting-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
   switch (b.action) {
     case "register":
@@ -869,6 +874,10 @@ async function api(req) {
       return J(await aiHist(b));
     case "ai_check":
       return J(await aiCheck(b));
+    case "colleagues":
+      return J(await colleaguesApi(b));
+    case "handoff":
+      return J(await handoffApi(b));
     case "sync_reset":
       return J(await syncReset(b));
     case "logout": {
@@ -2057,6 +2066,144 @@ async function panelAi(b, a) {
     return { ok: true };
   }
   return fail("Неизвестное действие панели.");
+}
+// ───────────── 2.8: коллеги — профили своего ведомства ─────────────
+// Видны только люди своей организации. После смены организации 24 часа нельзя смотреть новых коллег, и они не видят тебя.
+const COL_LOCK_MS = 24 * 3600e3;
+const colLocked = (p) => !!(p.org_at && Date.now() - new Date(p.org_at).getTime() < COL_LOCK_MS);
+const colOpensAt = (p) => new Date(new Date(p.org_at).getTime() + COL_LOCK_MS).toISOString();
+// Статистика пользователя из синхронизации: опыт, задержания, тесты (как в «Моём прогрессе»)
+async function statsOf(ids) {
+  const out = {};
+  for (const id of ids) out[id] = { xp: 0, det: 0, det7: 0, tests: 0, sum: 0, last: [] };
+  if (!ids.length) return out;
+  const rows = await db()`select user_id, kind, data, u from sync_items where user_id in ${db()(ids)} and not deleted and kind in ('xp', 'tests', 'thist')`;
+  const wk = Date.now() - 7 * 864e5;
+  for (const r of rows) {
+    const o = out[r.user_id], d = r.data;
+    if (r.kind === "xp") o.xp = Math.max(o.xp, Math.floor(+d) || 0);
+    else if (r.kind === "tests" && d) { o.tests++; o.last.push({ t: +d.t || 0, p: +d.p || 0 }); }
+    else if (r.kind === "thist") { o.det++; if (((d && +d.end) || Number(r.u)) >= wk) o.det7++; }
+  }
+  const adj = await xpAdjOf(ids);
+  for (const id of ids) {
+    const o = out[id];
+    o.xp = Math.max(0, o.xp + (adj[id] || 0));
+    const L = o.last.sort((a, c) => c.t - a.t).slice(0, 10);
+    o.avg_p = L.length ? Math.round(L.reduce((x, t) => x + t.p, 0) / L.length) : null;
+    delete o.last; delete o.sum;
+  }
+  return out;
+}
+const AVA_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+// 2.8: передача задержанного коллеге — код из 6 цифр, действует 30 минут, срабатывает один раз
+const HAND_MIN = 30, HAND_BYTES = 60000;
+async function handoffApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!(await flagFor(p, "det28xfer").catch(() => false))) return fail("Передача пока недоступна.", { code: "off" });
+  const sql = db();
+  const op = String(b.op || "");
+  if (op === "put") {
+    if (!(await hit(`hp:${p.id}`, 20, 3600))) return fail(RATE_MSG, { code: "rate" });
+    if (!b.data || typeof b.data !== "object" || Array.isArray(b.data)) return fail("Нет данных задержания.");
+    const json = JSON.stringify(b.data);
+    if (json.length > HAND_BYTES) return fail("В задержании слишком много записей для передачи. Сократите журнал или заметки.");
+    await sql`delete from handoffs where expires_at < now()`;
+    let code = "";
+    for (let i = 0; i < 6 && !code; i++) {
+      const a = new Uint32Array(1);
+      crypto.getRandomValues(a);
+      const c = String(100000 + (a[0] % 900000));
+      const r = await sql`insert into handoffs (code, from_id, data, expires_at) values (${c}, ${p.id}, ${json}::text::jsonb, now() + make_interval(mins => ${HAND_MIN}))
+                          on conflict (code) do nothing returning code`;
+      if (r.length) code = c;
+    }
+    if (!code) return fail("Не удалось получить код. Попробуйте ещё раз.");
+    return { ok: true, code, min: HAND_MIN };
+  }
+  if (op === "get") {
+    if (!(await hit(`hg:${p.id}`, 10, 900))) return fail(RATE_MSG, { code: "rate" });
+    const code = String(b.code || "").replace(/\D/g, "");
+    if (code.length !== 6) return fail("Введите код из 6 цифр.");
+    const [r] = await sql`delete from handoffs where code = ${code} and expires_at > now() returning data, from_id`;
+    if (!r) return fail("Код не подошёл или устарел: код действует " + HAND_MIN + " минут и срабатывает один раз.");
+    const [f] = await sql`select nick, login, org from profiles where id = ${r.from_id}`;
+    return { ok: true, data: r.data, from: f ? f.nick || f.login : "", org: f ? f.org : "" };
+  }
+  return fail("Неизвестное действие.");
+}
+
+async function colleaguesApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!(await flagFor(p, "col28").catch(() => false))) return fail("Раздел пока недоступен.", { code: "off" });
+  const sql = db();
+  const op = String(b.op || "list");
+  if (op === "save") {
+    // своя должность, «о себе», скрыть Discord, аватар (уменьшенная копия из программы)
+    if (!(await hit(`col:${p.id}`, 30, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const post = b.post == null ? p.post || "" : clean(b.post, 40);
+    const bio = b.bio == null ? p.bio || "" : String(b.bio).replace(/\r/g, "").replace(/[\u0000-\u0009\u000b-\u001f]/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, 300);
+    const bad = await blacklisted(post, bio);
+    if (bad) return fail("В должности или в «о себе» есть недопустимое слово. Уберите его.");
+    const hide = b.hideDiscord == null ? !!p.hide_discord : !!b.hideDiscord;
+    const [np] = await sql`update profiles set post = ${post}, bio = ${bio}, hide_discord = ${hide} where id = ${p.id} returning *`;
+    if (b.avatar !== undefined) {
+      const img = String(b.avatar || "");
+      if (!img) await sql`delete from avatars where user_id = ${p.id}`;
+      else if (img.length > 16000 || !AVA_RE.test(img)) return fail("Фото не подошло: нужна картинка до 12 КБ.");
+      else await sql`insert into avatars (user_id, img) values (${p.id}, ${img}) on conflict (user_id) do update set img = excluded.img, updated_at = now()`;
+    }
+    return { ok: true, user: pub(np) };
+  }
+  if (op === "mine") {
+    const [av] = await sql`select updated_at from avatars where user_id = ${p.id}`;
+    return { ok: true, post: p.post || "", bio: p.bio || "", hideDiscord: !!p.hide_discord, avaAt: av ? av.updated_at : null, locked: colLocked(p), opensAt: colLocked(p) ? colOpensAt(p) : null };
+  }
+  if (colLocked(p)) return { ok: true, locked: true, opensAt: colOpensAt(p), org: p.org, items: [] };
+  if (op === "list") {
+    const people = await sql`select id, login, nick, org, post, rank, last_seen, org_at from profiles
+                             where org = ${p.org} and not banned and approval = 'ok' order by lower(nick) limit 500`;
+    const vis = people.filter((x) => x.id === p.id || !colLocked(x));
+    const ids = vis.map((x) => x.id);
+    const st = await statsOf(ids);
+    const av = ids.length ? await sql`select user_id, img from avatars where user_id in ${sql(ids)}` : [];
+    const A = Object.fromEntries(av.map((r) => [r.user_id, r.img]));
+    return {
+      ok: true, org: p.org,
+      items: vis.map((x) => ({
+        id: x.id, nick: x.nick, post: x.post || "", rank: x.rank, me: x.id === p.id, ava: A[x.id] || "",
+        lvl: lvOf(st[x.id].xp).name, lvn: lvOf(st[x.id].xp).n, seen: x.last_seen,
+      })),
+    };
+  }
+  if (op === "view") {
+    // по id, а не по логину: логин коллегам не показываем
+    const id = String(b.id || "");
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return fail("Профиль не найден в вашей организации.");
+    const [x] = await sql`select * from profiles where id = ${id} and org = ${p.org} and not banned and approval = 'ok'`;
+    if (!x || (x.id !== p.id && colLocked(x))) return fail("Профиль не найден в вашей организации.");
+    const st = (await statsOf([x.id]))[x.id];
+    const [av] = await sql`select img from avatars where user_id = ${x.id}`;
+    const got = await sql`select code, at from achievements where user_id = ${x.id} order by at`;
+    const AX = await getSetting("achx", {});
+    const ach = got.map((r) => {
+      const a = ACH_BY[r.code] || (AX[r.code] ? { ...AX[r.code], rare: true } : null);
+      return a ? { code: r.code, icon: a.icon, name: a.name, desc: a.desc, rare: !!a.rare, at: r.at } : null;
+    }).filter(Boolean);
+    const lv = lvOf(st.xp);
+    return {
+      ok: true,
+      profile: {
+        id: x.id, nick: x.nick, org: x.org, post: x.post || "", bio: x.bio || "", rank: x.rank, rankName: RANKS[x.rank] || x.rank,
+        discord: x.hide_discord ? "" : x.discord || "", ava: av ? av.img : "", me: x.id === p.id,
+        level: { n: lv.n, name: lv.name, xp: st.xp, from: lv.from, to: lv.to },
+        det: st.det, det7: st.det7, tests: st.tests, avg_p: st.avg_p, ach, since: x.created_at, seen: x.last_seen,
+      },
+    };
+  }
+  return fail("Неизвестное действие.");
 }
 async function flagFor(p, k) {
   const m = (await flagsNow())[k];
@@ -3856,6 +4003,17 @@ async function panelApi(b, ip, ua) {
     case "ads_toggle":
     case "ads_delete":
       return panelAds(b, a);
+    case "col_clear": {
+      // 2.8: модерация профиля для коллег — убрать должность, «о себе» и фото
+      const t = await findProfile(String(b.login || ""));
+      if (!t) return fail("Пользователь не найден.");
+      const no = canTouch(a, t);
+      if (no) return fail(no);
+      await db()`update profiles set post = '', bio = '' where id = ${t.id}`;
+      await db()`delete from avatars where user_id = ${t.id}`;
+      await audit(a.label, "col_clear", t.login, { post: t.post || "", bio: t.bio || "" });
+      return { ok: true };
+    }
     case "beta_list":
     case "beta_set":
     case "beta_task":
@@ -4112,7 +4270,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 27;
+const SCHEMA_V = 28;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -4178,6 +4336,23 @@ alter table public.ai_gold enable row level security;
 revoke all on table public.ai_dict, public.ai_gold from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;
 `;
+// 2.8: должность и «о себе» в профиле, время смены организации, аватары для профилей коллег
+const SCHEMA_28 = `
+alter table public.profiles add column if not exists post text not null default '';
+alter table public.profiles add column if not exists bio text not null default '';
+alter table public.profiles add column if not exists hide_discord boolean not null default false;
+alter table public.profiles add column if not exists org_at timestamptz;
+create table if not exists public.avatars (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  img text not null, updated_at timestamptz not null default now());
+alter table public.avatars enable row level security;
+revoke all on table public.avatars from anon, authenticated;
+create table if not exists public.handoffs (
+  code text primary key, from_id uuid not null references public.profiles(id) on delete cascade,
+  data jsonb not null, created_at timestamptz not null default now(), expires_at timestamptz not null);
+alter table public.handoffs enable row level security;
+revoke all on table public.handoffs from anon, authenticated;
+`;
 let schemaReady = null;
 function ensureSchema() {
   if (!schemaReady)
@@ -4186,7 +4361,7 @@ function ensureSchema() {
         const v = await getSetting("schema_v", 0);
         if (+v >= SCHEMA_V) return;
         // база уже на 2.4: повторно 2.4 не выполняем (иначе вернулись бы удалённые баннеры по умолчанию)
-        await db().unsafe(+v >= 24 ? SCHEMA_27 : ADS_DDL + SCHEMA_24 + SCHEMA_27);
+        await db().unsafe(+v >= 27 ? SCHEMA_28 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28);
         adsReady = true;
         await setSetting("schema_v", SCHEMA_V);
       } catch (e) {
@@ -4198,6 +4373,7 @@ function ensureSchema() {
 }
 
 // ───────────── 2.4: функции по флагам (владелец включает в панели: всем, только тестерам или никому) ─────────────
+// [название в панели, режим по умолчанию, версия]. В панели сверху функции последней версии, остальные — в «Прошлых версиях»
 const FLAG_DEFS = {
   patrol: ["Совместный патруль", "beta", "2.4"],
   board: ["Тактическая доска", "all", "2.4"],
@@ -4208,6 +4384,22 @@ const FLAG_DEFS = {
   card: ["Карточка сотрудника", "all", "2.4"],
   ideas: ["Идеи и голосование", "all", "2.4"],
   events: ["Мероприятия организаций", "all", "2.4"],
+  col28: ["Коллеги и должность в профиле", "beta", "2.8"],
+  det28mk: ["Процессуальные отметки со временем (и голосом в рации)", "beta", "2.8"],
+  det28wait: ["Отсчёт ожидания адвоката и прокурора", "beta", "2.8"],
+  det28rp: ["Проверка рапорта перед отправкой", "beta", "2.8"],
+  det28shift: ["Журнал смены и отчёт о смене", "beta", "2.8"],
+  det28grp: ["Групповое задержание", "beta", "2.8"],
+  det28jur: ["Подсказка по юрисдикции в калькуляторе", "beta", "2.8"],
+  det28note: ["Голосовая заметка в рации", "beta", "2.8"],
+  det28sz: ["Изъятые предметы в карточке задержания", "beta", "2.8"],
+  det28wit: ["Свидетели и потерпевшие", "beta", "2.8"],
+  det28chron: ["Хронология и причины пауз в рапорте", "beta", "2.8"],
+  det28xfer: ["Передача задержанного коллеге по коду", "beta", "2.8"],
+  det28imm: ["Проверка на неприкосновенность", "beta", "2.8"],
+  pad28: ["Блокнот: окно, чек-листы, напоминания", "beta", "2.8"],
+  pad28mini: ["Блокнот в мини-окне задержания", "beta", "2.8"],
+  pad28tpl: ["Шаблоны заметок", "beta", "2.8"],
 };
 // функции выпущенных версий включены у всех и флагов больше не имеют; бета 2.7.0 ещё спрашивает общий флаг ai27
 const FLAG_RELEASED = { ai27: "all" };

@@ -2047,8 +2047,8 @@ function renderCalc(){
       '<div class="sum"><div class="k">Штрафы (сумма)</div><div class="v">'+(sumFmax?(sumFmin===0?"до "+money(sumFmax):(sumFmin!==sumFmax?money(sumFmin)+"–"+money(sumFmax):money(sumFmax))):"—")+'</div></div>'+
       '<div class="sum"><div class="k">Судимость</div><div class="v">'+(rec?"Да":"Нет")+'</div></div></div>';
     h+='<p class="hint">Сроки не суммируются: итог берётся по статье с наибольшим уровнем розыска'+(top?" ("+top.code+(top.part?" ч."+top.part:"")+")":"")+' и не превышает '+TERM_CAP+' мес. Штрафы в списке: либо штраф, либо срок. Сумма штрафов показана для оценки, а не как итог.</p>';
-    var cw=conflictWarns(items);
-    if(cw.length) h+='<div class="verdict" role="alert" style="border-left:4px solid #e0a400;margin-top:10px"><b>⚠ Проверьте сочетание статей</b><br>'+cw.map(esc).join("<br>")+'</div>';
+    var cw=conflictWarns(items).concat(window.SA_jurWarns?SA_jurWarns(items):[]); // 2.8: подсказка по юрисдикции
+    if(cw.length) h+='<div class="verdict" role="alert" style="border-left:4px solid #e0a400;margin-top:10px"><b>⚠ '+(cw.length&&window.SA_jurWarns&&SA_jurWarns(items).length===cw.length?'Проверьте юрисдикцию':'Проверьте сочетание статей')+'</b><br>'+cw.map(esc).join("<br>")+'</div>';
     if(maxS) h+='<p class="hint">КПЗ: не более '+hm(maxS*10)+' (10 мин за ★).</p>';
     h+='<p style="margin:12px 0 0"><button class="btn primary" id="saveCalc" type="button">Сохранить расчёт</button> <button class="btn" id="clearBasket" type="button">Очистить</button></p>';
   }
@@ -2915,7 +2915,7 @@ function buildNav(){nav2.innerHTML="";[tbT,tbC].forEach(function(b){b.hidden=tru
 // раздел, который можно открыть в роли: кодексы, главная и руководство есть всегда
 function tabOk(r,t){return t==="home"||t==="boss"||BASE.indexOf(t)>=0||visible(r).indexOf(t)>=0}
 function firstTab(r){var L=ROLES[r][1];return L.length?L[0]:"home"}
-function remember(t){if(!t||t==="boss"||t==="ideas"||t==="tester")return;if(RC.last[X.role]!==t){RC.last[X.role]=t;saveRC()}}
+function remember(t){if(!t||t==="boss"||t==="ideas"||t==="tester"||t==="colleagues")return;if(RC.last[X.role]!==t){RC.last[X.role]=t;saveRC()}}
 function setRole(r){if(ALLOW.indexOf(r)<0)r="off";remember(state.tab);X.role=r;try{localStorage.setItem("bos-role",r)}catch(e){}buildNav();
  var t=RC.last[r];
  if(t&&tabOk(r,t))state.tab=t; else if(!tabOk(r,state.tab))state.tab=firstTab(r);
@@ -3984,7 +3984,7 @@ function cabHtml(){
       fld("discord","Discord",acc.discord,40,"ник в Discord")+fld("telegram","Telegram",acc.telegram,33,"@name или пусто")+fld("phone","Номер в игре",acc.phone,12,"только цифры или пусто")+
       '<div class="sbtns" style="margin:0"><button type="button" class="btn" data-cab="accsave" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Сохранить</button></div>'+
       '<div id="accMsg" role="status" aria-live="polite" style="font-size:12.5px;color:var(--muted);min-height:1.2em"></div></div></div>';
-    ah+=deptInfo(acc.org||dept)+(window.SA_PROG?window.SA_PROG.html():"")+(window.SA_CAB11?window.SA_CAB11(true):"")+(window.SA_CAB13?window.SA_CAB13(true):"")+(window.SA_CAB24?window.SA_CAB24():"")+(window.SA_RP?window.SA_RP.cabHtml():"")+detHtml()+testHtml();
+    ah+=deptInfo(acc.org||dept)+(window.SA_PROG?window.SA_PROG.html():"")+(window.SA_CAB11?window.SA_CAB11(true):"")+(window.SA_CAB13?window.SA_CAB13(true):"")+(window.SA_CAB24?window.SA_CAB24():"")+(window.SA_CAB28?window.SA_CAB28():"")+(window.SA_RP?window.SA_RP.cabHtml():"")+detHtml()+testHtml();
     ah+='<p class="cab-foot">Данные кабинета хранятся в вашем аккаунте. После смены ведомства программу нужно перезапустить.</p>';
     return ah;
   }
@@ -6295,7 +6295,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.7.1";
+var APP_VER="2.8.0-beta.1";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6384,6 +6384,24 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.8.0-beta.1",d:"24.10.2026",items:[
+  ["🧪","Только для бета-тестеров","У каждой функции ниже свой флаг. Пока они доступны только участникам бета-теста."],
+  ["👥","Коллеги","Новый раздел в меню: профили сотрудников вашего ведомства с аватаром, должностью, «о себе», Discord, уровнем, задержаниями, тестами и достижениями. После смены ведомства профили открываются через 24 часа."],
+  ["🪪","Должность в профиле","В личном кабинете можно указать должность (она видна рядом с ведомством) и пару слов о себе, а также скрыть свой Discord от коллег."],
+  ["⏱","Процессуальные отметки","В карточке задержания кнопки «Миранда зачитана», «Звонок», «Адвокат вызван / прибыл», «Прокурор вызван», «Медпомощь», «Видеозапись». Время каждой отметки попадает в журнал и рапорт. Отметку можно поставить и голосом: «Миранда зачитана», «звонок предоставлен», «медпомощь оказана», «видеозапись ведётся»."],
+  ["⏳","Ожидание адвоката и прокурора","Вызов адвоката или прокурора сам ставит паузу. Программа показывает, сколько осталось до срока по ПК, и напоминает звуком и уведомлением, когда срок вышел."],
+  ["📝","Проверка рапорта","Перед отправкой рапорта о задержании программа предупредит, если нет доказательств, времени или отметки о зачтении прав."],
+  ["📋","Журнал смены","В кабинете все задержания за день по времени и кнопка «Скопировать отчёт о смене»."],
+  ["👬","Групповое задержание","Кнопка «Ещё задержанный по этому делу» заводит второй таймер с тем же временем и статьями. Общие статьи можно добавить всей группе."],
+  ["🗺","Подсказка по юрисдикции","Калькулятор предупредит, если статья вне компетенции вашего ведомства, и подскажет, кому передать дело."],
+  ["🎙","Голосовая заметка","Скажите в рацию «заметка: скинул ствол в кусты», и запись сохранится в задержание и рапорт."],
+  ["🗒","Блокнот","Блокнот открывается с главной: строки «[ ] пункт» становятся чек-листом, есть напоминания через 15 минут – 2 часа, а в программе блокнот можно показать в мини-окне поверх игры."],
+  ["🧩","Шаблоны заметок","В блокноте готовые заготовки «Вызов», «ДТП», «Обыск авто». Свой текст можно сохранить как шаблон."],
+  ["📦","Изъятые предметы","В карточке задержания список изъятого с количеством и быстрыми кнопками. Он сам попадает в рапорт."],
+  ["🧑‍🤝‍🧑","Свидетели и потерпевшие","Ник, статик и короткие показания прямо в карточке задержания. В рапорте они идут отдельным блоком."],
+  ["🕰","Хронология в рапорт","События задержания со временем одной кнопкой копируются или сами попадают в рапорт. Причины пауз тоже видны в рапорте."],
+  ["🤝","Передача коллеге","Кнопка «Передать коллеге» даёт код из 6 цифр. Коллега вводит его в «Принять задержанного по коду» и получает таймер, статьи, отметки, изъятое и свидетелей. Код действует 30 минут."],
+  ["🛡","Неприкосновенность","Укажите должность или статус задержанного. Если это судья, прокурор, адвокат, депутат или другое лицо с особым порядком, программа напомнит об этом."]]},
  {v:"2.7.1",d:"24.10.2026",items:[
   ["🤖","ИИ-помощник стал умнее","Сотрудникам FIB и SANG ИИ в первую очередь подбирает законы их ведомства, а бытовые слова вроде «угон» сам связывает с нужной статьёй."],
   ["⚡","Быстрые вопросы","Над полем ввода ИИ появились кнопки-заготовки: «Что нарушил?», «Какой срок?», «Могу ли я…», «Что такое…». Нажми и допиши ситуацию."],
@@ -6812,7 +6830,7 @@ var VERD=["","Нарушений не выявлено","Выявлены нар
 var F={
  arrest:[["suspect","Задержанный","text","Имя Фамилия",1],["sid","Паспорт задержанного","text","номер паспорта или статик"],["dt","Дата и время","text",""],["place","Место","text","например, Mission Row"],
   ["arts","Статьи","area","ст. 12.8 УК «…»; ст. 6.1 АК «…»",1],["reason","Обстоятельства","area","Что произошло и почему задержали",1],["measure","Решение","sel"],["term","Срок или штраф","text","например, 12 мес. или $5 000"],
-  ["checks","Отметки","chk"],["seized","Изъято","text","оружие, наркотики, деньги…"],["partners","Напарники","text","ники через запятую"],["tmr","Время задержания","area","подставится из таймера"],["evidence","Доказательства","text","ссылка на видео или скриншоты"]],
+  ["checks","Отметки","chk"],["seized","Изъято","text","оружие, наркотики, деньги…"],["partners","Напарники","text","ники через запятую"],["tmr","Время задержания","area","подставится из таймера"],["wit","Свидетели и потерпевшие","area","ник, статик, что видели (2.8)"],["chron","Хронология","area","подставится из таймера (2.8)"],["evidence","Доказательства","text","ссылка на видео или скриншоты"]],
  force:[["dt","Дата и время","text",""],["place","Место","text",""],["target","В отношении кого","text","Имя Фамилия, паспорт",1],["means","Что применено","means","",1],
   ["reason","Причина применения","area","Например: оказал вооружённое сопротивление при задержании",1],["result","Последствия","text","например, без телесных повреждений"],["checks","Отметки","chk"],["partners","Напарники","text",""],["evidence","Доказательства","text","ссылка на видео"]],
  incident:[["dt","Дата и время","text",""],["place","Место","text",""],["what","Что произошло","area","Коротко и по порядку",1],["who","Участники","text","ники, паспорта, номера машин"],
@@ -6854,7 +6872,9 @@ function bodyOf(kind,f){
   if(f.measure||f.term) P.push("Принятое решение: "+dot([lc1(f.measure),f.term].filter(Boolean).join(", ")));
   var c=ch(f.checks); if(c) P.push(c);
   if(f.seized) P.push("Изъято: "+dot(f.seized));
+  if(f.wit) P.push("Свидетели и потерпевшие: "+dot(f.wit));
   if(f.tmr) P.push(dot(f.tmr));
+  if(f.chron) P.push("Хронология: "+dot(f.chron));
  } else if(kind==="force"){
   var m=(f.means||[]).map(function(x,i){return i?lc1(x):lc1(x)}).join(", ");
   P.push("Докладываю, что"+(where||" ________")+" мною"+(f.partners?" совместно с "+f.partners:"")+" в отношении "+gap(f.target)+" применено следующее: "+gap(m)+".");
@@ -6955,6 +6975,7 @@ function fieldHtml(x){
 function formHtml(){
  var L=F[R.kind], h='<div class="rp-form">';
  h+='<div class="rp-two"><label><span>Кому</span><input data-rf="to" maxlength="80" value="'+esc(R.f.to||"")+'"></label><label><span>Ваше звание или должность</span><input data-rf="pos" maxlength="60" value="'+esc(R.f.pos||"")+'" placeholder="например, Офицер II"></label></div>';
+ var D28w=!!(window.SA_det28on&&SA_det28on("det28wit")),D28c=!!(window.SA_det28on&&SA_det28on("det28chron"));L=L.filter(function(x){return (D28w||x[0]!=="wit")&&(D28c||x[0]!=="chron")}); // 2.8: поля для бета-тестеров
  for(var i=0;i<L.length;i++){
   var x=L[i], y=L[i+1];
   if(x[2]==="text"&&y&&y[2]==="text"&&x[0]!=="evidence"&&y[0]!=="evidence"){h+='<div class="rp-two">'+fieldHtml(x)+fieldHtml(y)+'</div>';i++}
@@ -7040,6 +7061,10 @@ function send(){
  if(R.sending||!online())return;
  var bad=missing(R.kind,R.f);
  if(Object.keys(bad).length){R.bad=bad;R.msg="Заполните поля, отмеченные красным.";R.msgErr=true;paint();var f=sheet().querySelector(".rp-bad input,.rp-bad textarea");if(f)f.focus();return}
+ // 2.8: проверка рапорта о задержании перед отправкой; повторное нажатие отправляет как есть
+ if(R.kind==="arrest"&&window.SA_det28on&&SA_det28on("det28rp")){var w=[],F2=R.f,sig=JSON.stringify(F2);
+  if(!trim(F2.dt))w.push("нет даты и времени");if(!trim(F2.tmr))w.push("нет времени задержания из таймера");if(!trim(F2.evidence))w.push("нет доказательств");if((F2.checks||[]).indexOf("mir")<0)w.push("нет отметки «Права зачитаны»");
+  if(w.length&&R._warn!==sig){R._warn=sig;R.msg="Проверьте рапорт: "+w.join(", ")+". Если всё верно, нажмите «Отправить руководству» ещё раз.";R.msgErr=true;paint();return}}
  var f2={};Object.keys(R.f).forEach(function(k){if(k.charAt(0)!=="_")f2[k]=R.f[k]});f2.sub=subOf(R.kind,R.f);
  R.sending=true;R.msg="";paint();
  A.api("reports",{op:"create",kind:R.kind,title:titleOf(R.kind,R.f),body:bodyOf(R.kind,R.f),fields:f2}).then(function(r){
@@ -7065,7 +7090,10 @@ function prefill(src){
  if(t){p._src=src+":"+t.id;p.suspect=t.nick||"";p.sid=t.st||"";p.arts=t.arts||"";p.dt=nowStr(t.start);if(t.result)p.measure=t.result;
   try{p.tmr=timerSummary()}catch(e){}
   var ev=[];(t.media||[]).forEach(function(m){if(m.t==="url"&&(ev.join(", ")+", "+m.u).length<=300)ev.push(m.u)});if(ev.length)p.evidence=ev.join(", ");
-  var c=[];if(t.checks&&(t.checks["inv:mir"]||t.checks["war:mir"]))c.push("mir");if(c.length)p.checks=c}
+  var c=[];if(t.checks&&(t.checks["inv:mir"]||t.checks["war:mir"]))c.push("mir");
+  var mk=t.marks||{};if(mk.adva||mk.advc)c.push("adv");if(t.checks&&(t.checks["inv:srch"]||t.checks["war:srch"]))c.push("srch");if(mk.cam)c.push("cam"); // 2.8: отметки со временем
+  if(c.length)p.checks=c;
+  var x28=window.SA_det28rp?SA_det28rp(t):null;if(x28){if(x28.seized)p.seized=x28.seized.slice(0,160);if(x28.wit)p.wit=x28.wit.slice(0,1500);if(x28.chron)p.chron=x28.chron.slice(0,1500)}}
  if(src==="calc"&&typeof basketItems==="function"){
   var items=basketItems();
   if(items.length){
@@ -8168,7 +8196,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.7.1";
+var APP_VER="2.8.0-beta.1";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
@@ -10303,6 +10331,7 @@ function contactsHtml(){var u=me();if(!u)return "";
   '<div class="rowbtn"><button type="button" class="btn" data-s11c="show">'+(sh?'🙈 Скрыть':'👁 Показать')+'</button></div>'+
   '<p class="hint">'+(CVerr?e(CVerr)+' ':'')+(CV==null&&!CVerr?'Загружаем настройки видимости… ':'')+'Руководству организации можно открыть только Discord: без галочки руководство его не видит. Номер в игре и Telegram необязательны и руководству не показываются. Владелец и модераторы памятки видят связи всегда, чтобы связаться по вопросам аккаунта. Изменить значения можно в полях выше.</p></div>'}
 window.SA_CAB11=function(acc){return shiftHtml()+topHtml()+(acc?contactsHtml():"")};
+window.SA_shiftText=shiftText; // 2.8: для отчёта о смене
 
 /* ================= события ================= */
 function upd(id,html){var n=document.getElementById(id);if(n)n.innerHTML=html}
@@ -11851,10 +11880,26 @@ if(["","halloween","newyear"].indexOf(C.prev)<0)C.prev="";
 function saveC(){jset("bos-s24",C)}
 
 /* ---------- флаги функций ---------- */
-var FDEF={patrol:"beta",board:"all",mini:"all",tts:"all",mascot:"all",season:"all",card:"all",ideas:"all",events:"all"};
+var FDEF={patrol:"beta",board:"all",mini:"all",tts:"all",mascot:"all",season:"all",card:"all",ideas:"all",events:"all",col28:"beta",det28mk:"beta",det28wait:"beta",det28rp:"beta",det28shift:"beta",det28grp:"beta",det28jur:"beta",det28note:"beta",det28sz:"beta",det28wit:"beta",det28chron:"beta",det28xfer:"beta",det28imm:"beta",pad28:"beta",pad28mini:"beta",pad28tpl:"beta"};
 var FN={patrol:["Совместный патруль","Экипаж по коду: общий список задержаний и таймеров с напарниками."],board:["Тактическая доска","Рисование на схеме зон и отправка схемы ссылкой."],mini:["Мини-окно задержания","Маленькое окно поверх игры с таймерами и итогом калькулятора."],
  tts:["Озвучка статей","Кнопка 🔊 у статьи читает её вслух голосом Windows."],mascot:["Лиса Senko","Подсказки и поздравления в углу окна."],season:["Сезонное оформление","Хэллоуин и Новый год."],card:["Карточка сотрудника","Картинка со статистикой для Discord."],
- ideas:["Идеи и голосование","Раздел «Идеи» в меню."],events:["Мероприятия организаций","Учения и собрания на главной и в панели руководителя."]};
+ ideas:["Идеи и голосование","Раздел «Идеи» в меню."],events:["Мероприятия организаций","Учения и собрания на главной и в панели руководителя."],
+ col28:["Коллеги","Раздел «Коллеги»: профили своего ведомства, должность и «о себе» в кабинете."],
+ det28mk:["Процессуальные отметки","Кнопки «Миранда зачитана», «Адвокат вызван» и др. со временем в журнале и рапорте, отметки голосом в рации."],
+ det28wait:["Ожидание адвоката","Отсчёт до срока по ПК во время паузы и напоминание, когда срок вышел."],
+ det28rp:["Проверка рапорта","Предупреждение, если в рапорте о задержании нет доказательств, времени или отметки о правах."],
+ det28shift:["Журнал смены","В кабинете все задержания за день и кнопка «Скопировать отчёт о смене»."],
+ det28grp:["Групповое задержание","Кнопка «Ещё задержанный по этому делу» и общие статьи для группы."],
+ det28jur:["Подсказка по юрисдикции","Предупреждение, если статья вне компетенции вашего ведомства."],
+ det28note:["Голосовая заметка","«Заметка: …» в рацию сохраняется в задержание и рапорт."],
+ det28sz:["Изъятые предметы","Список изъятого с количеством, сам попадает в рапорт."],
+ det28wit:["Свидетели и потерпевшие","Ник, статик и показания в карточке, отдельным блоком в рапорте."],
+ det28chron:["Хронология","Лента событий со временем копируется в рапорт, причины пауз видны в рапорте."],
+ det28xfer:["Передача коллеге","Таймер, статьи, отметки и изъятое уходят коллеге по коду из 6 цифр."],
+ det28imm:["Неприкосновенность","По должности задержанного программа напоминает особый порядок (ПК ст. 19)."],
+ pad28:["Блокнот","Блокнот с главной: чек-листы «[ ] пункт» и напоминания."],
+ pad28mini:["Блокнот в мини-окне","Записи и галочки блокнота в мини-окне поверх игры."],
+ pad28tpl:["Шаблоны заметок","Заготовки «Вызов», «ДТП», «Обыск авто» и свои шаблоны."]};
 function tester(){var s=sys(),u=user();return !!(s.tester||(u&&(u.rank==="owner"||u.rank==="moderator")))}
 function mode(k){var f=sys().flags;return f&&f[k]?f[k]:FDEF[k]}
 function flag(k){var m=mode(k);if(m==="off")return false;if(m==="beta")return tester()&&C.exp[k]!==false;return true}
@@ -11896,9 +11941,9 @@ function testerHtml(){
    '<button type="button" class="btn" data-t24="bug">Сообщить с картинкой</button></div><p class="s24-msg" id="t24m'+e(t.id)+'">'+e(TS.msg[t.id]||"")+'</p></div>'}).join("")+'</div>';
  h+=sec("Задания","Проверьте и отметьте результат. Ответ сразу уходит разработчику.",b+'<div class="s24-row"><button type="button" class="btn" data-t24="reload">Обновить</button></div>');
  /* экспериментальные функции */
- var F=Object.keys(FN).map(function(k){
+ var F=Object.keys(FN).filter(function(k){return mode(k)==="beta"}).map(function(k){ // только то, что сейчас в бете: вышедшее для всех и выключенное здесь не показываем
   var m=mode(k),chip=m==="all"?'<span class="s24-chip ok">у всех</span>':m==="beta"?'<span class="s24-chip beta">только тестерам</span>':'<span class="s24-chip">выключено</span>';
-  return '<div class="s24-flag"><span><b>'+e(FN[k][0])+'</b> '+chip+'<br><small class="s24-meta">'+e(FN[k][1])+'</small></span>'+(m==="beta"?swb('data-t24exp="'+k+'"',C.exp[k]!==false,FN[k][0]):'')+'</div>'}).join("");
+  return '<div class="s24-flag"><span><b>'+e(FN[k][0])+'</b> '+chip+'<br><small class="s24-meta">'+e(FN[k][1])+'</small></span>'+(m==="beta"?swb('data-t24exp="'+k+'"',C.exp[k]!==false,FN[k][0]):'')+'</div>'}).join("")||'<p class="s24-empty">Сейчас экспериментальных функций нет.</p>';
  h+=sec("Экспериментальные функции","Функции с пометкой «только тестерам» видите только вы и другие тестеры. Если что-то мешает, выключите её здесь, это действует только на этом компьютере.",F);
  /* ранние версии */
  if(DESK&&c.betaUpdates!=null){
@@ -12399,6 +12444,7 @@ function miniPush(){
  var calc=null;try{var it=typeof basketItems==="function"?basketItems():[];if(it.length){var uk=it.filter(function(r){return r.k==="uk"}),ft=typeof finalTerm==="function"?finalTerm(it):{m:0,cut:false};
   calc={n:it.length,stars:Math.max.apply(null,uk.map(function(r){return r.stars||0}).concat([0])),term:ft.m||0,cut:!!ft.cut,fine:it.filter(function(r){return r.k!=="uk"||!r.m}).reduce(function(a,r){return a+(r.fmax||0)},0)}}}catch(x){}
  var d={timers:T,sel:typeof selId!=="undefined"?selId:0,calc:calc,accent:cssVar("--accent","")};
+ try{if(window.SA_padMini){var pd=SA_padMini();if(pd)d.pad=pd}}catch(x){} // 2.8: блокнот в мини-окне
  var sig=JSON.stringify(d);if(sig===MINI.sig&&Date.now()-MINI.at<30000)return;MINI.sig=sig;MINI.at=Date.now();A.miniState(d);
 }
 if(DESK&&A.miniState)setInterval(miniPush,1000);
@@ -12453,12 +12499,14 @@ function ideasOk(){return online()&&flag("ideas")}
 window.SA_S24={testerOk:testerOk,ideasOk:ideasOk,flag:flag};
 var R24=render;
 render=function(){
- if(state.tab==="tester"||state.tab==="ideas"){
-  if(state.tab==="tester"?!testerOk():!ideasOk()){state.tab="home";setTimeout(function(){if(window.SA_go)SA_go("home")},0);return}
+ var PG=window.SA_pages&&window.SA_pages[state.tab]; // 2.8: страницы из поздних блоков ({ok, html, after})
+ if(state.tab==="tester"||state.tab==="ideas"||PG){
+  if(PG?!PG.ok():state.tab==="tester"?!testerOk():!ideasOk()){state.tab="home";setTimeout(function(){if(window.SA_go)SA_go("home")},0);return}
   document.querySelectorAll(".tab").forEach(function(t){t.setAttribute("aria-selected","false")});
   qEl.disabled=true;qc.hidden=true;qEl.placeholder="Поиск работает в разделах УК, АК, ДК, ПК";
   var qt=document.querySelector(".qtools"),qh=document.getElementById("qh");if(qt)qt.hidden=true;if(qh)qh.hidden=true;
-  view.innerHTML=state.tab==="tester"?testerHtml():ideasHtml();
+  view.innerHTML=PG?PG.html():state.tab==="tester"?testerHtml():ideasHtml();
+  if(PG&&PG.after)try{PG.after(view)}catch(x){}
   if(typeof updateBadge==="function")updateBadge();
   return;
  }
@@ -13027,7 +13075,24 @@ function cmd(text){
  // связь
  if(/^(отбой|конец связи|спасибо отбой|все отбой)$/.test(low))return R("Принято. Конец связи.","Конец связи.",{close:true});
  if(/(отставить|отмена|отмени|отменить последн)/.test(low)){var w=UNDO&&UNDO.what;return restore()?(refreshAll(),R("Принято. Отставить. Отменено: "+(w||"последнее действие").toLowerCase()+".")):R("Никак нет. Отменять нечего.")}
+ // 2.8: процессуальные отметки голосом: «Миранда зачитана», «звонок предоставлен», «медпомощь оказана», «видеозапись ведётся»
+ var VMK=[["mir",/(миранд[аы]?|права) (зачитан[аы]?|прочитан[аы]?)(?=[\s,.!]|$)|зачитал[аи]? (ему |ей |им )?(права|миранд)/,"Миранда зачитана"],
+  ["call",/звонок (предоставлен|дан|разрешен)(?=[\s,.!]|$)|предоставил[аи]? (ему |ей )?звонок|дал[аи]? (ему |ей )?позвонить/,"звонок предоставлен"],
+  ["med",/(медпомощь|медицинская помощь|первая помощь) оказан|оказал[аи]? (ему |ей )?(медпомощь|медицинскую помощь|первую помощь)/,"медпомощь оказана"],
+  ["cam",/(видеозапись|запись|бодикамера|камера) (ведется|идет|включена|включен)(?=[\s,.!]|$)|включил[аи]? (камеру|запись|видеозапись|бодикамеру)/,"видеозапись ведётся"]];
+ if(window.SA_det28mark&&window.SA_det28on&&SA_det28on("det28mk")){var vm=VMK.filter(function(x){return x[1].test(low)})[0];
+  if(vm){var tv=cur();if(!tv)return R("Никак нет. Активных задержаний нет, отметка не поставлена.");
+   if(tv.marks&&tv.marks[vm[0]])return R("Так точно. Отметка «"+vm[2]+"» уже стоит.");
+   snap("Отметку");window.SA_det28mark(tv,vm[0]);refreshAll();var hh=new Date(),tt=(hh.getHours()<10?"0":"")+hh.getHours()+":"+(hh.getMinutes()<10?"0":"")+hh.getMinutes();
+   return R("Принято. Отметка: "+vm[2]+", "+tt+".","Отметка"+(tv.nick?" ("+tv.nick+")":"")+": "+vm[2]+" · "+tt)}}
  if(/(что (ты )?умеешь|помощь|список команд|какие команды)/.test(low))return R("Диспетчер на связи. Докладывайте задержание: задержан гражданин, имя, паспорт и статья. Добавляйте статьи, найденные наркотики, вызов и прибытие адвоката. Спрашивайте время, дату, остаток и доклад.","Задержание, статьи, наркотики, адвокат, время, дата, остаток, доклад, отмена, отбой.");
+ // 2.8: голосовая заметка к текущему задержанию: «заметка: скинул ствол в кусты»
+ if(window.SA_det28on&&SA_det28on("det28note")&&/^(заметка|заметку|запиши заметку|примечание)(?=[\s:,.-]|$)/.test(low)){
+  var nt=raw.replace(/^\s*(запиши\s+заметку|заметку|заметка|примечание)[\s:,.-]*/i,"").trim(),tz=cur();
+  if(!tz)return R("Никак нет. Активных задержаний нет, заметка не сохранена.");
+  if(!nt)return R("Повторите текст заметки после слова «заметка».");
+  snap("заметку");window.SA_det28note(tz,nt.charAt(0).toUpperCase()+nt.slice(1));refreshAll();
+  return R("Принято. Заметка к задержанию"+(tz.nick?" "+tz.nick:"")+" записана.","Заметка"+(tz.nick?" ("+tz.nick+")":"")+": "+nt)}
  if(/(миранд|зачитай права|правило миранды)/.test(low))return R(typeof MIRANDA==="string"?MIRANDA:"Вы имеете право хранить молчание.","Зачитываю правило Миранды.");
  if(/(какое сегодня число|какое число|какая дата|^дата|сегодня какой день|какой сегодня день|какой день недели)/.test(low)){var d=msk();return R("Так точно. Сегодня "+WD[d.w]+", "+d.D+" "+MON[d.M]+" "+d.Y+" года.",WD[d.w]+", "+d.D+" "+MON[d.M]+" "+d.Y)}
  if(/(который час|сколько времени$|^время$|^время\b(?!.*задерж)|точное время|московское время)/.test(low)&&!/(осталось|прошло|задержан)/.test(low)){var m=msk();return R("Так точно. Московское время "+m.h+" "+plural(m.h,HRS)+" "+m.m+" "+plural(m.m,MIN)+".","МСК "+(m.h<10?"0":"")+m.h+":"+(m.m<10?"0":"")+m.m)}
@@ -13058,8 +13123,8 @@ function cmd(text){
  var endV=/(прибыл|приехал|подъехал|пришел|пришла|прибыла|на месте|закончен|окончен|завершен|закончил|продолж|сними с паузы|снять паузу|конец паузы|пауза окончена|не ответил|не прибыл|отказался)/.test(low);
  if(endV&&(pz||/(пауз|продолж)/.test(low))){
   if(!t||!t.paused)return R("Никак нет. Задержание не на паузе.");
-  var pk=t.paused.k,dur=Date.now()-t.paused.at;snap("Конец паузы");endPause(t);saveTm();refreshAll();
-  var miss=/(не ответил|не прибыл|отказался)/.test(low);
+  var pk=t.paused.k,dur=Date.now()-t.paused.at;snap("Конец паузы");endPause(t);saveTm();
+  var miss=/(не ответил|не прибыл|отказался)/.test(low);if(pk==="adv"&&!miss&&window.SA_det28mark)SA_det28mark(t,"adva");refreshAll();
   return R((miss?"Принято. Право на адвоката считается реализованным. ":"Так точно. "+(PZN[pk]||"Пауза")+(pk==="adv"||pk==="pros"?" прибыл. ":" — закончено. "))+"Задержание продолжено. Пауза длилась "+mins(dur)+". Осталось "+mins(LIM-elapsed(t))+".")}
  // новое задержание
  var newDet=/(^|\s)(задержан|задержана|задержаны|задерживаю|задержал|задержала|задержание начато|задержание начинаю|начато задержание|новое задержание|начинаю задержание|начать задержание|начни задержание|оформляю задержание)(?=[\s,.!]|$)/.test(low)&&!/(вызван|вызвал|прибыл)/.test(low);
@@ -13080,7 +13145,8 @@ function cmd(text){
  if(pz&&startV){
   if(!t)return R("Никак нет. Активных задержаний нет.");if(t.decidedAt)return R("Никак нет. Мера уже избрана, таймер остановлен.");
   if(t.paused&&t.paused.k===pz[0])return R("Так точно. Задержание уже на паузе: "+PZN[pz[0]].toLowerCase()+".");
-  snap("Пауза");endPause(t);t.paused={k:pz[0],at:Date.now(),note:"диспетчер"};ev(t,"pause","Пауза: "+pauseName(pz[0])+" (диспетчер)");saveTm();refreshAll();
+  snap("Пауза");endPause(t);t.paused={k:pz[0],at:Date.now(),note:"диспетчер"};ev(t,"pause","Пауза: "+pauseName(pz[0])+" (диспетчер)");saveTm();
+  if(window.SA_det28mark&&(pz[0]==="adv"||pz[0]==="pros"))SA_det28mark(t,pz[0]==="adv"?"advc":"prosc");refreshAll();
   var tip=pz[0]==="adv"?" Если адвокат не ответит за 3 минуты, право считается реализованным.":pz[0]==="pros"?" Ждём не более 15 минут.":"";
   return R("Принято. "+(pz[0]==="int"||pz[0]==="srch"||pz[0]==="vid"?PZN[pz[0]]+" начат.":"Ожидаем "+pz[2]+".")+" Задержание на паузе, отсчёт пошёл."+tip)}
  // наркотики
@@ -13177,7 +13243,7 @@ SA_P.r_disp=function(){
   '<div class="r26-cmd"><input id="r26q" maxlength="300" placeholder="Сказать текстом, например «время» или «вызван адвокат»" aria-label="Команда диспетчеру"><button type="button" class="btn primary" data-r26="send">Передать</button></div>'+
   '<ul class="r26-log" id="r26log" aria-live="polite">'+logHtml()+'</ul>'+(LOG.length?'<div class="rowbtn"><button type="button" class="btn" data-r26="clear">Очистить журнал</button></div>':'')+'</section>'+
   '<section class="panel"><h2>Что понимает диспетчер</h2><p class="sub">Говорите обычными словами, числа можно называть словами. Имена распознаются по звучанию, поэтому проверьте их на экране рации и при необходимости поправьте: «имя …».</p><ul class="r26-help">'+
-  HELP.map(function(x){return '<li><b>'+e(x[0])+'</b><q>'+e(x[1])+'</q></li>'}).join("")+'</ul></section></div>'+
+  HELP.concat(window.SA_det28on&&SA_det28on("det28mk")?[["Отметки","Миранда зачитана · звонок предоставлен · медпомощь оказана · видеозапись ведётся"]]:[],window.SA_det28on&&SA_det28on("det28note")?[["Заметка","заметка: скинул оружие в кусты"]]:[]).map(function(x){return '<li><b>'+e(x[0])+'</b><q>'+e(x[1])+'</q></li>'}).join("")+'</ul></section></div>'+
   '<section class="panel"><h2>Настройки рации</h2>'+setHtml()+'</section></div>'};
 SA_P.r_phr=function(){return SA_P.f_radio?SA_P.f_radio():'<section class="panel"><p>Фразы для рации недоступны.</p></section>'};
 
@@ -13418,7 +13484,8 @@ var I={
  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.500-6 8-6s7 2 8 6"/>',
  menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
  tester:'<path d="M9 3h6M10 3v6L4.5 18.5A2 2 0 0 0 6.2 21.5h11.6a2 2 0 0 0 1.7-3L14 9V3"/><path d="M7.5 15h9"/>',
- ideas:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.9V16h5v-.2c0-.8.4-1.5 1-1.9A6 6 0 0 0 12 3z"/>'
+ ideas:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.9V16h5v-.2c0-.8.4-1.5 1-1.9A6 6 0 0 0 12 3z"/>',
+ colleagues:'<circle cx="8" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.5"/><path d="M2.5 19c.6-3.200 2.800-5 5.500-5s4.900 1.800 5.500 5"/><path d="M14.500 14.300c.6-.2 1.300-.3 2-.3 2.300 0 4.100 1.500 4.600 4.500"/>'
 };
 function ic(k){return '<svg viewBox="0 0 24 24" aria-hidden="true">'+(I[k]||"")+'</svg>'}
 var FOX='<svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="38" fill="#090D15"/><path fill="#EEE8E4" d="M226.5 474.3C140.3 461.4 69.1 397.3 48 313.5C41.1 286.4 39.1 254.6 42.5 227.9C56.7 115.3 146.3 34 256 34C296.9 34 334.9 44.8 369.7 66.3C442.8 111.7 483.7 206.1 468.4 294.4C452.1 388.9 377.9 461.4 284.2 474.4C269.9 476.4 240.3 476.4 226.5 474.3ZM278.5 461.5C331.4 450.5 385.4 406 412.1 351.5C423.5 328.2 428.8 307.5 429.7 283C430.3 266 430.7 265.9 434.1 282.3C440.2 312.6 432.9 350.2 415 380C409.3 389.5 409.9 389.4 418 379.5C465.3 321.6 472.3 231.3 435.2 157.5C393.4 74.3 300.6 30.9 209.7 52.1C96.7 78.5 28.2 200.5 61.5 316C81.7 386.1 139.5 441.7 209.9 458.7C232.8 464.2 260.3 465.3 278.5 461.5ZM234.5 451.9C220.9 450.1 192 441.2 192 438.9C192 438.6 195 438.2 198.8 438.1C214 437.7 234.2 433 251.1 425.8C266.9 419.1 267.1 418.4 253.7 418.8C216.8 419.9 178.6 408.5 151.8 388.5C141.6 380.8 126.8 365.6 120.9 356.6C118.6 353 116.5 350.2 116.3 350.4C115.7 351 120.3 363.7 123.6 370.5C130.3 384.2 143.6 399 157.3 408C161 410.4 163.8 412.5 163.6 412.7C163 413.3 145.6 405.8 139.7 402.4C108.6 384.2 83.9 347.8 77.6 311.1C75 295.8 76.2 281.4 81.2 268.4L83.5 262.5L84.1 275C84.7 287.9 86.9 298.3 90.9 307L93 311.5L92.4 307.6C92.1 305.5 91.9 297.9 91.9 290.6C91.9 270.1 96.4 255.2 107.4 238.6C121.1 218.1 145.8 200.6 169 195.1C180.8 192.2 180.9 192.3 174.4 199.2C143 233.2 138.9 280.9 164.1 320.1C167.9 326.1 168.7 325.8 166.7 319.3C164.3 311.9 163 303.4 163 295.1L163.1 287.5L165.9 294.7C181 332.9 215.9 361.4 265 375.5C271.7 377.4 281.2 379.6 286.1 380.2C296.4 381.6 295.6 382.3 281.5 384.1C262.9 386.4 236 383.1 213.8 375.6C208.4 373.9 204 372.6 204.1 372.9C204.1 373.8 214.8 382.2 221.9 387C248.2 404.7 280.6 408.8 312.5 398.5C330.5 392.7 349.2 381.3 364.9 366.5C368.8 362.8 372 360.1 372 360.6C372 361.1 369.7 366.2 366.9 372C350.6 406 321.6 433.9 291 445C272.7 451.7 251.7 454.3 234.5 451.9ZM377 373.9C377 373.6 378.3 370.4 379.9 366.9C385.2 355.2 393.3 324.9 391.1 325C390.8 325.1 388.5 327.8 386 331.1C373 348.6 352.6 362.4 332.8 366.9C310 372.2 294.7 370.1 268.4 358.5C253.7 351.9 246.8 350 237.3 350C233.3 350 230 349.7 230 349.3C230 347.2 239.2 335.1 244.7 330.1C257.1 318.7 270.3 313.5 286.5 313.6C296.4 313.7 298.6 314.1 309 317.5C324 322.4 333 323.1 342.8 320.1C372.4 311.1 390.1 269.1 379.4 233.6C378.3 230.3 384.5 234.7 391.9 242.7C421.1 273.8 417.7 331.9 384.8 366.4C380.5 370.9 377.1 374.2 377 373.9ZM199.3 307.9C196.3 307 196.1 306.8 197.2 304.4C198.6 301.3 196.4 299 192.2 299C190.9 299 189 298.5 188 298C186.2 297.1 186.5 296.1 192.5 283.9C202.5 263.2 203.4 257.3 199.5 236C193.7 204.4 206.1 173.8 233.4 152.1C238.4 148.1 249.3 141 250.3 141C250.5 141 249.1 145.4 247.4 150.8C241.6 168.3 242 170 249 156.5C268.7 118.5 293.4 77.7 299.2 73.5C305.2 69.3 310.8 74.1 319.3 90.6C339.8 130.8 342 173.5 325 199.9L321 206L327.9 206C331.6 206 338.1 206.9 342.4 208C349.8 209.9 366 217.4 366 219C366 219.4 363.7 220 360.9 220.3C352.9 221.3 343 224.8 329.2 231.5L316.5 237.7L322.2 238.9C330.5 240.7 339.6 245.6 345.9 251.7C348.9 254.6 351.1 257.2 350.8 257.5C350.5 257.8 347.2 257.3 343.4 256.3C333 253.8 312.1 254 300.8 256.8C288.6 259.8 277.9 264.1 268 270C256.9 276.6 256.6 277.1 264.2 275.2C274.2 272.7 291.9 273.1 299.9 275.9C312.4 280.3 322.5 289.3 326.5 299.5C327.3 301.8 327.5 302.7 326.7 301.6C317.1 287.3 306 281.1 288.5 280.2C272.4 279.5 258.9 283.7 237 296.3C216.6 308.1 216.2 308.3 209.1 308.6C205.5 308.8 201.1 308.5 199.3 307.9ZM412.2 260.6C402.2 228.6 375.6 199 349.5 191.1C347.3 190.4 345 189.7 344.3 189.5C343.5 189.2 343.8 187 345.2 181.8C346.9 175.9 347.3 171.5 347.3 159.2L347.3 144L350.9 144.6C367 147.3 381.5 153.6 392.3 162.5C396.1 165.6 399 168.3 398.8 168.5C398.6 168.7 396 168.2 393 167.4C389.6 166.5 383.9 166.1 378.1 166.2L368.7 166.5L374.6 168.9C386.5 173.7 396.1 180.2 406.6 190.5C421.2 204.9 429.9 219.2 435.4 238.3C437.6 245.9 440.2 260 439.5 260.8C439.4 260.9 437.4 257.2 435.2 252.6C429.5 240.6 423.9 232.7 415.2 224.2C411.1 220.2 407.6 217 407.5 217.2C407.3 217.4 408.2 220.7 409.5 224.5C413.5 236.4 415.1 246.6 414.8 257.8L414.5 268.2L412.2 260.6ZM236.2 251.9C240.4 248.6 245.1 244.3 246.6 242.2C248.1 240.2 250.9 236.5 252.7 234.1C254.5 231.7 255.8 229.5 255.6 229.3C254.9 228.6 244.1 233.8 238.4 237.6C231.8 242 227.8 247.8 225 256.9C222.5 264.9 222.5 265.2 225.8 261.1C227.2 259.3 231.9 255.1 236.2 251.9ZM296.8 193.5C314.5 185 322 171.2 322 146.5C322 140.4 321.3 131.4 320.4 126.5C317.7 110.4 308.2 85.8 304.3 84.3C299.7 82.5 287.8 107.4 272.1 152L268 163.5L276.3 155C280.8 150.3 288 142.7 292.3 138L300 129.5L300 137.5C300 150.3 295.5 164.5 288 175.8L285.7 179.1L291.4 176.6C294.5 175.2 298.5 173.1 300.1 171.9C304 169.2 304.4 169.7 302.5 175C300.4 181 297.4 185.7 291.6 191.8C285.9 197.9 286.9 198.3 296.8 193.5ZM204.2 171.9C203.7 170.6 200.5 162.2 197.1 153.2C183.1 116.2 176.1 91.5 178 86.4C179.8 81.7 187.3 84.4 208.9 97.7C226.1 108.3 252 127.1 252 128.9C252 129.3 249.1 131.2 245.6 133.2C231.3 141.5 219.2 153 209.8 167.2C205.3 174 205 174.3 204.2 171.9Z"/></svg>';
@@ -13446,6 +13513,7 @@ var D={
  ref:["Справочник","Шпаргалка, неприкосновенные","Справочник","Шпаргалка, неприкосновенные лица, охраняемые места и регламент передачи дел."],
  boss:["Руководство","Панель руководителя","Панель руководителя","Сотрудники организации, рейтинг недели, смены и контрольные тесты."],
  ideas:["Идеи","Предложить и проголосовать","Идеи","Предложите, что добавить в программу, и голосуйте за идеи других. Самые популярные разработчик берёт в работу."],
+ colleagues:["Коллеги","Профили своего ведомства","Коллеги","Сотрудники вашего ведомства: должность, уровень, задержания, тесты и достижения. Свою должность и «о себе» укажите в личном кабинете."],
  tester:["Панель тестера","Задания и бета-версии","Панель тестера","Задания от разработчика, экспериментальные функции и ранние версии программы."]
 };
 var X=window.SA_X||{role:"off"};
@@ -13517,7 +13585,8 @@ function navHtml(){
  grp("Кодексы и законы",CODES); grp("Работа",WORKS); grp("Развитие",DEV);
  if(bossOk()) h+='<div class="sd-g">Руководство</div>'+item("boss");
  var S24=window.SA_S24;
- if(S24&&S24.ideasOk()) h+='<div class="sd-g">Сообщество</div>'+item("ideas");
+ var COM=[]; if(window.SA_COL&&SA_COL.ok()) COM.push("colleagues"); if(S24&&S24.ideasOk()) COM.push("ideas");
+ if(COM.length) h+='<div class="sd-g">Сообщество</div>'+COM.map(item).join("");
  if(S24&&S24.testerOk()) h+='<div class="sd-g">Тестирование</div>'+item("tester");
  return h;
 }
@@ -13605,6 +13674,7 @@ function homeHtml(){
  if(window.SA_rights&&(r==="off"||r==="adv")) h+=act("rights","rights","Права задержанного","Зачитать правило Миранды или показать список прав");
  if(window.SA_RP&&has("rp")) h+=act("rp","rp","Написать рапорт",r==="pros"?"Заключение по проверке или служебный":r==="adv"?"Жалоба на действия сотрудника":"О задержании, силе, происшествии или служебный");
  h+=act("find","search","Найти статью","Номер или слово: 12.8, ствол, маска");
+ if(window.SA_pad&&SA_pad.ok()) h+=act("pad","apps","Блокнот","Записи, чек-листы и напоминания");
  if(document.getElementById("aiBtn")) h+=act("ai","ai","Спросить ИИ","Опишите ситуацию обычными словами");
  var dd=window.SA_TR&&SA_TR.dailyDone?SA_TR.dailyDone():null;
  h+=act("daily","learn","Мини-тест дня",dd?"Сегодня пройден: "+dd.s+" из "+dd.n:"5 вопросов, +20 опыта и серия дней");
@@ -13647,6 +13717,7 @@ view.addEventListener("click",function(e){
  else if(k==="cab"){ var c=document.getElementById("cabBtn"); if(c) c.click(); }
  else if(k==="tip"){ ls("bos-tip",String((+ls("bos-tip")||0)+1)); paintHome(); }
  else if(k==="tipoff"){ ls("bos-tips-off","1"); paintHome(); }
+ else if(k==="pad"){ if(window.SA_pad) SA_pad.open(); }
 });
 // с главного экрана поиск сразу открывает УК
 qEl.addEventListener("input",function(){ if(state.tab==="home"&&qEl.value.trim()){ state.tab="uk"; } },true);
@@ -13837,6 +13908,531 @@ function selfCheck(){
  })}
 setTimeout(function(){loadDict(true);selfCheck()},90e3);
 setInterval(function(){loadDict(false)},30*60e3);
+})();
+</script>
+<style id="col28-style">
+.c28-top{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:4px}
+.c28-top input{flex:1;min-width:200px;font:inherit;color:inherit;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.c28-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;margin-top:12px}
+.c28-card{display:flex;gap:10px;align-items:center;text-align:left;font:inherit;color:inherit;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface);cursor:pointer;min-width:0}
+.c28-card:hover{border-color:var(--accent)}
+.c28-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.c28-card span{min-width:0;display:flex;flex-direction:column;gap:1px}
+.c28-card b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c28-card small{color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c28-av{flex:none;width:40px;height:40px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--chip);color:var(--muted);font-weight:700;font-size:15px}
+.c28-av img{width:100%;height:100%;object-fit:cover;display:block}
+.c28-av.big{width:76px;height:76px;font-size:26px}
+.c28-head{display:flex;gap:14px;align-items:center;margin-bottom:12px}
+.c28-head h3{margin:0;font-size:19px;overflow-wrap:anywhere}
+.c28-head p{margin:2px 0 0;color:var(--muted);font-size:13.5px}
+.c28-bio{white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 12px;padding:10px 12px;border-radius:8px;background:var(--chip)}
+.c28-st{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:0 0 12px}
+.c28-st>div{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.c28-st small{display:block;color:var(--muted);font-size:12px}
+.c28-st b{font-size:17px}
+.c28-bar{height:6px;border-radius:3px;background:var(--chip);margin-top:6px;overflow:hidden}
+.c28-bar i{display:block;height:100%;background:var(--accent)}
+.c28-ach{display:flex;flex-wrap:wrap;gap:6px}
+.c28-ach span{border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12.5px}
+.c28-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px;font-size:13.5px}
+.c28-f{display:grid;gap:8px}
+.c28-f label{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+.c28-f input[type=text],.c28-f textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px;box-sizing:border-box;width:100%}
+.c28-f textarea{min-height:64px;resize:vertical}
+.c28-f .c28-ck{display:flex;gap:8px;align-items:center;color:var(--ink)}
+.c28-lock{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--chip)}
+</style>
+<script>
+/* ===== 2.8 · Коллеги =====
+   Раздел «Коллеги»: список и профили людей своего ведомства (уровень, задержания, тесты, достижения, аватар, Discord, «о себе»).
+   В личном кабинете: должность (видна рядом с ведомством), «о себе», скрыть Discord. Аватар с этого компьютера уходит на сервер
+   уменьшенной копией. После смены ведомства 24 часа профили новых коллег закрыты (и они не видят вас). Всё по флагу col28. */
+(function(){
+"use strict";
+var A=window.senkoApp;
+function st(){try{return A&&A.state?A.state():null}catch(x){return null}}
+function user(){var s=st();return s&&s.user}
+function online(){var u=user();return !!(u&&!u.offline&&A&&A.api)}
+function on(){try{return typeof window.SA_flag==="function"&&!!window.SA_flag("col28")}catch(x){return false}}
+function api(a,d){
+ if(!A||!A.api)return Promise.resolve({ok:false,error:"Нужно войти в аккаунт."});
+ return A.api(a,d||{}).then(function(r){return r||{ok:false,error:"Нет ответа от сервера."}},function(){return {ok:false,error:"Ошибка связи с программой."}})}
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
+function toast(t){if(window.SA_toast)SA_toast(t)}
+function day(v){var d=new Date(v);return isNaN(d)?"":d.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"})}
+function when(v){var d=new Date(v);if(isNaN(d))return "";var m=(Date.now()-d)/60e3;
+ if(m<15)return "недавно";
+ var t=d.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});
+ if(new Date().toDateString()===d.toDateString())return "сегодня в "+t;
+ return d.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit"})+" в "+t}
+function opens(v){var d=new Date(v);return isNaN(d)?"":d.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}
+function ini(n){n=String(n||"?").trim();var p=n.split(/[\s_]+/).filter(Boolean);return ((p[0]||"?").charAt(0)+(p[1]?p[1].charAt(0):"")).toUpperCase()}
+function av(img,nick,big){return '<span class="c28-av'+(big?' big':'')+'" aria-hidden="true">'+(img&&/^data:image\//.test(img)?'<img alt="" src="'+e(img)+'">':e(ini(nick)))+'</span>'}
+function ok(){return online()&&on()}
+window.SA_COL={ok:ok};
+
+/* ---------- раздел «Коллеги» ---------- */
+var CS={list:null,org:"",locked:false,opensAt:null,err:"",loading:false,q:"",at:0};
+function load(force){
+ if(CS.loading||(!force&&CS.list&&Date.now()-CS.at<120e3))return;CS.loading=true;CS.err="";
+ api("colleagues",{op:"list"}).then(function(r){CS.loading=false;CS.at=Date.now();
+  if(r.ok){CS.list=r.items||[];CS.org=r.org||"";CS.locked=!!r.locked;CS.opensAt=r.opensAt||null}else{CS.err=r.error||"Не удалось загрузить коллег.";if(!CS.list)CS.list=null}
+  if(state.tab==="colleagues")repaint()})}
+function repaint(){var y=window.pageYOffset;render();window.scrollTo(0,y)}
+function match(c,q){return !q||(String(c.nick||"")+" "+String(c.post||"")).toLowerCase().indexOf(q)>=0}
+function cardHtml(c){
+ var sub=[c.post,c.lvl?"ур. "+c.lvn+" · "+c.lvl:""].filter(Boolean).join(" · ");
+ return '<button type="button" class="c28-card" data-c28v="'+e(c.id)+'" data-q="'+e((String(c.nick||"")+" "+String(c.post||"")).toLowerCase())+'">'+av(c.ava,c.nick)+
+  '<span><b>'+e(c.nick||"Без ника")+(c.me?' <small style="display:inline">(вы)</small>':'')+'</b><small>'+e(sub||" ")+'</small></span></button>'}
+function pageHtml(){
+ setTimeout(function(){load(false)},0);
+ var h='<section class="panel s24-sec"><h2>Коллеги'+(CS.org?' · '+e(CS.org):'')+'</h2><p class="sub">Сотрудники вашего ведомства. Нажмите на человека, чтобы открыть профиль. Свою должность и «о себе» можно указать в личном кабинете.</p>';
+ if(CS.locked){
+  h+='<div class="c28-lock"><b>Профили коллег откроются '+e(opens(CS.opensAt))+'.</b><p style="margin:6px 0 0">Вы недавно сменили ведомство. Чтобы никто не злоупотреблял переходами, профили нового ведомства открываются через 24 часа. До этого времени коллеги тоже не видят ваш профиль.</p></div>';
+  return h+'</section>'}
+ var L=CS.list;
+ if(!L){h+=CS.err?'<p class="s24-msg err">'+e(CS.err)+'</p><div class="s24-row"><button type="button" class="btn" data-c28="reload">Повторить</button></div>':'<p class="s24-empty">Загружаем…</p>';return h+'</section>'}
+ h+='<div class="c28-top"><input type="search" data-c28in="q" placeholder="Поиск по нику или должности" aria-label="Поиск коллег" maxlength="40" value="'+e(CS.q)+'"><span class="s24-chip">'+L.length+' чел.</span></div>';
+ var q=CS.q.trim().toLowerCase(),n=0;
+ h+='<div class="c28-grid">'+L.map(function(c){var v=match(c,q);if(v)n++;return v?cardHtml(c):cardHtml(c).replace('<button ','<button hidden ')}).join("")+'</div>';
+ h+='<p class="s24-empty c28-none"'+(n?' hidden':'')+'>'+(L.length?'Никого не нашли. Попробуйте другую часть ника.':'Пока здесь только вы.')+'</p>';
+ return h+'</section>'}
+window.SA_pages=window.SA_pages||{};
+window.SA_pages.colleagues={ok:ok,html:pageHtml};
+document.addEventListener("input",function(ev){var t=ev.target;if(!t||!t.dataset||t.dataset.c28in!=="q")return;ev.stopPropagation();
+ CS.q=t.value;var q=CS.q.trim().toLowerCase(),n=0,box=t.closest("section");if(!box)return;
+ box.querySelectorAll(".c28-card").forEach(function(b){var v=!q||String(b.dataset.q||"").indexOf(q)>=0;b.hidden=!v;if(v)n++});
+ var no=box.querySelector(".c28-none");if(no)no.hidden=!!n},true);
+
+/* ---------- профиль ---------- */
+function profHtml(p){
+ var lv=p.level||{},pct=lv.to>lv.from?Math.max(0,Math.min(100,Math.round((lv.xp-lv.from)/(lv.to-lv.from)*100))):100;
+ var badge=p.rank&&p.rank!=="user"?' <span class="s24-chip">'+e(p.rankName||p.rank)+'</span>':'';
+ var h='<div class="c28-head">'+av(p.ava,p.nick,true)+'<div><h3>'+e(p.nick||"Без ника")+badge+'</h3><p>'+e(p.org||"")+(p.post?' · '+e(p.post):'')+'</p></div></div>';
+ if(p.bio)h+='<p class="c28-bio">'+e(p.bio)+'</p>';
+ if(p.discord)h+='<div class="c28-row"><span>Discord: <b>'+e(p.discord)+'</b></span><button type="button" class="more" data-c28c="'+e(p.discord)+'">Скопировать</button></div>';
+ h+='<div class="c28-st">'+
+  '<div><small>Уровень</small><b>'+e(lv.n||1)+' · '+e(lv.name||"")+'</b><div class="c28-bar" title="'+e(lv.xp||0)+' опыта"><i style="width:'+pct+'%"></i></div></div>'+
+  '<div><small>Задержания</small><b>'+e(p.det||0)+'</b><small>за 7 дней: '+e(p.det7||0)+'</small></div>'+
+  '<div><small>Тесты</small><b>'+e(p.tests||0)+'</b><small>'+(p.avg_p!=null?'в среднем '+e(p.avg_p)+'%':'тестов пока нет')+'</small></div></div>';
+ var ach=p.ach||[];
+ h+='<h4 style="margin:0 0 6px">Достижения'+(ach.length?' · '+ach.length:'')+'</h4>'+(ach.length?'<div class="c28-ach">'+ach.map(function(a){return '<span title="'+e(a.desc||"")+(a.at?' · '+e(day(a.at)):'')+'">'+e(a.icon||"🏅")+' '+e(a.name)+'</span>'}).join("")+'</div>':'<p class="s24-empty">Пока нет.</p>');
+ h+='<p class="s24-empty" style="margin-top:12px">'+(p.since?'В программе с '+e(day(p.since)):'')+(p.seen?(p.since?' · ':'')+'Активность: '+e(when(p.seen)):'')+'</p>';
+ return h}
+function openProf(id){
+ if(!window.SA_modal)return;
+ var o=SA_modal("Профиль",'<p class="s24-empty">Загружаем…</p>');
+ api("colleagues",{op:"view",id:id}).then(function(r){
+  var b=o&&o.querySelector(".sa-body");if(!b||!document.contains(o))return;
+  b.innerHTML=r.ok&&r.profile?profHtml(r.profile):'<p class="s24-msg err">'+e(r.error||"Не удалось открыть профиль.")+'</p>'})}
+document.addEventListener("click",function(ev){
+ var b=ev.target.closest&&ev.target.closest("[data-c28v],[data-c28],[data-c28c]");if(!b)return;
+ if(b.dataset.c28v){openProf(b.dataset.c28v);return}
+ if(b.dataset.c28c!=null){var t=b.dataset.c28c;if(A&&A.copy)A.copy(t);else if(navigator.clipboard)navigator.clipboard.writeText(t).catch(function(){});toast("Discord скопирован");return}
+ var a=b.dataset.c28;
+ if(a==="reload"){CS.list=null;load(true);repaint();return}
+ if(a==="save")saveMine(b);
+});
+
+/* ---------- личный кабинет: должность, «о себе», Discord ---------- */
+var ME={d:null,busy:false,msg:"",err:false,draft:null};
+function loadMine(){if(ME.busy)return;ME.busy=true;
+ api("colleagues",{op:"mine"}).then(function(r){ME.busy=false;if(r.ok){ME.d=r;if(!ME.draft)ME.draft={post:r.post||"",bio:r.bio||"",hide:!!r.hideDiscord}}if(window.SA_cabRepaint)SA_cabRepaint()})}
+window.SA_CAB28=function(){
+ if(!ok())return "";
+ if(!ME.d){setTimeout(loadMine,0);return '<div class="cab-h">Профиль для коллег<small>раздел «Коллеги»</small></div><p class="s24-empty">Загружаем…</p>'}
+ var D=ME.draft||{post:"",bio:"",hide:false};
+ return '<div class="cab-h">Профиль для коллег<small>раздел «Коллеги»</small></div><p class="s24-empty" style="margin-top:0">Это видят сотрудники вашего ведомства в разделе «Коллеги»: ник, фото, должность, «о себе», Discord, уровень, задержания, тесты и достижения.</p>'+
+  (ME.d.locked?'<p class="s24-msg">Вы недавно сменили ведомство: коллеги увидят ваш профиль '+e(opens(ME.d.opensAt))+'.</p>':'')+
+  '<div class="c28-f"><label>Должность (видна рядом с ведомством)<input type="text" data-c28f="post" maxlength="40" value="'+e(D.post)+'" placeholder="Например, Глава отдела PD"></label>'+
+  '<label>О себе<textarea data-c28f="bio" maxlength="300" placeholder="Пара слов о себе: смены, специализация, как связаться">'+e(D.bio)+'</textarea></label>'+
+  '<label class="c28-ck"><input type="checkbox" data-c28f="hide"'+(D.hide?' checked':'')+'> Скрыть мой Discord от коллег</label>'+
+  '<div class="s24-row" style="margin-top:0"><button type="button" class="btn primary" data-c28="save">Сохранить для коллег</button><span class="s24-msg'+(ME.err?' err':'')+'" style="margin:0" role="status">'+e(ME.msg)+'</span></div></div>'};
+function inp(ev){var t=ev.target;if(!t||!t.dataset||!t.dataset.c28f)return;ev.stopPropagation();if(!ME.draft)ME.draft={post:"",bio:"",hide:false};
+ var k=t.dataset.c28f;if(k==="hide")ME.draft.hide=!!t.checked;else ME.draft[k]=t.value;ME.msg=""}
+document.addEventListener("input",inp,true);document.addEventListener("change",inp,true);
+function saveMine(b){
+ var D=ME.draft;if(!D)return;b.disabled=true;
+ var d={op:"save",post:D.post,bio:D.bio,hideDiscord:D.hide};
+ api("colleagues",d).then(function(r){b.disabled=false;
+  if(r.ok){var u=r.user||{};ME.d=Object.assign({},ME.d,{post:u.post||"",bio:u.bio||"",hideDiscord:!!u.hideDiscord});ME.draft={post:u.post||"",bio:u.bio||"",hide:!!u.hideDiscord};ME.msg="Сохранено.";ME.err=false;CS.at=0}
+  else{ME.msg=r.error||"Не удалось сохранить.";ME.err=true}
+  if(window.SA_cabRepaint)SA_cabRepaint()})}
+
+/* ---------- аватар: уменьшенная копия на сервер ---------- */
+function hash(s){var h=5381;for(var i=0;i<s.length;i+=7)h=((h<<5)+h+s.charCodeAt(i))|0;return s.length+":"+h}
+function small(url,cb){var img=new Image();img.onerror=function(){cb("")};img.onload=function(){
+ try{var N=96,c=document.createElement("canvas");c.width=c.height=N;var g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,N,N);
+  var w=img.naturalWidth,h=img.naturalHeight,s=Math.min(w,h);g.drawImage(img,(w-s)/2,(h-s)/2,s,s,0,0,N,N);
+  var q=0.82,out=c.toDataURL("image/jpeg",q);while(out.length>15000&&q>0.4){q-=0.12;out=c.toDataURL("image/jpeg",q)}cb(out.length<=15000?out:"")}catch(x){cb("")}};img.src=url}
+var avBusy=false;
+function avSync(){
+ if(avBusy||!ok())return;var u=user(),key="bos-col28ava:"+(u&&(u.login||u.nick)||"");
+ var cur=ls("bos-avatar")||"",h=cur?hash(cur):"",was=ls(key);
+ if(was===h||(!cur&&!was))return; // не менялся; удаляем на сервере только то, что отправили с этого компьютера
+ avBusy=true;
+ var send=function(img){api("colleagues",{op:"save",avatar:img}).then(function(r){avBusy=false;if(r.ok){ls(key,h);CS.at=0}})};
+ if(!cur)send("");else small(cur,function(img){if(img)send(img);else{avBusy=false;ls(key,h)}})}
+setTimeout(avSync,20e3);setInterval(avSync,60e3);
+var lastOrg=(user()||{}).org||"";
+if(A&&A.onChange)A.onChange(function(){var o=(user()||{}).org||"";if(!ok()||o!==lastOrg){CS.list=null;CS.org="";CS.locked=false;ME.d=null;ME.draft=null}lastOrg=o});
+})();
+</script>
+<style id="det28-style">
+.t28-mk{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 4px}
+.t28-mk .btn small{font-weight:400;opacity:.8;margin-left:4px}
+.t28-mk .btn[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.t28-cd{margin-top:6px;font-size:13.5px}
+.t28-cd b{font-variant-numeric:tabular-nums}
+.t28-grp{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 0;font-size:13px;color:var(--muted)}
+.t28-sj{display:grid;gap:4px;margin:6px 0 0;padding:0;list-style:none}
+.t28-sj li{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:13px;border-bottom:1px dashed var(--line);padding:4px 0}
+.t28-sj li b{font-weight:600}
+.t28-sj li small{color:var(--muted)}
+.p28-x{margin-top:8px;display:grid;gap:8px}
+.p28-ta{width:100%;min-height:150px;box-sizing:border-box;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;resize:vertical}
+.p28-cl{display:grid;gap:2px}
+.p28-cl label{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;cursor:pointer}
+.p28-cl label.done span{text-decoration:line-through;color:var(--muted)}
+.p28-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px}
+.p28-row .lab{color:var(--muted)}
+.p28-tpl{display:inline-flex;align-items:center;gap:2px}
+.p28-rem{display:grid;gap:4px;font-size:13px}
+.p28-rem div{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+</style>
+<script>
+/* ===== 2.8 · Задержание и блокнот =====
+   det28: отметки со временем (Миранда, звонок, адвокат, медпомощь, видео) в карточке и рапорте, отсчёт ожидания адвоката и прокурора
+   с уведомлением, проверка рапорта перед отправкой, журнал смены и отчёт о смене, групповое задержание, подсказка по юрисдикции,
+   голосовая заметка в рации (window.SA_det28note).
+   pad28: блокнот в окне, чек-листы «[ ] пункт», напоминания, блокнот в мини-окне задержания. Всё по флагам (сначала только тестерам). */
+(function(){
+"use strict";
+var A=window.senkoApp, DESK=!!(A&&!A.web&&A.miniState);
+function fl(k){try{return typeof window.SA_flag==="function"&&!!window.SA_flag(k)}catch(x){return false}}
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
+function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(x){return d}}
+function jset(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(x){}}
+function toast(t){if(window.SA_toast)SA_toast(t)}
+function hm(ts){var d=new Date(ts);return isNaN(d)?"":d.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}
+function me(){try{var s=A&&A.state&&A.state();return s&&s.user||null}catch(x){return null}}
+function redraw(){if(state.tab==="timer"){var y=window.pageYOffset;render();window.scrollTo(0,y)}}
+function notify(t,b){try{if(A&&A.notify)A.notify(t,b)}catch(x){}}
+function det(k){return fl(k)}
+var DK=["det28mk","det28wait","det28rp","det28shift","det28grp","det28jur","det28note","det28sz","det28wit","det28chron","det28xfer","det28imm"];
+function anyDet(){return DK.some(fl)}
+
+/* ---------- 8: процессуальные отметки со временем ---------- */
+var MK=[["mir","Миранда зачитана","Миранда"],["call","Звонок предоставлен","звонок"],["advc","Адвокат вызван","адвокат вызван"],["adva","Адвокат прибыл","адвокат прибыл"],
+ ["prosc","Прокурор вызван","прокурор вызван"],["med","Медпомощь оказана","медпомощь"],["cam","Видеозапись ведётся","видеозапись"]];
+function mkHtml(t){var M=t.marks||{};
+ return '<h3>Процессуальные отметки</h3><p class="hint" style="margin-top:0">Нажмите, когда действие выполнено: время запишется в журнал и в рапорт. «Адвокат вызван» и «Прокурор вызван» сами ставят паузу ожидания.</p>'+
+  '<div class="t28-mk">'+MK.map(function(m){var at=M[m[0]];return '<button type="button" class="btn" data-t28mk="'+m[0]+'" aria-pressed="'+(!!at)+'">'+e(m[1])+(at?'<small>'+e(hm(at))+'</small>':'')+'</button>'}).join("")+'</div>'}
+function mark(k,t0,only){var t=t0||tm;if(!t||!t.start)return false;if(!t.marks)t.marks={};var m=MK.filter(function(x){return x[0]===k})[0];if(!m)return false;
+ if(t.marks[k]){if(only)return false;delete t.marks[k];if(k==="mir")delete t.checks[t.mode+":mir"];ev(t,"mk-"+k,"Отметка снята: "+m[2]);saveTm();redraw();return}
+ var now=Date.now();t.marks[k]=now;ev(t,"mk-"+k,m[1]);
+ if(k==="mir")t.checks[t.mode+":mir"]=now;
+ if(k==="call")t.checks[t.mode+":rights"]=t.checks[t.mode+":rights"]||now;
+ // вызов адвоката или прокурора ставит паузу ожидания, прибытие адвоката снимает её
+ if((k==="advc"||k==="prosc")&&!t.decidedAt){var pk=k==="advc"?"adv":"pros";if(!(t.paused&&t.paused.k===pk)){endPause(t);t.paused={k:pk,at:now,note:""};ev(t,"pause","Пауза: "+pauseName(pk))}}
+ if(k==="adva"&&t.paused&&t.paused.k==="adv")endPause(t);
+ saveTm();redraw();return true}
+window.SA_det28mark=function(t,k){return det("det28mk")&&mark(k,t,true)}; // 89: отметка голосом (только ставит)
+window.SA_det28marks=function(t){return marksText(t)};
+function marksText(t){var M=t&&t.marks||{};var L=MK.filter(function(m){return M[m[0]]}).sort(function(a,b){return M[a[0]]-M[b[0]]}).map(function(m){return m[2]+" "+hm(M[m[0]])});return L.join(", ")}
+function notesText(t){return ((t&&t.events)||[]).filter(function(x){return x.k==="note"||x.k==="vnote"}).map(function(x){return String(x.x||"").replace(/^Заметка:\s*/,"")}).filter(Boolean).join("; ")}
+var TS0=timerSummary;
+timerSummary=function(){var s=TS0.apply(this,arguments);if(!s)return s;
+ var m=det("det28mk")?marksText(tm):"",n=det("det28note")?notesText(tm):"";if(m)s+="; отметки: "+m;if(n)s+="; заметки: "+n;
+ if(!det("det28chron"))return s;
+ // 86: причины пауз
+ var pn=(tm.log||[]).filter(function(l){return l.note&&l.note!=="диспетчер"}).map(function(l){return pauseName(l.k)+" — "+l.note});if(tm.paused&&tm.paused.note&&tm.paused.note!=="диспетчер")pn.push(pauseName(tm.paused.k)+" — "+tm.paused.note);
+ if(pn.length)s+="; причины пауз: "+pn.join(", ");return s};
+
+/* ---------- 9: отсчёт до срока ожидания и уведомление ---------- */
+var PH0=pauseHtml;
+pauseHtml=function(t){var h=PH0.apply(this,arguments);t=t||tm;if(!h||!det("det28wait")||!t||!t.paused)return h;
+ var d=pauseDef(t.paused.k);if(!d||!d.lim.length)return h;var e2=Date.now()-t.paused.at,nx=null;
+ d.lim.forEach(function(l){if(!nx&&e2<l[0]*60000)nx=l});
+ return h+(nx?'<div class="t28-cd">До '+nx[0]+' мин осталось <b>'+fmt(nx[0]*60000-e2)+'</b>. Программа напомнит звуком и уведомлением.</div>':'')};
+function waitTick(){if(!det("det28wait"))return;var ch=false;
+ (tms||[]).forEach(function(t){if(!t.paused)return;var d=pauseDef(t.paused.k);if(!d||!d.lim.length)return;
+  var mins=(Date.now()-t.paused.at)/60000,n=d.lim.filter(function(l){return mins>=l[0]}).length;
+  if(t.paused._a==null){t.paused._a=n;ch=true;return} // после перезапуска не напоминаем о старом
+  if(n>t.paused._a){t.paused._a=n;ch=true;var msg=d.lim[n-1][1],who=t.nick||"задержание";
+   toast("⏰ "+d.t+" · "+who+": "+msg);try{if(typeof sndOn!=="function"||sndOn())beep(2,660)}catch(x){}
+   notify("Senko · "+d.t+" ("+who+")",msg);ev(t,"wait","Ожидание: "+msg)}});
+ if(ch)saveTm()}
+setInterval(waitTick,1000);
+
+/* ---------- 12: групповое задержание ---------- */
+function grpOf(t){return t&&t.grp?tms.filter(function(x){return x.grp===t.grp}):[]}
+function grpHtml(t){var G=grpOf(t);
+ return '<div class="t28-grp">'+(G.length>1?'<span>Групповое задержание: '+G.length+' чел.</span>':'')+
+  '<button type="button" class="btn" data-t28g="add">＋ Ещё задержанный по этому делу</button>'+
+  (G.length>1?'<button type="button" class="btn" data-t28g="arts">Статьи этого задержанного всем в группе</button>':'')+'</div>'}
+function grpAdd(){var s=tm;if(!s||!s.start)return;if(!s.grp)s.grp=s.id;
+ var t=startTm();if(!t)return;t.start=s.start;t.grp=s.grp;t.arts=s.arts||"";t.mode=s.mode;t.events=[];ev(t,"start","Задержание начато (групповое, вместе с "+(s.nick||"первым задержанным")+")");
+ saveTm();redraw();toast("Добавлен задержанный в группу: общие статьи скопированы, допишите свои")}
+function grpArts(){var s=tm,G=grpOf(s);if(G.length<2)return;var base=String(s.arts||"").split(/\s*,\s*/).filter(Boolean),n=0;
+ G.forEach(function(t){if(t===s)return;var have=String(t.arts||"").split(/\s*,\s*/).filter(Boolean),add=base.filter(function(a){return have.indexOf(a)<0});if(add.length){t.arts=have.concat(add).join(", ");n++}});
+ saveTm();redraw();toast(n?"Статьи добавлены ещё "+n+" задержанным":"У всех в группе эти статьи уже есть")}
+
+/* ---------- встраивание в страницу таймера ---------- */
+var RT0=renderTimer;
+renderTimer=function(){RT0.apply(this,arguments);if(!tm||!tm.start)return;
+ try{var hs=view.querySelectorAll("h3"),j=null;for(var i=0;i<hs.length;i++)if(/Журнал событий/.test(hs[i].textContent)){j=hs[i];break}
+  if(j&&det("det28mk"))j.insertAdjacentHTML("beforebegin",mkHtml(tm));
+  if(!det("det28grp"))return;
+  var row=view.querySelector('[data-tm="archive"]'),p=row&&row.closest(".rowbtn");if(p)p.insertAdjacentHTML("afterend",grpHtml(tm));
+  tms.forEach(function(t){if(!t.grp||grpOf(t).length<2)return;var c=view.querySelector('[data-card="'+t.id+'"] .tc-name');if(c)c.insertAdjacentHTML("afterend",'<i class="tc-md" title="Групповое задержание">👥</i>')});
+ }catch(x){}};
+var AR0=archiveTm;
+archiveTm=function(t){var M=t&&t.marks,G=t&&t.grp;AR0.apply(this,arguments);if(thist[0]&&thist[0].id===t.id){if(M)thist[0].marks=M;if(G)thist[0].grp=G}};
+document.addEventListener("click",function(ev2){var b=ev2.target.closest&&ev2.target.closest("[data-t28mk],[data-t28g],[data-t28sj]");if(!b)return;
+ if(b.dataset.t28mk){mark(b.dataset.t28mk);return}
+ if(b.dataset.t28g==="add"){grpAdd();return}
+ if(b.dataset.t28g==="arts"){grpArts();return}
+ if(b.dataset.t28sj==="copy"){if(typeof copyText==="function")copyText(shiftReport(),b);return}
+});
+
+/* ---------- 13: подсказка по юрисдикции в калькуляторе ---------- */
+window.SA_jurWarns=function(items){
+ if(!det("det28jur")||!dept||!DEPT_J[dept])return [];var out={};
+ (items||[]).forEach(function(r){if(r.k==="uk"&&r.j&&!DEPT_J[dept][r.j])(out[r.j]=out[r.j]||[]).push(r.code+(r.part?" ч."+r.part:""))});
+ return Object.keys(out).map(function(j){return "Ст. "+out[j].join(", ")+": "+JN[j].toLowerCase()+" юрисдикция ("+JW[j]+"), вне компетенции "+dept+". Передайте дело ведомству из списка или запросите одобрение по рации (УК ст. 2.8)."})};
+
+/* ---------- 14: голосовая заметка (рация) ---------- */
+window.SA_det28note=function(t,text){if(!det("det28note")||!t||!text)return false;ev(t,"vnote","Заметка: "+text);saveTm();return true};
+window.SA_det28on=function(k){return k?det(k):anyDet()};
+
+/* ---------- 11: журнал смены и отчёт о смене ---------- */
+function d0(off){var d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-(off||0));return d.getTime()}
+function dayRows(off){var from=d0(off),to=from+864e5,L=[];
+ (thist||[]).forEach(function(r){var t=r.end||r.start||0;if(t>=from&&t<to)L.push({start:r.start,end:r.end,dur:r.dur,nick:r.nick,st:r.st,arts:r.arts,res:r.res,marks:r.marks,live:false})});
+ if(!off)(tms||[]).forEach(function(t){if(t.start&&t.start>=from)L.push({start:t.start,dur:elapsed(t),nick:t.nick,st:t.st,arts:t.arts,res:t.result||(t.decidedAt?"Мера избрана":"в работе"),marks:t.marks,live:true})});
+ return L.sort(function(a,b){return a.start-b.start})}
+function offNow(){var X=window.SA_X||{};return X.s11day||0}
+function shiftReport(){var off=offNow(),L=dayRows(off),u=me()||{},day=new Date(d0(off)).toLocaleDateString("ru-RU");
+ var out=["ОТЧЁТ О СМЕНЕ · "+day,"Сотрудник: "+(u.nick||u.login||"________")+(u.org?" ("+u.org+")":""),"Задержаний: "+L.filter(function(r){return !r.live}).length+(L.some(function(r){return r.live})?" (ещё "+L.filter(function(r){return r.live}).length+" в работе)":"")];
+ L.forEach(function(r,i){out.push((i+1)+". "+hm(r.start)+(r.end?"–"+hm(r.end):"")+" · "+(r.nick||"без ника")+(r.st?" ("+r.st+")":"")+" · "+(r.arts||"статьи не указаны")+" · "+(r.res||"без итога")+" · "+fmt(r.dur||0)+(r.marks&&marksText(r)?" · отметки: "+marksText(r):""))});
+ try{if(typeof window.SA_shiftText==="function")out.push(SA_shiftText())}catch(x){}
+ return out.join("\n")}
+function journalHtml(){var off=offNow(),L=dayRows(off);
+ return '<div class="s11-cab"><div class="cab-h">Журнал смены<small>все задержания за день по времени</small></div>'+
+  (L.length?'<ul class="t28-sj">'+L.map(function(r){return '<li><b>'+e(hm(r.start))+(r.end?'–'+e(hm(r.end)):'')+'</b><span>'+e((r.nick||"без ника")+(r.st?" · "+r.st:""))+'</span><small>'+e(r.arts||"статьи не указаны")+' · '+e(r.res||"без итога")+(r.live?' · идёт':'')+'</small></li>'}).join("")+'</ul>':'<p class="hint">В этот день задержаний нет.</p>')+
+  '<div class="rowbtn"><button type="button" class="btn" data-t28sj="copy">Скопировать отчёт о смене</button></div></div>'}
+var C110=window.SA_CAB11;
+if(C110)window.SA_CAB11=function(acc){var h=C110.apply(this,arguments);if(!det("det28shift"))return h;
+ var k='<div class="s11-cab"><div class="cab-h">Мои частые статьи',i=h.indexOf(k);return i>=0?h.slice(0,i)+journalHtml()+h.slice(i):h+journalHtml()};
+
+/* =================== блокнот (pad28) =================== */
+function padOn(){return fl("pad28")}
+function pad(){return ls("bos-pad")||""}
+function setPad(v){ls("bos-pad",String(v||"").slice(0,20000));padSync()}
+var CK_RE=/^(\s*)\[( |x|х|X|Х)\]\s?(.*)$/;
+function items(){return pad().split("\n").map(function(s,i){var m=CK_RE.exec(s);return m?{i:i,ck:m[2]!==" ",t:m[3]}:null}).filter(Boolean)}
+function toggle(i){var L=pad().split("\n"),m=CK_RE.exec(L[i]||"");if(!m)return;L[i]=m[1]+"["+(m[2]===" "?"x":" ")+"] "+m[3];setPad(L.join("\n"))}
+var REM=jget("bos-padrem",[]);if(!Array.isArray(REM))REM=[];
+function firstLine(){var L=pad().split("\n").map(function(s){return s.replace(CK_RE,"$3").trim()}).filter(Boolean);return (L[0]||"Блокнот").slice(0,80)}
+function remAdd(min){REM.push({id:Date.now(),at:Date.now()+min*60000,t:firstLine()});REM=REM.slice(-10);jset("bos-padrem",REM);padSync();toast("Напомню в "+hm(Date.now()+min*60000))}
+function remDel(id){REM=REM.filter(function(r){return r.id!==id});jset("bos-padrem",REM);padSync()}
+function remTick(){if(!padOn())return;var now=Date.now(),due=REM.filter(function(r){return r.at<=now});if(!due.length)return;
+ REM=REM.filter(function(r){return r.at>now});jset("bos-padrem",REM);
+ due.forEach(function(r){toast("⏰ Напоминание: "+r.t);notify("Senko · напоминание",r.t)});
+ try{if(typeof sndOn!=="function"||sndOn())beep(2,880)}catch(x){}
+ padOpen()}
+setInterval(remTick,10000);
+function clHtml(){var L=items();if(!L.length)return '<p class="hint" style="margin:0">Чек-лист: начните строку с «[ ]», и она станет пунктом с галочкой.</p>';
+ var n=L.filter(function(x){return x.ck}).length;
+ return '<div class="p28-cl" role="group" aria-label="Чек-лист"><small class="hint" style="margin:0">Чек-лист: '+n+' из '+L.length+'</small>'+L.map(function(x){return '<label class="'+(x.ck?'done':'')+'"><input type="checkbox" data-p28ck="'+x.i+'"'+(x.ck?' checked':'')+'><span>'+e(x.t||"пункт")+'</span></label>'}).join("")+'</div>'}
+function remHtml(){var L=REM.slice().sort(function(a,b){return a.at-b.at});
+ return '<div class="p28-row"><span class="lab">Напомнить через</span>'+[[15,"15 мин"],[30,"30 мин"],[60,"1 час"],[120,"2 часа"]].map(function(x){return '<button type="button" class="pill" data-p28rem="'+x[0]+'">'+x[1]+'</button>'}).join("")+'</div>'+
+  (L.length?'<div class="p28-rem">'+L.map(function(r){return '<div><span>⏰ '+e(hm(r.at))+' · '+e(r.t)+'</span><button type="button" class="more" data-p28rd="'+r.id+'">Отменить</button></div>'}).join("")+'</div>':'')}
+function xHtml(){return '<div class="p28-x" data-p28x="1"><div data-p28cl="1">'+clHtml()+'</div><div class="p28-row"><button type="button" class="btn" data-p28="item">＋ Пункт чек-листа</button>'+
+  (DESK&&fl("pad28mini")?'<label class="p28-row" style="gap:6px"><input type="checkbox" data-p28mini="1"'+(ls("bos-pad28mini")==="1"?' checked':'')+'> Показывать в мини-окне задержания</label>':'')+'</div>'+
+  '<div data-p28rm="1">'+remHtml()+'</div>'+(fl("pad28tpl")?'<div data-p28tp="1">'+tplHtml()+'</div>':'')+'</div>'}
+/* ---------- 90: шаблоны заметок ---------- */
+var TPL0=[["Вызов","Вызов {t}\n[ ] Место: \n[ ] Что случилось: \n[ ] Участники и приметы: \n[ ] Доложить по рации"],
+ ["ДТП","ДТП {t}\n[ ] Место и время\n[ ] Участники и номера машин\n[ ] Пострадавшие, вызвать EMS\n[ ] Свидетели\n[ ] Видеозапись и фото\n[ ] Виновник и статья"],
+ ["Обыск авто","Обыск авто {t}\n[ ] Номер и модель\n[ ] Владелец и документы\n[ ] Основание для обыска\n[ ] Видеозапись ведётся\n[ ] Найдено: \n[ ] Изъятое внести в задержание"]];
+function myTpl(){var L=jget("bos-padtpl",[]);return Array.isArray(L)?L.filter(function(x){return x&&x.n&&x.t}).slice(0,12):[]}
+var TPLSAVE=false;
+function tplHtml(){var M=myTpl();
+ return '<div class="p28-row"><span class="lab">Шаблоны</span>'+TPL0.map(function(x,i){return '<button type="button" class="pill" data-p28tpl="b'+i+'">'+e(x[0])+'</button>'}).join("")+
+  M.map(function(x,i){return '<span class="p28-tpl"><button type="button" class="pill" data-p28tpl="m'+i+'">'+e(x.n)+'</button><button type="button" class="more" data-p28td="'+i+'" aria-label="Удалить шаблон '+e(x.n)+'">✕</button></span>'}).join("")+
+  (TPLSAVE?'':'<button type="button" class="more" data-p28ts="open">＋ Сохранить блокнот как шаблон</button>')+'</div>'+
+  (TPLSAVE?'<div class="p28-row"><input class="tin" data-p28tn="1" maxlength="30" placeholder="Название шаблона" style="max-width:220px" autocomplete="off"><button type="button" class="btn" data-p28ts="save">Сохранить</button><button type="button" class="more" data-p28ts="cancel">Отмена</button></div>':'')}
+function tplSync(){document.querySelectorAll('[data-p28tp]').forEach(function(n){n.innerHTML=tplHtml()})}
+function tplUse(code){var x=code.charAt(0)==="b"?TPL0[+code.slice(1)]:null,M=myTpl(),txt;
+ if(x)txt=x[1];else{var m=M[+code.slice(1)];if(!m)return;txt=m.t}
+ txt=txt.replace(/\{t\}/g,hm(Date.now()));var v=pad();setPad(v+(v.trim()?(/\n$/.test(v)?"\n":"\n\n"):"")+txt);
+ var ta=document.querySelector("textarea.p28-ta")||document.querySelector("textarea.s9-pad");if(ta){ta.value=pad();ta.focus();ta.selectionStart=ta.selectionEnd=ta.value.length}}
+function tplSave(){var i=document.querySelector('[data-p28tn]'),n=(i?i.value:"").trim().slice(0,30),t=pad().trim();
+ if(!t){toast("Блокнот пустой: сначала напишите текст шаблона");return}
+ if(!n){if(i)i.focus();toast("Введите название шаблона");return}
+ var M=myTpl().filter(function(x){return x.n!==n});if(M.length>=12){toast("Своих шаблонов уже 12: удалите один");return}
+ M.push({n:n,t:t.slice(0,3000)});jset("bos-padtpl",M);TPLSAVE=false;tplSync();toast("Шаблон «"+n+"» сохранён")}
+function padSync(){ // перерисовать чек-лист и напоминания везде, где открыт блокнот
+ document.querySelectorAll('[data-p28cl]').forEach(function(n){n.innerHTML=clHtml()});
+ document.querySelectorAll('[data-p28rm]').forEach(function(n){n.innerHTML=remHtml()});
+ document.querySelectorAll('textarea.p28-ta,textarea.s9-pad').forEach(function(t){if(document.activeElement!==t&&t.value!==pad())t.value=pad()})}
+function padOpen(){if(!window.SA_modal)return;
+ SA_modal("Блокнот",'<textarea class="p28-ta" data-p28ta="1" maxlength="20000" aria-label="Блокнот" placeholder="Быстрые записи: номера, приметы, что не забыть.\n[ ] пункт с галочкой">'+e(pad())+'</textarea>'+xHtml()+'<p class="hint">Сохраняется сам, только на этом компьютере.</p>')}
+window.SA_pad={ok:padOn,open:padOpen};
+// блокнот в боковой панели: дописываем чек-лист и напоминания под ним
+function railX(){if(!padOn())return;document.querySelectorAll("textarea.s9-pad").forEach(function(t){var nx=t.nextElementSibling;if(nx&&nx.dataset&&nx.dataset.p28x)return;t.insertAdjacentHTML("afterend",xHtml())})}
+new MutationObserver(function(){railX()}).observe(document.body,{childList:true,subtree:true});
+document.addEventListener("input",function(ev2){var t=ev2.target;if(!t)return;
+ if(t.dataset&&t.dataset.p28ta){ev2.stopPropagation();ls("bos-pad",t.value.slice(0,20000));var c=document.querySelectorAll('[data-p28cl]');c.forEach(function(n){n.innerHTML=clHtml()});return}
+ if(t.classList&&t.classList.contains("s9-pad")&&padOn())setTimeout(function(){document.querySelectorAll('[data-p28cl]').forEach(function(n){n.innerHTML=clHtml()})},0)},true);
+document.addEventListener("change",function(ev2){var t=ev2.target;if(!t||!t.dataset)return;
+ if(t.dataset.p28ck!=null){toggle(+t.dataset.p28ck);return}
+ if(t.dataset.p28mini){ls("bos-pad28mini",t.checked?"1":"0");return}});
+document.addEventListener("keydown",function(ev2){if(ev2.key==="Enter"&&ev2.target&&ev2.target.dataset&&ev2.target.dataset.p28tn){ev2.preventDefault();tplSave()}});
+document.addEventListener("click",function(ev2){var b=ev2.target.closest&&ev2.target.closest("[data-p28],[data-p28rem],[data-p28rd],[data-p28tpl],[data-p28td],[data-p28ts]");if(!b)return;
+ if(b.dataset.p28tpl){tplUse(b.dataset.p28tpl);return}
+ if(b.dataset.p28td!=null){var M=myTpl();M.splice(+b.dataset.p28td,1);jset("bos-padtpl",M);tplSync();return}
+ if(b.dataset.p28ts){TPLSAVE=b.dataset.p28ts==="open";if(b.dataset.p28ts==="save"){tplSave();return}tplSync();if(TPLSAVE){var ni=document.querySelector('[data-p28tn]');if(ni)ni.focus()}return}
+ if(b.dataset.p28rem){remAdd(+b.dataset.p28rem);return}
+ if(b.dataset.p28rd){remDel(+b.dataset.p28rd);return}
+ if(b.dataset.p28==="item"){var ta=document.querySelector("textarea.p28-ta")||document.querySelector("textarea.s9-pad"),v=pad();setPad(v+(v&&!/\n$/.test(v)?"\n":"")+"[ ] ");if(ta){ta.value=pad();ta.focus();ta.selectionStart=ta.selectionEnd=ta.value.length}}});
+// мини-окно задержания: пункты блокнота и галочки по клику
+window.SA_padMini=function(){if(!padOn()||!fl("pad28mini")||ls("bos-pad28mini")!=="1")return null;
+ var L=pad().split("\n").map(function(s,i){var m=CK_RE.exec(s);return m?{i:i,ck:m[2]!==" ",t:m[3]}:{i:i,t:s.trim()}}).filter(function(x){return x.t||x.ck!=null});
+ return {lines:L.slice(0,12),more:Math.max(0,L.length-12),rem:REM.length?hm(REM.slice().sort(function(a,b){return a.at-b.at})[0].at):""}};
+if(A&&A.onPadCheck)A.onPadCheck(function(i){if(i<0){padOpen();return}toggle(i)});
+})();
+</script>
+<style id="det28b-style">
+.t28-sz{display:grid;gap:6px;margin:6px 0 4px}
+.t28-sz .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.t28-sz input,.t28-sz select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 9px;box-sizing:border-box}
+.t28-sz ul{list-style:none;margin:0;padding:0;display:grid;gap:3px}
+.t28-sz li{display:flex;gap:8px;align-items:center;font-size:13.5px;border-bottom:1px dashed var(--line);padding:3px 0}
+.t28-sz li span{flex:1;min-width:0;overflow-wrap:anywhere}
+.t28-imm{margin:8px 0 0;padding:9px 12px;border-left:4px solid #e0a400;border-radius:6px;background:var(--chip);font-size:13.5px}
+.t28-code{font:700 30px/1.2 ui-monospace,Consolas,monospace;letter-spacing:.2em;text-align:center;margin:10px 0}
+</style>
+<script>
+/* ===== 2.8 · Задержание, часть 2 (флаг det28) =====
+   83 изъятые предметы, 84 свидетели и потерпевшие, 85 хронология в рапорт, 87 передача задержанного коллеге по коду,
+   88 проверка на неприкосновенность по должности задержанного. Голосовые отметки (89) — в рации, через window.SA_det28mark. */
+(function(){
+"use strict";
+var A=window.senkoApp;
+function det(k){try{return typeof window.SA_det28on==="function"&&SA_det28on(k)}catch(x){return false}}
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function toast(t){if(window.SA_toast)SA_toast(t)}
+function hm(ts){var d=new Date(ts);return isNaN(d)?"":d.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}
+function online(){try{var s=A&&A.state&&A.state();return !!(s&&s.user&&!s.user.offline&&A.api)}catch(x){return false}}
+function api(a,d){if(!A||!A.api)return Promise.resolve({ok:false,error:"Нужно войти в аккаунт."});return A.api(a,d||{}).then(function(r){return r||{ok:false,error:"Нет ответа от сервера."}},function(){return {ok:false,error:"Ошибка связи с программой."}})}
+function redraw(){if(state.tab==="timer"){var y=window.pageYOffset;render();window.scrollTo(0,y)}}
+function cut(s,n){return String(s==null?"":s).replace(/\s+/g," ").trim().slice(0,n)}
+
+/* ---------- 83: изъятые предметы ---------- */
+var SZQ=["Пистолет","Патроны","Наркотики, г","Деньги, $","Нож","Маска","Отмычки","Рация"];
+function szText(t){return (t.seized||[]).map(function(x){return x.n+(x.q?" ×"+x.q:"")}).join(", ")}
+function szHtml(t){var L=t.seized||[];
+ return '<h3>Изъятые предметы</h3><div class="t28-sz"><div class="row">'+SZQ.map(function(n){return '<button type="button" class="pill" data-t28sq="'+e(n)+'">'+e(n)+'</button>'}).join("")+'</div>'+
+  '<div class="row"><input data-t28si="n" maxlength="40" placeholder="Что изъято" style="flex:1 1 160px" autocomplete="off"><input data-t28si="q" maxlength="8" placeholder="Кол-во" style="width:90px" autocomplete="off" inputmode="numeric"><button type="button" class="btn" data-t28s="add">Добавить</button></div>'+
+  (L.length?'<ul>'+L.map(function(x,i){return '<li><span>'+e(x.n)+(x.q?' · '+e(x.q):'')+'</span><button type="button" class="more" data-t28s="del" data-i="'+i+'">Убрать</button></li>'}).join("")+'</ul>':'<p class="hint" style="margin:0">Пока ничего. Список сам попадёт в рапорт в поле «Изъято».</p>')+'</div>'}
+function szAdd(n,q){var t=tm;if(!t||!t.start)return;n=cut(n,40);q=cut(q,8);if(!n)return;if(!t.seized)t.seized=[];
+ var ex=t.seized.filter(function(x){return x.n.toLowerCase()===n.toLowerCase()})[0];
+ if(ex&&q&&/^\d+$/.test(q)&&/^\d+$/.test(ex.q||""))ex.q=String(+ex.q+ +q);else if(ex&&q)ex.q=q;else if(!ex){if(t.seized.length>=30)return toast("Не больше 30 позиций");t.seized.push({n:n,q:q})}
+ ev(t,"seize","Изъято: "+n+(q?" ×"+q:""));saveTm();redraw()}
+
+/* ---------- 84: свидетели и потерпевшие ---------- */
+var WR={w:"Свидетель",v:"Потерпевший"};
+function witText(t){return (t.wit||[]).map(function(x){return WR[x.r]+" "+x.n+(x.s?" (статик "+x.s+")":"")+(x.t?": "+x.t:"")}).join("; ")}
+function witHtml(t){var L=t.wit||[];
+ return '<h3>Свидетели и потерпевшие</h3><div class="t28-sz"><div class="row"><select data-t28wi="r" aria-label="Кто"><option value="w">Свидетель</option><option value="v">Потерпевший</option></select>'+
+  '<input data-t28wi="n" maxlength="40" placeholder="Ник" style="flex:1 1 140px" autocomplete="off"><input data-t28wi="s" maxlength="12" placeholder="Статик" style="width:110px" autocomplete="off"></div>'+
+  '<div class="row"><input data-t28wi="t" maxlength="200" placeholder="Что видел или что произошло (коротко)" style="flex:1 1 240px" autocomplete="off"><button type="button" class="btn" data-t28w="add">Добавить</button></div>'+
+  (L.length?'<ul>'+L.map(function(x,i){return '<li><span><b>'+e(WR[x.r])+'</b> '+e(x.n)+(x.s?' · '+e(x.s):'')+(x.t?' — '+e(x.t):'')+'</span><button type="button" class="more" data-t28w="del" data-i="'+i+'">Убрать</button></li>'}).join("")+'</ul>':'')+'</div>'}
+function witAdd(){var t=tm;if(!t||!t.start)return;var g=function(k){var n=view.querySelector('[data-t28wi="'+k+'"]');return n?n.value:""};
+ var n=cut(g("n"),40);if(!n){toast("Укажите ник свидетеля или потерпевшего");return}
+ if(!t.wit)t.wit=[];if(t.wit.length>=15)return toast("Не больше 15 человек");
+ var x={r:g("r")==="v"?"v":"w",n:n,s:cut(g("s"),12),t:cut(g("t"),200)};t.wit.push(x);ev(t,"wit",WR[x.r]+": "+n);saveTm();redraw()}
+
+/* ---------- 85: хронология ---------- */
+function chron(t){return ((t&&t.events)||[]).filter(function(x){return x.x&&!/^Отметка снята/.test(x.x)}).map(function(x){return hm(x.t)+" "+x.x}).join("\n")}
+
+/* ---------- 88: неприкосновенность и особый порядок ---------- */
+var IMM=/(суд(ья|ьи|ье)|прокур|депутат|сенатор|губернатор|мэр|министр|госслуж|правительств|government|адвокат|weazel|журналист|\bwn\b|fib|фбр|агент|секретн|usss|lspd|lscsd|шериф|полиц|sang|нацгвард|военн|офицер)/i;
+function immHtml(t){if(!t.role||!IMM.test(t.role))return "";
+ return '<div class="t28-imm" role="alert"><b>Возможен особый порядок (ПК ст. 19).</b> Госслужащий, сотрудник Weazel News, частный адвокат или лицо с неприкосновенностью: подтвердите статус, вызовите его руководство и прокурора, ждите до 15 минут. Если прокурор не ответил, задержанного освобождают. <button type="button" class="more" data-t28imm="1">Порядок в справочнике</button></div>'}
+
+/* ---------- 87: передача задержанного коллеге по коду ---------- */
+var KEEP=["mode","checks","nick","st","arts","events","result","marks","seized","wit","role","log","pausedTotal","paused","decidedAt","grp","note"];
+function pack(t){var o={start:t.start};KEEP.forEach(function(k){if(t[k]!==undefined)o[k]=t[k]});o.events=(o.events||[]).slice(-150);return o}
+function handOut(){var t=tm;if(!t||!t.start)return;
+ if(!online()){toast("Передача работает после входа в аккаунт и с интернетом");return}
+ var o=SA_modal("Передать коллеге",'<p class="sub" id="t28ho">Готовим код…</p>');
+ api("handoff",{op:"put",data:pack(t)}).then(function(r){var b=document.getElementById("t28ho");if(!b)return;
+  if(!r.ok){b.textContent=r.error||"Не удалось получить код.";return}
+  ev(t,"handoff","Передан коллеге по коду");saveTm();
+  b.outerHTML='<p>Продиктуйте код коллеге. Он открывает «Задержание» и нажимает «Принять задержанного по коду».</p><div class="t28-code">'+e(r.code)+'</div><p class="hint" style="text-align:center">Код действует '+e(r.min||30)+' минут и срабатывает один раз. Таймер, статьи, отметки, изъятое и свидетели перейдут вместе с ним.</p>'+
+   '<div class="rowbtn" style="justify-content:center"><button type="button" class="btn" data-t28h="arch">Убрать у себя в архив как «Передан коллеге»</button></div>'})}
+function handIn(){if(!online()){toast("Принять по коду можно после входа в аккаунт");return}
+ SA_modal("Принять задержанного",'<p class="sd-note">Код из 6 цифр от коллеги.</p><div class="rowbtn"><input class="tin" id="t28hi" maxlength="6" inputmode="numeric" placeholder="123456" style="width:140px" autocomplete="off"><button type="button" class="btn primary" data-t28h="get">Принять</button></div><p class="hint" id="t28hm" role="status"></p>');
+ var i=document.getElementById("t28hi");if(i)i.focus()}
+function handGet(b){var i=document.getElementById("t28hi"),m=document.getElementById("t28hm"),c=(i?i.value:"").replace(/\D/g,"");
+ if(c.length!==6){if(m)m.textContent="Введите 6 цифр.";return}
+ if(tms.length>=10){if(m)m.textContent="У вас уже 10 задержаний: отправьте одно в архив.";return}
+ b.disabled=true;if(m)m.textContent="Проверяем код…";
+ api("handoff",{op:"get",code:c}).then(function(r){b.disabled=false;
+  if(!r.ok||!r.data||typeof r.data!=="object"){if(m)m.textContent=r.error||"Код не подошёл.";return}
+  var d=r.data,t=newTimer(d.mode==="war"?"war":"inv"),ts=Date.now();while(tms.some(function(x){return x.id===ts}))ts++;
+  t.id=ts;t.start=+d.start||ts;
+  KEEP.forEach(function(k){var v=d[k];if(v===undefined||v===null)return;
+   if(["events","log","seized","wit"].indexOf(k)>=0){if(Array.isArray(v))t[k]=v.slice(0,300)}
+   else if(["checks","marks"].indexOf(k)>=0){if(typeof v==="object"&&!Array.isArray(v))t[k]=v}
+   else if(k==="paused"){if(typeof v==="object"&&+v.at)t.paused={k:String(v.k||""),at:+v.at,note:cut(v.note,80)}}
+   else if(["pausedTotal","decidedAt","grp"].indexOf(k)>=0)t[k]=+v||0;
+   else t[k]=cut(v,k==="arts"?200:k==="note"?400:60)});
+  if(t.paused&&!pauseDef(t.paused.k))t.paused=null;
+  tms.push(t);selId=t.id;pickTm();ev(t,"handoff","Принят от "+(r.from||"коллеги")+" по коду");saveTm();
+  if(window.SA_modalClose)SA_modalClose();if(window.SA_go)SA_go("timer");else render();toast("Задержанный принят: "+(t.nick||"без ника"))})}
+
+/* ---------- встраивание ---------- */
+var RT1=renderTimer;
+renderTimer=function(){RT1.apply(this,arguments);if(!det())return;
+ try{
+  var top=view.querySelector('[data-tm="start"]');top=top&&top.closest(".rowbtn");
+  if(top&&det("det28xfer")&&!top.querySelector('[data-t28h="in"]'))top.insertAdjacentHTML("beforeend",'<button class="btn" type="button" data-t28h="in">Принять задержанного по коду</button>');
+  if(!tm||!tm.start)return;
+  var fl=view.querySelector(".tfields");
+  if(fl&&det("det28imm")){fl.insertAdjacentHTML("beforeend",'<label style="grid-column:1/-1"><span class="tlab">Должность или статус</span><input class="tin" data-t28f="role" maxlength="60" value="'+e(tm.role||"")+'" placeholder="Например: сотрудник LSPD, судья, журналист WN" autocomplete="off"></label>');
+   fl.insertAdjacentHTML("afterend",'<div id="t28imm">'+immHtml(tm)+'</div>')}
+  var arch=view.querySelector('[data-tm="archive"]');if(arch&&det("det28xfer"))arch.insertAdjacentHTML("beforebegin",'<button class="btn" type="button" data-t28h="out">Передать коллеге</button>');
+  var hs=view.querySelectorAll("h3"),j=null;for(var i=0;i<hs.length;i++)if(/Журнал событий/.test(hs[i].textContent)){j=hs[i];break}
+  if(j){j.insertAdjacentHTML("beforebegin",(det("det28sz")?szHtml(tm):"")+(det("det28wit")?witHtml(tm):""));
+   var lst=j.parentNode.querySelector("ul.evlist");if(lst&&det("det28chron"))lst.insertAdjacentHTML("beforebegin",'<div class="rowbtn" style="margin-top:6px"><button type="button" class="btn" data-t28c="copy">Скопировать хронологию</button></div>')}
+ }catch(x){}};
+view.addEventListener("input",function(ev2){var t=ev2.target;if(!t.dataset||t.dataset.t28f!=="role"||!tm||!tm.start)return;ev2.stopPropagation();tm.role=t.value.slice(0,60);saveTm();var b=document.getElementById("t28imm");if(b)b.innerHTML=immHtml(tm)},true);
+view.addEventListener("keydown",function(ev2){var t=ev2.target;if(ev2.key!=="Enter"||!t.dataset)return;if(t.dataset.t28si){ev2.preventDefault();var b=view.querySelector('[data-t28s="add"]');if(b)b.click()}else if(t.dataset.t28wi){ev2.preventDefault();witAdd()}});
+document.addEventListener("keydown",function(ev2){if(ev2.key==="Enter"&&ev2.target&&ev2.target.id==="t28hi"){ev2.preventDefault();var b=document.querySelector('[data-t28h="get"]');if(b)handGet(b)}});
+document.addEventListener("click",function(ev2){var b=ev2.target.closest&&ev2.target.closest("[data-t28sq],[data-t28s],[data-t28w],[data-t28c],[data-t28h],[data-t28imm]");if(!b)return;
+ if(b.dataset.t28sq){var q=view.querySelector('[data-t28si="q"]');szAdd(b.dataset.t28sq,q?q.value:"");return}
+ if(b.dataset.t28s==="add"){var n=view.querySelector('[data-t28si="n"]'),q2=view.querySelector('[data-t28si="q"]');szAdd(n?n.value:"",q2?q2.value:"");return}
+ if(b.dataset.t28s==="del"){if(tm&&tm.seized){tm.seized.splice(+b.dataset.i,1);saveTm();redraw()}return}
+ if(b.dataset.t28w==="add"){witAdd();return}
+ if(b.dataset.t28w==="del"){if(tm&&tm.wit){tm.wit.splice(+b.dataset.i,1);saveTm();redraw()}return}
+ if(b.dataset.t28c==="copy"){if(typeof copyText==="function")copyText(chron(tm),b);return}
+ if(b.dataset.t28h==="out"){handOut();return}
+ if(b.dataset.t28h==="in"){handIn();return}
+ if(b.dataset.t28h==="get"){handGet(b);return}
+ if(b.dataset.t28h==="arch"){if(tm&&tm.start){tm.result="Передан коллеге";archiveTm(tm);saveTm()}if(window.SA_modalClose)SA_modalClose();if(state.tab==="timer")render();toast("Задержание убрано в архив");return}
+ if(b.dataset.t28imm){if(window.SA_X&&SA_X.sub)SA_X.sub.ref="imm";if(window.SA_go)SA_go("ref");return}
+});
+var AR1=archiveTm;
+archiveTm=function(t){var S=t&&t.seized,W=t&&t.wit,R=t&&t.role;AR1.apply(this,arguments);var h=thist[0];if(h&&t&&h.id===t.id){if(S)h.seized=S;if(W)h.wit=W;if(R)h.role=R}};
+// для рапорта: изъятое, свидетели, хронология
+window.SA_det28rp=function(t){if(!det()||!t)return null;return {seized:det("det28sz")?szText(t):"",wit:det("det28wit")?witText(t):"",chron:det("det28chron")?chron(t).split("\n").join("; "):""}};
 })();
 </script>
 </body></html>

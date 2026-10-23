@@ -550,6 +550,10 @@
         acts.appendChild(act("Организация", [{ k: "o", label: "Новая организация", type: "select", options: DEPTS.map(function (d) { return [d, d]; }), value: u.org }], function (v) { return "/setorg " + L + " " + v.o; }));
         if (u.approval !== "ok") acts.appendChild(act("Принять заявку", null, function () { return "/approve " + L; }));
         acts.appendChild(act("Завершить сессии", null, function () { return "/kick " + L; }));
+        acts.appendChild(btn("Очистить профиль для коллег", function () { // 2.8: должность, «о себе» и фото в разделе «Коллеги»
+          if (!confirm("Убрать у " + L + " должность, «о себе» и фото, которые видят коллеги?")) return;
+          api("col_clear", { login: L }).then(function (y) { toast(y.ok ? "Профиль для коллег очищен." : y.error, !y.ok); load(); });
+        }, "btn-sm"));
         acts.appendChild(btn(u.beta ? "Снять роль «Бета-тестер»" : "Выдать роль «Бета-тестер»", function () {
           api("beta_set", { login: L, on: !u.beta }).then(function (y) { toast(y.ok ? (u.beta ? "Роль тестера снята." : "Роль тестера выдана.") : y.error, !y.ok); load(); });
         }, "btn-sm"));
@@ -1041,15 +1045,18 @@
         var ofVer = function (v) { return Object.keys(r.defs).filter(function (k) { return (vers[k] || "2.4") === v; }); };
         var F = card("Функции " + (vlist[0] || ""), r.canFlags ? "«Только тестерам» — функция видна лишь бета-тестерам. Изменения доходят до программы за минуту." : "Режимы меняет владелец.");
         ofVer(vlist[0]).forEach(function (k) { F.appendChild(flagRow(k)); });
+        g.appendChild(F);
+        // режимы функций старых версий — не на плашке, отдельно внизу страницы и свёрнуты
+        var OLD = null;
         if (vlist.length > 1) {
-          var old = h("details", { style: "margin-top:12px" }, h("summary", { text: "Функции прошлых версий" }));
+          OLD = card("", null); OLD.style.marginTop = "14px";
+          var old = h("details", null, h("summary", { text: "Режимы старых функций" }));
           vlist.slice(1).forEach(function (v) {
             old.appendChild(h("h3", { text: "Функции " + v, style: "margin:14px 0 2px;font-size:14px" }));
             ofVer(v).forEach(function (k) { old.appendChild(flagRow(k)); });
           });
-          F.appendChild(old);
+          OLD.appendChild(old);
         }
-        g.appendChild(F);
         box.appendChild(g);
         // задания
         var T = card("Задания для тестеров", "Тестеры отмечают в программе: «работает» или «есть проблема» с комментарием.");
@@ -1066,6 +1073,7 @@
               btn("Удалить", function () { confirmDlg("Удалить задание", "Удалить «" + t.title + "» вместе с отметками тестеров?", "Удалить", function () { api("beta_task_delete", { id: t.id }).then(function (y) { toast(y.ok ? "Задание удалено." : y.error, !y.ok); load(); }); }, true); }, "btn-sm btn-d"))));
         })))));
         box.appendChild(T);
+        if (OLD) box.appendChild(OLD);
       });
     }
     head(el, "Тестеры", "Роль «Бета-тестер», задания и функции, которые видят только тестеры", btn("Обновить", load, "btn-sm", "i-refresh"));
