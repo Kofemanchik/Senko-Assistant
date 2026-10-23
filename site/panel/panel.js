@@ -1026,16 +1026,29 @@
         })))));
         g.appendChild(U);
         // функции
-        var F = card("Функции 2.4", r.canFlags ? "«Только тестерам» — функция видна лишь бета-тестерам. Изменения доходят до программы за минуту." : "Режимы меняет владелец.");
-        Object.keys(r.defs).forEach(function (k) {
+        // функции: сверху только функции последнего обновления, прошлые версии свёрнуты ниже
+        var vers = r.vers || {}, vnum = function (v) { return String(v || "0").split(".").map(function (x) { return ("000" + (parseInt(x, 10) || 0)).slice(-3); }).join("."); };
+        var vlist = Object.keys(r.defs).map(function (k) { return vers[k] || "2.4"; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).sort(function (x, y) { return vnum(y) < vnum(x) ? -1 : 1; });
+        var flagRow = function (k) {
           var cur = r.flags[k], ctl;
           if (r.canFlags) {
             ctl = h("select", { style: "max-width:180px" }, FLAG_MODE.map(function (m) { return h("option", { value: m[0], text: m[1] }); }));
             ctl.value = cur;
             ctl.addEventListener("change", function () { api("flags_set", { key: k, mode: ctl.value }).then(function (y) { toast(y.ok ? "Сохранено." : y.error, !y.ok); if (!y.ok) ctl.value = cur; else cur = ctl.value; }); });
           } else ctl = pill(FLAG_MODE.filter(function (m) { return m[0] === cur; })[0][1], cur === "all" ? "on" : cur === "off" ? "off" : "acc");
-          F.appendChild(h("div", { class: "row", style: "justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)" }, h("span", { text: r.defs[k] }), ctl));
-        });
+          return h("div", { class: "row", style: "justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)" }, h("span", { text: r.defs[k] }), ctl);
+        };
+        var ofVer = function (v) { return Object.keys(r.defs).filter(function (k) { return (vers[k] || "2.4") === v; }); };
+        var F = card("Функции " + (vlist[0] || ""), r.canFlags ? "«Только тестерам» — функция видна лишь бета-тестерам. Изменения доходят до программы за минуту." : "Режимы меняет владелец.");
+        ofVer(vlist[0]).forEach(function (k) { F.appendChild(flagRow(k)); });
+        if (vlist.length > 1) {
+          var old = h("details", { style: "margin-top:12px" }, h("summary", { text: "Функции прошлых версий" }));
+          vlist.slice(1).forEach(function (v) {
+            old.appendChild(h("h3", { text: "Функции " + v, style: "margin:14px 0 2px;font-size:14px" }));
+            ofVer(v).forEach(function (k) { old.appendChild(flagRow(k)); });
+          });
+          F.appendChild(old);
+        }
         g.appendChild(F);
         box.appendChild(g);
         // задания

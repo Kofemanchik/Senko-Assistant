@@ -4199,22 +4199,34 @@ function ensureSchema() {
 
 // ───────────── 2.4: функции по флагам (владелец включает в панели: всем, только тестерам или никому) ─────────────
 const FLAG_DEFS = {
-  patrol: ["Совместный патруль", "beta"],
-  board: ["Тактическая доска", "all"],
-  mini: ["Мини-окно задержания", "all"],
-  tts: ["Озвучка статей", "all"],
-  mascot: ["Лиса Senko", "all"],
-  season: ["Сезонное оформление", "all"],
-  card: ["Карточка сотрудника", "all"],
-  ideas: ["Идеи и голосование", "all"],
-  events: ["Мероприятия организаций", "all"],
-  ai27: ["ИИ 2.7: словарь, ведомство, быстрые вопросы, уточнения, история", "beta"],
+  patrol: ["Совместный патруль", "beta", "2.4"],
+  board: ["Тактическая доска", "all", "2.4"],
+  mini: ["Мини-окно задержания", "all", "2.4"],
+  tts: ["Озвучка статей", "all", "2.4"],
+  mascot: ["Лиса Senko", "all", "2.4"],
+  season: ["Сезонное оформление", "all", "2.4"],
+  card: ["Карточка сотрудника", "all", "2.4"],
+  ideas: ["Идеи и голосование", "all", "2.4"],
+  events: ["Мероприятия организаций", "all", "2.4"],
+  ai27dict: ["Словарь ИИ: бытовое слово → статья", "beta", "2.7"],
+  ai27law: ["Законы своего ведомства первыми (FIB, SANG)", "beta", "2.7"],
+  ai27quick: ["Быстрые вопросы в окне ИИ", "beta", "2.7"],
+  ai27clar: ["Встречные вопросы ИИ (уточнения)", "beta", "2.7"],
+  ai27hist: ["История вопросов ИИ", "beta", "2.7"],
+  ai27chk: ["Самопроверка подбора статей (владелец и модераторы)", "beta", "2.7"],
 };
+// 2.7.0-beta.1 проверяет один флаг ai27: он включён, если включена хоть одна функция 2.7
+const FLAG_LEGACY = { ai27: ["ai27dict", "ai27law", "ai27quick", "ai27clar", "ai27hist", "ai27chk"] };
 const FLAG_MODES = ["all", "beta", "off"];
 async function flagsNow() {
   const s = (await getSetting("flags", {})) || {};
   const out = {};
-  for (const k of Object.keys(FLAG_DEFS)) out[k] = FLAG_MODES.includes(s[k]) ? s[k] : FLAG_DEFS[k][1];
+  for (const k of Object.keys(FLAG_DEFS)) {
+    // новые функции 2.7 сначала берут режим общего флага ai27, если владелец его менял
+    const legacy = Object.keys(FLAG_LEGACY).find((l) => FLAG_LEGACY[l].includes(k));
+    out[k] = FLAG_MODES.includes(s[k]) ? s[k] : legacy && FLAG_MODES.includes(s[legacy]) ? s[legacy] : FLAG_DEFS[k][1];
+  }
+  for (const [l, ks] of Object.entries(FLAG_LEGACY)) out[l] = ks.some((k) => out[k] === "all") ? "all" : ks.some((k) => out[k] === "beta") ? "beta" : "off";
   return out;
 }
 const isTester = (p) => !!p && (!!p.beta || p.rank === "owner" || p.rank === "moderator");
@@ -4585,7 +4597,7 @@ async function panelBeta(b, a) {
     const tasks = await sql`select t.*, (select count(*)::int from beta_results r where r.task_id = t.id and r.status = 'ok') as ok_n,
                               (select count(*)::int from beta_results r where r.task_id = t.id and r.status = 'bad') as bad_n
                             from beta_tasks t order by t.closed, t.id desc limit 60`;
-    return { ok: true, users, tasks, flags: await flagsNow(), defs: Object.fromEntries(Object.entries(FLAG_DEFS).map(([k, v]) => [k, v[0]])), canFlags: a.kind === "owner" };
+    return { ok: true, users, tasks, flags: await flagsNow(), defs: Object.fromEntries(Object.entries(FLAG_DEFS).map(([k, v]) => [k, v[0]])), vers: Object.fromEntries(Object.entries(FLAG_DEFS).map(([k, v]) => [k, v[2]])), canFlags: a.kind === "owner" };
   }
   if (op === "beta_set") {
     const t = await findProfile(String(b.login || ""));
@@ -4785,8 +4797,8 @@ async function aiAsk(b) {
   const refs = ctx.map((c) => c.ref);
   const cid = (await sha256("web:" + p.id)).slice(0, 32);
   const ts = String(Date.now());
-  // 2.7: встречный вопрос, если не хватает деталей (только в окне ИИ, не в голосовом помощнике; по флагу ai27)
-  const clar = !b.short && (await flagFor(p, "ai27").catch(() => false));
+  // 2.7: встречный вопрос, если не хватает деталей (только в окне ИИ, не в голосовом помощнике; по флагу ai27clar)
+  const clar = !b.short && (await flagFor(p, "ai27clar").catch(() => false));
   let j = null, status = 0;
   try {
     const r = await fetch(AI_URL + "/ask", {

@@ -6295,7 +6295,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.7.0-beta.1";
+var APP_VER="2.7.1-beta.1";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6384,6 +6384,9 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.7.1-beta.1",d:"23.10.2026",items:[
+  ["🧪","Только для бета-тестеров","Обновление для участников бета-теста."],
+  ["🎛","Функции 2.7 по отдельности","В «Панели тестера» у каждой функции ИИ-помощника 2.7 теперь свой переключатель: словарь, законы ведомства, быстрые вопросы, уточнения, история вопросов и самопроверка. Если что-то мешает, выключите только эту функцию."]]},
  {v:"2.7.0-beta.1",d:"23.10.2026",items:[
   ["🧪","Только для бета-тестеров","Всё ниже включено флагом «ИИ-помощник 2.7» и пока доступно только участникам бета-теста."],
   ["⚡","Быстрые вопросы","Над полем ввода ИИ появились кнопки-заготовки: «Что нарушил?», «Какой срок?», «Могу ли я…», «Что такое…». Нажми и допиши ситуацию."],
@@ -8160,7 +8163,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.7.0-beta.1";
+var APP_VER="2.7.1-beta.1";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
@@ -11843,11 +11846,16 @@ if(["","halloween","newyear"].indexOf(C.prev)<0)C.prev="";
 function saveC(){jset("bos-s24",C)}
 
 /* ---------- флаги функций ---------- */
-var FDEF={patrol:"beta",board:"all",mini:"all",tts:"all",mascot:"all",season:"all",card:"all",ideas:"all",events:"all",ai27:"beta"};
+var FDEF={patrol:"beta",board:"all",mini:"all",tts:"all",mascot:"all",season:"all",card:"all",ideas:"all",events:"all",ai27dict:"beta",ai27law:"beta",ai27quick:"beta",ai27clar:"beta",ai27hist:"beta",ai27chk:"beta"};
 var FN={patrol:["Совместный патруль","Экипаж по коду: общий список задержаний и таймеров с напарниками."],board:["Тактическая доска","Рисование на схеме зон и отправка схемы ссылкой."],mini:["Мини-окно задержания","Маленькое окно поверх игры с таймерами и итогом калькулятора."],
  tts:["Озвучка статей","Кнопка 🔊 у статьи читает её вслух голосом Windows."],mascot:["Лиса Senko","Подсказки и поздравления в углу окна."],season:["Сезонное оформление","Хэллоуин и Новый год."],card:["Карточка сотрудника","Картинка со статистикой для Discord."],
  ideas:["Идеи и голосование","Раздел «Идеи» в меню."],events:["Мероприятия организаций","Учения и собрания на главной и в панели руководителя."],
- ai27:["ИИ-помощник 2.7","Словарь владельца, законы своего ведомства первыми, быстрые вопросы, встречные вопросы ИИ и история вопросов."]};
+ ai27dict:["Словарь ИИ","Бытовые слова из словаря владельца подсказывают ИИ нужные статьи."],
+ ai27law:["Законы ведомства в ИИ","Для FIB и SANG ИИ сначала смотрит законы своего ведомства."],
+ ai27quick:["Быстрые вопросы","Кнопки-заготовки над полем ввода ИИ."],
+ ai27clar:["Уточнения ИИ","ИИ переспрашивает, если в вопросе не хватает деталей."],
+ ai27hist:["История вопросов","Кнопка «История» в окне ИИ: прошлые вопросы и «Спросить снова»."],
+ ai27chk:["Самопроверка ИИ","Раз в день программа владельца или модератора проверяет подбор статей."]};
 function tester(){var s=sys(),u=user();return !!(s.tester||(u&&(u.rank==="owner"||u.rank==="moderator")))}
 function mode(k){var f=sys().flags;return f&&f[k]?f[k]:FDEF[k]}
 function flag(k){var m=mode(k);if(m==="off")return false;if(m==="beta")return tester()&&C.exp[k]!==false;return true}
@@ -13698,14 +13706,15 @@ document.addEventListener("click",function(e){ if(e.target.closest&&e.target.clo
 /* ===== 2.7 · ИИ-помощник =====
    Словарь владельца «бытовое слово → статья» (window.SA_aiDict), законы своего ведомства первыми для FIB и SANG (window.SA_aiAgency),
    быстрые вопросы под полем, встречный вопрос ИИ (window.SA_aiPrep / SA_aiDone), история своих вопросов,
-   ежедневная самопроверка подбора статей в программе владельца и модераторов. Всё по флагу ai27 (сначала только тестерам). */
+   ежедневная самопроверка подбора статей в программе владельца и модераторов. Каждая функция по своему флагу ai27… (сначала только тестерам). */
 (function(){
 "use strict";
 var A=window.senkoApp;
 function st(){try{return A&&A.state?A.state():null}catch(x){return null}}
 function user(){var s=st();return s&&s.user}
 function online(){var u=user();return !!(u&&!u.offline&&A&&A.api)}
-function on(){try{return typeof window.SA_flag==="function"&&!!window.SA_flag("ai27")}catch(x){return false}}
+// 2.7.1: у каждой функции 2.7 свой флаг
+function on(k){try{return typeof window.SA_flag==="function"&&!!window.SA_flag(k)}catch(x){return false}}
 function api(a,d){if(!A||!A.api)return Promise.resolve({ok:false});return A.api(a,d||{}).then(function(r){return r||{ok:false}},function(){return {ok:false}})}
 function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(x){return d}}
@@ -13719,20 +13728,20 @@ function words(s){return String(s||"").toLowerCase().replace(/ё/g,"е").replace
 function stem(w){return w.length>6?w.slice(0,w.length-3):w.length>4?w.slice(0,w.length-2):w.length>3?w.slice(0,w.length-1):w}
 function hasWord(Q,w){var s=stem(w);return Q.some(function(q){return q.indexOf(s)===0||(q.length>=4&&s.indexOf(q)===0)})}
 window.SA_aiDict=function(q){
- if(!on()||!DICT.items.length)return [];
+ if(!on("ai27dict")||!DICT.items.length)return [];
  var Q=words(q),out=[];
  DICT.items.forEach(function(it){var P=words(it.p);if(!P.length||!P.every(function(w){return hasWord(Q,w)}))return;
   (it.r||[]).forEach(function(k){if(/^(uk|ak|dk|pk)\|[\d.]+$/.test(k)&&out.indexOf(k)<0)out.push(k)})});
  return out.slice(0,6)};
 function loadDict(force){
- if(!online()||!on())return Promise.resolve();
+ if(!online()||!on("ai27dict"))return Promise.resolve();
  if(!force&&Date.now()-DICT.at<10*60e3)return Promise.resolve();
  return api("ai_dict").then(function(r){if(r&&r.ok&&Array.isArray(r.items)){DICT={at:Date.now(),items:r.items.slice(0,500)};jset("bos-ai27dict",DICT)}})}
 
 /* ---------- законы своего ведомства ---------- */
 var AGENCY={FIB:/federal investigation|фбр|(^|[^a-z])fib([^a-z]|$)/i,SANG:/national guard|нацгвард|(^|[^a-z])sang([^a-z]|$)/i};
 window.SA_aiAgency=function(){
- if(!on())return null;var u=user(),re=u&&AGENCY[u.org];
+ if(!on("ai27law"))return null;var u=user(),re=u&&AGENCY[u.org];
  return re?function(L){return re.test(String((L&&L.title)||""))}:null};
 
 /* ---------- окно ИИ: быстрые вопросы, встречный вопрос, история ---------- */
@@ -13757,13 +13766,15 @@ function paint(){
  if(!els())return;
  var form=ov.querySelector("#aiForm"),head=ov.querySelector(".ai-head"),x=ov.querySelector(".ai-x");
  var qb=ov.querySelector(".ai27-q"),hb=ov.querySelector(".ai27-hb"),hp=ov.querySelector(".ai27-h");
- if(!on()){if(qb)qb.hidden=true;if(hb)hb.hidden=true;if(hp&&!hp.hidden)showHist(false);return}
+ var oq=on("ai27quick"),oh=on("ai27hist");
+ if(!oq&&!oh){if(qb)qb.hidden=true;if(hb)hb.hidden=true;if(hp&&!hp.hidden)showHist(false);return}
  if(!qb){qb=document.createElement("div");qb.className="ai27-q";qb.setAttribute("aria-label","Быстрые вопросы");
   qb.innerHTML=QUICK.map(function(x,i){return '<button type="button" data-ai27q="'+i+'">'+e(x[0])+'</button>'}).join("");
   form.parentNode.insertBefore(qb,form)}
- qb.hidden=false;
+ qb.hidden=!oq;
  if(!hb&&head&&x){hb=document.createElement("button");hb.type="button";hb.className="ai27-hb";hb.textContent="История";hb.title="Мои прошлые вопросы";head.insertBefore(hb,x)}
- if(hb)hb.hidden=!online();
+ if(hb)hb.hidden=!online()||!oh;
+ if(!oh&&hp&&!hp.hidden)showHist(false);
  if(!hp){hp=document.createElement("div");hp.className="ai27-h";hp.hidden=true;var lg=ov.querySelector("#aiLog");lg.parentNode.insertBefore(hp,lg.nextSibling)}
 }
 function setPend(base){
@@ -13772,12 +13783,12 @@ function setPend(base){
  qa.placeholder=base?"Ответьте на уточнение: я учту исходный вопрос":"Например: что будет за угон автомобиля?";
  if(base){lg.insertAdjacentHTML("beforeend",'<div class="ai27-cl" role="status"><span>↪ Ваш ответ уйдёт вместе с исходным вопросом.</span><button type="button" class="ai27-hb" data-ai27="new">Задать новый вопрос</button></div>');lg.scrollTop=lg.scrollHeight}}
 window.SA_aiPrep=function(q){
- if(!PEND||!on()){CUR=q;return q}
+ if(!PEND||!on("ai27clar")){CUR=q;return q}
  var base=PEND;setPend(null);
  CUR=(base+" (уточнение: "+q+")").slice(0,500);return CUR};
 window.SA_aiDone=function(q,r){
  HIST=null;
- if(!on()||!r||!r.ok)return;
+ if(!on("ai27clar")||!r||!r.ok)return;
  if(/^\s*\**\s*уточните/i.test(String(r.answer||"")))setPend(CUR||q);};
 
 function showHist(show){
@@ -13815,7 +13826,7 @@ if(!watch())setTimeout(watch,3000);
 /* ---------- самопроверка подбора статей (владелец и модераторы, раз в день) ---------- */
 var tries=0;
 function selfCheck(){
- var u=user();if(!u||(u.rank!=="owner"&&u.rank!=="moderator")||!online()||!on())return;
+ var u=user();if(!u||(u.rank!=="owner"&&u.rank!=="moderator")||!online()||!on("ai27chk"))return;
  if(jget("bos-ai27chk","")===today())return;
  var ready=false;try{ready=typeof lawIndex==="function"&&lawIndex().length>0&&typeof window.__senkoAiContext==="function"}catch(x){}
  if(!ready){if(++tries<6)setTimeout(selfCheck,5*60e3);return}
