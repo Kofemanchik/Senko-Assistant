@@ -2163,7 +2163,7 @@ async function colleaguesApi(b) {
   }
   if (colLocked(p)) return { ok: true, locked: true, opensAt: colOpensAt(p), org: p.org, items: [] };
   if (op === "list") {
-    const people = await sql`select id, login, nick, org, post, rank, last_seen, org_at from profiles
+    const people = await sql`select id, login, nick, static_id, org, post, rank, last_seen, org_at from profiles
                              where org = ${p.org} and not banned and approval = 'ok' order by lower(nick) limit 500`;
     const vis = people.filter((x) => x.id === p.id || !colLocked(x));
     const ids = vis.map((x) => x.id);
@@ -2173,7 +2173,7 @@ async function colleaguesApi(b) {
     return {
       ok: true, org: p.org,
       items: vis.map((x) => ({
-        id: x.id, nick: x.nick, post: x.post || "", rank: x.rank, me: x.id === p.id, ava: A[x.id] || "",
+        id: x.id, nick: x.nick, static: x.static_id || "", post: x.post || "", rank: x.rank, me: x.id === p.id, ava: A[x.id] || "",
         lvl: lvOf(st[x.id].xp).name, lvn: lvOf(st[x.id].xp).n, seen: x.last_seen,
       })),
     };
@@ -2197,7 +2197,7 @@ async function colleaguesApi(b) {
       ok: true,
       profile: {
         id: x.id, nick: x.nick, org: x.org, post: x.post || "", bio: x.bio || "", rank: x.rank, rankName: RANKS[x.rank] || x.rank,
-        discord: x.hide_discord ? "" : x.discord || "", ava: av ? av.img : "", me: x.id === p.id,
+        discord: x.hide_discord ? "" : x.discord || "", static: x.static_id || "", ava: av ? av.img : "", me: x.id === p.id,
         level: { n: lv.n, name: lv.name, xp: st.xp, from: lv.from, to: lv.to },
         det: st.det, det7: st.det7, tests: st.tests, avg_p: st.avg_p, ach, since: x.created_at, seen: x.last_seen,
       },

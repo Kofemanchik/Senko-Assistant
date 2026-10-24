@@ -6295,7 +6295,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.8.0-beta.1";
+var APP_VER="2.8.0-beta.2";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6384,6 +6384,9 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.8.0-beta.2",d:"24.10.2026",items:[
+  ["🧪","Только для бета-тестеров","Доработка раздела «Коллеги» для участников бета-теста."],
+  ["🔎","Поиск коллег по статику","В «Коллегах» можно найти сотрудника по статику, а в его профиле статик виден рядом с Discord и копируется одной кнопкой."]]},
  {v:"2.8.0-beta.1",d:"24.10.2026",items:[
   ["🧪","Только для бета-тестеров","У каждой функции ниже свой флаг. Пока они доступны только участникам бета-теста."],
   ["👥","Коллеги","Новый раздел в меню: профили сотрудников вашего ведомства с аватаром, должностью, «о себе», Discord, уровнем, задержаниями, тестами и достижениями. После смены ведомства профили открываются через 24 часа."],
@@ -8196,7 +8199,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.8.0-beta.1";
+var APP_VER="2.8.0-beta.2";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
@@ -13981,10 +13984,11 @@ function load(force){
   if(r.ok){CS.list=r.items||[];CS.org=r.org||"";CS.locked=!!r.locked;CS.opensAt=r.opensAt||null}else{CS.err=r.error||"Не удалось загрузить коллег.";if(!CS.list)CS.list=null}
   if(state.tab==="colleagues")repaint()})}
 function repaint(){var y=window.pageYOffset;render();window.scrollTo(0,y)}
-function match(c,q){return !q||(String(c.nick||"")+" "+String(c.post||"")).toLowerCase().indexOf(q)>=0}
+function hay(c){return (String(c.nick||"")+" "+String(c.post||"")+" "+String(c.static||"")).toLowerCase()} // 2.8.0-beta.2: и по статику
+function match(c,q){return !q||hay(c).indexOf(q)>=0}
 function cardHtml(c){
  var sub=[c.post,c.lvl?"ур. "+c.lvn+" · "+c.lvl:""].filter(Boolean).join(" · ");
- return '<button type="button" class="c28-card" data-c28v="'+e(c.id)+'" data-q="'+e((String(c.nick||"")+" "+String(c.post||"")).toLowerCase())+'">'+av(c.ava,c.nick)+
+ return '<button type="button" class="c28-card" data-c28v="'+e(c.id)+'" data-q="'+e(hay(c))+'">'+av(c.ava,c.nick)+
   '<span><b>'+e(c.nick||"Без ника")+(c.me?' <small style="display:inline">(вы)</small>':'')+'</b><small>'+e(sub||" ")+'</small></span></button>'}
 function pageHtml(){
  setTimeout(function(){load(false)},0);
@@ -13994,10 +13998,10 @@ function pageHtml(){
   return h+'</section>'}
  var L=CS.list;
  if(!L){h+=CS.err?'<p class="s24-msg err">'+e(CS.err)+'</p><div class="s24-row"><button type="button" class="btn" data-c28="reload">Повторить</button></div>':'<p class="s24-empty">Загружаем…</p>';return h+'</section>'}
- h+='<div class="c28-top"><input type="search" data-c28in="q" placeholder="Поиск по нику или должности" aria-label="Поиск коллег" maxlength="40" value="'+e(CS.q)+'"><span class="s24-chip">'+L.length+' чел.</span></div>';
+ h+='<div class="c28-top"><input type="search" data-c28in="q" placeholder="Поиск по нику, статику или должности" aria-label="Поиск коллег" maxlength="40" value="'+e(CS.q)+'"><span class="s24-chip">'+L.length+' чел.</span></div>';
  var q=CS.q.trim().toLowerCase(),n=0;
  h+='<div class="c28-grid">'+L.map(function(c){var v=match(c,q);if(v)n++;return v?cardHtml(c):cardHtml(c).replace('<button ','<button hidden ')}).join("")+'</div>';
- h+='<p class="s24-empty c28-none"'+(n?' hidden':'')+'>'+(L.length?'Никого не нашли. Попробуйте другую часть ника.':'Пока здесь только вы.')+'</p>';
+ h+='<p class="s24-empty c28-none"'+(n?' hidden':'')+'>'+(L.length?'Никого не нашли. Попробуйте другую часть ника или статика.':'Пока здесь только вы.')+'</p>';
  return h+'</section>'}
 window.SA_pages=window.SA_pages||{};
 window.SA_pages.colleagues={ok:ok,html:pageHtml};
@@ -14013,6 +14017,7 @@ function profHtml(p){
  var h='<div class="c28-head">'+av(p.ava,p.nick,true)+'<div><h3>'+e(p.nick||"Без ника")+badge+'</h3><p>'+e(p.org||"")+(p.post?' · '+e(p.post):'')+'</p></div></div>';
  if(p.bio)h+='<p class="c28-bio">'+e(p.bio)+'</p>';
  if(p.discord)h+='<div class="c28-row"><span>Discord: <b>'+e(p.discord)+'</b></span><button type="button" class="more" data-c28c="'+e(p.discord)+'">Скопировать</button></div>';
+ if(p.static)h+='<div class="c28-row"><span>Статик: <b>'+e(p.static)+'</b></span><button type="button" class="more" data-c28c="'+e(p.static)+'">Скопировать</button></div>';
  h+='<div class="c28-st">'+
   '<div><small>Уровень</small><b>'+e(lv.n||1)+' · '+e(lv.name||"")+'</b><div class="c28-bar" title="'+e(lv.xp||0)+' опыта"><i style="width:'+pct+'%"></i></div></div>'+
   '<div><small>Задержания</small><b>'+e(p.det||0)+'</b><small>за 7 дней: '+e(p.det7||0)+'</small></div>'+
