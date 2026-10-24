@@ -4208,26 +4208,15 @@ const FLAG_DEFS = {
   card: ["Карточка сотрудника", "all", "2.4"],
   ideas: ["Идеи и голосование", "all", "2.4"],
   events: ["Мероприятия организаций", "all", "2.4"],
-  ai27dict: ["Словарь ИИ: бытовое слово → статья", "beta", "2.7"],
-  ai27law: ["Законы своего ведомства первыми (FIB, SANG)", "beta", "2.7"],
-  ai27quick: ["Быстрые вопросы в окне ИИ", "beta", "2.7"],
-  ai27clar: ["Встречные вопросы ИИ (уточнения)", "beta", "2.7"],
-  ai27hist: ["История вопросов ИИ", "beta", "2.7"],
-  ai27chk: ["Самопроверка подбора статей (владелец и модераторы)", "beta", "2.7"],
 };
-// 2.7.0-beta.1 проверяет один флаг ai27: он включён, если включена хоть одна функция 2.7
-const FLAG_LEGACY = { ai27: ["ai27dict", "ai27law", "ai27quick", "ai27clar", "ai27hist", "ai27chk"] };
+// функции выпущенных версий включены у всех и флагов больше не имеют; бета 2.7.0 ещё спрашивает общий флаг ai27
+const FLAG_RELEASED = { ai27: "all" };
 const FLAG_MODES = ["all", "beta", "off"];
 async function flagsNow() {
   const s = (await getSetting("flags", {})) || {};
   const out = {};
-  for (const k of Object.keys(FLAG_DEFS)) {
-    // новые функции 2.7 сначала берут режим общего флага ai27, если владелец его менял
-    const legacy = Object.keys(FLAG_LEGACY).find((l) => FLAG_LEGACY[l].includes(k));
-    out[k] = FLAG_MODES.includes(s[k]) ? s[k] : legacy && FLAG_MODES.includes(s[legacy]) ? s[legacy] : FLAG_DEFS[k][1];
-  }
-  for (const [l, ks] of Object.entries(FLAG_LEGACY)) out[l] = ks.some((k) => out[k] === "all") ? "all" : ks.some((k) => out[k] === "beta") ? "beta" : "off";
-  return out;
+  for (const k of Object.keys(FLAG_DEFS)) out[k] = FLAG_MODES.includes(s[k]) ? s[k] : FLAG_DEFS[k][1];
+  return { ...FLAG_RELEASED, ...out };
 }
 const isTester = (p) => !!p && (!!p.beta || p.rank === "owner" || p.rank === "moderator");
 
@@ -4797,8 +4786,8 @@ async function aiAsk(b) {
   const refs = ctx.map((c) => c.ref);
   const cid = (await sha256("web:" + p.id)).slice(0, 32);
   const ts = String(Date.now());
-  // 2.7: встречный вопрос, если не хватает деталей (только в окне ИИ, не в голосовом помощнике; по флагу ai27clar)
-  const clar = !b.short && (await flagFor(p, "ai27clar").catch(() => false));
+  // 2.7: встречный вопрос, если не хватает деталей (только в окне ИИ, не в голосовом помощнике)
+  const clar = !b.short;
   let j = null, status = 0;
   try {
     const r = await fetch(AI_URL + "/ask", {

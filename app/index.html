@@ -6295,7 +6295,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.7.1-beta.1";
+var APP_VER="2.7.1";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6384,6 +6384,11 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.7.1",d:"24.10.2026",items:[
+  ["🤖","ИИ-помощник стал умнее","Сотрудникам FIB и SANG ИИ в первую очередь подбирает законы их ведомства, а бытовые слова вроде «угон» сам связывает с нужной статьёй."],
+  ["⚡","Быстрые вопросы","Над полем ввода ИИ появились кнопки-заготовки: «Что нарушил?», «Какой срок?», «Могу ли я…», «Что такое…». Нажми и допиши ситуацию."],
+  ["❓","ИИ переспрашивает","Если в вопросе не хватает важной детали (кто, где, при каких обстоятельствах), ИИ коротко уточнит. Ответь на уточнение, и он даст полный ответ."],
+  ["🕘","История вопросов","Кнопка «История» в окне ИИ: все твои прошлые вопросы с поиском и кнопкой «Спросить снова»."]]},
  {v:"2.7.1-beta.1",d:"23.10.2026",items:[
   ["🧪","Только для бета-тестеров","Обновление для участников бета-теста."],
   ["🎛","Функции 2.7 по отдельности","В «Панели тестера» у каждой функции ИИ-помощника 2.7 теперь свой переключатель: словарь, законы ведомства, быстрые вопросы, уточнения, история вопросов и самопроверка. Если что-то мешает, выключите только эту функцию."]]},
@@ -8163,7 +8168,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.7.1-beta.1";
+var APP_VER="2.7.1";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
@@ -11846,16 +11851,10 @@ if(["","halloween","newyear"].indexOf(C.prev)<0)C.prev="";
 function saveC(){jset("bos-s24",C)}
 
 /* ---------- флаги функций ---------- */
-var FDEF={patrol:"beta",board:"all",mini:"all",tts:"all",mascot:"all",season:"all",card:"all",ideas:"all",events:"all",ai27dict:"beta",ai27law:"beta",ai27quick:"beta",ai27clar:"beta",ai27hist:"beta",ai27chk:"beta"};
+var FDEF={patrol:"beta",board:"all",mini:"all",tts:"all",mascot:"all",season:"all",card:"all",ideas:"all",events:"all"};
 var FN={patrol:["Совместный патруль","Экипаж по коду: общий список задержаний и таймеров с напарниками."],board:["Тактическая доска","Рисование на схеме зон и отправка схемы ссылкой."],mini:["Мини-окно задержания","Маленькое окно поверх игры с таймерами и итогом калькулятора."],
  tts:["Озвучка статей","Кнопка 🔊 у статьи читает её вслух голосом Windows."],mascot:["Лиса Senko","Подсказки и поздравления в углу окна."],season:["Сезонное оформление","Хэллоуин и Новый год."],card:["Карточка сотрудника","Картинка со статистикой для Discord."],
- ideas:["Идеи и голосование","Раздел «Идеи» в меню."],events:["Мероприятия организаций","Учения и собрания на главной и в панели руководителя."],
- ai27dict:["Словарь ИИ","Бытовые слова из словаря владельца подсказывают ИИ нужные статьи."],
- ai27law:["Законы ведомства в ИИ","Для FIB и SANG ИИ сначала смотрит законы своего ведомства."],
- ai27quick:["Быстрые вопросы","Кнопки-заготовки над полем ввода ИИ."],
- ai27clar:["Уточнения ИИ","ИИ переспрашивает, если в вопросе не хватает деталей."],
- ai27hist:["История вопросов","Кнопка «История» в окне ИИ: прошлые вопросы и «Спросить снова»."],
- ai27chk:["Самопроверка ИИ","Раз в день программа владельца или модератора проверяет подбор статей."]};
+ ideas:["Идеи и голосование","Раздел «Идеи» в меню."],events:["Мероприятия организаций","Учения и собрания на главной и в панели руководителя."]};
 function tester(){var s=sys(),u=user();return !!(s.tester||(u&&(u.rank==="owner"||u.rank==="moderator")))}
 function mode(k){var f=sys().flags;return f&&f[k]?f[k]:FDEF[k]}
 function flag(k){var m=mode(k);if(m==="off")return false;if(m==="beta")return tester()&&C.exp[k]!==false;return true}
@@ -13706,15 +13705,15 @@ document.addEventListener("click",function(e){ if(e.target.closest&&e.target.clo
 /* ===== 2.7 · ИИ-помощник =====
    Словарь владельца «бытовое слово → статья» (window.SA_aiDict), законы своего ведомства первыми для FIB и SANG (window.SA_aiAgency),
    быстрые вопросы под полем, встречный вопрос ИИ (window.SA_aiPrep / SA_aiDone), история своих вопросов,
-   ежедневная самопроверка подбора статей в программе владельца и модераторов. Каждая функция по своему флагу ai27… (сначала только тестерам). */
+   ежедневная самопроверка подбора статей в программе владельца и модераторов. С 2.7.1 всё включено у всех (раньше по флагам ai27… для только тестерам). */
 (function(){
 "use strict";
 var A=window.senkoApp;
 function st(){try{return A&&A.state?A.state():null}catch(x){return null}}
 function user(){var s=st();return s&&s.user}
 function online(){var u=user();return !!(u&&!u.offline&&A&&A.api)}
-// 2.7.1: у каждой функции 2.7 свой флаг
-function on(k){try{return typeof window.SA_flag==="function"&&!!window.SA_flag(k)}catch(x){return false}}
+// 2.7.1: функции 2.7 вышли для всех, флагов у них больше нет
+function on(k){return true}
 function api(a,d){if(!A||!A.api)return Promise.resolve({ok:false});return A.api(a,d||{}).then(function(r){return r||{ok:false}},function(){return {ok:false}})}
 function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(x){return d}}
