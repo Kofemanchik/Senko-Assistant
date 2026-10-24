@@ -9,6 +9,7 @@ const voice = require("./voice"); // голосовой ввод и оверле
 const radio = require("./dispatch"); // 2.6: рация диспетчера
 const mini = require("./mini"); // 2.4: мини-окно задержания поверх игры
 const trayMenu = require("./traymenu"); // 2.5: своё меню значка в трее вместо системного
+const dialogs = require("./dialogs"); // 2.8.0-beta.5: окна-сообщения в стиле программы
 const ai = require("./ai");       // ИИ-помощник (через прокси)
 
 // ───────────── НАСТРОЙКИ ─────────────
@@ -289,9 +290,16 @@ function currentVersion() {
 function dlgParent() {
   return win && !win.isDestroyed() && win.isVisible() && !win.isMinimized() ? win : null;
 }
+// 2.8.0-beta.5: сообщения рисуются своим окном в стиле программы; системное окно Windows — только если своё не открылось
 function box(opts) {
   const p = dlgParent();
-  return p ? dialog.showMessageBox(p, opts) : dialog.showMessageBox(opts);
+  try {
+    return dialogs.show(opts, p);
+  } catch (e) {
+    const o = { ...opts }; delete o.rows;
+    if (opts.rows && opts.rows.length) o.detail = opts.rows.map((r) => r[0] + ": " + r[1]).join("\n") + (opts.detail ? "\n\n" + opts.detail : "");
+    return p ? dialog.showMessageBox(p, o) : dialog.showMessageBox(o);
+  }
 }
 
 async function checkForUpdate(manual) {
@@ -925,19 +933,19 @@ function releaseDate() {
 async function showAbout() {
   const u = accounts.current();
   const dv = currentVersion();
-  const lines = [
-    `Версия программы: ${app.getVersion()}`,
-    `Версия данных памятки: ${dv}`,
-    `Дата выпуска: ${releaseDate()}`,
-    `Автор: Hanami Senko | Senko Corporation`,
-    `Electron ${process.versions.electron} · Chromium ${process.versions.chrome}`
+  const rows = [
+    ["Версия программы", app.getVersion()],
+    ["Данные памятки", dv],
+    ["Дата выпуска", releaseDate()],
+    ["Автор", "Hanami Senko | Senko Corporation"],
+    ["Движок", `Electron ${process.versions.electron} · Chromium ${process.versions.chrome}`]
   ];
-  if (u) lines.push("", `Вы вошли как: ${u.login} (${u.nick})`);
+  if (u) rows.push(["Вы вошли как", `${u.login} (${u.nick})`]);
   const r = await box({
     type: "info",
     title: "О программе",
     message: "Senko Assistant",
-    detail: lines.join("\n"),
+    rows,
     buttons: ["Закрыть", "Проверить обновления", "Папка с данными"],
     defaultId: 0,
     cancelId: 0,
@@ -1675,6 +1683,7 @@ app.whenReady().then(() => {
     micOk: (wc) => radio.isWc(wc) // 2.6: микрофон и окну рации
   });
   trayMenu.init({ state: trayState, act: trayAct });
+  dialogs.init();
   mini.init({
     getCfg: () => cfg,
     saveCfg,

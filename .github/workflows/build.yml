@@ -39,7 +39,41 @@ jobs:
 
       - run: npm ci
 
+      # Модель голоса (Vosk, 46 МБ) не лежит в репозитории. Без неё голосовой ввод и рация пишут «модель не найдена»,
+      # так было во всех сборках с 2.3.0. Качаем официальную модель, сверяем каждый файл с voice-model/manifest.sha256
+      # и пакуем в model.tar.gz с записями папок (без них модель не открывается).
+      - name: Кэш модели голоса
+        uses: actions/cache@v4
+        with:
+          path: voice-model/model.tar.gz
+          key: voice-model-${{ hashFiles('voice-model/manifest.sha256') }}
+
+      - name: Модель голоса
+        shell: bash
+        run: |
+          M=voice-model/model.tar.gz
+          if [ ! -s "$M" ]; then
+            mkdir -p vm && cd vm
+            curl -fsSL --retry 4 --retry-delay 5 -o m.zip https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip
+            if command -v unzip >/dev/null; then unzip -q m.zip; else 7z x -y m.zip >/dev/null; fi
+            sha256sum -c ../voice-model/manifest.sha256
+            L=$(cut -d' ' -f3 ../voice-model/manifest.sha256)
+            D=$(for f in $L; do d=$(dirname "$f"); while [ "$d" != "." ]; do echo "$d"; d=$(dirname "$d"); done; done | sort -u)
+            tar --format=ustar --owner=0 --group=0 --no-recursion -czf ../$M $D $L
+            cd .. && rm -rf vm
+          fi
+          S=$(wc -c < "$M")
+          echo "model.tar.gz: $S байт"
+          if [ "$S" -lt 40000000 ]; then echo "::error::Модель голоса не собралась"; exit 1; fi
+
       - run: npm run dist
+
+      - name: Модель голоса попала в сборку
+        shell: bash
+        run: |
+          F=dist/win-unpacked/resources/voice-model/model.tar.gz
+          if [ ! -s "$F" ]; then echo "::error::В сборке нет $F"; exit 1; fi
+          echo "в сборке: $(wc -c < "$F") байт"
 
       # обычная версия даёт latest.yml, бета (2.5.0-beta.1) — beta.yml; служебный файл сборщика в релиз не нужен
       - name: Убрать служебные файлы сборки

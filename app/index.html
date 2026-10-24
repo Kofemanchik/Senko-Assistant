@@ -6319,7 +6319,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.8.0-beta.4";
+var APP_VER="2.8.0-beta.5";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6330,7 +6330,7 @@ function strip(s){return String(s||"").replace(/<[^>]*>/g,"").replace(/\s+/g," "
 
 /* ---------- окно поверх всего ---------- */
 var cur=null;
-function closeM(){if(cur){var f=cur._f;cur.remove();cur=null;if(f&&f.focus&&document.contains(f))try{f.focus()}catch(e){}}}
+function closeM(){if(cur){var f=cur._f,o=cur;cur=null;if(document.documentElement.classList.contains("sa-anim")){o.classList.add("sa-out");setTimeout(function(){o.remove()},150)}else o.remove();if(f&&f.focus&&document.contains(f))try{f.focus()}catch(e){}}} // 2.8.0-beta.5: у тестеров окно закрывается с анимацией
 function modal(title,body,wide){
  closeM();
  var o=document.createElement("div"); o.className="sa-ov sd-ov noprint"; o.style.zIndex="2147469000"; o._f=document.activeElement;
@@ -6408,6 +6408,11 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.8.0-beta.5",d:"24.10.2026",items:[
+  ["🧪","Только для бета-тестеров","Новые окна программы, возвращение голосового ввода без интернета и анимации интерфейса."],
+  ["🪟","Новые окна обновления и «О программе»","Окна «Найдено обновление», «Обновление готово» и «О программе» теперь в стиле Senko: светлая и тёмная тема, понятные кнопки, сведения о версии аккуратной таблицей."],
+  ["🎙️","Голосовой ввод без интернета снова работает","В установщиках последних версий не хватало модели распознавания речи, поэтому диагностика писала «модель не найдена». Теперь модель снова входит в программу, переустанавливать ничего не нужно, достаточно обновиться."],
+  ["✨","Анимации","Плавно раскрываются выпадающие списки и подсказки, открываются и закрываются окна, нажимаются кнопки и переключаются разделы. Если в системе включено «уменьшение движения», анимации отключаются."]]},
  {v:"2.8.0-beta.4",d:"24.10.2026",items:[
   ["🧪","Только для бета-тестеров","Продолжение исправлений подбора статей для ИИ-помощника."],
   ["🤖","ИИ понимает вопросы «а если я…»","Подбор статей понимает будущее время и деепричастия («украду тачку», «расстреляв их», «заеду к сангам»), военные звания и высших должностных лиц («генерал армии», «министр») угон машин скорой, армии и ведомств (УК 10.5.1), угон вертолёта сангов, заезд или прилёт на их территорию и авианосец (УК 12.7), сленг «спиздить», «стырить», названия ведомств кириллицей («ЛСПД», «ФИБ») и грубые слова о сексе (ИИ уточнит, было ли согласие). Насильственные действия сотрудника (например, «насильное освидетельствование») — УК 8.1, 8.2, 15.1 и 17.2, а опечатки в длинных словах больше не мешают найти статью. Похищение людей словами «украсть губернатора» (УК 7.1), «ПВС» как судья, непристойности и неуважение в суде (УК 16.1, АК 2.2), «отстреливать крайм» (УК 6.1, 6.3). Вопросы о задержании и аресте губернатора, судей, министров и сенаторов («откинуть губернатора с датиком») находят закон о неприкосновенности и ордера на задержание. На вопросы о создателе программы ИИ не отвечает, как бы их ни написали. Выстрел в воздух больше не считается посягательством на сотрудника."]]},
@@ -8229,7 +8234,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.8.0-beta.4";
+var APP_VER="2.8.0-beta.5";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
@@ -14502,6 +14507,46 @@ var AR1=archiveTm;
 archiveTm=function(t){var S=t&&t.seized,W=t&&t.wit,R=t&&t.role;AR1.apply(this,arguments);var h=thist[0];if(h&&t&&h.id===t.id){if(S)h.seized=S;if(W)h.wit=W;if(R)h.role=R}};
 // для рапорта: изъятое, свидетели, хронология
 window.SA_det28rp=function(t){if(!det()||!t)return null;return {seized:det("det28sz")?szText(t):"",wit:det("det28wit")?witText(t):"",chron:det("det28chron")?chron(t).split("\n").join("; "):""}};
+})();
+</script>
+<style>
+/* ===== 2.8.0-beta.5: анимации интерфейса (пока у бета-тестеров: класс sa-anim на <html>) ===== */
+@keyframes saDrop{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes saIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes saOut{to{opacity:0}}
+@keyframes saSheetOut{to{opacity:0;transform:translateY(10px) scale(.98)}}
+@keyframes saOpen{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@keyframes saPop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.08)}100%{transform:none;opacity:1}}
+html.sa-anim :is(button,.btn,.rbtn,.tab,.pill,.chip,a,[role="button"],[role="tab"],[role="menuitem"],[role="menuitemradio"],[role="option"],summary,label){transition:background-color .16s ease,color .16s ease,border-color .16s ease,box-shadow .18s ease,transform .12s ease,opacity .16s ease,filter .16s ease}
+html.sa-anim :is(button,.btn,.rbtn,.tab,.pill,.chip,[role="button"],[role="tab"],summary):active:not(:disabled):not([aria-disabled="true"]){transform:scale(.965)}
+html.sa-anim :is(input,select,textarea){transition:border-color .16s ease,box-shadow .2s ease,background-color .16s ease}
+html.sa-anim :is(.card,.art,.panel,.srow){transition:box-shadow .2s ease,transform .2s ease,border-color .2s ease,background-color .2s ease}
+html.sa-anim .sa-sheet{animation:saUp .26s cubic-bezier(.2,.9,.3,1.15)}
+html.sa-anim .sa-ov.sa-out{animation:saOut .15s ease-in forwards;pointer-events:none}
+html.sa-anim .sa-ov.sa-out .sa-sheet{animation:saSheetOut .15s ease-in forwards}
+html.sa-anim :is(#sug:not([hidden]),[role="listbox"]:not([hidden]),[role="menu"],.sd-rmenu,.md-drop,.s9-tip,.hm-tip){animation:saDrop .17s cubic-bezier(.2,.9,.3,1.1);transform-origin:top center}
+html.sa-anim details[open]>:not(summary){animation:saOpen .2s ease-out}
+html.sa-anim details>summary::marker{transition:transform .2s}
+html.sa-anim #view.sa-swap>*{animation:saIn .24s cubic-bezier(.2,.8,.3,1) both}
+html.sa-anim #view.sa-swap>*:nth-child(2){animation-delay:.03s}
+html.sa-anim #view.sa-swap>*:nth-child(3){animation-delay:.06s}
+html.sa-anim #view.sa-swap>*:nth-child(4){animation-delay:.09s}
+html.sa-anim #view.sa-swap>*:nth-child(n+5){animation-delay:.11s}
+html.sa-anim .sa-toast{transition:opacity .2s ease,transform .28s cubic-bezier(.2,.9,.3,1.3)}
+html.sa-anim [aria-checked="true"]>.sw,html.sa-anim input[type="checkbox"]:checked{animation:saPop .22s ease-out}
+@media (prefers-reduced-motion:reduce){html.sa-anim *,html.sa-anim *::before,html.sa-anim *::after{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}}
+</style>
+<script>
+/* 2.8.0-beta.5: анимации включаются у бета-тестеров; смена раздела плавно показывает новое содержимое */
+(function(){
+ var H=document.documentElement;
+ function on(){var t=false;try{t=typeof window.SA_isTester==="function"&&!!window.SA_isTester()}catch(e){}H.classList.toggle("sa-anim",t)}
+ on();setInterval(on,3000);
+ var T=null;
+ function swap(){var v=document.getElementById("view");if(!v||!H.classList.contains("sa-anim"))return;v.classList.remove("sa-swap");void v.offsetWidth;v.classList.add("sa-swap");clearTimeout(T);T=setTimeout(function(){v.classList.remove("sa-swap")},450)}
+ // разделы и подразделы: верхние вкладки, боковое меню, подменю
+ document.addEventListener("click",function(e){var b=e.target.closest&&e.target.closest('nav.tabs button,nav.tabs a,.tabs2 button,.subnav button,.side button,.side a,[role="tab"],[data-tab]');if(b)swap()},true);
+ window.SA_animSwap=swap;
 })();
 </script>
 </body></html>
