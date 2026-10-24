@@ -6319,7 +6319,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.8.0-beta.6";
+var APP_VER="2.8.0-beta.7";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6408,6 +6408,9 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.8.0-beta.7",d:"24.10.2026",items:[
+  ["🧪","Только для бета-тестеров","Исправление анимаций."],
+  ["✨","Интерфейс больше не дёргается","Кнопки при нажатии не сжимаются, а текст статей и раскрывающихся блоков не сдвигается. Отклик на нажатие даёт волна, новый раздел и раскрытый блок плавно проявляются на месте."]]},
  {v:"2.8.0-beta.6",d:"24.10.2026",items:[
   ["🧪","Только для бета-тестеров","Исправление анимаций и сезонного оформления."],
   ["✨","Анимации без мигания","При нажатии на кнопки и переходе по разделам экран больше не моргает: новый раздел мягко выезжает, а от точки нажатия расходится лёгкая волна."],
@@ -8238,7 +8241,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.8.0-beta.6";
+var APP_VER="2.8.0-beta.7";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
@@ -14519,16 +14522,15 @@ window.SA_det28rp=function(t){if(!det()||!t)return null;return {seized:det("det2
 <style>
 /* ===== 2.8.0-beta.5: анимации интерфейса (пока у бета-тестеров: класс sa-anim на <html>) ===== */
 @keyframes saDrop{from{opacity:.5;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
-@keyframes saIn{from{transform:translateY(10px)}to{transform:none}}
+@keyframes saIn{from{opacity:.55}to{opacity:1}}
 @keyframes saRip{from{transform:translate(-50%,-50%) scale(0);opacity:.35}to{transform:translate(-50%,-50%) scale(1);opacity:0}}
 @keyframes saOut{to{opacity:0}}
 @keyframes saSheetOut{to{opacity:0;transform:translateY(10px) scale(.98)}}
-@keyframes saOpen{from{opacity:.4;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@keyframes saOpen{from{opacity:.25}to{opacity:1}}
 @keyframes saPop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.08)}100%{transform:none;opacity:1}}
-html.sa-anim :is(button,.btn,.rbtn,.tab,.pill,.chip,a,[role="button"],[role="tab"],[role="menuitem"],[role="menuitemradio"],[role="option"],summary,label){transition:background-color .16s ease,color .16s ease,border-color .16s ease,box-shadow .18s ease,transform .12s ease,opacity .16s ease,filter .16s ease}
-html.sa-anim :is(button,.btn,.rbtn,.tab,.pill,.chip,[role="button"],[role="tab"],summary):active:not(:disabled):not([aria-disabled="true"]){transform:scale(.965)}
+html.sa-anim :is(button,.btn,.rbtn,.tab,.pill,.chip,a,[role="button"],[role="tab"],[role="menuitem"],[role="menuitemradio"],[role="option"],summary,label){transition:background-color .16s ease,color .16s ease,border-color .16s ease,box-shadow .18s ease,opacity .16s ease,filter .16s ease}
 html.sa-anim :is(input,select,textarea){transition:border-color .16s ease,box-shadow .2s ease,background-color .16s ease}
-html.sa-anim :is(.card,.art,.panel,.srow){transition:box-shadow .2s ease,transform .2s ease,border-color .2s ease,background-color .2s ease}
+html.sa-anim :is(.card,.art,.panel,.srow){transition:box-shadow .2s ease,border-color .2s ease,background-color .2s ease}
 html.sa-anim .sa-sheet{animation:saUp .26s cubic-bezier(.2,.9,.3,1.15)}
 html.sa-anim .sa-ov.sa-out{animation:saOut .15s ease-in forwards;pointer-events:none}
 html.sa-anim .sa-ov.sa-out .sa-sheet{animation:saSheetOut .15s ease-in forwards}
@@ -14536,13 +14538,8 @@ html.sa-anim :is(#sug:not([hidden]),[role="listbox"]:not([hidden]),[role="menu"]
 html.sa-anim details.sa-opening[open]>:not(summary){animation:saOpen .2s ease-out}
 html.sa-anim .sa-rip{position:fixed;z-index:2147483000;pointer-events:none;border-radius:50%;background:var(--accent,#C2541B);animation:saRip .45s ease-out forwards}
 html.sa-anim details>summary::marker{transition:transform .2s}
-html.sa-anim #view.sa-swap>*{animation:saIn .24s cubic-bezier(.2,.8,.3,1) both}
-html.sa-anim #view.sa-swap>*:nth-child(2){animation-delay:.03s}
-html.sa-anim #view.sa-swap>*:nth-child(3){animation-delay:.06s}
-html.sa-anim #view.sa-swap>*:nth-child(4){animation-delay:.09s}
-html.sa-anim #view.sa-swap>*:nth-child(n+5){animation-delay:.11s}
+html.sa-anim #view.sa-swap>*{animation:saIn .18s ease-out}
 html.sa-anim .sa-toast{transition:opacity .2s ease,transform .28s cubic-bezier(.2,.9,.3,1.3)}
-html.sa-anim [aria-checked="true"]>.sw,html.sa-anim input[type="checkbox"]:checked{animation:saPop .22s ease-out}
 @media (prefers-reduced-motion:reduce){html.sa-anim *,html.sa-anim *::before,html.sa-anim *::after{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}}
 </style>
 <script>
@@ -14552,7 +14549,7 @@ html.sa-anim [aria-checked="true"]>.sw,html.sa-anim input[type="checkbox"]:check
  function on(){var t=false;try{t=typeof window.SA_isTester==="function"&&!!window.SA_isTester()}catch(e){}H.classList.toggle("sa-anim",t)}
  on();setInterval(on,3000);
  var T=null;
- // 2.8.0-beta.6: раздел больше не становится прозрачным (было мигание); новое содержимое только мягко выезжает и только если раздел правда сменился
+ // 2.8.0-beta.7: при смене раздела новое содержимое мягко проявляется, без сдвига и без полного исчезновения; только если раздел правда сменился
  function swap(){var v=document.getElementById("view");if(!v||!H.classList.contains("sa-anim"))return;v.classList.remove("sa-swap");void v.offsetWidth;v.classList.add("sa-swap");clearTimeout(T);T=setTimeout(function(){v.classList.remove("sa-swap")},450)}
  function key(){var v=document.getElementById("view"),c=document.querySelector("aside.side [aria-current]"),t=v&&v.querySelector('[role="tab"][aria-selected="true"],.tabs2 [aria-pressed="true"],.subnav [aria-pressed="true"]');
   return (c?c.textContent:"")+"|"+(t?t.textContent:"")+"|"+(v?[].slice.call(v.children,0,3).map(function(x){return x.className}).join(","):"")}
@@ -14560,8 +14557,9 @@ html.sa-anim [aria-checked="true"]>.sw,html.sa-anim input[type="checkbox"]:check
  document.addEventListener("click",function(e){var b=e.target.closest&&e.target.closest('nav.tabs button,nav.tabs a,.tabs2 button,.subnav button,.side button,.side a,[role="tab"],[data-tab]');if(!b||!H.classList.contains("sa-anim"))return;var k=key();requestAnimationFrame(function(){if(key()!==k)swap()})},true);
  // нажатие: волна от точки нажатия; она живёт поверх страницы, поэтому видна, даже если раздел перерисовался
  document.addEventListener("pointerdown",function(e){if(!H.classList.contains("sa-anim")||e.button!==0)return;var b=e.target.closest&&e.target.closest('button,.btn,a[href],[role="button"],[role="tab"],[role="menuitem"],[role="option"],summary');if(!b||b.disabled)return;var r=b.getBoundingClientRect(),d=Math.min(Math.max(r.height*2,48),140),c=document.createElement("span");c.className="sa-rip";c.style.cssText="left:"+e.clientX+"px;top:"+e.clientY+"px;width:"+d+"px;height:"+d+"px";document.body.appendChild(c);setTimeout(function(){c.remove()},500)},true);
- // раскрытие блоков: анимация только у того, что открыли сейчас, а не при каждой перерисовке
- document.addEventListener("toggle",function(e){var d=e.target;if(d&&d.tagName==="DETAILS"&&d.open&&H.classList.contains("sa-anim")){d.classList.add("sa-opening");setTimeout(function(){d.classList.remove("sa-opening")},260)}},true);
+ // раскрытие блоков: анимация только у блока, который человек открыл сам (toggle приходит и при каждой перерисовке открытого блока, из-за этого дёргался текст)
+ var SUMT=0;document.addEventListener("click",function(e){if(e.target.closest&&e.target.closest("summary"))SUMT=Date.now()},true);
+ document.addEventListener("toggle",function(e){var d=e.target;if(d&&d.tagName==="DETAILS"&&d.open&&H.classList.contains("sa-anim")&&Date.now()-SUMT<400){d.classList.add("sa-opening");setTimeout(function(){d.classList.remove("sa-opening")},260)}},true);
  window.SA_animSwap=swap;
 })();
 </script>
