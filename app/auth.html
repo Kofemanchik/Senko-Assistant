@@ -118,6 +118,7 @@ body:not(.framed) .tbar{display:none}
       <label class="chk"><input type="checkbox" id="rEye"> Показать пароли</label>
       <label><span>Ник игрока <span class="req">обязательно</span></span><input id="rNick" maxlength="40" autocomplete="off"></label>
       <label><span>Статик <span class="req">обязательно</span></span><input id="rSt" maxlength="12" autocomplete="off"></label>
+      <label><span>Сервер <span class="req">обязательно</span></span><select id="rServer"></select></label>
       <label><span>Организация <span class="req">обязательно</span></span><select id="rOrg"></select></label>
       <label id="rOrgOtherW" hidden><span>Название организации <span class="req">обязательно</span></span><input id="rOrgOther" maxlength="60" autocomplete="off"></label>
       <label><span>Роль в игре <span class="req">обязательно</span></span><select id="rRole"></select></label>
@@ -490,6 +491,8 @@ body:not(.framed) .tbar{display:none}
 
   A.state().then(function(s){
     if(!s) return;
+    fill($("rServer"),(s.servers||[{id:12,name:"Boston"}]).map(function(x){return [String(x.id),x.name+" ("+x.id+")"]}),"Выберите сервер");
+    $("rServer").value=String(s.defaultServer||12);
     fill($("rOrg"),s.depts.map(function(d){return [d,d]}).concat([["other","Другая организация"]]),"Выберите организацию");
     ROLES_ALL=s.roles||{}; if(s.gov) GOV=s.gov; fillRoles();
     if(s.lastLogin) $("lLogin").value=s.lastLogin;
@@ -560,13 +563,14 @@ body:not(.framed) .tbar{display:none}
     e.preventDefault(); showErr("rErr","");
     if(!LG.checked()){LG.shake();showErr("rErr","Подтвердите ознакомление с Политикой конфиденциальности и Условиями пользования.");return}
     if($("rPass").value!==$("rPass2").value){showErr("rErr","Пароли не совпадают.");return}
+    if(!$("rServer").value){showErr("rErr","Выберите сервер.");return}
     if(!$("rOrg").value){showErr("rErr","Выберите организацию.");return}
     $("rBtn").disabled=true;
     var login=$("rLogin").value.trim();
     A.register({
       login:login, password:$("rPass").value,
       nick:$("rNick").value.trim(), static:$("rSt").value.trim(),
-      org:$("rOrg").value, orgOther:$("rOrgOther").value.trim(),
+      server:$("rServer").value, org:$("rOrg").value, orgOther:$("rOrgOther").value.trim(),
       role:$("rRole").value, remember:$("rRem").checked,
       discord:$("rDiscord").value.trim(), telegram:$("rTg").value.trim(), phone:$("rPhone").value.trim(),
       migrated:migrating,

@@ -9,6 +9,13 @@ const crypto = require("crypto");
 
 const ROLES = { off: "Сотрудник", pros: "Прокурор", adv: "Адвокат" };
 const DEPTS = ["Government", "LSPD", "LSCSD", "FIB", "SANG"]; // должен совпадать с DEPTS в supabase/functions/senko/index.ts
+// 2.9: серверы Majestic RP; должен совпадать с SERVERS в supabase/functions/senko/index.ts и scripts/servers.js
+const SERVERS = [
+  { id: 12, name: "Boston" },
+  { id: 7, name: "Los Angeles" },
+  { id: 16, name: "Denver" }
+];
+const DEFAULT_SERVER = 12; // Boston: сервер по умолчанию (аккаунты, созданные до 2.9)
 const GOV_ORG = "Government"; // только этой организации доступны роли «Прокурор» и «Адвокат»
 const OFFLINE_GRACE_DAYS = 14; // сколько дней можно работать без связи с сервером по запомненному входу
 const STAFF_RANKS = ["leader", "moderator", "owner"];
@@ -213,6 +220,8 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
   return {
     ROLES,
     DEPTS,
+    SERVERS,
+    DEFAULT_SERVER,
     GOV_ORG,
     current: () => pub(),
     isStaff: () => !!(current && STAFF_RANKS.includes(current.rank)),
@@ -260,7 +269,7 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
       const r = await call({
         action: "register",
         login: d.login, password: d.password, nick: d.nick, static: d.static,
-        org: d.org, orgOther: d.orgOther, role: d.role,
+        org: d.org, orgOther: d.orgOther, role: d.role, server: clean(d.server, 4),
         discord: d.discord, telegram: d.telegram, phone: d.phone,
         remember: !!d.remember, migrated: !!lg,
         legal: d.legal, ...client()
@@ -335,7 +344,7 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
       takeSys(r);
       if (r.ok && r.user.needLegal) return { ok: false, error: "Обновились Политика и Условия. Войдите заново и примите их." };
       if (r.ok) {
-        const changed = ["rank", "nick", "org", "role", "discord", "phone", "telegram", "static"].some((k) => r.user[k] !== current[k]) || JSON.stringify(sys) !== before;
+        const changed = ["rank", "nick", "org", "server", "role", "discord", "phone", "telegram", "static"].some((k) => r.user[k] !== current[k]) || JSON.stringify(sys) !== before;
         const wasOffline = current.offline;
         setCurrent(r.user, token);
         if (remember) saveCache(r.user);
@@ -386,7 +395,7 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
       const r = await call({
         action: "update_profile", token,
         nick: clean(d.nick, 40), static: clean(d.static, 12), discord: clean(d.discord, 40),
-        telegram: clean(d.telegram, 60), phone: clean(d.phone, 20), org: clean(d.org, 60)
+        telegram: clean(d.telegram, 60), phone: clean(d.phone, 20), org: clean(d.org, 60), server: clean(d.server, 4)
       });
       if (r.ok && r.user) {
         setCurrent(r.user, token);

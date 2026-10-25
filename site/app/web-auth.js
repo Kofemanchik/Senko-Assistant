@@ -5,6 +5,7 @@
   var W = window.SenkoWeb;
   var ROLES = { off: "Сотрудник", pros: "Прокурор", adv: "Адвокат" };
   var DEPTS = ["Government", "LSPD", "LSCSD", "FIB", "SANG"];
+  var SERVERS = [{ id: 12, name: "Boston" }, { id: 7, name: "Los Angeles" }, { id: 16, name: "Denver" }]; // как SERVERS в серверной функции
   var pending = null; // свежая регистрация или новые документы: вход после подтверждения
 
   function next() {
@@ -20,7 +21,7 @@
 
   window.senkoAuth = {
     state: function () {
-      return Promise.resolve({ lastLogin: W.ls("sa-web-last") || "", depts: DEPTS.slice(), roles: ROLES, gov: "Government", version: W.CFG.stable || W.CFG.ver || "", notice: W.notice() });
+      return Promise.resolve({ lastLogin: W.ls("sa-web-last") || "", depts: DEPTS.slice(), servers: SERVERS.slice(), defaultServer: 12, roles: ROLES, gov: "Government", version: W.CFG.stable || W.CFG.ver || "", notice: W.notice() });
     },
     login: function (d) {
       d = d || {};
@@ -40,7 +41,7 @@
       d = d || {};
       return W.call(Object.assign({
         action: "register", login: d.login, password: d.password, nick: d.nick, static: d.static,
-        org: d.org, orgOther: d.orgOther, role: d.role, discord: d.discord, telegram: d.telegram, phone: d.phone,
+        server: clean(d.server, 4), org: d.org, orgOther: d.orgOther, role: d.role, discord: d.discord, telegram: d.telegram, phone: d.phone,
         remember: !!d.remember, migrated: false, legal: d.legal
       }, W.client())).then(function (r) {
         if (!r.ok) return { ok: false, error: r.error || "Не удалось зарегистрироваться.", code: r.code };

@@ -763,9 +763,10 @@ function getState() {
     version: app.getVersion(),
     dataVersion: currentVersion(),
     depts: accounts.DEPTS,
+    servers: accounts.SERVERS,
     shareUrl: require("./server-config").API_URL,
     sys: accounts.sys(),
-    user: u ? { login: u.login, nick: u.nick, static: u.static, discord: u.discord, telegram: u.telegram, phone: u.phone, role: u.role, roleName: u.roleName, org: u.org, rank: u.rank, rankName: u.rankName, offline: !!u.offline } : null
+    user: u ? { login: u.login, nick: u.nick, static: u.static, discord: u.discord, telegram: u.telegram, phone: u.phone, role: u.role, roleName: u.roleName, org: u.org, server: u.server || accounts.DEFAULT_SERVER, serverName: u.serverName || "", staffServer: u.staffServer || 0, rank: u.rank, rankName: u.rankName, offline: !!u.offline } : null
   };
 }
 function pushState() {
@@ -1380,6 +1381,8 @@ ipcMain.handle("auth:state", (e) =>
     ? {
         lastLogin: accounts.lastLogin(),
         depts: accounts.DEPTS,
+        servers: accounts.SERVERS,
+        defaultServer: accounts.DEFAULT_SERVER,
         roles: accounts.ROLES,
         gov: accounts.GOV_ORG,
         version: app.getVersion(),

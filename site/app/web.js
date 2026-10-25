@@ -8,6 +8,7 @@
   if (!sess) { W.toLogin(); return; }
 
   var DEPTS = ["Government", "LSPD", "LSCSD", "FIB", "SANG"];
+  var SERVERS = [{ id: 12, name: "Boston" }, { id: 7, name: "Los Angeles" }, { id: 16, name: "Denver" }]; // как SERVERS в серверной функции
   var root = document.documentElement;
 
   /* ───── заставка, пока готовятся данные ───── */
@@ -63,7 +64,7 @@
     return {
       cfg: cfg(), win: { stream: [], profiles: [], profile: "" }, platform: "web", web: true, autostart: false,
       sync: sync.status(), hotkeyError: "", packaged: true, version: shownVer(u), dataVersion: CFG.ver || "",
-      depts: DEPTS.slice(), shareUrl: CFG.api, sys: sys,
+      depts: DEPTS.slice(), servers: SERVERS.slice(), shareUrl: CFG.api, sys: sys,
       user: u ? { login: u.login, nick: u.nick, static: u.static, discord: u.discord, telegram: u.telegram, phone: u.phone, role: u.role, roleName: u.roleName, org: u.org, rank: u.rank, rankName: u.rankName, offline: !!u.offline } : null
     };
   }
@@ -313,7 +314,7 @@
     updateProfile: function (d) {
       d = d || {};
       var c = function (s, m) { return String(s == null ? "" : s).replace(/[\u0000-\u001f]/g, " ").trim().slice(0, m); };
-      return act("update_profile", { nick: c(d.nick, 40), static: c(d.static, 12), discord: c(d.discord, 40), telegram: c(d.telegram, 60), phone: c(d.phone, 20), org: c(d.org, 60) }).then(function (r) {
+      return act("update_profile", { nick: c(d.nick, 40), static: c(d.static, 12), discord: c(d.discord, 40), telegram: c(d.telegram, 60), phone: c(d.phone, 20), org: c(d.org, 60), server: c(d.server, 4) }).then(function (r) {
         if (r && r.ok && r.user) { user = r.user; W.cacheUser(r.user); pushState(); }
         return r;
       });

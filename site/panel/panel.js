@@ -8,7 +8,15 @@
   var SKEY = "sa-panel";
   var DEPTS = ["Government", "LSPD", "LSCSD", "FIB", "SANG"];
   var RANKS = { user: "Пользователь", leader: "Руководство", moderator: "Модератор памятки", owner: "Владелец" };
-  var ME = null, TOKEN = null, DASH = null;
+  // 2.9: серверы Majestic RP (номер, название); список тот же, что в SERVERS серверной функции
+  var SERVERS = [[12, "Boston"], [7, "Los Angeles"], [16, "Denver"]];
+  function srvName(n) { for (var i = 0; i < SERVERS.length; i++) if (SERVERS[i][0] === +n) return SERVERS[i][1] + " (" + n + ")"; return n ? "сервер " + n : "—"; }
+  function srvShort(n) { for (var i = 0; i < SERVERS.length; i++) if (SERVERS[i][0] === +n) return SERVERS[i][1]; return String(n || ""); }
+  // фильтр по серверу; модератору, привязанному к одному серверу, выбор не нужен: сервер подставляет сервер
+  function srvOpts(first) { return [["", first || "Все серверы"]].concat(SERVERS.map(function (x) { return [String(x[0]), x[1] + " (" + x[0] + ")"]; })); }
+  // роль «БетаТестер»: зелёная метка
+  function betaPill() { return pill("БетаТестер", "on"); }
+  var ME = null, TOKEN = null, DASH = null, DSRV = "";
 
   function $(id) { return document.getElementById(id); }
   function ss(k, v) { try { if (v === undefined) return sessionStorage.getItem(k); if (v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch (e) {} return null; }
@@ -290,7 +298,7 @@
     var c = { queue: (d.users.pending || 0) + (d.resets || 0), reports: d.reports || 0, bugs: d.bugs || 0 };
     document.querySelectorAll("[data-c]").forEach(function (el) { var n = c[el.dataset.c]; el.textContent = n; el.hidden = !n; });
   }
-  function refreshCounts() { return api("dash").then(function (d) { if (d.ok) { DASH = d; counts(d); } return d; }); }
+  function refreshCounts() { return api("dash", { server: DSRV }).then(function (d) { if (d.ok) { DASH = d; counts(d); } return d; }); }
   $("burger").addEventListener("click", function () { $("shell").classList.add("menu"); });
   $("scrim").addEventListener("click", function () { $("shell").classList.remove("menu"); });
 
@@ -307,7 +315,9 @@
   var PAGES = {};
 
   PAGES.dash = function (el) {
-    head(el, "Сводка", "Главное о пользователях и режимах работы", btn("Обновить", function () { route(true); }, "btn-sm", "i-refresh"));
+    var dsel = ME.staffServer ? null : h("select", { "aria-label": "Сервер", style: "width:auto", on: { change: function () { DSRV = dsel.value; route(true); } } }, srvOpts().map(function (o) { return h("option", { value: o[0], text: o[1] }); }));
+    if (dsel) dsel.value = DSRV;
+    head(el, "Сводка", ME.staffServer ? "Сервер " + srvName(ME.staffServer) : "Главное о пользователях и режимах работы", h("div", { class: "row" }, dsel, btn("Обновить", function () { route(true); }, "btn-sm", "i-refresh")));
     var box = h("div", { class: "load", text: "Загружаю…" });
     el.appendChild(box);
     return refreshCounts().then(function (d) {
@@ -342,6 +352,15 @@
           h("span", { text: o.org }), h("span", { class: "track" }, h("span", { style: "width:" + Math.round((o.n / omax) * 100) + "%" })), h("b", { text: o.n + " (" + o.active + ")" }));
       })));
       el.appendChild(h("div", { class: "grid g2 sec" }, c1, c2));
+      if (!d.server && (d.servers || []).length > 1) {
+        var c3 = card("Серверы", "Аккаунтов на каждом сервере; в скобках — заходили за 7 дней");
+        var smax = Math.max.apply(null, d.servers.map(function (x) { return x.n; }).concat([1]));
+        c3.appendChild(h("div", { class: "olist" }, d.servers.map(function (o) {
+          return h("a", { class: "orow", href: "#users", on: { click: function () { UF.server = String(o.id); } }, style: "color:inherit;text-decoration:none" },
+            h("span", { text: o.name + " (" + o.id + ")" }), h("span", { class: "track" }, h("span", { style: "width:" + Math.round((o.n / smax) * 100) + "%" })), h("b", { text: o.n + " (" + o.active + ")" }));
+        })));
+        el.appendChild(h("div", { class: "sec" }, c3));
+      }
       var m = d.modes, P = [];
       P.push(pill(m.maintenance && m.maintenance.on ? "Техработы: включены" : "Техработы: выключены", m.maintenance && m.maintenance.on ? "warn" : "off"));
       P.push(pill(m.regs && m.regs.open === false ? "Регистрация закрыта" : "Регистрация открыта" + (m.regs && m.regs.limit ? ", до " + m.regs.limit + " в сутки" : ""), m.regs && m.regs.open === false ? "bad" : "on"));
@@ -370,7 +389,7 @@
   };
 
   // Пользователи
-  var UF = { q: "", rank: "", org: "", state: "", sort: "new", page: 0 };
+  var UF = { q: "", rank: "", org: "", server: "", beta: "", state: "", sort: "new", page: 0 };
   PAGES.users = function (el, arg) {
     if (arg === "online" || arg === "banned" || arg === "pending") { UF.state = arg; UF.page = 0; }
     head(el, "Пользователи", "Поиск по логину, нику, статику и Discord" + (ME.owner ? ", Telegram" : "") + "; #тег — по тегу");
@@ -378,7 +397,9 @@
     function sel(k, opts) { var s = h("select", { "aria-label": k, on: { change: function () { UF[k] = s.value; UF.page = 0; load(); } } }, opts.map(function (o) { return h("option", { value: o[0], text: o[1] }); })); s.value = UF[k]; return s; }
     el.appendChild(h("div", { class: "tools" }, h("label", { class: "search" }, ico("i-search"), q),
       sel("rank", [["", "Все роли"]].concat(Object.keys(RANKS).map(function (k) { return [k, RANKS[k]]; }))),
+      ME.staffServer ? null : sel("server", srvOpts()),
       sel("org", [["", "Все организации"]].concat(DEPTS.map(function (d) { return [d, d]; }))),
+      sel("beta", [["", "Все пользователи"], ["1", "Только БетаТестеры"]]),
       sel("state", [["", "Любой статус"], ["online", "В сети за час"], ["banned", "Заблокированы"], ["pending", "Ждут подтверждения"]]),
       sel("sort", [["new", "Сначала новые"], ["seen", "Недавно в сети"], ["login", "По логину"]])));
     var list = h("div", null, h("div", { class: "load", text: "Загружаю…" }));
@@ -391,6 +412,7 @@
       if (r.approval && r.approval !== "ok") P.push(pill(r.approval === "pending" ? "ждёт подтверждения" : "отклонён", "warn"));
       if (r.warns) P.push(pill("⚠ " + r.warns, "warn"));
       if (r.rank !== "user") P.push(pill(RANKS[r.rank], "acc"));
+      if (r.beta) P.push(betaPill());
       (r.tags || []).slice(0, 3).forEach(function (x) { P.push(pill("#" + x)); });
       return P;
     }
@@ -401,16 +423,16 @@
         if (!r.rows.length) return list.appendChild(h("div", { class: "card empty", text: "Никого не нашлось." }));
         var go = function (login) { return function () { location.hash = "#user/" + encodeURIComponent(login); }; };
         list.appendChild(h("div", { class: "tbl-wrap resp" }, h("table", { class: "tbl" },
-          h("thead", null, h("tr", null, ["Логин и ник", "Статик", "Организация", "Статус", "Был в сети", "Регистрация"].map(function (x) { return h("th", { text: x }); }))),
+          h("thead", null, h("tr", null, ["Логин и ник", "Статик", "Сервер", "Организация", "Статус", "Был в сети", "Регистрация"].map(function (x) { return h("th", { text: x }); }))),
           h("tbody", null, r.rows.map(function (u) {
             return h("tr", { tabindex: 0, on: { click: go(u.login), keydown: function (e) { if (e.key === "Enter") go(u.login)(); } } },
               h("td", null, h("div", { class: "lg", text: u.login }), h("div", { class: "nick", text: u.nick })),
-              h("td", { class: "mono", text: u.static_id }), h("td", { text: u.org }), h("td", null, h("div", { class: "pills" }, status(u))),
+              h("td", { class: "mono", text: u.static_id }), h("td", { text: srvShort(u.server) }), h("td", { text: u.org }), h("td", null, h("div", { class: "pills" }, status(u))),
               h("td", { text: ago(u.last_seen) }), h("td", { text: fmt(u.created_at).slice(0, 10) }));
           })))));
         list.appendChild(h("div", { class: "cards" }, r.rows.map(function (u) {
           return h("button", { type: "button", class: "ucard", on: { click: go(u.login) } }, h("div", { class: "t" }, h("b", { text: u.login }), h("span", { class: "muted small", text: ago(u.last_seen) })),
-            h("div", { class: "m", text: u.nick + " · " + u.static_id + " · " + u.org }), h("div", { class: "pills" }, status(u)));
+            h("div", { class: "m", text: u.nick + " · " + u.static_id + " · " + srvShort(u.server) + " · " + u.org }), h("div", { class: "pills" }, status(u)));
         })));
         list.appendChild(h("div", { class: "pager" },
           btn("← Назад", function () { UF.page--; load(); }, "btn-sm", null),
@@ -444,7 +466,7 @@
         if (!r.ok) { left.textContent = ""; left.appendChild(errMsg(r)); return r; }
         var old = el.querySelector(".ph");
         if (old) old.remove();
-        var P = h("div", { class: "pills" }, pill(r.user.rankName, r.user.rank === "user" ? "" : "acc"), r.user.beta ? pill("бета-тестер", "acc") : null, r.user.banned ? pill("заблокирован", "bad") : null, r.user.approval !== "ok" ? pill("ждёт подтверждения", "warn") : null);
+        var P = h("div", { class: "pills" }, pill(r.user.rankName, r.user.rank === "user" ? "" : "acc"), r.user.beta ? betaPill() : null, pill(srvName(r.user.server)), r.user.banned ? pill("заблокирован", "bad") : null, r.user.approval !== "ok" ? pill("ждёт подтверждения", "warn") : null);
         head(el, r.user.login, r.user.nick + " · " + r.user.static + " · " + r.user.org, P);
         el.insertBefore(el.querySelector(".ph"), el.children[1]);
         if (!right.parentNode) el.appendChild(h("div", { class: "ubox" }, left, right));
@@ -567,8 +589,9 @@
       if (ME.owner) {
         acts.appendChild(h("h3", { text: "Владелец" }));
         acts.appendChild(act("Роль", [{ k: "r", label: "Роль", type: "select", options: Object.keys(RANKS).map(function (k) { return [k, RANKS[k]]; }), value: u.rank },
+          { k: "sv", label: "Сервер модератора", type: "select", options: [["", "Сервер игрока: " + srvShort(u.server)]].concat(SERVERS.map(function (x) { return [String(x[0]), x[1] + " (" + x[0] + ")"]; })).concat([["all", "Все серверы"]]), value: u.staffServer ? String(u.staffServer) : "", hint: "Только для модератора. Руководитель работает на сервере, где играет сам." },
           { k: "tg", label: "Telegram ID", max: 15, ph: "необязательно", hint: "Нужен, чтобы модератор или руководитель работал в боте. Без него модератор работает только в панели." }],
-          function (v) { if (v.tg && !/^\d{3,15}$/.test(v.tg)) return { error: "Telegram ID — только цифры." }; return "/role " + L + " " + v.r + (v.tg ? " " + v.tg : ""); }));
+          function (v) { if (v.tg && !/^\d{3,15}$/.test(v.tg)) return { error: "Telegram ID — только цифры." }; return "/role " + L + " " + v.r + (v.tg ? " " + v.tg : "") + (v.r === "moderator" && v.sv ? " " + v.sv : ""); }));
         acts.appendChild(act("Исправить ник", [{ k: "n", label: "Новый ник", req: 1, max: 40, value: u.nick }], function (v) { return "/rename " + L + " " + word(v.n); }));
         acts.appendChild(act("Исправить статик", [{ k: "s", label: "Статик", req: 1, max: 12, value: u.static }], function (v) { return "/setstatic " + L + " " + word(v.s).replace(/\s/g, ""); }));
         if (u.rank === "moderator" || u.rank === "owner") acts.appendChild(btn("Пароль панели", function () { issueKey(L, function () { load(); }); }, "btn-sm"));
@@ -607,17 +630,18 @@
       var f = h("form", { class: "row", novalidate: true },
         h("input", { class: "grow", placeholder: "Логин", maxlength: 24, "data-k": "l", spellcheck: "false", "aria-label": "Логин" }),
         h("select", { "data-k": "r", "aria-label": "Роль", style: "width:auto" }, ["moderator", "leader", "user", "owner"].map(function (k) { return h("option", { value: k, text: RANKS[k] }); })),
+        h("select", { "data-k": "s", "aria-label": "Сервер модератора", style: "width:auto" }, [["", "Сервер игрока"]].concat(SERVERS.map(function (x) { return [String(x[0]), x[1] + " (" + x[0] + ")"]; })).concat([["all", "Все серверы"]]).map(function (o) { return h("option", { value: o[0], text: o[1] }); })),
         h("input", { placeholder: "Telegram ID (необязательно)", maxlength: 15, "data-k": "t", style: "flex:0 1 230px", inputmode: "numeric", "aria-label": "Telegram ID" }),
         h("button", { type: "submit", class: "btn btn-p", text: "Выдать" }));
       f.addEventListener("submit", function (e) {
         e.preventDefault();
-        var l = f.querySelector('[data-k="l"]').value.trim(), r = f.querySelector('[data-k="r"]').value, t = f.querySelector('[data-k="t"]').value.trim();
+        var l = f.querySelector('[data-k="l"]').value.trim(), r = f.querySelector('[data-k="r"]').value, t = f.querySelector('[data-k="t"]').value.trim(), sv = f.querySelector('[data-k="s"]').value;
         if (!/^[A-Za-z0-9_.-]{3,24}$/.test(l)) return toast("Введите логин пользователя.", true);
         if (t && !/^\d{3,15}$/.test(t)) return toast("Telegram ID — только цифры.", true);
-        run("/role " + l + " " + r + (t ? " " + t : ""), feed, { clear: true });
+        run("/role " + l + " " + r + (t ? " " + t : "") + (r === "moderator" && sv ? " " + sv : ""), feed, { clear: true });
       });
       c.appendChild(f);
-      c.appendChild(h("p", { class: "muted small", style: "margin-top:10px", text: "Руководство видит только свою организацию. Модератору без Telegram ID доступна только эта панель." }));
+      c.appendChild(h("p", { class: "muted small", style: "margin-top:10px", text: "Руководство видит только свою организацию на своём сервере. Модератор видит выбранный сервер или все серверы. Модератору без Telegram ID доступна только эта панель." }));
       c.appendChild(h("div", { style: "margin-top:12px" }, feed));
       el.appendChild(c);
       feed.onDone = function () { load(); };
@@ -628,7 +652,7 @@
       return api("staff").then(function (r) {
         list.textContent = "";
         if (!r.ok) return list.appendChild(errMsg(r));
-        var cols = ["Аккаунт", "Роль", "Организация", "Telegram", "Был в сети"];
+        var cols = ["Аккаунт", "Роль", "Сервер", "Организация", "Telegram", "Был в сети"];
         if (ME.owner) cols.push("Пароль панели", "");
         list.appendChild(h("h2", { text: "Команда", style: "font-size:20px;margin-bottom:12px" }));
         list.appendChild(h("div", { class: "tbl-wrap" }, h("table", { class: "tbl" },
@@ -636,7 +660,7 @@
           h("tbody", null, r.rows.map(function (u) {
             var tr = h("tr", { style: "cursor:default" },
               h("td", null, h("a", { class: "lg", href: "#user/" + encodeURIComponent(u.login), text: u.login }), h("div", { class: "nick", text: u.nick })),
-              h("td", null, pill(RANKS[u.rank], u.rank === "leader" ? "" : "acc")), h("td", { text: u.org }),
+              h("td", null, pill(RANKS[u.rank], u.rank === "leader" ? "" : "acc")), h("td", { text: u.rank === "owner" ? "все" : u.rank === "moderator" ? (u.staff_server ? srvShort(u.staff_server) : "все серверы") : srvShort(u.server) }), h("td", { text: u.org }),
               h("td", null, u.has_tg ? pill("привязан", "on") : pill("нет", "off")), h("td", { text: ago(u.last_seen) }));
             if (ME.owner) {
               var panelOk = u.rank === "owner" || u.rank === "moderator";
@@ -1019,7 +1043,7 @@
         if (!r.users.length) U.appendChild(h("p", { class: "muted", style: "margin-top:12px", text: "Тестеров пока нет. Роль можно выдать здесь, на странице пользователя или командой бота /beta логин on." }));
         else U.appendChild(h("div", { class: "tbl-wrap", style: "box-shadow:none;margin-top:12px" }, h("table", { class: "tbl" }, h("tbody", null, r.users.map(function (u) {
           return h("tr", { on: { click: function (e) { if (e.target.closest("button")) return; location.hash = "#user/" + encodeURIComponent(u.login); } } },
-            h("td", null, h("b", { text: u.login }), h("div", { class: "muted small", text: u.nick + " · " + u.org })),
+            h("td", null, h("b", { text: u.login }), " ", betaPill(), h("div", { class: "muted small", text: u.nick + " · " + srvShort(u.server) + " · " + u.org })),
             h("td", { class: "small muted", text: (u.app_version ? "v" + u.app_version + " · " : "") + "отметок: " + u.results }),
             h("td", { class: "small muted", text: u.last_seen ? ago(u.last_seen) : "—" }),
             h("td", null, btn("Снять", function () {
@@ -1373,13 +1397,14 @@
   var ACT_RU = { ban: "блокировка", unban: "разблокировка", tempban: "блокировка на срок", tempban_end: "конец блокировки", autoban: "автоблокировка", warn: "предупреждение", unwarn: "снято предупреждение", kick: "завершены сессии", note: "заметка", tag: "тег", untag: "убран тег", role: "роль", rename: "ник", setstatic: "статик", setorg: "организация", delete: "удаление аккаунта", profile_update: "изменение профиля", password_reset: "сброс пароля", reset_approve: "сброс подтверждён", reset_reject: "сброс отклонён", broadcast: "рассылка", maintenance: "техработы", regs: "регистрация", reglimit: "лимит регистраций", blacklist: "чёрный список", appeal: "обжалование", delay: "отложенная команда", backup: "резервная копия", laws: "законы", approve: "заявка принята", reject: "заявка отклонена", approval: "приём новичков", shift_start: "начало смены", shift_end: "конец смены", ctrl_create: "контрольный тест", sync_reset: "сброс синхронизации", report_create: "рапорт", report_delete: "рапорт удалён", report_review: "рапорт проверен", panel_login: "вход в панель", panel_key: "пароль панели", panel_revoke: "закрыт вход в панель", db_edit: "правка базы", db_delete: "удаление из базы", db_revert: "возврат правки", ad_save: "баннер сохранён", ad_toggle: "баннер вкл/выкл", ad_delete: "баннер удалён" };
   PAGES.audit = function (el, arg) {
     if (!ME.owner) return ownerOnly(el);
-    var S = { q: arg === "db" ? "db_edit" : "", page: 0 };
+    var S = { q: arg === "db" ? "db_edit" : "", server: "", page: 0 };
     head(el, "Журнал", "Кто, когда и что сделал: бот, программа и панель");
     var q = h("input", { type: "search", placeholder: "Логин или кто сделал", maxlength: 40 });
     var sel = h("select", { style: "width:auto", "aria-label": "Действие" }, [h("option", { value: "", text: "Все действия" })]);
     var list = h("div", { class: "card", style: "padding:0" }, h("div", { class: "load", text: "Загружаю…", style: "padding:20px" }));
     var pager = h("div", { class: "pager" });
-    el.appendChild(h("div", { class: "tools" }, h("label", { class: "search" }, ico("i-search"), q), sel));
+    var ssel = h("select", { style: "width:auto", "aria-label": "Сервер", on: { change: function () { S.server = ssel.value; S.page = 0; load(); } } }, srvOpts().map(function (o) { return h("option", { value: o[0], text: o[1] }); }));
+    el.appendChild(h("div", { class: "tools" }, h("label", { class: "search" }, ico("i-search"), q), sel, ssel));
     el.appendChild(list); el.appendChild(pager);
     var t = 0;
     q.addEventListener("input", function () { clearTimeout(t); t = setTimeout(function () { S.q = q.value.trim(); sel.value = ""; S.page = 0; load(); }, 300); });
@@ -1395,7 +1420,7 @@
         r.rows.forEach(function (x) {
           var d = x.details && Object.keys(x.details).length ? x.details : null;
           al.appendChild(h("div", { class: "aitem" }, h("div", { class: "when", text: fmt(x.at) }),
-            h("div", null, h("div", null, h("b", { text: x.actor }), " · ", ACT_RU[x.action] || x.action, x.target ? " · " : "", x.target ? h("span", { class: "mono small", text: x.target }) : null),
+            h("div", null, h("div", null, h("b", { text: x.actor }), " · ", ACT_RU[x.action] || x.action, x.target ? " · " : "", x.target ? h("span", { class: "mono small", text: x.target }) : null, x.server ? h("span", { class: "muted small", text: " · " + srvShort(x.server) }) : null),
               d ? h("details", null, h("summary", { text: "подробности" }), h("pre", { class: "json", text: JSON.stringify(d, null, 2) })) : null,
               x.action === "db_edit" ? btn("Вернуть как было", function () { confirmDlg("Вернуть правку", "Вернуть прежние значения полей для " + x.target + "?", "Вернуть", function () { api("db_revert", { id: x.id }).then(function (y) { toast(y.ok ? "Значения возвращены." : y.error, !y.ok); load(); }); }); }, "btn-sm") : null)));
         });

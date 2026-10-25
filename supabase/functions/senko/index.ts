@@ -28,6 +28,14 @@ const GOV_ORG = "Government"; // только этой организации д
 const GAME_ROLES = { off: "Сотрудник", pros: "Прокурор", adv: "Адвокат" };
 // Роль в игре с учётом организации: вне Government всегда «Сотрудник»
 const gameRole = (p) => (p.org === GOV_ORG ? p.game_role : "off");
+// 2.9: серверы Majestic RP. Номер — номер сервера в игре; форум нужен для сбора законов (scripts/servers.js хранит тот же список)
+const SERVERS = { 12: { name: "Boston" }, 7: { name: "Los Angeles" }, 16: { name: "Denver" } };
+const DEFAULT_SERVER = 12; // у всех, кто зарегистрировался до 2.9, и у старых программ без выбора сервера
+const srvName = (n) => (SERVERS[n] ? `${SERVERS[n].name} (${n})` : `сервер ${n}`);
+const parseServer = (v) => {
+  const n = parseInt(v, 10);
+  return SERVERS[n] ? n : 0;
+};
 const RANKS = { user: "Пользователь", leader: "Руководство", moderator: "Модератор памятки", owner: "Владелец" };
 const LEGAL_VERSION = "2026-10-21.2"; // версия Политики и Условий; должна совпадать с VERSION в app/auth.html и app/index.html
 const SYNC_KINDS = { thist: 1, dlog: 1, tests: 1, qstat: 1, xp: 1, daily: 1, streak: 1, favs: 1, notes: 1, labels: 1, folders: 1, favorder: 1 }; // что синхронизируется между компьютерами
@@ -110,7 +118,9 @@ async function hit(key, max, windowSec) {
 
 async function audit(actor, action, target, details) {
   try {
-    await db()`insert into audit_log (actor, action, target, details) values (${actor}, ${action}, ${target || null}, ${db().json(details || {})})`;
+    await db()`insert into audit_log (actor, action, target, details, server)
+               values (${actor}, ${action}, ${target || null}, ${db().json(details || {})},
+                       (select server from profiles where login_lc = lower(${target || ""}) limit 1))`;
   } catch (e) {
     console.error("audit", e);
   }
@@ -162,6 +172,7 @@ function card(p, viewer) {
     `👤 <b>${esc(p.login)}</b> — ${RANKS[p.rank] || p.rank}${p.banned ? " 🚫 ЗАБЛОКИРОВАН" : ""}`,
     `Ник: ${esc(p.nick)}`,
     `Статик: <code>${esc(p.static_id)}</code>`,
+    `Сервер: ${esc(srvName(p.server || DEFAULT_SERVER))}`,
     `Организация: ${esc(p.org)}${p.post ? " · " + esc(p.post) : ""}`,
     `Роль в игре: ${GAME_ROLES[gameRole(p)] || gameRole(p)}`,
     `Дискорд: ${esc(p.discord)}`,
@@ -199,6 +210,9 @@ function pub(p) {
     static: p.static_id,
     org: p.org,
     dept: p.dept || "",
+    server: p.server || DEFAULT_SERVER,
+    serverName: (SERVERS[p.server || DEFAULT_SERVER] || { name: "" }).name,
+    staffServer: p.staff_server || 0,
     role: gameRole(p),
     roleName: GAME_ROLES[gameRole(p)] || gameRole(p),
     rank: p.rank,
@@ -269,7 +283,10 @@ function validate(b) {
   if (!org) return { error: "Укажите организацию." };
   if (b.org !== "other" && !DEPTS.includes(org)) return { error: "Выберите организацию из списка." };
   if (b.role !== "off" && org !== GOV_ORG) return { error: "Роли «Прокурор» и «Адвокат» доступны только сотрудникам Government." };
-  return { login, pass, ...f, org, dept: DEPTS.includes(org) ? org : "", role: b.role };
+  // старые версии программы сервер не присылают — это Boston; неизвестный номер не принимаем
+  const server = b.server == null || b.server === "" ? DEFAULT_SERVER : parseServer(b.server);
+  if (!server) return { error: "Выберите сервер из списка." };
+  return { login, pass, ...f, org, dept: DEPTS.includes(org) ? org : "", role: b.role, server };
 }
 // Поля профиля, которые пользователь может указать при регистрации и потом поменять в личном кабинете
 function checkFields(b) {
@@ -327,9 +344,9 @@ async function register(b, ip) {
   try {
     p = await sql.begin(async (t) => {
       const [row] = await t`
-        insert into profiles (login, pass_hash, nick, static_id, org, dept, game_role, discord, telegram, phone, legal_version, legal_at, approval)
+        insert into profiles (login, pass_hash, nick, static_id, org, dept, game_role, discord, telegram, phone, legal_version, legal_at, approval, server)
         values (${v.login}, extensions.crypt(${v.pass}, extensions.gen_salt('bf', 10)), ${v.nick}, ${v.st}, ${v.org}, ${v.dept},
-                ${v.role}, ${v.discord}, ${v.telegram}, ${v.phone}, ${clean(b.legal.version, 20)}, now(), ${pend ? "pending" : "ok"})
+                ${v.role}, ${v.discord}, ${v.telegram}, ${v.phone}, ${clean(b.legal.version, 20)}, now(), ${pend ? "pending" : "ok"}, ${v.server})
         returning *`;
       await t`insert into recovery_codes (user_id, code_hash) values (${row.id}, ${codeHash})`;
       return row;
@@ -487,6 +504,7 @@ const PROFILE_FIELDS = [
   ["telegram", "telegram", "Телеграм"],
   ["phone", "phone", "Номер в игре"],
   ["org", "org", "Организация"],
+  ["server", "server", "Сервер"],
 ];
 async function updateProfile(b) {
   const { p, err } = await who(b);
@@ -498,13 +516,21 @@ async function updateProfile(b) {
   // организацию можно выбрать только из списка; не указана — остаётся прежней
   v.org = b.org == null || b.org === "" ? p.org : DEPTS.find((d) => d === b.org);
   if (!v.org) return fail("Выберите организацию из списка.");
-  const changes = PROFILE_FIELDS.filter(([k, col]) => String(p[col] || "") !== v[k]).map(([k, col, label]) => ({ label, from: String(p[col] || ""), to: v[k] }));
+  // сервер: не указан — остаётся прежним (старые версии программы его не присылают)
+  v.server = b.server == null || b.server === "" ? p.server || DEFAULT_SERVER : parseServer(b.server);
+  if (!v.server) return fail("Выберите сервер из списка.");
+  const shown = (k, x) => (k === "server" ? srvName(+x || DEFAULT_SERVER) : String(x == null ? "" : x));
+  const changes = PROFILE_FIELDS.filter(([k, col]) => String(p[col] || (k === "server" ? DEFAULT_SERVER : "")) !== String(v[k])).map(([k, col, label]) => ({ label, from: shown(k, p[col]), to: shown(k, v[k]) }));
   if (!changes.length) return { ok: true, user: pub(p), changed: 0 };
   const sql = db();
   const orgChanged = v.org !== p.org;
+  const srvChanged = v.server !== (p.server || DEFAULT_SERVER);
+  // при смене сервера руководство снимается (у каждого сервера своё руководство), профили коллег закрываются на 24 часа, как при смене организации
+  const demote = srvChanged && p.rank === "leader";
   const [np] = await sql`update profiles set nick = ${v.nick}, static_id = ${v.st}, discord = ${v.discord}, telegram = ${v.telegram}, phone = ${v.phone},
-                           org = ${v.org}, dept = ${orgChanged ? v.org : p.dept},
-                           org_at = ${orgChanged ? new Date() : p.org_at || null}
+                           org = ${v.org}, dept = ${orgChanged ? v.org : p.dept}, server = ${v.server},
+                           rank = ${demote ? "user" : p.rank},
+                           org_at = ${orgChanged || srvChanged ? new Date() : p.org_at || null}
                          where id = ${p.id} returning *`;
   await audit(p.login, "profile_update", p.login, { changes });
   // Уведомление владельцу о каждой смене — сбой Telegram не должен ломать сохранение
@@ -512,6 +538,7 @@ async function updateProfile(b) {
     if (OWNER_TG) {
       let text = `✏️ <b>Изменение данных</b>: <code>${esc(p.login)}</code> · ${esc(p.org)}\n\n` +
         changes.map((c) => `${c.label}: ${esc(c.from) || "—"} → <b>${esc(c.to) || "—"}</b>`).join("\n");
+      if (demote) text += `\n\n🔄 Сервер сменился, роль «Руководство» снята: ${esc(p.login)}. Выдать заново для нового сервера: /role ${esc(p.login)} leader`;
       if (orgChanged && (v.org === GOV_ORG || p.org === GOV_ORG))
         text += `\n\n⚖️ Режимы «Прокурор» и «Адвокат» ${v.org === GOV_ORG ? "открылись" : "закрылись"}. Вернуть организацию: /setorg ${esc(p.login)} ${esc(p.org)}`;
       if (changes.some((c) => c.label === "Статик")) {
@@ -2276,7 +2303,7 @@ const HELP_COMMON =
   "/reports on|off — присылать новые рапорты сюда\n";
 const HELP_OWNER =
   "\n<b>Только владелец</b>\n" +
-  "/role &lt;логин&gt; &lt;user|leader|moderator|owner&gt; [telegram_id] — выдать роль\n" +
+  "/role &lt;логин&gt; &lt;user|leader|moderator|owner&gt; [telegram_id] [7|12|16|all] — выдать роль; сервер: для модератора любой или all, для руководства — сервер игрока\n" +
   "/rename &lt;логин&gt; &lt;новый ник&gt; — исправить ник\n" +
   "/setstatic &lt;логин&gt; &lt;статик&gt; — исправить статик\n" +
   "/delete &lt;логин&gt; — удалить аккаунт и все данные\n" +
@@ -2348,7 +2375,11 @@ const durText = (ms) =>
 const normTag = (t) => String(t || "").replace(/^#/, "").toLowerCase().replace(/[^0-9a-zа-яё_-]/gi, "").slice(0, 24);
 
 // Кого может трогать модератор: не владельца и не других модераторов
+// Сервер, которым ограничен модератор (0 — работает со всеми серверами; владелец и руководство обрабатываются отдельно)
+const scopeServer = (a) => (a && a.kind === "moderator" && a.profile && a.profile.staff_server > 0 ? a.profile.staff_server : 0);
 function canTouch(a, p) {
+  const sc = scopeServer(a);
+  if (sc && (p.server || DEFAULT_SERVER) !== sc) return `Пользователь с другого сервера (${srvName(p.server || DEFAULT_SERVER)}). У вас доступ только к серверу ${srvName(sc)}.`;
   if (p.rank === "owner") return "Действие с владельцем невозможно.";
   if (a.kind === "moderator" && p.rank === "moderator") return "С модераторами работает только владелец.";
   return "";
@@ -2439,13 +2470,13 @@ async function runConfirmed(a, action, x) {
     case "role": {
       if (a.kind !== "owner") return "Роли выдаёт только владелец.";
       try {
-        await sql`update profiles set rank = ${x.rank}, tg_id = ${x.tg} where id = ${p.id}`;
+        await sql`update profiles set rank = ${x.rank}, tg_id = ${x.tg}, staff_server = ${x.rank === "moderator" ? +x.srv || 0 : 0} where id = ${p.id}`;
       } catch (e) {
         if (e && e.code === "23505") return "Этот Telegram ID уже привязан к другому аккаунту.";
         throw e;
       }
-      await audit(a.label, "role", p.login, { from: p.rank, to: x.rank, tg_id: x.tg });
-      return `✅ ${esc(p.login)}: ${RANKS[p.rank]} → <b>${RANKS[x.rank]}</b>${x.tg ? `\nTelegram ID: <code>${x.tg}</code>` : ""}\nВ приложении изменение применится в течение 20 минут или при следующем запуске.`;
+      await audit(a.label, "role", p.login, { from: p.rank, to: x.rank, tg_id: x.tg, server: x.rank === "moderator" ? +x.srv || 0 : p.server || DEFAULT_SERVER });
+      return `✅ ${esc(p.login)}: ${RANKS[p.rank]} → <b>${RANKS[x.rank]}</b>${x.rank === "moderator" ? ` · ${x.srv ? esc(srvName(x.srv)) : "все серверы"}` : x.rank === "leader" ? ` · ${esc(srvName(p.server || DEFAULT_SERVER))}, ${esc(p.org)}` : ""}${x.tg ? `\nTelegram ID: <code>${x.tg}</code>` : ""}\nВ приложении изменение применится в течение 20 минут или при следующем запуске.`;
     }
   }
   return "Неизвестное действие.";
@@ -2712,13 +2743,28 @@ async function onMessage(m, opts = {}) {
       if (!owner) return send(chat, "Роли выдаёт только владелец.");
       const p = args[0] ? await findProfile(args[0]) : null;
       const rank = String(args[1] || "").toLowerCase();
-      const tgArg = args[2];
-      if (!p || !RANKS[rank] || (tgArg && !/^\d{3,15}$/.test(tgArg)))
-        return send(chat, "Использование: /role &lt;логин&gt; &lt;user|leader|moderator|owner&gt; [telegram_id]\nПользователь должен быть зарегистрирован.");
+      // дальше по порядку не важно: Telegram ID (3–15 цифр) и сервер (7, 12, 16 или all — для модератора на все серверы)
+      let tgArg = "";
+      let srvArg = null;
+      let badArg = false;
+      for (const x of args.slice(2)) {
+        if (/^\d{3,15}$/.test(x)) tgArg = x;
+        else if (/^all$/i.test(x)) srvArg = 0;
+        else if (parseServer(x)) srvArg = parseServer(x);
+        else badArg = true;
+      }
+      if (!p || !RANKS[rank] || badArg)
+        return send(chat, "Использование: /role &lt;логин&gt; &lt;user|leader|moderator|owner&gt; [telegram_id] [сервер: " + Object.keys(SERVERS).join("|") + (rank === "moderator" ? "|all" : "") + "]\nПользователь должен быть зарегистрирован.");
+      const pSrv = p.server || DEFAULT_SERVER;
+      // руководство и модератор получают сервер: руководство — сервер, где играет человек; модератор — указанный (по умолчанию его собственный); all — все серверы
+      if (rank === "leader" && srvArg != null && srvArg !== pSrv)
+        return send(chat, `Руководство работает на сервере, где играет пользователь: ${esc(p.login)} играет на ${esc(srvName(pSrv))}. Чтобы назначить руководителем на другом сервере, пусть он сменит сервер в личном кабинете.`);
+      if (srvArg === 0 && rank !== "moderator") return send(chat, "«all» (все серверы) можно указать только для модератора.");
+      const staffSrv = rank === "moderator" ? (srvArg == null ? pSrv : srvArg) : rank === "leader" ? pSrv : 0;
       if (rank === "moderator" && !tgArg && p.tg_id == null && !a.panel)
         return send(chat, "Для модератора нужен его Telegram ID: /role " + esc(p.login) + " moderator 123456789\nID покажет бот в ответ на /start, пусть модератор напишет боту.");
       const tgNew = rank === "user" ? null : tgArg ? tgArg : p.tg_id == null ? null : String(p.tg_id);
-      return askConfirm(chat, a, "role", { id: p.id, rank, tg: tgNew }, `Выдать <b>${esc(p.login)}</b> роль: ${RANKS[p.rank]} → <b>${RANKS[rank]}</b>?${tgNew ? `\nTelegram ID: <code>${tgNew}</code>` : rank === "moderator" ? "\nБез Telegram ID модератор работает только в панели на сайте." : ""}`);
+      return askConfirm(chat, a, "role", { id: p.id, rank, tg: tgNew, srv: staffSrv }, `Выдать <b>${esc(p.login)}</b> роль: ${RANKS[p.rank]} → <b>${RANKS[rank]}</b>${rank === "moderator" ? ` · ${staffSrv ? "сервер " + esc(srvName(staffSrv)) : "все серверы"}` : rank === "leader" ? ` · ${esc(srvName(staffSrv))}, ${esc(p.org)}` : ""}?${tgNew ? `\nTelegram ID: <code>${tgNew}</code>` : rank === "moderator" ? "\nБез Telegram ID модератор работает только в панели на сайте." : ""}`);
     }
 
     case "delete": {
@@ -3663,7 +3709,7 @@ async function pwho(b, ownerOnly = false) {
   if (ownerOnly && a.kind !== "owner") return { err: fail("Это доступно только владельцу.", { code: "forbidden" }) };
   return { p, a, th };
 }
-const panelMe = (p, a) => ({ login: p.login, nick: p.nick, rank: p.rank, rankName: RANKS[p.rank], kind: a.kind, owner: a.kind === "owner", tg: p.tg_id != null || a.kind === "owner" && !!OWNER_TG, idleMin: PANEL_IDLE_MIN });
+const panelMe = (p, a) => ({ login: p.login, nick: p.nick, rank: p.rank, rankName: RANKS[p.rank], kind: a.kind, owner: a.kind === "owner", tg: p.tg_id != null || a.kind === "owner" && !!OWNER_TG, idleMin: PANEL_IDLE_MIN, staffServer: scopeServer(a) });
 
 async function panelLogin(b, ip, ua) {
   const lc = clean(b.login, 24).toLowerCase();
@@ -3823,8 +3869,11 @@ async function panelRevert(b, a) {
   return { ok: true, row: dbRow(t, row) };
 }
 
-async function panelDash(a) {
+async function panelDash(a, b = {}) {
   const sql = db();
+  const srv = scopeServer(a) || parseServer(b.server);
+  const sf = srv ? sql`where server = ${srv}` : sql``;
+  const byServer = await sql`select server, count(*)::int n, count(*) filter (where last_seen > now() - interval '7 days')::int active from profiles group by server order by server`;
   const [u] = await sql`select count(*)::int total,
       count(*) filter (where last_seen > now() - interval '1 hour')::int online,
       count(*) filter (where last_seen > now() - interval '1 day')::int today,
@@ -3832,14 +3881,14 @@ async function panelDash(a) {
       count(*) filter (where banned)::int banned,
       count(*) filter (where approval = 'pending')::int pending,
       count(*) filter (where rank = 'moderator')::int mods,
-      count(*) filter (where rank = 'leader')::int leaders from profiles`;
-  const orgs = await sql`select org, count(*)::int n, count(*) filter (where last_seen > now() - interval '7 days')::int active from profiles group by org order by n desc`;
+      count(*) filter (where rank = 'leader')::int leaders from profiles ${sf}`;
+  const orgs = await sql`select org, count(*)::int n, count(*) filter (where last_seen > now() - interval '7 days')::int active from profiles ${sf} group by org order by n desc`;
   const [{ resets }] = await sql`select count(*)::int resets from reset_requests where status = 'pending' and expires_at > now()`;
   const [{ bugs }] = await sql`select count(*)::int bugs from bug_reports where not answered`;
   const [{ reports }] = await sql`select count(*)::int reports from reports where status = 'new'`;
   const [{ notices }] = await sql`select count(*)::int notices from broadcasts where expires_at > now() and user_id is null`;
   const days = await sql`select to_char(date_trunc('day', created_at + interval '3 hours'), 'DD.MM') d, count(*)::int n from profiles
-                         where created_at > now() - interval '14 days' group by 1 order by min(created_at)`;
+                         where created_at > now() - interval '14 days' ${srv ? sql`and server = ${srv}` : sql``} group by 1 order by min(created_at)`;
   const modes = {
     maintenance: await getSetting("maintenance", { on: false }),
     regs: await getSetting("regs", { open: true, limit: 0 }),
@@ -3850,7 +3899,7 @@ async function panelDash(a) {
     appeal: await getSetting("appeal", null),
     blacklist: await getSetting("blacklist", []),
   };
-  return { ok: true, users: u, orgs, resets, bugs, reports, notices, days, modes: a.kind === "owner" ? modes : { maintenance: modes.maintenance, approval: modes.approval, regs: modes.regs } };
+  return { ok: true, users: u, orgs, resets, bugs, reports, notices, days, server: srv, servers: byServer.map((r) => ({ id: r.server, name: (SERVERS[r.server] || { name: "сервер " + r.server }).name, n: r.n, active: r.active })), modes: a.kind === "owner" ? modes : { maintenance: modes.maintenance, approval: modes.approval, regs: modes.regs } };
 }
 
 async function panelUsers(b, a) {
@@ -3865,12 +3914,16 @@ async function panelUsers(b, a) {
     : sql`(login ilike ${like} or nick ilike ${like} or static_id ilike ${like} or discord ilike ${like})`);
   if (RANKS[b.rank]) conds.push(sql`rank = ${b.rank}`);
   if (DEPTS.includes(b.org)) conds.push(sql`org = ${b.org}`);
+  // сервер: модератор с ограничением видит только свой сервер, остальные могут отфильтровать по серверу
+  const srv = scopeServer(a) || parseServer(b.server);
+  if (srv) conds.push(sql`server = ${srv}`);
+  if (b.beta === true || b.beta === "1") conds.push(sql`beta`);
   if (b.state === "banned") conds.push(sql`banned`);
   if (b.state === "pending") conds.push(sql`approval <> 'ok'`);
   if (b.state === "online") conds.push(sql`last_seen > now() - interval '1 hour'`);
   const where = conds.reduce((x, y) => sql`${x} and ${y}`);
   const order = b.sort === "seen" ? sql`last_seen desc nulls last` : b.sort === "login" ? sql`login_lc` : sql`created_at desc`;
-  const rows = await sql`select id, login, nick, static_id, org, rank, banned, banned_until, approval, tags, app_version, created_at, last_seen, tg_id is not null as has_tg,
+  const rows = await sql`select id, login, nick, static_id, org, server, staff_server, beta, rank, banned, banned_until, approval, tags, app_version, created_at, last_seen, tg_id is not null as has_tg,
                            (select count(*)::int from account_warns w where w.user_id = profiles.id) warns
                          from profiles where ${where} order by ${order} limit 41 offset ${page * 40}`;
   const [{ n }] = await sql`select count(*)::int n from profiles where ${where}`;
@@ -3880,6 +3933,8 @@ async function panelUsers(b, a) {
 async function panelUser(b, a) {
   const p = await findProfile(String(b.login || ""));
   if (!p) return fail("Пользователь не найден.");
+  const sc = scopeServer(a);
+  if (sc && (p.server || DEFAULT_SERVER) !== sc) return fail("Пользователь с другого сервера.");
   const sql = db();
   const owner = a.kind === "owner";
   const [k] = await sql`select created_at, last_used_at from panel_keys where user_id = ${p.id}`;
@@ -3888,7 +3943,7 @@ async function panelUser(b, a) {
   return {
     ok: true,
     html: await fullCard(p, a.kind),
-    user: { login: p.login, nick: p.nick, static: p.static_id, org: p.org, rank: p.rank, rankName: RANKS[p.rank], banned: p.banned, approval: p.approval, tags: p.tags || [], hasTg: p.tg_id != null, self: p.id === a.profile.id, beta: !!p.beta },
+    user: { login: p.login, nick: p.nick, static: p.static_id, org: p.org, server: p.server || DEFAULT_SERVER, serverName: srvName(p.server || DEFAULT_SERVER), staffServer: p.staff_server || 0, rank: p.rank, rankName: RANKS[p.rank], banned: p.banned, approval: p.approval, tags: p.tags || [], hasTg: p.tg_id != null, self: p.id === a.profile.id, beta: !!p.beta },
     touch: canTouch(a, p) || "",
     panelKey: owner && k ? { created: k.created_at, used: k.last_used_at } : null,
     logins,
@@ -3898,10 +3953,11 @@ async function panelUser(b, a) {
 
 async function panelStaff(a) {
   const sql = db();
-  const rows = await sql`select p.login, p.nick, p.org, p.rank, p.tg_id is not null as has_tg, p.last_seen, k.created_at as key_at, k.last_used_at as key_used,
+  const rows = await sql`select p.login, p.nick, p.org, p.server, p.staff_server, p.rank, p.tg_id is not null as has_tg, p.last_seen, k.created_at as key_at, k.last_used_at as key_used,
                            (select count(*)::int from panel_sessions s where s.user_id = p.id and s.expires_at > now()) as panels
                          from profiles p left join panel_keys k on k.user_id = p.id
-                         where p.rank in ('owner','moderator','leader') order by array_position(array['owner','moderator','leader'], p.rank), p.org, p.login_lc`;
+                         where p.rank in ('owner','moderator','leader') ${scopeServer(a) ? sql`and (p.server = ${scopeServer(a)} or p.rank = 'owner')` : sql``}
+                         order by array_position(array['owner','moderator','leader'], p.rank), p.server, p.org, p.login_lc`;
   return { ok: true, rows: rows.map((r) => (a.kind === "owner" ? r : { ...r, key_at: null, key_used: null, panels: null })), site: SITE_URL };
 }
 
@@ -3922,7 +3978,7 @@ async function panelApi(b, ip, ua) {
       await sql`delete from panel_sessions where ${b.all ? sql`user_id = ${p.id}` : sql`token_hash = ${th}`}`;
       return { ok: true };
     case "dash":
-      return panelDash(a);
+      return panelDash(a, b);
     case "health":
       return { ok: true, html: await healthText() };
     case "users":
@@ -3947,10 +4003,12 @@ async function panelApi(b, ip, ua) {
       const q = clean(b.q, 40);
       const page = Math.max(0, Math.min(1000, parseInt(b.page, 10) || 0));
       const like = "%" + likeEsc(q) + "%";
+      const srv = parseServer(b.server);
+      const sf = srv ? sql`server = ${srv}` : sql`true`;
       const rows = q
-        ? await sql`select * from audit_log where action = ${q} or target ilike ${like} or actor ilike ${like} order by id desc limit 51 offset ${page * 50}`
-        : await sql`select * from audit_log order by id desc limit 51 offset ${page * 50}`;
-      return { ok: true, rows: rows.slice(0, 50), more: rows.length > 50, page, actions: AUDIT_ACTIONS };
+        ? await sql`select * from audit_log where (action = ${q} or target ilike ${like} or actor ilike ${like}) and ${sf} order by id desc limit 51 offset ${page * 50}`
+        : await sql`select * from audit_log where ${sf} order by id desc limit 51 offset ${page * 50}`;
+      return { ok: true, rows: rows.slice(0, 50), more: rows.length > 50, page, actions: AUDIT_ACTIONS, servers: Object.keys(SERVERS).map((k) => ({ id: +k, name: SERVERS[k].name })) };
     }
     case "bugs": {
       const rows = await sql`select b.id, b.user_id, b.text, b.app_version, b.answered, b.at, length(b.log)::int as log_len, p.login, p.nick, p.org
@@ -4270,7 +4328,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 28;
+const SCHEMA_V = 29;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -4353,6 +4411,15 @@ create table if not exists public.handoffs (
 alter table public.handoffs enable row level security;
 revoke all on table public.handoffs from anon, authenticated;
 `;
+// 2.9: мультисерверность. server — сервер игрока (у всех прежних Boston, 12); staff_server — сервер модератора (0 — все серверы)
+const SCHEMA_29 = `
+alter table public.profiles add column if not exists server integer not null default 12;
+alter table public.profiles add column if not exists staff_server integer not null default 0;
+create index if not exists profiles_server_idx on public.profiles (server, org);
+alter table public.audit_log add column if not exists server integer;
+update public.audit_log a set server = p.server from public.profiles p where a.server is null and a.target is not null and p.login_lc = lower(a.target);
+create index if not exists audit_log_server_idx on public.audit_log (server, id desc);
+`;
 let schemaReady = null;
 function ensureSchema() {
   if (!schemaReady)
@@ -4361,7 +4428,7 @@ function ensureSchema() {
         const v = await getSetting("schema_v", 0);
         if (+v >= SCHEMA_V) return;
         // база уже на 2.4: повторно 2.4 не выполняем (иначе вернулись бы удалённые баннеры по умолчанию)
-        await db().unsafe(+v >= 27 ? SCHEMA_28 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28);
+        await db().unsafe(+v >= 28 ? SCHEMA_29 : +v >= 27 ? SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29);
         adsReady = true;
         await setSetting("schema_v", SCHEMA_V);
       } catch (e) {
@@ -4772,7 +4839,7 @@ async function panelBeta(b, a) {
   const sql = db();
   const op = b.op;
   if (op === "beta_list") {
-    const users = await sql`select p.login, p.nick, p.org, p.rank, p.last_seen, p.app_version,
+    const users = await sql`select p.login, p.nick, p.org, p.server, p.rank, p.last_seen, p.app_version,
                               (select count(*)::int from beta_results r where r.user_id = p.id) as results
                             from profiles p where p.beta order by p.last_seen desc nulls last limit 200`;
     const tasks = await sql`select t.*, (select count(*)::int from beta_results r where r.task_id = t.id and r.status = 'ok') as ok_n,

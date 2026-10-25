@@ -3995,21 +3995,24 @@ function testHtml(){
 }
 function cabHtml(){
   // В программе данные кабинета — это данные аккаунта: кнопка «Сохранить» отправляет их на сервер
-  var acc=null, AL=[]; try{var _st=window.senkoApp&&window.senkoApp.updateProfile&&window.senkoApp.state(); if(_st&&_st.user){acc=_st.user; AL=(_st.depts||[]).slice()}}catch(e){}
+  var acc=null, AL=[], SV=[]; try{var _st=window.senkoApp&&window.senkoApp.updateProfile&&window.senkoApp.state(); if(_st&&_st.user){acc=_st.user; AL=(_st.depts||[]).slice(); SV=(_st.servers||[]).slice()}}catch(e){}
   if(acc){
     if(AL.indexOf(acc.org)<0) AL.unshift(acc.org);
+    if(!SV.length) SV=[{id:12,name:"Boston"},{id:7,name:"Los Angeles"},{id:16,name:"Denver"}];
+    var sopts=SV.map(function(x){return '<option value="'+x.id+'"'+((acc.server||12)===x.id?' selected':'')+'>'+esc(x.name)+' ('+x.id+')</option>'}).join("");
     var aopts=AL.map(function(d){return '<option value="'+escA(d)+'"'+(acc.org===d?' selected':'')+'>'+esc(d)+'</option>'}).join("");
     var fld=function(k,l,v,ml,ph){return '<label>'+l+'<input data-acc="'+k+'" maxlength="'+ml+'" autocomplete="off" value="'+escA(v||"")+'"'+(ph?' placeholder="'+ph+'"':'')+'></label>'};
     var ah='<div class="cab-top"><div class="cab-ava"><div class="cab-av" id="cabAvBig">'+avatarInner(true)+'</div>'+
       '<div class="cab-btns"><button type="button" class="btn" data-cab="avpick">'+(AVA?'Заменить':'Загрузить фото')+'</button>'+(AVA?'<button type="button" class="btn" data-cab="avrm">Удалить</button>':'')+'</div>'+
       '<input type="file" id="saFile" accept="image/*" hidden><div class="cab-msg" id="cabMsg" role="status" aria-live="polite"></div></div>'+
       '<div class="cab-fields">'+fld("nick","Ник игрока",acc.nick,40,"Например, Senko")+fld("static","Статик",acc.static,12,"Ваш статик")+
+      '<label>Сервер<select data-acc="server">'+sopts+'</select></label>'+
       '<label>Ведомство<select data-acc="org">'+aopts+'</select></label>'+
       fld("discord","Discord",acc.discord,40,"ник в Discord")+fld("telegram","Telegram",acc.telegram,33,"@name или пусто")+fld("phone","Номер в игре",acc.phone,12,"только цифры или пусто")+
       '<div class="sbtns" style="margin:0"><button type="button" class="btn" data-cab="accsave" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Сохранить</button></div>'+
       '<div id="accMsg" role="status" aria-live="polite" style="font-size:12.5px;color:var(--muted);min-height:1.2em"></div></div></div>';
     ah+=deptInfo(acc.org||dept)+(window.SA_PROG?window.SA_PROG.html():"")+(window.SA_CAB11?window.SA_CAB11(true):"")+(window.SA_CAB13?window.SA_CAB13(true):"")+(window.SA_CAB24?window.SA_CAB24():"")+(window.SA_CAB28?window.SA_CAB28():"")+(window.SA_RP?window.SA_RP.cabHtml():"")+detHtml()+testHtml();
-    ah+='<p class="cab-foot">Данные кабинета хранятся в вашем аккаунте. После смены ведомства программу нужно перезапустить.</p>';
+    ah+='<p class="cab-foot">Данные кабинета хранятся в вашем аккаунте. После смены ведомства или сервера программу нужно перезапустить: законы и подсказки подстроятся под выбранный сервер.</p>';
     return ah;
   }
   var opts='<option value="">Не выбрано</option>'+Object.keys(DEPTS).map(function(d){
