@@ -5908,7 +5908,12 @@ function load(){
   if(state.tab==="boss")draw();
  },function(){B.loading=false;B.err="Ошибка связи с программой.";if(state.tab==="boss")draw()});
 }
-function rows(){var d=B.data||[];return B.org?d.filter(function(x){return x.org===B.org}):d}
+function rows(){var d=B.data||[];if(B.org)d=d.filter(function(x){return x.org===B.org});var sv=SRV();return sv?d.filter(function(x){return String(x.server||12)===sv}):d}
+/* 2.9: сервер в панели руководителя; выбирают владелец и модератор «на все серверы», у руководителя и ограниченного модератора сервер один */
+function SRV(){return window.SA_STAFF_SRV||""}
+window.SA_SRV=SRV;
+function srvList(){var s=null;try{s=A.state()}catch(e){}return (s&&s.servers&&s.servers.length?s.servers:[{id:12,name:"Boston"},{id:7,name:"Los Angeles"},{id:16,name:"Denver"}])}
+function srvSelect(){return '<select id="bpSrv" aria-label="Сервер"><option value="">Все серверы</option>'+srvList().map(function(x){return '<option value="'+x.id+'"'+(String(x.id)===SRV()?' selected':'')+'>'+esc(x.name)+' ('+x.id+')</option>'}).join("")+'</select>'}
 function orgList(){var o={};B.orgs.forEach(function(x){o[x]=1});(B.data||[]).forEach(function(x){o[x.org]=1});return Object.keys(o).sort()}
 function top(list,k,n){return list.filter(function(x){return (x[k]||0)>0}).sort(function(a,b){return (b[k]||0)-(a[k]||0)}).slice(0,n)}
 function li(x,extra){return '<li><b>'+esc(x.nick||x.login)+'</b> <small>'+esc(x.login)+(B.org||B.scope?'':' · '+esc(x.org))+'</small>'+(extra?' — '+extra:'')+'</li>'}
@@ -5966,8 +5971,8 @@ function curOrg(){return B.scope||B.org||""}
 function eload(sub,op,extra,ok){
  var e=E[sub], org=curOrg(), act=sub==="rate"?"week_board":sub;
  if(sub!=="rate"&&!org){e.key="";e.data=null;return}
- if(e.loading)return; e.loading=true; e.err=""; e.msg=""; e.key=org;
- A.api(act,Object.assign({org:org},op?{op:op}:{},extra||{})).then(function(r){
+ if(e.loading)return; e.loading=true; e.err=""; e.msg=""; e.key=org+"|"+SRV();
+ A.api(act,Object.assign({org:org,server:SRV()},op?{op:op}:{},extra||{})).then(function(r){
   e.loading=false;
   if(r&&r.ok){e.data=r;e.msg=r.msg||"";if(ok)ok(e)}else{e.err=(r&&r.error)||"Не удалось загрузить данные.";if(!op)e.data=null}
   if(state.tab==="boss"&&B.sub===sub)draw();
@@ -5975,7 +5980,7 @@ function eload(sub,op,extra,ok){
 }
 function need(sub){var e=E[sub];if(!A.api)return '<p class="bp-empty">Обновите программу, чтобы открыть этот раздел.</p>';
  if(sub!=="rate"&&!curOrg())return '<p class="bp-empty">Выберите организацию в списке сверху.</p>';
- if(e.key!==curOrg()||(!e.data&&!e.loading&&!e.err)){setTimeout(function(){eload(sub)},0);return '<p class="bp-empty">Загружаем…</p>'}
+ if(e.key!==curOrg()+"|"+SRV()||(!e.data&&!e.loading&&!e.err)){setTimeout(function(){eload(sub)},0);return '<p class="bp-empty">Загружаем…</p>'}
  if(!e.data)return e.loading?'<p class="bp-empty">Загружаем…</p>':'<div class="banner bp-err" role="alert">'+esc(e.err)+'</div>';
  return ""}
 function emsg(e){return (e.err?'<div class="banner bp-err" role="alert">'+esc(e.err)+'</div>':'')+(e.msg?'<p class="bp-ok" role="status">'+esc(e.msg)+'</p>':'')}
@@ -6024,6 +6029,7 @@ function draw(){
  var h='<div class="subnav noprint">'+subs.map(function(s){return '<button class="pill" data-bpsub="'+s[0]+'" aria-pressed="'+(s[0]===B.sub)+'">'+s[1]+'</button>'}).join("")+'</div>';
  h+='<section class="panel bp"><div class="bp-head"><h2>'+title+'</h2>';
  if(B.data&&!B.scope&&B.sub!=="orgs")h+='<select id="bpOrg" aria-label="Организация"><option value="">Все организации</option>'+orgList().map(function(o){return '<option'+(o===B.org?' selected':'')+'>'+esc(o)+'</option>'}).join("")+'</select>';
+ if(B.data&&!B.scope&&!(A.state&&A.state()&&A.state().user&&A.state().user.staffServer))h+=srvSelect();
  h+='<button type="button" class="btn" data-bp="reload"'+(B.loading?' disabled':'')+'>'+(B.loading?"Загрузка…":"Обновить")+'</button></div>';
  if(B.viewer)h+='<p class="sub">Вы видите данные как: '+(RANKS[B.viewer]||B.viewer)+(B.scope?". Доступна только ваша организация.":".")+'</p>';
  if(B.err)h+='<div class="banner bp-err" role="alert">'+esc(B.err)+'</div>';
@@ -6058,6 +6064,7 @@ view.addEventListener("input",function(e){
 view.addEventListener("change",function(e){if(state.tab!=="boss")return;var id=e.target.id;
  if(id==="ctN"){e.stopPropagation();CF.n=+e.target.value;return}
  if(id==="ctD"){e.stopPropagation();CF.days=+e.target.value;return}
+ if(id==="bpSrv"){e.stopPropagation();window.SA_STAFF_SRV=e.target.value;try{window.dispatchEvent(new Event("sa-srv"))}catch(x){}draw();return}
  if(id!=="bpOrg")return;e.stopPropagation();B.org=e.target.value;draw()},true);
 view.addEventListener("input",function(e){if(state.tab==="boss"&&e.target.id==="ctTitle"){e.stopPropagation();CF.title=e.target.value}},true);
 
@@ -7178,10 +7185,10 @@ document.addEventListener("click",function(e){
 var BQ={org:null,status:"",kind:"",q:"",data:null,loading:false,err:"",key:"",redraw:null,t:0};
 function bload(){
  if(!A||!A.api||BQ.loading)return; BQ.loading=true; BQ.err="";
- var key=[BQ.org,BQ.status,BQ.kind,BQ.q].join("|"); BQ.key=key;
- A.api("reports",{op:"list",org:BQ.org||"",status:BQ.status,kind:BQ.kind,q:BQ.q}).then(function(r){
+ var key=[BQ.org,BQ.status,BQ.kind,BQ.q,window.SA_STAFF_SRV||""].join("|"); BQ.key=key;
+ A.api("reports",{op:"list",org:BQ.org||"",server:window.SA_STAFF_SRV||"",status:BQ.status,kind:BQ.kind,q:BQ.q}).then(function(r){
   BQ.loading=false; if(r&&r.ok){BQ.data=r}else BQ.err=(r&&r.error)||"Не удалось загрузить рапорты.";
-  if(BQ.key!==[BQ.org,BQ.status,BQ.kind,BQ.q].join("|"))return bload();
+  if(BQ.key!==[BQ.org,BQ.status,BQ.kind,BQ.q,window.SA_STAFF_SRV||""].join("|"))return bload();
   bredraw();
  },function(){BQ.loading=false;BQ.err="Ошибка связи с программой.";bredraw()});
 }
@@ -7220,7 +7227,7 @@ document.addEventListener("input",function(e){
 function review(ok){
  var v=R.view, n=sheet()&&sheet().querySelector("#rpNote");
  R.sending=true; R.msg=""; paint();
- A.api("reports",{op:"review",id:v.id,ok:ok,note:n?n.value:"",org:BQ.org||""}).then(function(r){
+ A.api("reports",{op:"review",id:v.id,ok:ok,note:n?n.value:"",org:BQ.org||"",server:window.SA_STAFF_SRV||""}).then(function(r){
   R.sending=false;
   if(r&&r.ok){BQ.data=r;var x=(r.list||[]).filter(function(y){return y.id===v.id})[0];R.view=Object.assign({},x||v,{staff:true});R.msg=ok?"Рапорт принят.":"Рапорт отклонён.";R.msgErr=false;paint();bredraw()}
   else{R.msg=(r&&r.error)||"Не удалось сохранить решение.";R.msgErr=true;paint()}
@@ -12083,11 +12090,12 @@ document.addEventListener("click",function(ev){
 /* ======== Панель руководителя: вебхуки Discord и мероприятия ======== */
 var BH={org:null,d:null,loading:false,err:"",msg:"",url:"",ev:null};
 var BE={org:null,d:null,loading:false,err:"",msg:"",f:{title:"",at:"",place:"",body:""}};
+window.addEventListener("sa-srv",function(){BH.org=null;BH.d=null;BE.org=null;BE.d=null});
 var bDraw=null;
 function bRedraw(){if(state.tab==="boss"&&bDraw)bDraw()}
 function bCall(S,act,org,op,extra,ok){
  if(S.loading)return;S.loading=true;S.err="";S.msg="";S.org=org;
- api(act,Object.assign({org:org,op:op||(act==="hooks"?"get":"list")},extra||{})).then(function(r){S.loading=false;
+ api(act,Object.assign({org:org,server:window.SA_STAFF_SRV||"",op:op||(act==="hooks"?"get":"list")},extra||{})).then(function(r){S.loading=false;
   if(r.ok){if(r.hook!==undefined||r.events)S.d=r;S.msg=r.msg||"";if(ok)ok(r)}else{S.err=r.error||"Не удалось выполнить.";if(!S.d&&!op)S.d=null}
   bRedraw()});
 }
