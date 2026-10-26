@@ -1,0 +1,19 @@
+{
+  "name": "senko-discord-bot",
+  "version": "1.0.0-beta",
+  "description": "Senko Assistant Discord bot — панель, новости, changelog, законы, ассистенты, поддержка, мониторинг",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "deploy-commands": "node deploy-commands.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.15.3",
+    "@discordjs/rest": "^2.3.0",
+    "node-fetch": "^2.7.0",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

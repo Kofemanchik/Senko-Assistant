@@ -330,6 +330,57 @@ create table if not exists public.login_log (
 );
 create index if not exists login_log_user_idx on public.login_log (user_id, at desc);
 
+-- Панель владельца и модератора на сайте (сайт, этап 3) ----------------------
+-- Пароль панели (32 знака) выдаёт бот командой /panel; в базе только хэш
+create table if not exists public.panel_keys (
+  user_id      uuid primary key references public.profiles(id) on delete cascade,
+  key_hash     text not null,
+  created_at   timestamptz not null default now(),
+  created_by   text not null default '',
+  last_used_at timestamptz
+);
+-- Открытые панели: не дольше 12 часов, закрываются после 2 часов без действий
+create table if not exists public.panel_sessions (
+  token_hash  text primary key,
+  user_id     uuid not null references public.profiles(id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  expires_at  timestamptz not null,
+  last_at     timestamptz not null default now(),
+  ip          text not null default '',
+  ua          text not null default ''
+);
+create index if not exists panel_sessions_user_idx on public.panel_sessions (user_id);
+
+-- Рекламные баннеры (2.3.0): показываются на сайте и на главной в программе, правит владелец в панели
+create table if not exists public.ads (
+  id          bigserial primary key,
+  title       text not null,
+  srv         text not null default '',
+  body        text not null default '',
+  tag         text not null default 'Реклама',
+  style       text not null default 'wide' check (style in ('wide','square')),
+  image       text not null default '',
+  links       jsonb not null default '[]'::jsonb,
+  promo       text not null default '',
+  place       text not null default 'both' check (place in ('both','site','app')),
+  enabled     boolean not null default true,
+  sort        int not null default 0,
+  updated_at  timestamptz not null default now(),
+  updated_by  text not null default ''
+);
+insert into public.ads (title, srv, body, style, image, links, promo, sort)
+select * from (values
+  ('Senko Family', 'Majestic RP · Los Angeles',
+   'Семья на сервере Los Angeles. Заходите в Discord и Telegram: знакомство, набор и новости семьи.',
+   'wide', '/img/senko-family-820.webp',
+   '[{"label":"Discord семьи","url":"https://discord.gg/ZEz5kfG6W8"},{"label":"Telegram семьи","url":"https://t.me/senkofamq"}]'::jsonb, '', 10),
+  ('Docossum | Ассистент GTA 5RP', 'Программа-ассистент · GTA 5 RP',
+   'Помощник для игроков GTA 5 RP, похожий на наш, только умеет ещё больше. Загляните в Discord и Telegram, а с нашим промокодом будет приятнее.',
+   'square', '/img/docossum.webp',
+   '[{"label":"Discord","url":"https://discord.gg/Nnv9YjX3px"},{"label":"Telegram","url":"https://t.me/docossum"}]'::jsonb, 'Senko', 20)
+) v(title, srv, body, style, image, links, promo, sort)
+where not exists (select 1 from public.ads);
+
 -- Закрываем таблицы от публичного API ----------------------------------------
 alter table public.profiles       enable row level security;
 alter table public.sessions       enable row level security;
@@ -356,6 +407,9 @@ alter table public.shares         enable row level security;
 alter table public.transfers      enable row level security;
 alter table public.search_misses  enable row level security;
 alter table public.login_log      enable row level security;
+alter table public.panel_keys     enable row level security;
+alter table public.panel_sessions enable row level security;
+alter table public.ads            enable row level security;
 
 revoke all on table public.profiles, public.sessions, public.recovery_codes,
                     public.reset_requests, public.audit_log, public.rate_limits, public.sync_items,
@@ -363,7 +417,8 @@ revoke all on table public.profiles, public.sessions, public.recovery_codes,
                     public.bot_settings, public.broadcasts, public.bug_reports, public.bot_delayed,
                     public.xp_week, public.achievements, public.shifts, public.control_tests,
                     public.control_results, public.ai_log, public.reports,
-                    public.shares, public.transfers, public.search_misses, public.login_log
+                    public.shares, public.transfers, public.search_misses, public.login_log,
+                    public.panel_keys, public.panel_sessions, public.ads
   from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;
 
@@ -371,3 +426,131 @@ revoke all on all sequences in schema public from anon, authenticated;
 create or replace function public.ping() returns text
 language sql stable as $$ select 'ok'::text $$;
 grant execute on function public.ping() to anon, authenticated;
+
+-- 2.4: бета-тестеры, задания, вебхуки Discord, мероприятия, идеи, экипажи, доска в ссылках.
+-- Функция создаёт всё это сама при первом запросе (bot_settings.schema_v = 24), здесь то же самое для ручной установки.
+alter table public.profiles add column if not exists beta boolean not null default false;
+alter table public.shares drop constraint if exists shares_kind_check;
+alter table public.shares add constraint shares_kind_check check (kind in ('calc','set','board'));
+create table if not exists public.beta_tasks (
+  id bigserial primary key, title text not null, body text not null default '', author text not null default '',
+  created_at timestamptz not null default now(), closed boolean not null default false);
+create table if not exists public.beta_results (
+  task_id bigint not null references public.beta_tasks(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  status text not null check (status in ('ok','bad')), comment text not null default '', at timestamptz not null default now(),
+  primary key (task_id, user_id));
+create table if not exists public.org_hooks (
+  org text primary key, url text not null, events text[] not null default '{}', updated_by text not null default '',
+  updated_at timestamptz not null default now(), fails int not null default 0, last_error text not null default '');
+create table if not exists public.org_events (
+  id bigserial primary key, org text not null, title text not null, body text not null default '', place text not null default '',
+  starts_at timestamptz not null, author text not null default '', created_at timestamptz not null default now(), reminded boolean not null default false);
+create index if not exists org_events_org_idx on public.org_events (org, starts_at);
+create table if not exists public.ideas (
+  id bigserial primary key, user_id uuid references public.profiles(id) on delete set null, text text not null,
+  status text not null default 'new' check (status in ('new','work','done','no')), answer text not null default '',
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+create table if not exists public.idea_votes (
+  idea_id bigint not null references public.ideas(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade, primary key (idea_id, user_id));
+create table if not exists public.patrols (
+  code text primary key, owner_id uuid references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(), expires_at timestamptz not null);
+create table if not exists public.patrol_members (
+  code text not null references public.patrols(code) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  joined_at timestamptz not null default now(), seen_at timestamptz not null default now(), primary key (code, user_id));
+create table if not exists public.patrol_items (
+  id bigserial primary key, code text not null references public.patrols(code) on delete cascade,
+  user_id uuid references public.profiles(id) on delete cascade, uid text not null default '',
+  data jsonb not null default '{}'::jsonb, updated_at timestamptz not null default now(), deleted boolean not null default false);
+create unique index if not exists patrol_items_key on public.patrol_items (code, user_id, uid);
+alter table public.beta_tasks enable row level security;
+alter table public.beta_results enable row level security;
+alter table public.org_hooks enable row level security;
+alter table public.org_events enable row level security;
+alter table public.ideas enable row level security;
+alter table public.idea_votes enable row level security;
+alter table public.patrols enable row level security;
+alter table public.patrol_members enable row level security;
+alter table public.patrol_items enable row level security;
+revoke all on table public.beta_tasks, public.beta_results, public.org_hooks, public.org_events, public.ideas, public.idea_votes,
+                    public.patrols, public.patrol_members, public.patrol_items from anon, authenticated;
+revoke all on all sequences in schema public from anon, authenticated;
+
+-- 2.6.3: поправка опыта из панели владельца (функция создаёт столбец сама, если schema.sql не запускали)
+alter table public.profiles add column if not exists xp_adj integer not null default 0;
+-- 2.6.6: дополнительные запросы к ИИ сверх дневного лимита (выдаёт владелец в панели)
+alter table public.profiles add column if not exists ai_bonus integer not null default 0;
+
+-- 2.7: словарь ИИ «бытовое слово → статья», эталонные вопросы для самопроверки, ответ ИИ в журнале
+-- (сервер выполняет это сам при первом запросе, см. SCHEMA_27 в functions/senko/index.ts)
+alter table public.ai_log add column if not exists ans text not null default '';
+create table if not exists public.ai_dict (
+  id bigserial primary key, phrase text not null, refs text[] not null default '{}', note text not null default '',
+  author text not null default '', created_at timestamptz not null default now());
+create table if not exists public.ai_gold (
+  id bigserial primary key, q text not null, expect text not null default '', last text not null default '', last_ref text not null default '',
+  prev text not null default '', prev_ref text not null default '', checked_at timestamptz, created_at timestamptz not null default now());
+alter table public.ai_dict enable row level security;
+alter table public.ai_gold enable row level security;
+revoke all on table public.ai_dict, public.ai_gold from anon, authenticated;
+
+-- 2.8: должность и «о себе» в профиле, время смены организации (24 часа без профилей коллег), аватары для профилей коллег
+alter table public.profiles add column if not exists post text not null default '';
+alter table public.profiles add column if not exists bio text not null default '';
+alter table public.profiles add column if not exists hide_discord boolean not null default false;
+alter table public.profiles add column if not exists org_at timestamptz;
+create table if not exists public.avatars (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  img text not null, updated_at timestamptz not null default now());
+alter table public.avatars enable row level security;
+revoke all on table public.avatars from anon, authenticated;
+create table if not exists public.handoffs (
+  code text primary key, from_id uuid not null references public.profiles(id) on delete cascade,
+  data jsonb not null, created_at timestamptz not null default now(), expires_at timestamptz not null);
+alter table public.handoffs enable row level security;
+revoke all on table public.handoffs from anon, authenticated;
+
+-- 3.0: Discord-бот Senko Assistant
+-- Тикеты поддержки: создаются пользователем, принимаются/закрываются модераторами с ролью Support
+create table if not exists public.discord_tickets (
+  id           bigserial primary key,
+  user_id      uuid references public.profiles(id) on delete cascade,
+  discord_id   text not null,          -- Discord ID пользователя
+  discord_name text not null,          -- имя пользователя в Discord
+  channel_id   text not null,          -- ID канала в Discord
+  channel_name text not null,          -- discord_name-номер
+  message_id   text not null default '',-- ID приветственного сообщения
+  status       text not null default 'open' check (status in ('open','accepted','closed')),
+  accepted_by  text not null default '',-- кто взял в работу
+  created_at   timestamptz not null default now(),
+  closed_at    timestamptz
+);
+create index if not exists discord_tickets_user_idx on public.discord_tickets (user_id);
+create index if not exists discord_tickets_status_idx on public.discord_tickets (status);
+create index if not exists discord_tickets_channel_idx on public.discord_tickets (channel_id);
+
+-- Мониторинг ресурсов: результат каждой проверки (хранится 7 дней)
+create table if not exists public.discord_monitor (
+  id       bigserial primary key,
+  resource text not null,               -- название ресурса
+  ok       boolean not null default true,
+  latency  integer not null default 0,   -- мс
+  detail   text not null default '',     -- ошибка или примечание
+  checked_at timestamptz not null default now()
+);
+create index if not exists discord_monitor_resource_idx on public.discord_monitor (resource, checked_at desc);
+
+-- Настройки Discord-бота в bot_settings (ключи discord_*):
+--   discord_channel_info / news / laws / assistants / changelog / support / monitor — ID каналов
+--   discord_role_support — ID роли Support
+--   discord_info_links — JSON со ссылками для канала «Информация»
+--   discord_laws_text — текст для канала «Законы»
+--   discord_assistants_text — текст для канала «Ассистенты»
+--   discord_news_enabled / discord_changelog_enabled / discord_monitor_enabled — bool
+
+alter table public.discord_tickets enable row level security;
+alter table public.discord_monitor enable row level security;
+revoke all on table public.discord_tickets, public.discord_monitor from anon, authenticated;

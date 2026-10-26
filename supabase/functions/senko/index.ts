@@ -28,6 +28,14 @@ const GOV_ORG = "Government"; // только этой организации д
 const GAME_ROLES = { off: "Сотрудник", pros: "Прокурор", adv: "Адвокат" };
 // Роль в игре с учётом организации: вне Government всегда «Сотрудник»
 const gameRole = (p) => (p.org === GOV_ORG ? p.game_role : "off");
+// 2.9: серверы Majestic RP. Номер — номер сервера в игре; форум нужен для сбора законов (scripts/servers.js хранит тот же список)
+const SERVERS = { 12: { name: "Boston" }, 7: { name: "Los Angeles" }, 16: { name: "Denver" } };
+const DEFAULT_SERVER = 12; // у всех, кто зарегистрировался до 2.9, и у старых программ без выбора сервера
+const srvName = (n) => (SERVERS[n] ? `${SERVERS[n].name} (${n})` : `сервер ${n}`);
+const parseServer = (v) => {
+  const n = parseInt(v, 10);
+  return SERVERS[n] ? n : 0;
+};
 const RANKS = { user: "Пользователь", leader: "Руководство", moderator: "Модератор памятки", owner: "Владелец" };
 const LEGAL_VERSION = "2026-10-21.2"; // версия Политики и Условий; должна совпадать с VERSION в app/auth.html и app/index.html
 const SYNC_KINDS = { thist: 1, dlog: 1, tests: 1, qstat: 1, xp: 1, daily: 1, streak: 1, favs: 1, notes: 1, labels: 1, folders: 1, favorder: 1 }; // что синхронизируется между компьютерами
@@ -110,7 +118,9 @@ async function hit(key, max, windowSec) {
 
 async function audit(actor, action, target, details) {
   try {
-    await db()`insert into audit_log (actor, action, target, details) values (${actor}, ${action}, ${target || null}, ${db().json(details || {})})`;
+    await db()`insert into audit_log (actor, action, target, details, server)
+               values (${actor}, ${action}, ${target || null}, ${db().json(details || {})},
+                       (select server from profiles where login_lc = lower(${target || ""}) limit 1))`;
   } catch (e) {
     console.error("audit", e);
   }
@@ -151,8 +161,9 @@ async function tg(method, payload) {
 const send = (chat, text, extra = {}) =>
   tg("sendMessage", { chat_id: chat, text, parse_mode: "HTML", disable_web_page_preview: true, ...extra });
 
-async function moderatorChats() {
-  const rows = await db()`select tg_id from profiles where rank = 'moderator' and tg_id is not null and not banned`;
+// модераторы, которым нужны уведомления по серверу: их сервер или «все серверы»
+async function moderatorChats(server = 0) {
+  const rows = await db()`select tg_id from profiles where rank = 'moderator' and tg_id is not null and not banned and (${server}::int = 0 or staff_server = 0 or staff_server = ${server})`;
   return rows.map((r) => String(r.tg_id));
 }
 
@@ -162,7 +173,8 @@ function card(p, viewer) {
     `👤 <b>${esc(p.login)}</b> — ${RANKS[p.rank] || p.rank}${p.banned ? " 🚫 ЗАБЛОКИРОВАН" : ""}`,
     `Ник: ${esc(p.nick)}`,
     `Статик: <code>${esc(p.static_id)}</code>`,
-    `Организация: ${esc(p.org)}`,
+    `Сервер: ${esc(srvName(p.server || DEFAULT_SERVER))}`,
+    `Организация: ${esc(p.org)}${p.post ? " · " + esc(p.post) : ""}`,
     `Роль в игре: ${GAME_ROLES[gameRole(p)] || gameRole(p)}`,
     `Дискорд: ${esc(p.discord)}`,
     `Номер в игре: ${esc(p.phone || "—")}`,
@@ -172,6 +184,7 @@ function card(p, viewer) {
     L.push(`Telegram ID: ${p.tg_id == null ? "—" : p.tg_id}`);
     L.push(`Принял документы: ${p.legal_version || "—"}`);
   }
+  if (p.bio) L.push(`О себе: ${esc(p.bio)}`);
   if (p.approval && p.approval !== "ok") L.push(p.approval === "pending" ? "⏳ Заявка ждёт подтверждения руководства" : "❌ Заявка отклонена руководством");
   L.push(`Регистрация: ${fmtDate(p.created_at)}`);
   L.push(`Был в сети: ${fmtDate(p.last_seen)}`);
@@ -198,6 +211,9 @@ function pub(p) {
     static: p.static_id,
     org: p.org,
     dept: p.dept || "",
+    server: p.server || DEFAULT_SERVER,
+    serverName: (SERVERS[p.server || DEFAULT_SERVER] || { name: "" }).name,
+    staffServer: p.staff_server || 0,
     role: gameRole(p),
     roleName: GAME_ROLES[gameRole(p)] || gameRole(p),
     rank: p.rank,
@@ -206,6 +222,10 @@ function pub(p) {
     telegram: p.telegram,
     phone: p.phone,
     needLegal: p.legal_version !== LEGAL_VERSION,
+    beta: !!p.beta,
+    post: p.post || "",
+    bio: p.bio || "",
+    hideDiscord: !!p.hide_discord,
   };
 }
 
@@ -264,7 +284,10 @@ function validate(b) {
   if (!org) return { error: "Укажите организацию." };
   if (b.org !== "other" && !DEPTS.includes(org)) return { error: "Выберите организацию из списка." };
   if (b.role !== "off" && org !== GOV_ORG) return { error: "Роли «Прокурор» и «Адвокат» доступны только сотрудникам Government." };
-  return { login, pass, ...f, org, dept: DEPTS.includes(org) ? org : "", role: b.role };
+  // старые версии программы сервер не присылают — это Boston; неизвестный номер не принимаем
+  const server = b.server == null || b.server === "" ? DEFAULT_SERVER : parseServer(b.server);
+  if (!server) return { error: "Выберите сервер из списка." };
+  return { login, pass, ...f, org, dept: DEPTS.includes(org) ? org : "", role: b.role, server };
 }
 // Поля профиля, которые пользователь может указать при регистрации и потом поменять в личном кабинете
 function checkFields(b) {
@@ -298,6 +321,7 @@ async function register(b, ip) {
   if (!(await hit(`reg:${ip}`, 8, 3600))) return fail(RATE_MSG, { code: "rate" });
   const v = validate(b);
   if (v.error) return fail(v.error);
+  if (!(await serverOpen(v.server, null))) return fail(`Сервер ${srvName(v.server)} пока доступен только бета-тестерам. Выберите Boston (12): сервер можно будет сменить в личном кабинете, когда он откроется.`, { code: "server_closed" });
   const sql = db();
   const mt = await getSetting("maintenance", { on: false });
   if (mt && mt.on) return fail("Идут технические работы, регистрация временно недоступна. Попробуйте позже.", { code: "maintenance" });
@@ -322,9 +346,9 @@ async function register(b, ip) {
   try {
     p = await sql.begin(async (t) => {
       const [row] = await t`
-        insert into profiles (login, pass_hash, nick, static_id, org, dept, game_role, discord, telegram, phone, legal_version, legal_at, approval)
+        insert into profiles (login, pass_hash, nick, static_id, org, dept, game_role, discord, telegram, phone, legal_version, legal_at, approval, server)
         values (${v.login}, extensions.crypt(${v.pass}, extensions.gen_salt('bf', 10)), ${v.nick}, ${v.st}, ${v.org}, ${v.dept},
-                ${v.role}, ${v.discord}, ${v.telegram}, ${v.phone}, ${clean(b.legal.version, 20)}, now(), ${pend ? "pending" : "ok"})
+                ${v.role}, ${v.discord}, ${v.telegram}, ${v.phone}, ${clean(b.legal.version, 20)}, now(), ${pend ? "pending" : "ok"}, ${v.server})
         returning *`;
       await t`insert into recovery_codes (user_id, code_hash) values (${row.id}, ${codeHash})`;
       return row;
@@ -353,6 +377,7 @@ async function register(b, ip) {
   } catch (e) {
     console.error("notify register", e);
   }
+  await postHook(p.org, sv(p), "join", pend ? "🆕 Заявка в организацию" : "🆕 Новый сотрудник", `**${esc(p.nick)}** (статик ${esc(p.static_id)}) зарегистрировался в Senko Assistant${pend ? " и ждёт подтверждения руководства: /pending в боте или панель руководителя в программе." : "."}`, 0x2e7d4f);
   if (pend) {
     try {
       await askApproval(p);
@@ -481,6 +506,7 @@ const PROFILE_FIELDS = [
   ["telegram", "telegram", "Телеграм"],
   ["phone", "phone", "Номер в игре"],
   ["org", "org", "Организация"],
+  ["server", "server", "Сервер"],
 ];
 async function updateProfile(b) {
   const { p, err } = await who(b);
@@ -492,12 +518,22 @@ async function updateProfile(b) {
   // организацию можно выбрать только из списка; не указана — остаётся прежней
   v.org = b.org == null || b.org === "" ? p.org : DEPTS.find((d) => d === b.org);
   if (!v.org) return fail("Выберите организацию из списка.");
-  const changes = PROFILE_FIELDS.filter(([k, col]) => String(p[col] || "") !== v[k]).map(([k, col, label]) => ({ label, from: String(p[col] || ""), to: v[k] }));
+  // сервер: не указан — остаётся прежним (старые версии программы его не присылают)
+  v.server = b.server == null || b.server === "" ? p.server || DEFAULT_SERVER : parseServer(b.server);
+  if (!v.server) return fail("Выберите сервер из списка.");
+  if (!(await serverOpen(v.server, p))) return fail(`Сервер ${srvName(v.server)} пока доступен только бета-тестерам.`, { code: "server_closed" });
+  const shown = (k, x) => (k === "server" ? srvName(+x || DEFAULT_SERVER) : String(x == null ? "" : x));
+  const changes = PROFILE_FIELDS.filter(([k, col]) => String(p[col] || (k === "server" ? DEFAULT_SERVER : "")) !== String(v[k])).map(([k, col, label]) => ({ label, from: shown(k, p[col]), to: shown(k, v[k]) }));
   if (!changes.length) return { ok: true, user: pub(p), changed: 0 };
   const sql = db();
   const orgChanged = v.org !== p.org;
+  const srvChanged = v.server !== (p.server || DEFAULT_SERVER);
+  // при смене сервера руководство снимается (у каждого сервера своё руководство), профили коллег закрываются на 24 часа, как при смене организации
+  const demote = srvChanged && p.rank === "leader";
   const [np] = await sql`update profiles set nick = ${v.nick}, static_id = ${v.st}, discord = ${v.discord}, telegram = ${v.telegram}, phone = ${v.phone},
-                           org = ${v.org}, dept = ${orgChanged ? v.org : p.dept}
+                           org = ${v.org}, dept = ${orgChanged ? v.org : p.dept}, server = ${v.server},
+                           rank = ${demote ? "user" : p.rank},
+                           org_at = ${orgChanged || srvChanged ? new Date() : p.org_at || null}
                          where id = ${p.id} returning *`;
   await audit(p.login, "profile_update", p.login, { changes });
   // Уведомление владельцу о каждой смене — сбой Telegram не должен ломать сохранение
@@ -505,6 +541,7 @@ async function updateProfile(b) {
     if (OWNER_TG) {
       let text = `✏️ <b>Изменение данных</b>: <code>${esc(p.login)}</code> · ${esc(p.org)}\n\n` +
         changes.map((c) => `${c.label}: ${esc(c.from) || "—"} → <b>${esc(c.to) || "—"}</b>`).join("\n");
+      if (demote) text += `\n\n🔄 Сервер сменился, роль «Руководство» снята: ${esc(p.login)}. Выдать заново для нового сервера: /role ${esc(p.login)} leader`;
       if (orgChanged && (v.org === GOV_ORG || p.org === GOV_ORG))
         text += `\n\n⚖️ Режимы «Прокурор» и «Адвокат» ${v.org === GOV_ORG ? "открылись" : "закрылись"}. Вернуть организацию: /setorg ${esc(p.login)} ${esc(p.org)}`;
       if (changes.some((c) => c.label === "Статик")) {
@@ -622,6 +659,8 @@ async function userStats() {
     from sync_items group by user_id`;
   const m = {};
   for (const r of rows) m[r.user_id] = { det: r.det, det7: r.det7, tests: r.tests, avg_p: r.avg_p, xp: r.xp };
+  const adj = await xpAdjOf(null);
+  for (const id of Object.keys(adj)) if (m[id]) m[id].xp = Math.max(0, (m[id].xp || 0) + adj[id]);
   return m;
 }
 const statLine = (s) => (s ? `Задержаний: ${s.det} · тестов: ${s.tests}${s.avg_p == null ? "" : " (средний результат " + s.avg_p + "%)"} · XP: ${s.xp == null ? 0 : s.xp}` : "Данных работы пока нет");
@@ -632,11 +671,10 @@ async function staffList(b) {
   if (err) return err;
   // Руководство видит только свою организацию, модераторы и владелец — все
   const scope = p.rank === "leader" ? p.org : null;
-  const rows = scope
-    ? await db()`select * from profiles where org = ${scope} order by created_at`
-    : await db()`select * from profiles order by created_at`;
+  const srv = staffSrvOpt(p, b); // руководство и ограниченный модератор видят только свой сервер; владелец — выбранный или все
+  const rows = await db()`select * from profiles where ${scope ? db()`org = ${scope}` : db()`true`} and ${srv ? db()`server = ${srv}` : db()`true`} order by created_at`;
   const stats = await userStats();
-  const wk = Object.fromEntries((await weekStats(scope)).map((x) => [x.id, x]));
+  const wk = Object.fromEntries((await weekStats(scope, undefined, false, srv)).map((x) => [x.id, x]));
   const full = p.rank === "owner" || p.rank === "moderator";
   const opened = (r, k) => Array.isArray(r.contacts_open) && r.contacts_open.includes(k);
   const list = rows.map((r) => {
@@ -647,6 +685,7 @@ async function staffList(b) {
       nick: r.nick,
       static: r.static_id,
       org: r.org,
+      server: r.server || DEFAULT_SERVER,
       role: gameRole(r),
       rank: r.rank,
       created: r.created_at,
@@ -675,7 +714,7 @@ async function staffList(b) {
     }
     return o;
   });
-  return { ok: true, viewer: p.rank, scope, orgs: scope ? [scope] : DEPTS, list };
+  return { ok: true, viewer: p.rank, scope, server: srv || 0, servers: srv ? [srv] : Object.keys(SERVERS).map(Number), orgs: scope ? [scope] : DEPTS, list };
 }
 
 // ───────────── API: сброс пароля ─────────────
@@ -808,7 +847,7 @@ async function api(req) {
     return J(fail("Некорректный запрос."), 400);
   }
   if (!b || typeof b !== "object") return J(fail("Некорректный запрос."), 400);
-  if (b.action !== "sync" && b.action !== "xfer" && !((b.action === "ai_ask" || b.action === "panel") && raw.length <= 40000) && raw.length > 8192) return J(fail("Слишком большой запрос."), 413);
+  if (b.action !== "sync" && b.action !== "xfer" && !((b.action === "ai_ask" || b.action === "panel") && raw.length <= 40000) && !(b.action === "panel" && b.op === "ads_save" && raw.length <= 700000) && !(b.action === "bug_report" && raw.length <= 700000) && !(b.action === "stt" && raw.length <= 1200000) && !(b.action === "share" && raw.length <= 40000) && !(b.action === "colleagues" && raw.length <= 40000) && !(b.action === "handoff" && raw.length <= 70000) && raw.length > 8192) return J(fail("Слишком большой запрос."), 413);
   const ip = req.headers.get("cf-connecting-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
   switch (b.action) {
     case "register":
@@ -825,6 +864,8 @@ async function api(req) {
       return J(await lawsApi(b));
     case "ai_ask":
       return J(await aiAsk(b));
+    case "stt":
+      return J(await sttApi(b));
     case "panel":
       return J(await panelApi(b, ip, req.headers.get("user-agent") || ""));
     case "bug_report":
@@ -857,6 +898,16 @@ async function api(req) {
       return J(await aiLog(b));
     case "ai_vote":
       return J(await aiVote(b));
+    case "ai_dict":
+      return J(await aiDictApi(b));
+    case "ai_hist":
+      return J(await aiHist(b));
+    case "ai_check":
+      return J(await aiCheck(b));
+    case "colleagues":
+      return J(await colleaguesApi(b));
+    case "handoff":
+      return J(await handoffApi(b));
     case "sync_reset":
       return J(await syncReset(b));
     case "logout": {
@@ -878,6 +929,22 @@ async function api(req) {
       return J(await resetStatus(b, ip));
     case "reset_complete":
       return J(await resetComplete(b, ip));
+    case "ads":
+      return J(await adsPublic(b));
+    case "status":
+      return J(await statusApi());
+    case "beta":
+      return J(await betaApi(b));
+    case "hooks":
+      return J(await hooksApi(b));
+    case "events":
+      return J(await eventsApi(b));
+    case "ideas":
+      return J(await ideasApi(b));
+    case "patrol":
+      return J(await patrolApi(b));
+    case "discord":
+      return J(await discordApi(b));
     default:
       return J(fail("Неизвестное действие."), 400);
   }
@@ -885,7 +952,7 @@ async function api(req) {
 
 // ───────────── Этап 10: ссылки «Поделиться», перенос по коду, поиски без результата ─────────────
 const SHARE_DAYS = 30; // сколько живёт ссылка на расчёт или набор
-const SHARE_KINDS = { calc: "Расчёт", set: "Набор статей" };
+const SHARE_KINDS = { calc: "Расчёт", set: "Набор статей", board: "Тактическая доска" };
 const SHARE_ID_RE = /^(uk|ak|dk)[0-9a-zа-яё.]{1,12}-[0-9a-zа-яё.]{0,6}$/i;
 const XFER_MIN = 15; // сколько действует код переноса
 const XFER_BYTES = 900000;
@@ -906,8 +973,11 @@ async function shareApi(b) {
     const kind = String(b.kind || "");
     if (!SHARE_KINDS[kind]) return fail("Неизвестный вид ссылки.");
     const ids = (Array.isArray(b.ids) ? b.ids : []).map((x) => clean(x, 30)).filter((x) => SHARE_ID_RE.test(x)).slice(0, 40);
-    if (!ids.length) return fail("Добавьте статьи, чтобы поделиться.");
-    const body = cleanText(b.text, 3000);
+    // 2.4: доска передаёт рисунок (JSON) вместо статей
+    const board = kind === "board" ? String(b.data == null ? "" : b.data) : "";
+    if (kind === "board" && (board.length < 10 || board.length > 30000 || !/^\{[\s\S]*\}$/.test(board))) return fail("Доска пустая или слишком большая.");
+    if (!ids.length && kind !== "board") return fail("Добавьте статьи, чтобы поделиться.");
+    const body = kind === "board" ? board : cleanText(b.text, 3000);
     if (!(await hit(`sh:${p.id}`, 30, 3600))) return fail(RATE_MSG, { code: "rate" });
     let code = "";
     for (let i = 0; i < 5 && !code; i++) {
@@ -929,7 +999,7 @@ async function shareApi(b) {
       : [];
     if (!r) return fail("Ссылка не найдена или устарела: ссылки действуют " + SHARE_DAYS + " дней.");
     await sql`update shares set views = views + 1 where code = ${code}`;
-    return { ok: true, share: { code, kind: r.kind, title: r.title, ids: r.ids, author: r.author, at: new Date(r.created_at).getTime() } };
+    return { ok: true, share: { code, kind: r.kind, title: r.title, ids: r.ids, author: r.author, at: new Date(r.created_at).getTime(), data: r.kind === "board" ? r.body : undefined } };
   }
   return fail("Неизвестное действие.");
 }
@@ -945,7 +1015,7 @@ async function shareView(req, url) {
     : [];
   if (!r) return new Response("Senko Assistant\n\nСсылка не найдена или устарела: ссылки действуют " + SHARE_DAYS + " дней.", { status: 404, headers: head });
   await db()`update shares set views = views + 1 where code = ${code}`;
-  const t = `Senko Assistant · ${SHARE_KINDS[r.kind] || "Ссылка"}${r.title ? ": " + r.title : ""}\nОт: ${r.author} · ${fmtDate(r.created_at)}\n\n${r.body || ""}\n\n` +
+  const t = `Senko Assistant · ${SHARE_KINDS[r.kind] || "Ссылка"}${r.title ? ": " + r.title : ""}\nОт: ${r.author} · ${fmtDate(r.created_at)}\n\n${r.kind === "board" ? "Схема на карте зон: откройте её в программе." : r.body || ""}\n\n` +
     `Открыть в программе: скопируйте эту ссылку и вставьте в строку поиска Senko Assistant.\nКод: ${code}`;
   return new Response(t, { status: 200, headers: head });
 }
@@ -1031,6 +1101,9 @@ const GH_LAWS_TOKEN = Deno.env.get("GH_LAWS_TOKEN") || ""; // токен GitHub 
 const GH_REPO = Deno.env.get("GH_REPO") || "Kofemanchik/Senko-Assistant";
 const LAWS_WORKFLOW = "sync-laws.yml";
 const LAWS_STATUS_URL = Deno.env.get("LAWS_STATUS_URL") || "https://raw.githubusercontent.com/Kofemanchik/Senko-Assistant/main/update/laws-status.json";
+// Boston хранится как раньше (laws-status.json), остальные серверы — с номером (laws-status-7.json): scripts/servers.js
+const lawsSfx = (n) => (n === DEFAULT_SERVER ? "" : "-" + n);
+const lawsStatusUrl = (n) => (n === DEFAULT_SERVER ? LAWS_STATUS_URL : LAWS_STATUS_URL.replace(/laws-status\.json$/, "laws-status" + lawsSfx(n) + ".json"));
 const NOTICE_DAYS = 7; // сколько дней рассылка видна в программе
 const MILESTONES = [100, 250, 500, 1000, 2000, 5000, 10000];
 const FAIL_ALERT = 5; // неудачных входов за 15 минут, после которых владелец получает уведомление
@@ -1070,13 +1143,18 @@ async function hitN(key, windowSec) {
 async function sysFor(p) {
   const m = await getSetting("maintenance", { on: false, text: "" });
   const rows = await db()`select id, org, user_id, title, text, created_at from broadcasts
-                          where expires_at > now() and ((org is null and user_id is null) or org = ${p.org} or user_id = ${p.id})
+                          where expires_at > now() and ((org is null and user_id is null and (server is null or server = ${sv(p)})) or (org = ${p.org} and (server is null or server = ${sv(p)})) or user_id = ${p.id})
                           order by created_at desc limit 5`;
   const ctrl = await db()`select t.id, t.title, t.topics, t.n, t.due_at from control_tests t
-                          where t.org = ${p.org} and not t.closed and t.due_at > now() and t.author_id is distinct from ${p.id}
+                          where t.org = ${p.org} and t.server = ${sv(p)} and not t.closed and t.due_at > now() and t.author_id is distinct from ${p.id}
                             and not exists (select 1 from control_results r where r.test_id = t.id and r.user_id = ${p.id})
                           order by t.due_at limit 5`;
+  const flags = await flagsNow();
+  const events = flags.events === "off" ? [] : (await eventsFor(p.org, 14, sv(p))).slice(0, 5).map((e) => evOut(e, p));
   return {
+    flags,
+    tester: isTester(p),
+    events,
     controls: ctrl.map((t) => ({ id: String(t.id), title: t.title, topics: t.topics, n: t.n, due: t.due_at })),
     maintenance: m && m.on ? { on: true, text: m.text || "", exempt: p.rank === "owner" || p.rank === "moderator" } : { on: false },
     notices: rows.map((r) => ({
@@ -1123,6 +1201,9 @@ async function bugReport(b) {
       reply_markup: { inline_keyboard: [[{ text: "✉️ Ответить", callback_data: `bg:${r.id}` }]] },
     });
     if (log) await sendFile(OWNER_TG, `bug-${r.id}-log.txt`, log, `📎 Журнал к сообщению #${r.id}`, "text/plain");
+    // 2.4: скриншот окна программы (тестеры и все, кто поставил галочку)
+    const m = /^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=]{100,})$/.exec(String(b.shot || ""));
+    if (m && m[2].length <= 680000) await sendPhoto(OWNER_TG, Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0)), `bug-${r.id}.${m[1] === "png" ? "png" : "jpg"}`, `📷 Скриншот к сообщению #${r.id}${p.beta ? " · 🧪 тестер" : ""}`);
   }
   return { ok: true, id: String(r.id) };
 }
@@ -1146,13 +1227,19 @@ async function healthText() {
   } catch (e) {
     L.push("❌ ИИ-прокси: не отвечает");
   }
-  try {
-    const r = await fetch(LAWS_STATUS_URL + "?t=" + Date.now(), { signal: AbortSignal.timeout(6000) });
-    const j = await r.json();
-    const age = Math.round((Date.now() - j.checkedAt) / 3600e3);
-    L.push(`${j.ok && age < 36 ? "✅" : "⚠️"} Законы: проверка ${fmtDate(j.checkedAt)} (${age} ч. назад), последнее изменение ${fmtDate(j.updatedAt)}, законов: ${j.count}${j.failed ? ", не прочитано тем: " + j.failed : ""}${j.error ? "\nОшибка: " + esc(j.error) : ""}`);
-  } catch (e) {
-    L.push("⚠️ Законы: не удалось прочитать laws-status.json");
+  for (const id of Object.keys(SERVERS).map(Number)) {
+    try {
+      const r = await fetch(lawsStatusUrl(id) + "?t=" + Date.now(), { signal: AbortSignal.timeout(6000) });
+      if (r.status === 404 && id !== DEFAULT_SERVER) {
+        L.push(`⚠️ Законы ${esc(srvName(id))}: ещё не собирались (запустите /laws)`);
+        continue;
+      }
+      const j = await r.json();
+      const age = Math.round((Date.now() - j.checkedAt) / 3600e3);
+      L.push(`${j.ok && age < 36 ? "✅" : "⚠️"} Законы ${esc(srvName(id))}: проверка ${fmtDate(j.checkedAt)} (${age} ч. назад), последнее изменение ${fmtDate(j.updatedAt)}, законов: ${j.count}${j.failed ? ", не прочитано тем: " + j.failed : ""}${j.error ? "\nОшибка: " + esc(j.error) : ""}`);
+    } catch (e) {
+      L.push(`⚠️ Законы ${esc(srvName(id))}: не удалось прочитать статус`);
+    }
   }
   const tick = await getSetting("tick", null);
   L.push(tick && Date.now() - tick.at < 5 * 60e3 ? `✅ Расписание: последний запуск ${fmtDate(tick.at)}` : `⚠️ Расписание: ${tick ? "последний запуск " + fmtDate(tick.at) : "ни разу не запускалось"} (см. cron.sql)`);
@@ -1229,6 +1316,22 @@ async function sendFile(chat, name, text, caption, type = "application/json") {
   }
 }
 
+async function sendPhoto(chat, bytes, name, caption) {
+  if (!BOT_TOKEN) return null;
+  const fd = new FormData();
+  fd.append("chat_id", String(chat));
+  fd.append("caption", caption);
+  fd.append("parse_mode", "HTML");
+  fd.append("photo", new Blob([bytes], { type: /png$/.test(name) ? "image/png" : "image/jpeg" }), name);
+  try {
+    const r = await fetch(`${TG_API}/bot${BOT_TOKEN}/sendPhoto`, { method: "POST", body: fd, signal: AbortSignal.timeout(30000) });
+    return await r.json();
+  } catch (e) {
+    console.error("telegram sendPhoto", String(e).split(BOT_TOKEN).join("***"));
+    return null;
+  }
+}
+
 // ───────────── Бот ─────────────
 // ───────────── Этап 4: рейтинг недели, достижения, смены, контрольные тесты, приём новичков, ИИ ─────────────
 // Уровни и темы — те же, что в тренажёре программы (app/index.html: LVN/LVT, TOP)
@@ -1259,6 +1362,41 @@ const ACH = [
   { code: "lvl8", icon: "👑", name: "Звание «Легенда»", desc: "Набрать 1900 опыта", rare: true, test: (s) => s.xp >= 1900 },
 ];
 const ACH_BY = Object.fromEntries(ACH.map((x) => [x.code, x]));
+// 2.6.3: особые достижения, которые владелец создаёт в панели (bot_settings «achx»: код → значок, название, описание)
+const achAll = async () => ({ ...(await getSetting("achx", {})), ...ACH_BY });
+
+// 2.6.3: поправка опыта из панели владельца. Опыт = опыт из программы (синхронизация берёт большее значение) + поправка,
+// поэтому опыт можно и уменьшить: программа не «перебьёт» поправку своим числом
+let xpAdjReady = null;
+function ensureXpAdj() {
+  if (!xpAdjReady)
+    xpAdjReady = (async () => {
+      const sql = db();
+      const cols = await sql`select column_name c from information_schema.columns where table_schema = 'public' and table_name = 'profiles' and column_name in ('xp_adj', 'ai_bonus')`;
+      const has = new Set(cols.map((r) => r.c));
+      if (!has.has("xp_adj")) await sql.unsafe("alter table public.profiles add column if not exists xp_adj integer not null default 0");
+      // 2.6.6: дополнительные запросы к ИИ сверх дневного лимита (выдаёт владелец в панели)
+      if (!has.has("ai_bonus")) await sql.unsafe("alter table public.profiles add column if not exists ai_bonus integer not null default 0");
+    })().catch((e) => {
+      xpAdjReady = null;
+      throw e;
+    });
+  return xpAdjReady;
+}
+// ids = null — все пользователи с поправкой
+async function xpAdjOf(ids) {
+  try {
+    await ensureXpAdj();
+    const sql = db();
+    const rows = ids
+      ? await sql`select id, xp_adj from profiles where xp_adj <> 0 and id = any(${ids}::uuid[])`
+      : await sql`select id, xp_adj from profiles where xp_adj <> 0`;
+    return Object.fromEntries(rows.map((r) => [r.id, r.xp_adj]));
+  } catch (e) {
+    console.error("xp_adj", e);
+    return {};
+  }
+}
 
 // Неделя с понедельника 00:00 по МСК: key — дата понедельника, start — его начало в мс
 function mskWeek(d = new Date()) {
@@ -1287,11 +1425,10 @@ async function snapshotWeek() {
 }
 
 // Показатели сотрудников за неделю w. full=true — неделя целиком (для отчёта), иначе текущая неделя до сейчас
-async function weekStats(org, w = mskWeek(), full = false) {
+async function weekStats(org, w = mskWeek(), full = false, server = null) {
   const sql = db();
-  const people = org
-    ? await sql`select id, login, nick, org, rank, last_seen, created_at from profiles where org = ${org} and not banned and approval = 'ok'`
-    : await sql`select id, login, nick, org, rank, last_seen, created_at from profiles where not banned and approval = 'ok'`;
+  const people = await sql`select id, login, nick, org, server, rank, last_seen, created_at from profiles
+                           where ${org ? sql`org = ${org}` : sql`true`} and ${server ? sql`server = ${server}` : sql`true`} and not banned and approval = 'ok'`;
   if (!people.length) return [];
   const ids = people.map((p) => p.id);
   const next = weekAfter(w);
@@ -1306,14 +1443,15 @@ async function weekStats(org, w = mskWeek(), full = false) {
            round(avg(senko_num(data->>'p')) filter (where kind = 'tests' and senko_num(data->>'t') >= ${w.start} and senko_num(data->>'t') < ${end}))::int avg_p
     from sync_items where not deleted and kind in ('thist', 'tests') and user_id = any(${ids}::uuid[]) group by user_id`;
   const ach = await sql`select user_id, count(*)::int n from achievements where user_id = any(${ids}::uuid[]) group by user_id`;
+  const ADJ = await xpAdjOf(ids);
   const X = {}, B0 = {}, B1 = {}, AC = {}, AN = {};
   xs.forEach((r) => (X[r.user_id] = r.xp));
   bs.forEach((r) => ((r.week === w.key ? B0 : B1)[r.user_id] = r.base));
   act.forEach((r) => (AC[r.user_id] = r));
   ach.forEach((r) => (AN[r.user_id] = r.n));
   return people.map((p) => {
-    const xp = X[p.id] || 0;
-    const top = full ? (B1[p.id] != null ? B1[p.id] : xp) : xp;
+    const sx = X[p.id] || 0, xp = Math.max(0, sx + (ADJ[p.id] || 0)); // опыт за неделю — только заработанный в программе
+    const top = full ? (B1[p.id] != null ? B1[p.id] : sx) : sx;
     const base = B0[p.id] != null ? B0[p.id] : top;
     const a = AC[p.id] || {};
     return { ...p, xp, wxp: Math.max(0, top - base), det: a.det || 0, tests: a.tests || 0, avg_p: a.avg_p == null ? null : a.avg_p, ach: AN[p.id] || 0, lvl: lvOf(xp) };
@@ -1333,6 +1471,7 @@ async function checkAch(p) {
            coalesce(max(senko_num(data#>>'{}')) filter (where kind = 'xp'), 0)::int xp
     from sync_items where user_id = ${p.id} and not deleted`;
   const [c] = await sql`select count(*) filter (where p >= 100)::int ctrl100 from control_results where user_id = ${p.id}`;
+  s.xp = Math.max(0, s.xp + ((await xpAdjOf([p.id]))[p.id] || 0));
   const earned = ACH.filter((x) => x.test({ ...s, ...c })).map((x) => x.code);
   if (!earned.length) return [];
   const got = (await sql`insert into achievements (user_id, code) select ${p.id}, unnest(${earned}::text[])
@@ -1368,6 +1507,8 @@ async function myStats(b) {
       if (((d && +d.end) || Number(r.u)) >= wk) det7++;
     }
   }
+  const xpAdj = (await xpAdjOf([p.id]))[p.id] || 0;
+  xp = Math.max(0, xp + xpAdj);
   tests.sort((a, c) => c.t - a.t);
   const last = tests.slice(0, 10);
   const weak = Object.keys(TOPICS)
@@ -1378,21 +1519,23 @@ async function myStats(b) {
     .slice(0, 3);
   const got = await sql`select code, at from achievements where user_id = ${p.id}`;
   const G = Object.fromEntries(got.map((r) => [r.code, r.at]));
+  const AX = await getSetting("achx", {});
+  const custom = Object.keys(G).filter((c) => !ACH_BY[c] && AX[c]).map((c) => ({ code: c, icon: AX[c].icon, name: AX[c].name, desc: AX[c].desc, rare: true, at: G[c] }));
   const w = mskWeek();
-  const board = (await weekStats(p.org, w)).sort(byWxp);
+  const board = (await weekStats(p.org, w, false, sv(p))).sort(byWxp);
   const place = board.findIndex((x) => x.id === p.id);
   const ctrl = await sql`select t.id, t.title, t.n, t.due_at, r.p, r.at from control_tests t
                          left join control_results r on r.test_id = t.id and r.user_id = ${p.id}
-                         where t.org = ${p.org} and (r.p is not null or (not t.closed and t.due_at > now()))
+                         where t.org = ${p.org} and t.server = ${sv(p)} and (r.p is not null or (not t.closed and t.due_at > now()))
                          order by t.created_at desc limit 10`;
   return {
     ok: true,
     org: p.org,
-    xp, level: lvOf(xp), streak, det, det7,
+    xp, xpAdj, level: lvOf(xp), streak, det, det7,
     tests: tests.length,
     avg_p: last.length ? Math.round(last.reduce((s, t) => s + t.p, 0) / last.length) : null,
     weak,
-    ach: ACH.map((x) => ({ code: x.code, icon: x.icon, name: x.name, desc: x.desc, rare: !!x.rare, at: G[x.code] || null })),
+    ach: ACH.map((x) => ({ code: x.code, icon: x.icon, name: x.name, desc: x.desc, rare: !!x.rare, at: G[x.code] || null })).concat(custom),
     week: { from: w.start, wxp: place >= 0 ? board[place].wxp : 0, place: place >= 0 ? place + 1 : null, of: board.length },
     top: board.slice(0, 10).map((x, i) => ({ n: i + 1, nick: x.nick, lvl: x.lvl.name, wxp: x.wxp, me: x.id === p.id })),
     controls: ctrl.map((r) => ({ id: String(r.id), title: r.title, n: r.n, due: r.due_at, p: r.p, at: r.at })),
@@ -1401,23 +1544,28 @@ async function myStats(b) {
 
 // Организация, с которой работает руководство: руководитель — только своя, модераторы и владелец — выбранная
 const staffOrg = (p, b) => (p.rank === "leader" ? p.org : DEPTS.find((d) => d === String(b.org || "")) || null);
+// Сервер, с которым работает руководство: руководитель — свой, модератор с ограничением — его сервер, владелец и модератор «на все серверы» — выбранный (null — все серверы)
+const staffSrvOpt = (p, b) => (p.rank === "leader" ? sv(p) : modServer(p) || parseServer(b.server) || null);
+// то же, но когда действие требует конкретного сервера (создание смены, теста, мероприятия): без выбора — Boston
+const staffSrv = (p, b) => staffSrvOpt(p, b) || DEFAULT_SERVER;
 
 async function weekBoardApi(b) {
   const { p, err } = await who(b, ["leader", "moderator", "owner"]);
   if (err) return err;
   const org = staffOrg(p, b);
+  const srv = staffSrvOpt(p, b);
   const w = mskWeek();
-  const list = (await weekStats(org, w)).sort(byWxp);
+  const list = (await weekStats(org, w, false, srv)).sort(byWxp);
   return {
-    ok: true, org, from: w.start,
+    ok: true, org, server: srv || 0, from: w.start,
     list: list.map((x, i) => ({ n: i + 1, login: x.login, nick: x.nick, org: x.org, lvl: x.lvl.name, xp: x.xp, wxp: x.wxp, det: x.det, tests: x.tests, avg_p: x.avg_p, ach: x.ach })),
   };
 }
 
 // ───────────── API: журнал смены ─────────────
-async function shiftSummary(org, from, to) {
+async function shiftSummary(org, from, to, server = DEFAULT_SERVER) {
   const sql = db();
-  const people = await sql`select id, login, nick, last_seen from profiles where org = ${org} and not banned and approval = 'ok'`;
+  const people = await sql`select id, login, nick, last_seen from profiles where org = ${org} and server = ${server} and not banned and approval = 'ok'`;
   if (!people.length) return { total: 0, online: [], det: 0, tests: 0 };
   const ids = people.map((x) => x.id);
   const act = await sql`
@@ -1451,7 +1599,7 @@ function shiftText(r, auto) {
 }
 async function endShift(cur, by, auto = false) {
   const sql = db();
-  const s = await shiftSummary(cur.org, tsOf(cur.started_at), Date.now());
+  const s = await shiftSummary(cur.org, tsOf(cur.started_at), Date.now(), cur.server || DEFAULT_SERVER);
   const [r] = await sql`update shifts set ended_at = now(), summary = ${sql.json(s)} where id = ${cur.id} and ended_at is null returning *`;
   if (!r) return null;
   const chats = new Set();
@@ -1470,25 +1618,26 @@ async function shiftApi(b) {
   if (err) return err;
   const org = staffOrg(p, b);
   if (!org) return fail("Выберите организацию.");
+  const srv = staffSrv(p, b);
   const sql = db();
   const op = String(b.op || "");
   let msg = "";
   if (op === "start") {
-    const [cur] = await sql`select * from shifts where org = ${org} and ended_at is null`;
+    const [cur] = await sql`select * from shifts where org = ${org} and server = ${srv} and ended_at is null`;
     if (cur) return fail(`Смена уже идёт с ${fmtDate(cur.started_at)}, её начал ${cur.leader}.`);
-    await sql`insert into shifts (org, leader_id, leader) values (${org}, ${p.id}, ${p.nick || p.login})`;
+    await sql`insert into shifts (org, server, leader_id, leader) values (${org}, ${srv}, ${p.id}, ${p.nick || p.login})`;
     await audit(p.login, "shift_start", org, {});
     msg = "Смена начата.";
   } else if (op === "end") {
-    const [cur] = await sql`select * from shifts where org = ${org} and ended_at is null`;
+    const [cur] = await sql`select * from shifts where org = ${org} and server = ${srv} and ended_at is null`;
     if (!cur) return fail("Смена не начата.");
     await endShift(cur, p);
     await audit(p.login, "shift_end", org, {});
     msg = p.tg_id != null ? "Смена завершена. Сводка отправлена вам в Telegram." : "Смена завершена.";
   }
-  const [act] = await sql`select * from shifts where org = ${org} and ended_at is null`;
-  const hist = await sql`select * from shifts where org = ${org} and ended_at is not null order by started_at desc limit 10`;
-  return { ok: true, org, msg, active: act ? shiftOut(act) : null, history: hist.map(shiftOut) };
+  const [act] = await sql`select * from shifts where org = ${org} and server = ${srv} and ended_at is null`;
+  const hist = await sql`select * from shifts where org = ${org} and server = ${srv} and ended_at is not null order by started_at desc limit 10`;
+  return { ok: true, org, server: srv, msg, active: act ? shiftOut(act) : null, history: hist.map(shiftOut) };
 }
 
 // ───────────── API: контрольные тесты ─────────────
@@ -1500,7 +1649,7 @@ async function ctrlApi(b) {
     if (err) return err;
     const id = parseInt(b.id, 10);
     const [t] = id ? await sql`select * from control_tests where id = ${id}` : [];
-    if (!t || t.org !== p.org) return fail("Тест не найден.");
+    if (!t || t.org !== p.org || (t.server || DEFAULT_SERVER) !== sv(p)) return fail("Тест не найден.");
     if (t.closed || tsOf(t.due_at) < Date.now() - 10 * 60e3) return fail("Срок теста истёк.");
     const n = Math.floor(+b.n), s = Math.floor(+b.s);
     if (!(n > 0 && n <= 50 && s >= 0 && s <= n)) return fail("Некорректный результат.");
@@ -1514,6 +1663,8 @@ async function ctrlApi(b) {
   const { p, err } = await who(b, ["leader", "moderator", "owner"]);
   if (err) return err;
   const org = staffOrg(p, b);
+  const srvO = staffSrvOpt(p, b);
+  const srv = srvO || DEFAULT_SERVER;
   if (op === "create") {
     if (!org) return fail("Выберите организацию.");
     const topics = (Array.isArray(b.topics) ? b.topics : []).map(String).filter((k) => TOPICS[k]);
@@ -1521,23 +1672,22 @@ async function ctrlApi(b) {
     const n = Math.min(20, Math.max(5, Math.floor(+b.n) || 10));
     const days = Math.min(14, Math.max(1, Math.floor(+b.days) || 3));
     const title = clean(b.title, 80) || "Контрольный тест";
-    const [{ k }] = await sql`select count(*)::int k from control_tests where org = ${org} and not closed and due_at > now()`;
+    const [{ k }] = await sql`select count(*)::int k from control_tests where org = ${org} and server = ${srv} and not closed and due_at > now()`;
     if (k >= 5) return fail("Активных тестов уже 5. Закройте один из них.");
     if (!(await hit(`ct:${p.id}`, 20, 86400))) return fail(RATE_MSG, { code: "rate" });
-    const [t] = await sql`insert into control_tests (org, author_id, author, title, topics, n, due_at)
-                          values (${org}, ${p.id}, ${p.nick || p.login}, ${title}, ${topics}, ${n}, now() + make_interval(days => ${days})) returning id`;
+    const [t] = await sql`insert into control_tests (org, server, author_id, author, title, topics, n, due_at)
+                          values (${org}, ${srv}, ${p.id}, ${p.nick || p.login}, ${title}, ${topics}, ${n}, now() + make_interval(days => ${days})) returning id`;
     await audit(p.login, "ctrl_create", org, { id: t.id, title, topics, n, days });
+    await postHook(org, srv, "ctrl", "📋 Контрольный тест: " + title, `Вопросов: ${n}, срок: ${days} дн. Пройти можно в программе: сверху появится плашка с кнопкой «Пройти».\nНазначил(а): ${esc(p.nick || p.login)}`, 0x7c3aed);
   } else if (op === "close") {
     const id = parseInt(b.id, 10);
-    const r = id ? await sql`update control_tests set closed = true where id = ${id} and (${org}::text is null or org = ${org}) returning id` : [];
+    const r = id ? await sql`update control_tests set closed = true where id = ${id} and (${org}::text is null or org = ${org}) and (${srvO}::int is null or server = ${srvO}) returning id` : [];
     if (!r.length) return fail("Тест не найден.");
   }
-  const tests = org
-    ? await sql`select * from control_tests where org = ${org} order by created_at desc limit 10`
-    : await sql`select * from control_tests order by created_at desc limit 10`;
+  const tests = await sql`select * from control_tests where (${org}::text is null or org = ${org}) and (${srvO}::int is null or server = ${srvO}) order by created_at desc limit 10`;
   const out = [];
   for (const t of tests) out.push(await ctrlDetails(t));
-  return { ok: true, org, topics: TOPICS, tests: out };
+  return { ok: true, org, server: srvO || 0, topics: TOPICS, tests: out };
 }
 async function ctrlDetails(t) {
   const sql = db();
@@ -1545,11 +1695,11 @@ async function ctrlDetails(t) {
                         where r.test_id = ${t.id} order by r.p desc, r.at`;
   const done = new Set(res.map((r) => r.login));
   // автор теста его не проходит
-  const all = await sql`select login, nick from profiles where org = ${t.org} and not banned and approval = 'ok' and created_at < ${t.due_at}
+  const all = await sql`select login, nick from profiles where org = ${t.org} and server = ${t.server || DEFAULT_SERVER} and not banned and approval = 'ok' and created_at < ${t.due_at}
                           and id is distinct from ${t.author_id} order by nick`;
   const miss = all.filter((x) => !done.has(x.login));
   return {
-    id: String(t.id), org: t.org, title: t.title, topics: t.topics, n: t.n, due: t.due_at, by: t.author, created: t.created_at,
+    id: String(t.id), org: t.org, server: t.server || DEFAULT_SERVER, title: t.title, topics: t.topics, n: t.n, due: t.due_at, by: t.author, created: t.created_at,
     active: !t.closed && tsOf(t.due_at) > Date.now(),
     avg: res.length ? Math.round(res.reduce((s, r) => s + r.p, 0) / res.length) : null,
     results: res.map((r) => ({ nick: r.nick, login: r.login, p: r.p, s: r.s, n: r.n, at: r.at })),
@@ -1602,17 +1752,18 @@ const rpButtons = (r) =>
 async function rpNotify(r) {
   const sql = db();
   const chats = new Set();
-  const leaders = await sql`select tg_id from profiles where rank = 'leader' and org = ${r.org} and tg_id is not null and not banned`;
+  const leaders = await sql`select tg_id from profiles where rank = 'leader' and org = ${r.org} and server = ${r.server || DEFAULT_SERVER} and tg_id is not null and not banned`;
   for (const l of leaders) if ((await getSetting("rpn:" + l.tg_id, { on: true })).on) chats.add(String(l.tg_id));
-  const staff = (await moderatorChats()).concat(OWNER_TG ? [OWNER_TG] : []);
+  const staff = (await moderatorChats(r.server || DEFAULT_SERVER)).concat(OWNER_TG ? [OWNER_TG] : []);
   for (const c of staff) if ((await getSetting("rpn:" + c, { on: false })).on) chats.add(c);
   for (const c of chats) await send(c, rpText(r, 1500) + (r.body.length > 1500 ? `\n\nПолностью: /report ${r.id}` : ""), { disable_notification: true, ...rpButtons(r) });
+  await postHook(r.org, r.server || DEFAULT_SERVER, "rep", `📝 Рапорт №${r.id}: ${r.title}`, rpText(r, 1500), 0xc2530e);
 }
 // Решение по рапорту. who: { label, name, org (null — любая организация) }
 async function rpReview(by, id, ok, note) {
   const sql = db();
   const [r0] = id ? await sql`select * from reports where id = ${id}` : [];
-  if (!r0 || (by.org && r0.org !== by.org)) return { err: "Рапорт не найден." };
+  if (!r0 || (by.org && r0.org !== by.org) || (by.server && (r0.server || DEFAULT_SERVER) !== by.server)) return { err: "Рапорт не найден." };
   const [r] = await sql`update reports set status = ${ok ? "ok" : "no"}, reviewer = ${by.name}, review_note = ${note || ""}, reviewed_at = now()
                         where id = ${r0.id} returning *`;
   await audit(by.label, "report_review", r.login, { id: String(r.id), org: r.org, status: r.status });
@@ -1638,8 +1789,8 @@ async function reportsApi(b) {
       if (body.length < 20) return fail("Рапорт слишком короткий: заполните поля.");
       if (!(await hit(`rp:${p.id}`, 15, 3600))) return fail(RATE_MSG, { code: "rate" });
       const title = clean(b.title, 120) || RP_KINDS[kind];
-      const [r] = await sql`insert into reports (user_id, org, author, login, static_id, dept, kind, title, fields, body)
-                            values (${p.id}, ${p.org}, ${p.nick || p.login}, ${p.login}, ${p.static_id}, ${p.dept || ""}, ${kind}, ${title},
+      const [r] = await sql`insert into reports (user_id, org, server, author, login, static_id, dept, kind, title, fields, body)
+                            values (${p.id}, ${p.org}, ${sv(p)}, ${p.nick || p.login}, ${p.login}, ${p.static_id}, ${p.dept || ""}, ${kind}, ${title},
                                     ${sql.json(rpFields(b.fields))}, ${body}) returning *`;
       await audit(p.login, "report_create", r.org, { id: String(r.id), kind });
       try {
@@ -1662,7 +1813,7 @@ async function reportsApi(b) {
   if (err) return err;
   const org = staffOrg(p, b);
   if (op === "review") {
-    const x = await rpReview({ label: p.login, name: p.nick || p.login, org: p.rank === "leader" ? p.org : null }, parseInt(b.id, 10), !!b.ok, clean(b.note, 300));
+    const x = await rpReview({ label: p.login, name: p.nick || p.login, org: p.rank === "leader" ? p.org : null, server: staffSrvOpt(p, b) || 0 }, parseInt(b.id, 10), !!b.ok, clean(b.note, 300));
     if (x.err) return fail(x.err);
   } else if (op !== "list") return fail("Неизвестное действие.");
   const st = RP_STATUS[b.status] ? String(b.status) : null;
@@ -1671,10 +1822,10 @@ async function reportsApi(b) {
   const like = q ? "%" + likeEsc(q) + "%" : null;
   const rows = await sql`
     select * from reports
-    where (${org}::text is null or org = ${org}) and (${st}::text is null or status = ${st}) and (${kind}::text is null or kind = ${kind})
+    where (${org}::text is null or org = ${org}) and (${staffSrvOpt(p, b)}::int is null or server = ${staffSrvOpt(p, b)}) and (${st}::text is null or status = ${st}) and (${kind}::text is null or kind = ${kind})
       and (${like}::text is null or lower(author) like ${like} or lower(login) like ${like} or lower(title) like ${like} or static_id like ${like} or id::text = ${q})
     order by created_at desc limit 100`;
-  const [{ n }] = await sql`select count(*)::int n from reports where status = 'new' and (${org}::text is null or org = ${org})`;
+  const [{ n }] = await sql`select count(*)::int n from reports where status = 'new' and (${org}::text is null or org = ${org}) and (${staffSrvOpt(p, b)}::int is null or server = ${staffSrvOpt(p, b)})`;
   return { ok: true, org, kinds: RP_KINDS, newN: n, list: rows.map((r) => rpOut(r)) };
 }
 
@@ -1685,9 +1836,9 @@ const approvalMsg = (p) =>
     : `Ваша заявка ждёт подтверждения руководства организации ${p.org}. Попробуйте войти позже.`;
 async function askApproval(p) {
   const sql = db();
-  const leaders = await sql`select tg_id from profiles where org = ${p.org} and rank = 'leader' and tg_id is not null and not banned`;
+  const leaders = await sql`select tg_id from profiles where org = ${p.org} and server = ${sv(p)} and rank = 'leader' and tg_id is not null and not banned`;
   const kb = { inline_keyboard: [[{ text: "✅ Принять", callback_data: `ap:ok:${p.id}` }, { text: "❌ Отклонить", callback_data: `ap:no:${p.id}` }]] };
-  const text = `🆕 <b>Заявка в ${esc(p.org)}</b>\n\n${card(p, "leader")}\n\nПринять сотрудника в программу?`;
+  const text = `🆕 <b>Заявка в ${esc(p.org)} · ${esc(srvName(sv(p)))}</b>\n\n${card(p, "leader")}\n\nПринять сотрудника в программу?`;
   const chats = new Set(leaders.map((l) => String(l.tg_id)));
   if (!chats.size && OWNER_TG) chats.add(OWNER_TG); // у руководства нет Telegram — решает владелец
   for (const c of chats) await send(c, text, { reply_markup: kb });
@@ -1697,7 +1848,8 @@ async function decideApproval(a, id, ok) {
   const sql = db();
   const [p0] = await sql`select * from profiles where id = ${id}`;
   if (!p0) return { err: "Аккаунт не найден." };
-  if (a.kind === "leader" && a.profile.org !== p0.org) return { err: "Это заявка другой организации." };
+  if (a.kind === "leader" && (a.profile.org !== p0.org || sv(a.profile) !== sv(p0))) return { err: "Это заявка другой организации." };
+  { const sc = scopeServer(a); if (sc && sv(p0) !== sc) return { err: "Это заявка с другого сервера." }; }
   const [r] = await sql`update profiles set approval = ${ok ? "ok" : "rejected"} where id = ${id} and approval = 'pending' returning *`;
   if (!r) return { err: `Заявка уже рассмотрена: ${p0.approval === "ok" ? "принята" : p0.approval === "rejected" ? "отклонена" : "нет заявки"}.` };
   await audit(a.label, ok ? "approve" : "reject", r.login, { org: r.org });
@@ -1709,9 +1861,9 @@ async function decideApproval(a, id, ok) {
 }
 
 // ───────────── Еженедельный отчёт руководству ─────────────
-async function orgReport(org) {
+async function orgReport(org, server = DEFAULT_SERVER) {
   const cur = mskWeek(), w = weekBefore(cur);
-  const L = await weekStats(org, w, true);
+  const L = await weekStats(org, w, true, server);
   if (!L.length) return null;
   const sql = db();
   const ids = L.map((x) => x.id);
@@ -1723,13 +1875,13 @@ async function orgReport(org) {
   const topX = [...L].sort(byWxp).filter((x) => x.wxp > 0).slice(0, 3);
   const topD = [...L].sort((a, c) => c.det - a.det).filter((x) => x.det > 0).slice(0, 3);
   const idle = L.filter((x) => Date.now() - tsOf(x.last_seen) >= 14 * 864e5);
-  const ct = await sql`select * from control_tests where org = ${org} and created_at < ${new Date(cur.start)} and due_at >= ${new Date(w.start)} order by created_at`;
+  const ct = await sql`select * from control_tests where org = ${org} and server = ${server} and created_at < ${new Date(cur.start)} and due_at >= ${new Date(w.start)} order by created_at`;
   const ctl = [];
   for (const t of ct) {
     const [r] = await sql`select count(*)::int n, round(avg(p))::int a from control_results where test_id = ${t.id} and user_id = any(${ids}::uuid[])`;
     ctl.push(`• «${esc(t.title)}» — прошли ${r.n} из ${L.length}${r.a == null ? "" : " (ср. " + r.a + "%)"}`);
   }
-  let t = `📊 <b>Отчёт ${esc(org)} за неделю ${ddmm(w.start)}–${ddmm(cur.start - 864e5)}</b>\n` +
+  let t = `📊 <b>Отчёт ${esc(org)} · ${esc(srvName(server))} за неделю ${ddmm(w.start)}–${ddmm(cur.start - 864e5)}</b>\n` +
     `Сотрудников: ${L.length}${fresh ? " (новых: " + fresh + ")" : ""}\nЗаходили за неделю: ${act}\n` +
     `Задержаний: ${det} · тестов: ${tests}${avg == null ? "" : " (ср. " + avg + "%)"}`;
   if (topX.length) t += `\n\n🏆 <b>Лучшие по опыту</b>\n` + topX.map((x, i) => `${i + 1}. ${esc(x.nick)} — ${x.wxp} опыта`).join("\n");
@@ -1739,14 +1891,26 @@ async function orgReport(org) {
   return t;
 }
 async function sendOrgReports() {
-  const rows = await db()`select org, tg_id from profiles where rank = 'leader' and tg_id is not null and not banned`;
+  // отчёт у каждой пары «организация + сервер» свой: ключ вида LSPD|12
+  const rows = await db()`select org, server, tg_id from profiles where rank = 'leader' and tg_id is not null and not banned`;
   const by = {};
-  rows.forEach((r) => (by[r.org] = by[r.org] || []).push(String(r.tg_id)));
+  rows.forEach((r) => (by[r.org + "|" + sv(r)] = by[r.org + "|" + sv(r)] || []).push(String(r.tg_id)));
+  let hooks = [];
+  try {
+    hooks = (await db()`select org, server from org_hooks where 'week' = any(events)`).map((h) => h.org + "|" + h.server);
+  } catch (e) {}
+  hooks.forEach((o) => (by[o] = by[o] || []));
   let n = 0;
-  for (const org of Object.keys(by)) {
-    const t = await orgReport(org);
+  for (const key of Object.keys(by)) {
+    const [org, srvS] = key.split("|");
+    const srv = +srvS || DEFAULT_SERVER;
+    const t = await orgReport(org, srv);
     if (!t) continue;
-    for (const c of by[org]) {
+    if (hooks.includes(key)) {
+      const nl = t.indexOf("\n");
+      await postHook(org, srv, "week", t.slice(0, nl).replace(/<[^>]+>/g, ""), t.slice(nl + 1), 0xff8a3d);
+    }
+    for (const c of by[key]) {
       await send(c, t);
       n++;
     }
@@ -1765,9 +1929,10 @@ async function aiLog(b) {
   if (!(await hit(`ai:${p.id}`, 80, 3600))) return fail(RATE_MSG, { code: "rate" });
   const q = String(b.q == null ? "" : b.q).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 500);
   if (!q) return fail("Пустой вопрос.");
-  const refs = (Array.isArray(b.refs) ? b.refs : []).slice(0, 10).map((r) => clean(r, 60)).filter(Boolean);
+  const refs = (Array.isArray(b.refs) ? b.refs : []).slice(0, 10).map((r) => clean(r, 120)).filter(Boolean); // 2.6.4: до 120 знаков, иначе номер статьи закона обрезался
   const ok = b.ok !== false;
-  const [r] = await db()`insert into ai_log (user_id, q, refs, ok) values (${p.id}, ${q}, ${refs}, ${ok}) returning id`;
+  const ans = String(b.ans == null ? "" : b.ans).slice(0, 4000); // 2.7: ответ ИИ нужен для разбора плохих ответов в панели
+  const [r] = await db()`insert into ai_log (user_id, q, refs, ok, ans) values (${p.id}, ${q}, ${refs}, ${ok}, ${ans}) returning id`;
   const chat = await aiChat();
   if (chat)
     await send(chat, `🤖 <b>${esc(p.login)}</b> · ${esc(p.org)}${ok ? "" : " · ⚠️ ИИ не ответил"} · №${r.id}\n${esc(q)}${refs.length ? "\n<i>Статьи: " + esc(refs.join(", ")) + "</i>" : ""}`, { disable_notification: true });
@@ -1797,6 +1962,302 @@ async function aiStatsText(days = 7) {
   return `🤖 <b>ИИ-помощник за ${days} дн.</b>\nВопросов: ${s.n} от ${s.users} чел. · 👍 ${s.up} · 👎 ${s.down}${s.bad ? " · без ответа: " + s.bad : ""}` +
     (refs.length ? `\n\n<b>Где ИИ чаще ошибается</b> (статьи в ответах с 👎)\n` + refs.map((r) => `• ${esc(r.r)} — ${r.n}`).join("\n") : "") +
     (last.length ? `\n\n<b>Последние вопросы</b>\n` + last.map((l) => `${l.vote > 0 ? "👍" : l.vote < 0 ? "👎" : "•"} ${esc(l.login || "?")}: ${esc(l.q.slice(0, 120))}`).join("\n") : "");
+}
+
+// ───────────── 2.7: словарь «бытовое слово → статья», самопроверка ИИ и история вопросов ─────────────
+// Словарь ведёт владелец в панели. Программа скачивает его и ставит указанные статьи первыми, если в вопросе есть все слова фразы.
+const AI_KIND = { "ук": "uk", "ак": "ak", "дк": "dk", "пк": "pk", uk: "uk", ak: "ak", dk: "dk", pk: "pk" };
+const AI_KN = { uk: "УК", ak: "АК", dk: "ДК", pk: "ПК" };
+// «УК 10.5, АК ст. 3» → ["uk|10.5", "ak|3"]
+function aiRefKeys(v) {
+  const out = [];
+  String(Array.isArray(v) ? v.join(",") : v == null ? "" : v).toLowerCase().split(/[,;\n]+/).forEach((part) => {
+    const m = /(ук|ак|дк|пк|uk|ak|dk|pk)\s*(?:\||ст\.?|статья|статьи)?\s*(\d{1,3}(?:\.\d{1,3}){0,3})/.exec(part.trim());
+    if (m) { const k = AI_KIND[m[1]] + "|" + m[2]; if (!out.includes(k)) out.push(k); }
+  });
+  return out.slice(0, 6);
+}
+const aiRefLabel = (k) => { const [kind, code] = String(k || "").split("|"); return AI_KN[kind] ? AI_KN[kind] + " " + code : String(k || "").replace(/^law:/, ""); };
+let aiDictCache = null;
+async function aiDictRows() {
+  if (aiDictCache && Date.now() - aiDictCache.at < 60e3) return aiDictCache.rows;
+  const rows = await db()`select id, phrase, refs, note, author, created_at from ai_dict order by id`;
+  aiDictCache = { at: Date.now(), rows };
+  return rows;
+}
+async function aiDictApi(b) {
+  const { err } = await who(b);
+  if (err) return err;
+  const rows = await aiDictRows();
+  return { ok: true, items: rows.map((r) => ({ p: r.phrase, r: r.refs })) };
+}
+// история: свои вопросы за последние 90 дней (столько хранится журнал)
+async function aiHist(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const rows = await db()`select id, q, vote, ok, at from ai_log where user_id = ${p.id} order by at desc limit 150`;
+  return { ok: true, rows: rows.map((r) => ({ id: String(r.id), q: r.q, vote: r.vote, ok: r.ok, at: r.at })) };
+}
+const AI_GOLD_DEFAULT = [
+  "убил человека", "оружие без лицензии", "полицейский избил гражданского", "что такое законное требование", "что такое процессуальный час",
+  "угнал машину", "сколько можно держать задержанного", "штраф за превышение скорости", "ходил в маске", "не подчинился полицейскому",
+  "дал взятку полицейскому", "оскорбил сотрудника полиции", "проехал на красный свет", "похитил человека", "хранение наркотиков",
+  "можно ли обыскать без ордера", "напал на сотрудника полиции", "ложный вызов полиции", "сколько ждать адвоката", "залез на охраняемую территорию",
+];
+async function aiGoldRows() {
+  const sql = db();
+  let rows = await sql`select * from ai_gold order by id`;
+  if (!rows.length && !(await getSetting("aigold_seeded", false))) {
+    for (const q of AI_GOLD_DEFAULT) await sql`insert into ai_gold (q) values (${q})`;
+    await setSetting("aigold_seeded", true);
+    rows = await sql`select * from ai_gold order by id`;
+  }
+  return rows;
+}
+const dayUtc = () => new Date().toISOString().slice(0, 10);
+// Самопроверка: подбор статей работает в программе, поэтому раз в день его запускает программа владельца или модератора.
+// Сервер сравнивает первую статью с прошлым разом (и с закреплённой, если она задана) и пишет владельцу, если что-то поменялось.
+async function aiCheck(b) {
+  const { p, err } = await who(b, ["owner", "moderator"]);
+  if (err) return err;
+  const sql = db();
+  const st = (await getSetting("aicheck", {})) || {};
+  if (b.op === "list") {
+    const rows = await aiGoldRows();
+    return { ok: true, due: st.day !== dayUtc(), items: rows.map((r) => ({ id: String(r.id), q: r.q })) };
+  }
+  if (b.op !== "report") return fail("Неизвестное действие.");
+  if (st.day === dayUtc() && !b.force) return { ok: true, skipped: true };
+  const res = (Array.isArray(b.res) ? b.res : []).slice(0, 60);
+  const rows = await aiGoldRows();
+  const byId = new Map(rows.map((r) => [String(r.id), r]));
+  const changed = [];
+  let n = 0;
+  for (const x of res) {
+    const r = byId.get(String(x && x.id));
+    if (!r) continue;
+    n++;
+    const top = clean(x.top, 160), label = clean(x.ref, 160);
+    if ((r.last && r.last !== top) || (r.expect && r.expect !== top)) changed.push({ q: r.q, was: r.last_ref || aiRefLabel(r.last) || "—", now: label || aiRefLabel(top) || "ничего не найдено", expect: r.expect });
+    await sql`update ai_gold set prev = last, prev_ref = last_ref, last = ${top}, last_ref = ${label}, checked_at = now() where id = ${r.id}`;
+  }
+  await setSetting("aicheck", { day: dayUtc(), at: Date.now(), by: p.login, n, changed: changed.length, ver: clean(b.ver, 30) });
+  if (changed.length && OWNER_TG)
+    await send(OWNER_TG, `🧪 <b>Самопроверка ИИ</b>: первая статья поменялась в ${changed.length} из ${n} вопросов\n` +
+      changed.slice(0, 15).map((c) => `• «${esc(c.q)}»: было ${esc(c.was)}, стало ${esc(c.now)}${c.expect && c.expect !== c.now ? ` (закреплена ${esc(aiRefLabel(c.expect))})` : ""}`).join("\n") +
+      `\n\nЗапуск: ${esc(p.login)}. Подробности — в панели, раздел «ИИ-помощник».`, { disable_notification: true });
+  return { ok: true, n, changed: changed.length };
+}
+// панель владельца: словарь, плохие ответы, эталонные вопросы
+async function panelAi(b, a) {
+  const sql = db();
+  const op = b.op;
+  if (op === "ai_dict_list") return { ok: true, rows: await sql`select * from ai_dict order by id desc` };
+  if (op === "ai_dict_save") {
+    const phrase = String(b.phrase == null ? "" : b.phrase).replace(/\s+/g, " ").trim().toLowerCase().slice(0, 80);
+    const refs = aiRefKeys(b.refs);
+    const note = clean(b.note, 200);
+    if (phrase.length < 3) return fail("Фраза: от 3 символов, например «угнал тачку».");
+    if (!refs.length) return fail("Статьи: например «УК 10.5» или «УК 10.5, АК 3».");
+    const id = parseInt(b.id, 10) || 0;
+    const [r] = id
+      ? await sql`update ai_dict set phrase = ${phrase}, refs = ${refs}, note = ${note}, author = ${a.label} where id = ${id} returning *`
+      : await sql`insert into ai_dict (phrase, refs, note, author) values (${phrase}, ${refs}, ${note}, ${a.label}) returning *`;
+    if (!r) return fail("Запись не найдена.");
+    aiDictCache = null;
+    await audit(a.label, "ai_dict", phrase, { refs, id: r.id, edit: !!id });
+    return { ok: true, row: r };
+  }
+  if (op === "ai_dict_delete") {
+    const [r] = await sql`delete from ai_dict where id = ${parseInt(b.id, 10) || 0} returning *`;
+    if (!r) return fail("Запись не найдена.");
+    aiDictCache = null;
+    await audit(a.label, "ai_dict", r.phrase, { deleted: true, refs: r.refs });
+    return { ok: true };
+  }
+  if (op === "ai_bad") {
+    const days = Math.max(1, Math.min(90, parseInt(b.days, 10) || 30));
+    const rows = await sql`select l.id, l.q, l.refs, l.ans, l.ok, l.at, p.login, p.org from ai_log l left join profiles p on p.id = l.user_id
+                           where l.vote < 0 and l.at > now() - make_interval(days => ${days}) order by l.at desc limit 100`;
+    return { ok: true, rows, days };
+  }
+  if (op === "ai_gold_list") return { ok: true, rows: await aiGoldRows(), last: (await getSetting("aicheck", {})) || {} };
+  if (op === "ai_gold_save") {
+    const q = String(b.q == null ? "" : b.q).replace(/\s+/g, " ").trim().slice(0, 300);
+    if (q.length < 3) return fail("Вопрос: от 3 символов.");
+    const exp = b.expect == null || b.expect === "" ? "" : aiRefKeys(b.expect)[0] || "";
+    if (b.expect && !exp) return fail("Ожидаемая статья: например «УК 6.1».");
+    const id = parseInt(b.id, 10) || 0;
+    const [r] = id
+      ? await sql`update ai_gold set q = ${q}, expect = ${exp} where id = ${id} returning *`
+      : await sql`insert into ai_gold (q, expect) values (${q}, ${exp}) returning *`;
+    if (!r) return fail("Вопрос не найден.");
+    await audit(a.label, "ai_gold", q, { expect: exp, edit: !!id });
+    return { ok: true, row: r };
+  }
+  if (op === "ai_gold_delete") {
+    const [r] = await sql`delete from ai_gold where id = ${parseInt(b.id, 10) || 0} returning *`;
+    if (!r) return fail("Вопрос не найден.");
+    await audit(a.label, "ai_gold", r.q, { deleted: true });
+    return { ok: true };
+  }
+  if (op === "ai_gold_pin") {
+    // закрепить текущий результат как правильный (у одного вопроса или у всех)
+    const id = parseInt(b.id, 10) || 0;
+    const rows = id ? await sql`update ai_gold set expect = last where id = ${id} and last <> '' returning id`
+      : await sql`update ai_gold set expect = last where last <> '' returning id`;
+    await audit(a.label, "ai_gold", id ? String(id) : "все", { pin: true, n: rows.length });
+    return { ok: true, n: rows.length };
+  }
+  if (op === "ai_gold_run") {
+    // следующий запуск программы владельца или модератора проверит заново
+    const st = (await getSetting("aicheck", {})) || {};
+    await setSetting("aicheck", { ...st, day: "" });
+    return { ok: true };
+  }
+  return fail("Неизвестное действие панели.");
+}
+// ───────────── 2.8: коллеги — профили своего ведомства ─────────────
+// Видны только люди своей организации. После смены организации 24 часа нельзя смотреть новых коллег, и они не видят тебя.
+const COL_LOCK_MS = 24 * 3600e3;
+const colLocked = (p) => !!(p.org_at && Date.now() - new Date(p.org_at).getTime() < COL_LOCK_MS);
+const colOpensAt = (p) => new Date(new Date(p.org_at).getTime() + COL_LOCK_MS).toISOString();
+// Статистика пользователя из синхронизации: опыт, задержания, тесты (как в «Моём прогрессе»)
+async function statsOf(ids) {
+  const out = {};
+  for (const id of ids) out[id] = { xp: 0, det: 0, det7: 0, tests: 0, sum: 0, last: [] };
+  if (!ids.length) return out;
+  const rows = await db()`select user_id, kind, data, u from sync_items where user_id in ${db()(ids)} and not deleted and kind in ('xp', 'tests', 'thist')`;
+  const wk = Date.now() - 7 * 864e5;
+  for (const r of rows) {
+    const o = out[r.user_id], d = r.data;
+    if (r.kind === "xp") o.xp = Math.max(o.xp, Math.floor(+d) || 0);
+    else if (r.kind === "tests" && d) { o.tests++; o.last.push({ t: +d.t || 0, p: +d.p || 0 }); }
+    else if (r.kind === "thist") { o.det++; if (((d && +d.end) || Number(r.u)) >= wk) o.det7++; }
+  }
+  const adj = await xpAdjOf(ids);
+  for (const id of ids) {
+    const o = out[id];
+    o.xp = Math.max(0, o.xp + (adj[id] || 0));
+    const L = o.last.sort((a, c) => c.t - a.t).slice(0, 10);
+    o.avg_p = L.length ? Math.round(L.reduce((x, t) => x + t.p, 0) / L.length) : null;
+    delete o.last; delete o.sum;
+  }
+  return out;
+}
+const AVA_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+// 2.8: передача задержанного коллеге — код из 6 цифр, действует 30 минут, срабатывает один раз
+const HAND_MIN = 30, HAND_BYTES = 60000;
+async function handoffApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!(await flagFor(p, "det28xfer").catch(() => false))) return fail("Передача пока недоступна.", { code: "off" });
+  const sql = db();
+  const op = String(b.op || "");
+  if (op === "put") {
+    if (!(await hit(`hp:${p.id}`, 20, 3600))) return fail(RATE_MSG, { code: "rate" });
+    if (!b.data || typeof b.data !== "object" || Array.isArray(b.data)) return fail("Нет данных задержания.");
+    const json = JSON.stringify(b.data);
+    if (json.length > HAND_BYTES) return fail("В задержании слишком много записей для передачи. Сократите журнал или заметки.");
+    await sql`delete from handoffs where expires_at < now()`;
+    let code = "";
+    for (let i = 0; i < 6 && !code; i++) {
+      const a = new Uint32Array(1);
+      crypto.getRandomValues(a);
+      const c = String(100000 + (a[0] % 900000));
+      const r = await sql`insert into handoffs (code, from_id, data, expires_at) values (${c}, ${p.id}, ${json}::text::jsonb, now() + make_interval(mins => ${HAND_MIN}))
+                          on conflict (code) do nothing returning code`;
+      if (r.length) code = c;
+    }
+    if (!code) return fail("Не удалось получить код. Попробуйте ещё раз.");
+    return { ok: true, code, min: HAND_MIN };
+  }
+  if (op === "get") {
+    if (!(await hit(`hg:${p.id}`, 10, 900))) return fail(RATE_MSG, { code: "rate" });
+    const code = String(b.code || "").replace(/\D/g, "");
+    if (code.length !== 6) return fail("Введите код из 6 цифр.");
+    const [r] = await sql`delete from handoffs where code = ${code} and expires_at > now() returning data, from_id`;
+    if (!r) return fail("Код не подошёл или устарел: код действует " + HAND_MIN + " минут и срабатывает один раз.");
+    const [f] = await sql`select nick, login, org from profiles where id = ${r.from_id}`;
+    return { ok: true, data: r.data, from: f ? f.nick || f.login : "", org: f ? f.org : "" };
+  }
+  return fail("Неизвестное действие.");
+}
+
+async function colleaguesApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!(await flagFor(p, "col28").catch(() => false))) return fail("Раздел пока недоступен.", { code: "off" });
+  const sql = db();
+  const op = String(b.op || "list");
+  if (op === "save") {
+    // своя должность, «о себе», скрыть Discord, аватар (уменьшенная копия из программы)
+    if (!(await hit(`col:${p.id}`, 30, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const post = b.post == null ? p.post || "" : clean(b.post, 40);
+    const bio = b.bio == null ? p.bio || "" : String(b.bio).replace(/\r/g, "").replace(/[\u0000-\u0009\u000b-\u001f]/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, 300);
+    const bad = await blacklisted(post, bio);
+    if (bad) return fail("В должности или в «о себе» есть недопустимое слово. Уберите его.");
+    const hide = b.hideDiscord == null ? !!p.hide_discord : !!b.hideDiscord;
+    const [np] = await sql`update profiles set post = ${post}, bio = ${bio}, hide_discord = ${hide} where id = ${p.id} returning *`;
+    if (b.avatar !== undefined) {
+      const img = String(b.avatar || "");
+      if (!img) await sql`delete from avatars where user_id = ${p.id}`;
+      else if (img.length > 16000 || !AVA_RE.test(img)) return fail("Фото не подошло: нужна картинка до 12 КБ.");
+      else await sql`insert into avatars (user_id, img) values (${p.id}, ${img}) on conflict (user_id) do update set img = excluded.img, updated_at = now()`;
+    }
+    return { ok: true, user: pub(np) };
+  }
+  if (op === "mine") {
+    const [av] = await sql`select updated_at from avatars where user_id = ${p.id}`;
+    return { ok: true, post: p.post || "", bio: p.bio || "", hideDiscord: !!p.hide_discord, avaAt: av ? av.updated_at : null, locked: colLocked(p), opensAt: colLocked(p) ? colOpensAt(p) : null };
+  }
+  if (colLocked(p)) return { ok: true, locked: true, opensAt: colOpensAt(p), org: p.org, items: [] };
+  if (op === "list") {
+    const people = await sql`select id, login, nick, static_id, org, post, rank, last_seen, org_at from profiles
+                             where org = ${p.org} and server = ${sv(p)} and not banned and approval = 'ok' order by lower(nick) limit 500`;
+    const vis = people.filter((x) => x.id === p.id || !colLocked(x));
+    const ids = vis.map((x) => x.id);
+    const st = await statsOf(ids);
+    const av = ids.length ? await sql`select user_id, img from avatars where user_id in ${sql(ids)}` : [];
+    const A = Object.fromEntries(av.map((r) => [r.user_id, r.img]));
+    return {
+      ok: true, org: p.org, server: sv(p),
+      items: vis.map((x) => ({
+        id: x.id, nick: x.nick, static: x.static_id || "", post: x.post || "", rank: x.rank, me: x.id === p.id, ava: A[x.id] || "",
+        lvl: lvOf(st[x.id].xp).name, lvn: lvOf(st[x.id].xp).n, seen: x.last_seen,
+      })),
+    };
+  }
+  if (op === "view") {
+    // по id, а не по логину: логин коллегам не показываем
+    const id = String(b.id || "");
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return fail("Профиль не найден в вашей организации.");
+    const [x] = await sql`select * from profiles where id = ${id} and org = ${p.org} and server = ${sv(p)} and not banned and approval = 'ok'`;
+    if (!x || (x.id !== p.id && colLocked(x))) return fail("Профиль не найден в вашей организации.");
+    const st = (await statsOf([x.id]))[x.id];
+    const [av] = await sql`select img from avatars where user_id = ${x.id}`;
+    const got = await sql`select code, at from achievements where user_id = ${x.id} order by at`;
+    const AX = await getSetting("achx", {});
+    const ach = got.map((r) => {
+      const a = ACH_BY[r.code] || (AX[r.code] ? { ...AX[r.code], rare: true } : null);
+      return a ? { code: r.code, icon: a.icon, name: a.name, desc: a.desc, rare: !!a.rare, at: r.at } : null;
+    }).filter(Boolean);
+    const lv = lvOf(st.xp);
+    return {
+      ok: true,
+      profile: {
+        id: x.id, nick: x.nick, org: x.org, post: x.post || "", bio: x.bio || "", rank: x.rank, rankName: RANKS[x.rank] || x.rank,
+        discord: x.hide_discord ? "" : x.discord || "", static: x.static_id || "", ava: av ? av.img : "", me: x.id === p.id,
+        level: { n: lv.n, name: lv.name, xp: st.xp, from: lv.from, to: lv.to },
+        det: st.det, det7: st.det7, tests: st.tests, avg_p: st.avg_p, ach, since: x.created_at, seen: x.last_seen,
+      },
+    };
+  }
+  return fail("Неизвестное действие.");
+}
+async function flagFor(p, k) {
+  const m = (await flagsNow())[k];
+  return m === "all" || (m === "beta" && isTester(p));
 }
 
 async function actorOf(tgId) {
@@ -1854,6 +2315,7 @@ const HELP_COMMON =
   "/unban &lt;логин&gt; — разблокировать\n" +
   "/kick &lt;логин&gt; — завершить все сессии без блокировки\n" +
   "/tag &lt;логин&gt; &lt;тег&gt; [тег…] — добавить теги; /untag &lt;логин&gt; &lt;тег&gt; — убрать\n" +
+  "/beta &lt;логин&gt; on|off — роль «Бета-тестер»; /beta list — все тестеры\n" +
   "/setorg &lt;логин&gt; &lt;организация&gt; — сменить организацию (" + DEPTS.join(", ") + ")\n" +
   "/resets — ожидающие запросы на сброс пароля\n" +
   "\n<b>Рейтинг и руководство</b>\n" +
@@ -1864,7 +2326,7 @@ const HELP_COMMON =
   "/reports on|off — присылать новые рапорты сюда\n";
 const HELP_OWNER =
   "\n<b>Только владелец</b>\n" +
-  "/role &lt;логин&gt; &lt;user|leader|moderator|owner&gt; [telegram_id] — выдать роль\n" +
+  "/role &lt;логин&gt; &lt;user|leader|moderator|owner&gt; [telegram_id] [7|12|16|all] — выдать роль; сервер: для модератора любой или all, для руководства — сервер игрока\n" +
   "/rename &lt;логин&gt; &lt;новый ник&gt; — исправить ник\n" +
   "/setstatic &lt;логин&gt; &lt;статик&gt; — исправить статик\n" +
   "/delete &lt;логин&gt; — удалить аккаунт и все данные\n" +
@@ -1909,6 +2371,9 @@ const AUDIT_ACTIONS = [
   "approve", "reject", "approval", "shift_start", "shift_end", "ctrl_create", "sync_reset",
   "report_create", "report_delete", "report_review",
   "panel_login", "panel_key", "panel_revoke", "db_edit", "db_delete", "db_revert",
+  "ad_save", "ad_toggle", "ad_delete",
+  "beta", "beta_task", "flags", "hook", "event", "idea",
+  "xp_set", "ach_grant", "ach_revoke", "ach_custom", "ai_bonus", "ai_dict", "ai_gold",
 ];
 
 async function findProfile(login) {
@@ -1933,7 +2398,13 @@ const durText = (ms) =>
 const normTag = (t) => String(t || "").replace(/^#/, "").toLowerCase().replace(/[^0-9a-zа-яё_-]/gi, "").slice(0, 24);
 
 // Кого может трогать модератор: не владельца и не других модераторов
+// Сервер, которым ограничен модератор (0 — работает со всеми серверами; владелец и руководство обрабатываются отдельно)
+const modServer = (p) => (p && p.rank === "moderator" && p.staff_server > 0 ? p.staff_server : 0);
+const scopeServer = (a) => (a && a.kind === "moderator" ? modServer(a.profile) : 0);
+const sv = (p) => (p && p.server) || DEFAULT_SERVER; // сервер игрока
 function canTouch(a, p) {
+  const sc = scopeServer(a);
+  if (sc && (p.server || DEFAULT_SERVER) !== sc) return `Пользователь с другого сервера (${srvName(p.server || DEFAULT_SERVER)}). У вас доступ только к серверу ${srvName(sc)}.`;
   if (p.rank === "owner") return "Действие с владельцем невозможно.";
   if (a.kind === "moderator" && p.rank === "moderator") return "С модераторами работает только владелец.";
   return "";
@@ -1954,7 +2425,8 @@ async function fullCard(p, viewer) {
   if (notes.length) t += `\n\n📝 <b>Заметки</b>\n` + notes.map((x) => `• ${fmtDate(x.at)} · ${esc(x.author)}: ${esc(x.text)}`).join("\n");
   if (viewer === "owner") t += "\n" + statLine((await userStats())[p.id]);
   const ach = await sql`select code from achievements where user_id = ${p.id} order by at`;
-  if (ach.length) t += `\n🏆 Достижения: ${ach.map((x) => ACH_BY[x.code]).filter(Boolean).map((x) => x.icon + " " + x.name).join(", ")}`;
+  const AA = ach.length ? await achAll() : {};
+  if (ach.length) t += `\n🏆 Достижения: ${ach.map((x) => AA[x.code]).filter(Boolean).map((x) => x.icon + " " + x.name).join(", ")}`;
   return t;
 }
 
@@ -2023,13 +2495,13 @@ async function runConfirmed(a, action, x) {
     case "role": {
       if (a.kind !== "owner") return "Роли выдаёт только владелец.";
       try {
-        await sql`update profiles set rank = ${x.rank}, tg_id = ${x.tg} where id = ${p.id}`;
+        await sql`update profiles set rank = ${x.rank}, tg_id = ${x.tg}, staff_server = ${x.rank === "moderator" ? +x.srv || 0 : 0} where id = ${p.id}`;
       } catch (e) {
         if (e && e.code === "23505") return "Этот Telegram ID уже привязан к другому аккаунту.";
         throw e;
       }
-      await audit(a.label, "role", p.login, { from: p.rank, to: x.rank, tg_id: x.tg });
-      return `✅ ${esc(p.login)}: ${RANKS[p.rank]} → <b>${RANKS[x.rank]}</b>${x.tg ? `\nTelegram ID: <code>${x.tg}</code>` : ""}\nВ приложении изменение применится в течение 20 минут или при следующем запуске.`;
+      await audit(a.label, "role", p.login, { from: p.rank, to: x.rank, tg_id: x.tg, server: x.rank === "moderator" ? +x.srv || 0 : p.server || DEFAULT_SERVER });
+      return `✅ ${esc(p.login)}: ${RANKS[p.rank]} → <b>${RANKS[x.rank]}</b>${x.rank === "moderator" ? ` · ${x.srv ? esc(srvName(x.srv)) : "все серверы"}` : x.rank === "leader" ? ` · ${esc(srvName(p.server || DEFAULT_SERVER))}, ${esc(p.org)}` : ""}${x.tg ? `\nTelegram ID: <code>${x.tg}</code>` : ""}\nВ приложении изменение применится в течение 20 минут или при следующем запуске.`;
     }
   }
   return "Неизвестное действие.";
@@ -2059,7 +2531,8 @@ async function onMessage(m, opts = {}) {
     return send(
       chat,
       `Senko Assistant.\nВаш Telegram ID: <code>${m.from.id}</code>\n` +
-        (a ? `Доступ: ${a.kind === "owner" ? "владелец" : a.kind === "leader" ? "руководство " + esc(a.profile.org) : "модератор памятки"}. Команды: /help` : "Команды вам недоступны. Если вы модератор, сообщите этот ID владельцу.")
+        (a ? `Доступ: ${a.kind === "owner" ? "владелец" : a.kind === "leader" ? "руководство " + esc(a.profile.org) : "модератор памятки"}. Команды: /help` : "Команды вам недоступны. Если вы модератор, сообщите этот ID владельцу.") +
+        "\n\n📖 Статьи кодексов в любом чате: наберите в строке сообщения имя бота через @ и номер статьи или слова, например <code>12.8</code>, <code>ак 2.1</code> или <code>оружие</code>, и выберите статью из списка."
     );
   }
   if (!a) return send(chat, "Нет доступа.");
@@ -2213,6 +2686,18 @@ async function onMessage(m, opts = {}) {
       return send(chat, `🏷 ${esc(p.login)}: ${next.length ? next.map((t) => "#" + esc(t)).join(" ") : "тегов нет"}`);
     }
 
+    case "beta": {
+      if (args[0] === "list" || !args[0]) {
+        const rows = await sql`select login, nick, org from profiles where beta order by login_lc limit 100`;
+        return send(chat, rows.length ? `🧪 <b>Бета-тестеры: ${rows.length}</b>\n` + rows.map((r) => `• <code>${esc(r.login)}</code> — ${esc(r.nick)} · ${esc(r.org)}`).join("\n") + "\n\nВыдать: /beta &lt;логин&gt; on, забрать: /beta &lt;логин&gt; off" : "Бета-тестеров пока нет. Выдать роль: /beta &lt;логин&gt; on");
+      }
+      const p = await target("/beta &lt;логин&gt; on|off");
+      if (!p) return;
+      const on = !/^(off|нет|0|выкл)/i.test(String(args[1] || "on"));
+      await setBeta(a, p, on);
+      return send(chat, on ? `🧪 ${esc(p.login)} теперь бета-тестер. В программе появится «Панель тестера» (после перезапуска или в течение 20 минут).` : `${esc(p.login)} больше не бета-тестер.`);
+    }
+
     case "online": {
       const rows = await sql`select login, nick, org, rank, last_seen from profiles where last_seen > now() - interval '1 hour' and not banned order by last_seen desc limit 50`;
       if (!rows.length) return send(chat, "За последний час в сети никого не было.");
@@ -2283,13 +2768,28 @@ async function onMessage(m, opts = {}) {
       if (!owner) return send(chat, "Роли выдаёт только владелец.");
       const p = args[0] ? await findProfile(args[0]) : null;
       const rank = String(args[1] || "").toLowerCase();
-      const tgArg = args[2];
-      if (!p || !RANKS[rank] || (tgArg && !/^\d{3,15}$/.test(tgArg)))
-        return send(chat, "Использование: /role &lt;логин&gt; &lt;user|leader|moderator|owner&gt; [telegram_id]\nПользователь должен быть зарегистрирован.");
+      // дальше по порядку не важно: Telegram ID (3–15 цифр) и сервер (7, 12, 16 или all — для модератора на все серверы)
+      let tgArg = "";
+      let srvArg = null;
+      let badArg = false;
+      for (const x of args.slice(2)) {
+        if (/^\d{3,15}$/.test(x)) tgArg = x;
+        else if (/^all$/i.test(x)) srvArg = 0;
+        else if (parseServer(x)) srvArg = parseServer(x);
+        else badArg = true;
+      }
+      if (!p || !RANKS[rank] || badArg)
+        return send(chat, "Использование: /role &lt;логин&gt; &lt;user|leader|moderator|owner&gt; [telegram_id] [сервер: " + Object.keys(SERVERS).join("|") + (rank === "moderator" ? "|all" : "") + "]\nПользователь должен быть зарегистрирован.");
+      const pSrv = p.server || DEFAULT_SERVER;
+      // руководство и модератор получают сервер: руководство — сервер, где играет человек; модератор — указанный (по умолчанию его собственный); all — все серверы
+      if (rank === "leader" && srvArg != null && srvArg !== pSrv)
+        return send(chat, `Руководство работает на сервере, где играет пользователь: ${esc(p.login)} играет на ${esc(srvName(pSrv))}. Чтобы назначить руководителем на другом сервере, пусть он сменит сервер в личном кабинете.`);
+      if (srvArg === 0 && rank !== "moderator") return send(chat, "«all» (все серверы) можно указать только для модератора.");
+      const staffSrv = rank === "moderator" ? (srvArg == null ? pSrv : srvArg) : rank === "leader" ? pSrv : 0;
       if (rank === "moderator" && !tgArg && p.tg_id == null && !a.panel)
         return send(chat, "Для модератора нужен его Telegram ID: /role " + esc(p.login) + " moderator 123456789\nID покажет бот в ответ на /start, пусть модератор напишет боту.");
       const tgNew = rank === "user" ? null : tgArg ? tgArg : p.tg_id == null ? null : String(p.tg_id);
-      return askConfirm(chat, a, "role", { id: p.id, rank, tg: tgNew }, `Выдать <b>${esc(p.login)}</b> роль: ${RANKS[p.rank]} → <b>${RANKS[rank]}</b>?${tgNew ? `\nTelegram ID: <code>${tgNew}</code>` : rank === "moderator" ? "\nБез Telegram ID модератор работает только в панели на сайте." : ""}`);
+      return askConfirm(chat, a, "role", { id: p.id, rank, tg: tgNew, srv: staffSrv }, `Выдать <b>${esc(p.login)}</b> роль: ${RANKS[p.rank]} → <b>${RANKS[rank]}</b>${rank === "moderator" ? ` · ${staffSrv ? "сервер " + esc(srvName(staffSrv)) : "все серверы"}` : rank === "leader" ? ` · ${esc(srvName(staffSrv))}, ${esc(p.org)}` : ""}?${tgNew ? `\nTelegram ID: <code>${tgNew}</code>` : rank === "moderator" ? "\nБез Telegram ID модератор работает только в панели на сайте." : ""}`);
     }
 
     case "delete": {
@@ -2357,18 +2857,24 @@ async function onMessage(m, opts = {}) {
     case "broadcast_org": {
       const isOrg = cmd === "broadcast_org";
       if (!owner && !(isOrg && a.kind === "leader")) return send(chat, isOrg ? "Рассылка по организации доступна владельцу и руководству." : "Эта команда доступна только владельцу.");
-      let org = null, rest = args;
+      let org = null, rest = args, bSrv = null;
       if (isOrg) {
         org = DEPTS.find((d) => d.toLowerCase() === String(args[0] || "").toLowerCase());
         if (!org) return send(chat, `Использование: /broadcast_org &lt;${DEPTS.join("|")}&gt; &lt;текст&gt;`);
         if (a.kind === "leader" && org !== a.profile.org) return send(chat, `Вы можете писать только своей организации (${esc(a.profile.org)}).`);
         rest = args.slice(1);
+        // сервер: руководство — только свой; владелец может указать 7, 12 или 16, без номера рассылка уйдёт организации на всех серверах
+        if (a.kind !== "leader" && rest.length && parseServer(rest[0])) {
+          bSrv = parseServer(rest[0]);
+          rest = rest.slice(1);
+        }
+        if (a.kind === "leader") bSrv = sv(a.profile);
       }
       // текст берём из исходного сообщения, чтобы сохранить переносы строк
-      const body = text.replace(/^\/\S+\s*/, "").replace(isOrg ? /^\S+\s*/ : /^/, "").trim().slice(0, 1500);
-      if (!body || !rest.length) return send(chat, isOrg ? "Использование: /broadcast_org &lt;организация&gt; &lt;текст&gt;" : "Использование: /broadcast &lt;текст&gt;");
-      const [r] = await sql`insert into broadcasts (org, author, text, expires_at)
-                            values (${org}, ${a.label}, ${body}, now() + make_interval(days => ${NOTICE_DAYS})) returning id`;
+      const body = text.replace(/^\/\S+\s*/, "").replace(isOrg ? /^\S+\s*/ : /^/, "").replace(isOrg && bSrv && a.kind !== "leader" ? /^\S+\s*/ : /^/, "").trim().slice(0, 1500);
+      if (!body || !rest.length) return send(chat, isOrg ? "Использование: /broadcast_org &lt;организация&gt; [7|12|16] &lt;текст&gt;" : "Использование: /broadcast &lt;текст&gt;");
+      const [r] = await sql`insert into broadcasts (org, server, author, text, expires_at)
+                            values (${org}, ${bSrv}, ${a.label}, ${body}, now() + make_interval(days => ${NOTICE_DAYS})) returning id`;
       await audit(a.label, "broadcast", org || "all", { id: r.id, text: body.slice(0, 200) });
       if (a.kind === "leader") await quiet(`📣 ${esc(a.profile.login)} сделал рассылку для ${org}:\n${esc(body)}`);
       return send(chat, `📣 Рассылка №${r.id} создана${org ? " для " + org : " для всех"}. Её покажут в программе ${NOTICE_DAYS} дней: при запуске и при сверке с сервером.\nУбрать: /unbroadcast ${r.id}`);
@@ -2379,7 +2885,7 @@ async function onMessage(m, opts = {}) {
       const rows = await sql`select * from broadcasts where expires_at > now() order by created_at desc limit 20`;
       if (!rows.length) return send(chat, "Активных рассылок нет.");
       return send(chat, "📣 <b>Активные сообщения</b>\n" + rows.map((r) =>
-        `№${r.id} · ${r.user_id ? "личное" : r.org ? esc(r.org) : "все"} · до ${fmtDate(r.expires_at)}\n${esc(r.text.slice(0, 120))}`).join("\n\n"));
+        `№${r.id} · ${r.user_id ? "личное" : r.org ? esc(r.org) + (r.server ? " · " + esc(srvName(r.server)) : "") : "все"} · до ${fmtDate(r.expires_at)}\n${esc(r.text.slice(0, 120))}`).join("\n\n"));
     }
 
     case "unbroadcast": {
@@ -2534,40 +3040,41 @@ async function onMessage(m, opts = {}) {
 
     case "top": {
       // /top [организация] [xp|tests|det]; руководство видит только свою организацию
-      let org = null, by = "xp";
+      let org = null, by = "xp", tSrv = null;
       for (const x of args.map((v) => v.toLowerCase())) {
         const o = DEPTS.find((d) => d.toLowerCase() === x);
         if (o) org = o;
+        else if (parseServer(x)) tSrv = parseServer(x);
         else if (["xp", "tests", "det", "опыт", "тесты", "задержания"].includes(x)) by = { опыт: "xp", тесты: "tests", задержания: "det" }[x] || x;
       }
-      if (a.kind === "leader") org = a.profile.org;
+      if (a.kind === "leader") { org = a.profile.org; tSrv = sv(a.profile); }
+      else if (scopeServer(a)) tSrv = scopeServer(a);
       const w = mskWeek();
-      let L = await weekStats(org, w);
+      let L = await weekStats(org, w, false, tSrv);
       if (by === "tests") L = L.filter((x) => x.tests > 0).sort((p1, p2) => p2.avg_p - p1.avg_p || p2.tests - p1.tests);
       else if (by === "det") L = L.filter((x) => x.det > 0).sort((p1, p2) => p2.det - p1.det);
       else L = L.filter((x) => x.wxp > 0).sort(byWxp);
-      const head = `🏆 <b>Рейтинг недели${org ? " · " + esc(org) : ""}</b> (с ${ddmm(w.start)}, ${by === "tests" ? "по тестам" : by === "det" ? "по задержаниям" : "по опыту"})`;
+      const head = `🏆 <b>Рейтинг недели${org ? " · " + esc(org) : ""}${tSrv ? " · " + esc(srvName(tSrv)) : ""}</b> (с ${ddmm(w.start)}, ${by === "tests" ? "по тестам" : by === "det" ? "по задержаниям" : "по опыту"})`;
       if (!L.length) return send(chat, head + "\nЗа эту неделю данных пока нет.");
       const val = (x) => (by === "tests" ? `${x.avg_p}% (${x.tests} ${plural(x.tests, "тест", "теста", "тестов")})` : by === "det" ? `${x.det}` : `${x.wxp} опыта · ${x.lvl.name}`);
-      return send(chat, head + "\n" + L.slice(0, 10).map((x, i) => `${i + 1}. ${esc(x.nick)} <code>${esc(x.login)}</code>${org ? "" : " · " + esc(x.org)} — ${val(x)}`).join("\n") +
-        (a.kind === "leader" ? "" : "\n\n/top &lt;организация&gt; [tests|det]"));
+      return send(chat, head + "\n" + L.slice(0, 10).map((x, i) => `${i + 1}. ${esc(x.nick)} <code>${esc(x.login)}</code>${org ? "" : " · " + esc(x.org)}${tSrv ? "" : " · " + esc(srvName(x.server || DEFAULT_SERVER))} — ${val(x)}`).join("\n") +
+        (a.kind === "leader" ? "" : "\n\n/top &lt;организация&gt; [7|12|16] [tests|det]"));
     }
 
     case "results": {
       const id = parseInt(args[0], 10);
       const scope = a.kind === "leader" ? a.profile.org : null;
+      const sSrv = a.kind === "leader" ? sv(a.profile) : scopeServer(a) || null;
       if (id) {
         const [t] = await sql`select * from control_tests where id = ${id}`;
-        if (!t || (scope && t.org !== scope)) return send(chat, "Тест не найден.");
+        if (!t || (scope && t.org !== scope) || (sSrv && (t.server || DEFAULT_SERVER) !== sSrv)) return send(chat, "Тест не найден.");
         const d = await ctrlDetails(t);
         return send(chat, `📋 <b>№${d.id} · ${esc(d.title)}</b> · ${esc(d.org)}\nТемы: ${d.topics.map((k) => TOPICS[k] || k).join(", ")} · вопросов: ${d.n}\nСрок: до ${fmtDate(d.due)}${d.active ? "" : " (завершён)"} · создал ${esc(d.by)}\n\n` +
           `<b>Прошли: ${d.results.length}</b>${d.avg == null ? "" : " · средний результат " + d.avg + "%"}\n` +
           (d.results.length ? d.results.map((r) => `• ${esc(r.nick)} — ${r.p}% (${r.s} из ${r.n})`).join("\n") : "пока никто") +
           (d.missingN ? `\n\n<b>Не прошли: ${d.missingN}</b>\n${d.missing.map(esc).join(", ")}${d.missingN > d.missing.length ? " …" : ""}` : ""));
       }
-      const rows = scope
-        ? await sql`select * from control_tests where org = ${scope} order by created_at desc limit 8`
-        : await sql`select * from control_tests order by created_at desc limit 8`;
+      const rows = await sql`select * from control_tests where (${scope}::text is null or org = ${scope}) and (${sSrv}::int is null or server = ${sSrv}) order by created_at desc limit 8`;
       if (!rows.length) return send(chat, "Контрольных тестов ещё не было. Создать тест можно в программе: панель руководителя → «Контрольные тесты».");
       const L = [];
       for (const t of rows) {
@@ -2579,6 +3086,7 @@ async function onMessage(m, opts = {}) {
 
     case "reports": {
       const scope = a.kind === "leader" ? a.profile.org : null;
+      const rSrv = a.kind === "leader" ? sv(a.profile) : scopeServer(a) || null;
       const arg = String(args[0] || "");
       if (/^(on|off)$/i.test(arg)) {
         const on = arg.toLowerCase() === "on";
@@ -2593,10 +3101,10 @@ async function onMessage(m, opts = {}) {
         else if (!d) login = arg.toLowerCase();
       }
       const rows = await sql`select * from reports
-        where (${org}::text is null or org = ${org}) and (${login}::text is null or lower(login) = ${login}) and (${st}::text is null or status = ${st})
+        where (${org}::text is null or org = ${org}) and (${rSrv}::int is null or server = ${rSrv}) and (${login}::text is null or lower(login) = ${login}) and (${st}::text is null or status = ${st})
         order by created_at desc limit 15`;
       if (!rows.length) return send(chat, "Рапортов нет." + (arg ? "" : " Сотрудники пишут их в программе: «Работа» → «Рапорты»."));
-      const [{ n }] = await sql`select count(*)::int n from reports where status = 'new' and (${scope}::text is null or org = ${scope})`;
+      const [{ n }] = await sql`select count(*)::int n from reports where status = 'new' and (${scope}::text is null or org = ${scope}) and (${rSrv}::int is null or server = ${rSrv})`;
       return send(chat, `📝 <b>Рапорты${org ? " · " + esc(org) : ""}${login ? " · " + esc(login) : ""}${st ? " · на рассмотрении" : ""}</b>\n` +
         rows.map((r) => `${RP_ICON[r.status]} №${r.id} · ${fmtDate(r.created_at).replace(" МСК", "")}${org ? "" : " · " + esc(r.org)}\n   ${esc(r.title)} — ${esc(r.author)}`).join("\n") +
         `\n\nНа рассмотрении: ${n}. Открыть: /report &lt;номер&gt;\n/reports new — только новые; /reports &lt;логин&gt;${scope ? "" : "; /reports &lt;организация&gt;"}\n/reports on|off — уведомления о новых`);
@@ -2606,15 +3114,14 @@ async function onMessage(m, opts = {}) {
       const id = parseInt(String(args[0] || "").replace(/^№/, ""), 10);
       if (!id) return send(chat, "Использование: /report &lt;номер&gt;. Список: /reports");
       const [r] = await sql`select * from reports where id = ${id}`;
-      if (!r || (a.kind === "leader" && r.org !== a.profile.org)) return send(chat, "Рапорт не найден.");
+      if (!r || (a.kind === "leader" && (r.org !== a.profile.org || (r.server || DEFAULT_SERVER) !== sv(a.profile))) || (scopeServer(a) && (r.server || DEFAULT_SERVER) !== scopeServer(a))) return send(chat, "Рапорт не найден.");
       return send(chat, rpText(r), rpButtons(r));
     }
 
     case "pending": {
       const scope = a.kind === "leader" ? a.profile.org : null;
-      const rows = scope
-        ? await sql`select * from profiles where approval = 'pending' and org = ${scope} order by created_at limit 10`
-        : await sql`select * from profiles where approval = 'pending' order by created_at limit 10`;
+      const pSrv = a.kind === "leader" ? sv(a.profile) : scopeServer(a) || null;
+      const rows = await sql`select * from profiles where approval = 'pending' and (${scope}::text is null or org = ${scope}) and (${pSrv}::int is null or server = ${pSrv}) order by created_at limit 10`;
       const st = await getSetting("approval", { on: false });
       if (!rows.length) return send(chat, `Заявок нет. Приём новичков ${st.on ? "включён" : "выключен"}${owner ? " (/approval on|off)" : ""}.`);
       for (const p of rows)
@@ -2627,7 +3134,8 @@ async function onMessage(m, opts = {}) {
     case "approve": {
       const p = await target("/approve &lt;логин&gt; — принять отклонённую или ожидающую заявку");
       if (!p) return;
-      if (a.kind === "leader" && p.org !== a.profile.org) return send(chat, "Это сотрудник другой организации.");
+      if (a.kind === "leader" && (p.org !== a.profile.org || sv(p) !== sv(a.profile))) return send(chat, "Это сотрудник другой организации.");
+      { const sc = scopeServer(a); if (sc && sv(p) !== sc) return send(chat, "Это сотрудник с другого сервера."); }
       if (p.approval === "ok") return send(chat, "Аккаунт уже подтверждён.");
       await sql`update profiles set approval = 'pending' where id = ${p.id}`;
       const r = await decideApproval(a, p.id, true);
@@ -2785,6 +3293,139 @@ async function onCallback(cb) {
     await send(OWNER_TG, `ℹ️ ${esc(a.profile.login)} ${approve ? "подтвердил" : "отклонил"} сброс пароля: <b>${esc(login)}</b>`);
 }
 
+// ───────────── 3.0: Discord-бот (настройки, события, тикеты, мониторинг) ─────
+// Доступен владельцу и модераторам (кто подключён к панели). Приватные ключи
+// и токен бота читаются из Secrets Edge Function, не из тела запроса.
+async function discordApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const isOwner = p.rank === "owner";
+  const sql = db();
+  const op = String(b.op || "get");
+  const a = { kind: "discord", label: p.login || String(p.id), profile: p };
+
+  if (op === "settings_get") {
+    const keys = [
+      "discord_channel_info", "discord_channel_news", "discord_channel_laws",
+      "discord_channel_assistants", "discord_channel_changelog",
+      "discord_channel_support", "discord_channel_monitor",
+      "discord_role_support",
+      "discord_info_links", "discord_laws_text", "discord_assistants_text",
+      "discord_news_enabled", "discord_changelog_enabled", "discord_monitor_enabled",
+    ];
+    const out: Record<string, any> = {};
+    for (const key of keys) {
+      const [r] = await sql`select value from bot_settings where key = ${key}`;
+      out[key] = r ? r.value : null;
+    }
+    return { ok: true, settings: out };
+  }
+
+  if (op === "settings_set") {
+    if (!isOwner) return fail("Только владелец может менять настройки Discord-бота.", { code: "forbidden" });
+    const key = String(b.key || "").slice(0, 100);
+    const value = b.value;
+    if (!key) return fail("Укажите ключ.");
+    await setSetting(key, value);
+    await audit(a.label, "discord_setting", key, { value: JSON.stringify(value) });
+    return { ok: true };
+  }
+
+  if (op === "settings_del") {
+    if (!isOwner) return fail("Только владелец может менять настройки Discord-бота.", { code: "forbidden" });
+    const key = String(b.key || "").slice(0, 100);
+    if (!key) return fail("Укажите ключ.");
+    await sql`delete from bot_settings where key = ${key}`;
+    return { ok: true };
+  }
+
+  if (op === "news") {
+    if (!isOwner) return fail("Только владелец может публиковать новости в Discord.", { code: "forbidden" });
+    const news = {
+      title: clean(b.title, 200),
+      body: clean(b.body, 2000),
+      author: clean(b.author || p.login, 80),
+      link: clean(b.link, 500),
+      at: Date.now(),
+    };
+    const hookUrl = await getSetting("discord_webhook_url", "");
+    if (hookUrl) {
+      try {
+        await fetch(hookUrl, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            username: "Senko Assistant",
+            embeds: [{
+              title: news.title,
+              description: news.body,
+              color: 0x3498db,
+              timestamp: new Date(news.at).toISOString(),
+              footer: { text: `Senko Assistant · ${news.author}` },
+            }],
+          }),
+        });
+      } catch (e) {
+        return fail("Не удалось отправить новость в Discord: " + e.message);
+      }
+    }
+    await audit(a.label, "discord_news", news.title, news);
+    return { ok: true, sent: !!hookUrl };
+  }
+
+  if (op === "changelog") {
+    if (!isOwner) return fail("Только владелец может публиковать changelog в Discord.", { code: "forbidden" });
+    const version = clean(b.version, 40);
+    const changes = clean(b.changes, 2000);
+    const hookUrl = await getSetting("discord_webhook_url", "");
+    if (hookUrl) {
+      try {
+        await fetch(hookUrl, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            username: "Senko Assistant",
+            embeds: [{
+              title: `Обновление Senko Assistant ${version}`,
+              description: changes || "—",
+              color: 0x2ecc71,
+              timestamp: new Date().toISOString(),
+              footer: { text: "Senko Assistant · Changelog" },
+            }],
+          }),
+        });
+      } catch (e) {
+        return fail("Не удалось отправить changelog в Discord: " + e.message);
+      }
+    }
+    await audit(a.label, "discord_changelog", version, { changes });
+    return { ok: true, sent: !!hookUrl };
+  }
+
+  if (op === "monitor_state") {
+    const rows = await sql`select resource, ok, latency, detail, checked_at from discord_monitor order by checked_at desc limit 20`;
+    return { ok: true, state: rows.map((r) => ({ resource: r.resource, ok: r.ok, latency: r.latency, detail: r.detail, at: r.checked_at })) };
+  }
+
+  if (op === "ticket_list") {
+    const status = String(b.status || "open");
+    const rows = await sql`select * from discord_tickets where status = ${status} order by created_at desc limit 50`;
+    return { ok: true, tickets: rows.map((r) => ({ id: String(r.id), discord_id: r.discord_id, discord_name: r.discord_name, channel_id: r.channel_id, channel_name: r.channel_name, status: r.status, accepted_by: r.accepted_by, created_at: r.created_at })) };
+  }
+
+  if (op === "ticket_close") {
+    if (!isOwner && p.rank !== "moderator") return fail("Нет прав.", { code: "forbidden" });
+    const id = parseInt(b.id, 10) || 0;
+    const [t] = await sql`select * from discord_tickets where id = ${id}`;
+    if (!t) return fail("Тикет не найден.");
+    await sql`update discord_tickets set status = 'closed', closed_at = now() where id = ${id}`;
+    await audit(a.label, "discord_ticket_close", `discord:${t.discord_id}`, { ticket: id });
+    return { ok: true };
+  }
+
+  return fail("Неизвестное действие Discord.", { code: "bad_op" });
+}
+
 async function bot(req) {
   const got = req.headers.get("x-telegram-bot-api-secret-token") || "";
   if (!WEBHOOK_SECRET || !safeEq(got, WEBHOOK_SECRET)) return new Response("forbidden", { status: 403 });
@@ -2797,6 +3438,7 @@ async function bot(req) {
   try {
     if (u.message) await onMessage(u.message);
     else if (u.callback_query) await onCallback(u.callback_query);
+    else if (u.inline_query) await onInline(u.inline_query);
   } catch (e) {
     console.error("bot", e);
   }
@@ -2834,6 +3476,11 @@ async function tick() {
     await setSetting("orgreport", { ...rep, last: wk.key });
     await sendOrgReports();
   }
+  try {
+    await eventReminders();
+  } catch (e) {
+    console.error("events", e);
+  }
   if (Math.random() < 0.05) await cleanup();
   return { ok: true, jobs: jobs.length };
 }
@@ -2868,6 +3515,132 @@ const ghError = (r) =>
   r.status === 403 || r.status === 404 ? "У токена GH_LAWS_TOKEN нет доступа: нужен доступ к репозиторию " + GH_REPO + " с правом Actions: Read and write." :
   "GitHub ответил ошибкой " + r.status + ".";
 
+// ───────────── 2.4.1: inline-режим бота ─────────────
+// В любом чате: «@бот 12.8», «@бот ак 2.1», «@бот оружие» → статья кодекса уходит в чат сообщением.
+// Кодексы берутся из app/index.html репозитория (те же массивы UK_RAW, AK_RAW, DK_RAW, PK, что в программе),
+// копия держится в памяти функции 30 минут. В BotFather у бота должен быть включён /setinline.
+const CODES_URL = Deno.env.get("CODES_URL") || "https://raw.githubusercontent.com/Kofemanchik/Senko-Assistant/main/app/index.html";
+const KIND_NAME = { uk: "УК", ak: "АК", dk: "ДК", pk: "ПК" };
+const KIND_FULL = { uk: "Уголовный кодекс", ak: "Административный кодекс", dk: "Дорожный кодекс", pk: "Процессуальный кодекс" };
+let codesCache = null; // { at, arts: [{ k, code, title, parts: [...] }] }
+function codesArr(html, name) {
+  const re = new RegExp("\\bvar " + name + " = \\(?\\[");
+  const m = re.exec(html);
+  if (!m) throw new Error("нет массива " + name);
+  const start = m.index + m[0].length - 1;
+  // массив заканчивается первой строкой «]» или «]])»: внутри строк скобки экранированы JSON-строками
+  let depth = 0, inStr = false, i = start;
+  for (; i < html.length; i++) {
+    const c = html[i];
+    if (inStr) { if (c === "\\") i++; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === "[") depth++;
+    else if (c === "]" && --depth === 0) break;
+  }
+  return JSON.parse(html.slice(start, i + 1).replace(/,\s*\]/g, "]"));
+}
+function codesParse(html) {
+  const rows = [];
+  for (const l of codesArr(html, "UK_RAW")) { const a = l.split("|"); rows.push({ k: "uk", code: a[0], title: a[1], part: a[2], stars: +a[3] || 0, m: +a[4] || 0, fmin: +a[5] || 0, fmax: +a[6] || 0, rec: a[7] === "1", note: a[8] || "" }); }
+  for (const l of codesArr(html, "AK_RAW")) { const a = l.split("|"); rows.push({ k: "ak", code: a[0], title: a[1], part: a[2], fmin: +a[3] || 0, fmax: +a[4] || 0, note: a[5] || "" }); }
+  for (const l of codesArr(html, "DK_RAW")) { const a = l.split("|"); rows.push({ k: "dk", code: a[0], title: a[1], part: a[2], fmax: +a[3] || 0, x: a[4] || "", note: a[5] || "" }); }
+  for (const a of codesArr(html, "PK")) rows.push({ k: "pk", code: a[0], part: a[1], title: a[2], note: a[3] || "" });
+  const map = new Map();
+  for (const r of rows) {
+    const id = r.k + ":" + r.code;
+    if (!map.has(id)) map.set(id, { k: r.k, code: r.code, title: r.title, parts: [] });
+    map.get(id).parts.push(r);
+  }
+  return [...map.values()];
+}
+async function codesLoad() {
+  if (codesCache && Date.now() - codesCache.at < 30 * 60e3) return codesCache.arts;
+  try {
+    const r = await fetch(CODES_URL + "?t=" + Math.floor(Date.now() / 600e3), { signal: AbortSignal.timeout(20000) });
+    if (!r.ok) throw new Error("GitHub вернул " + r.status);
+    const arts = codesParse(await r.text());
+    if (arts.length < 50) throw new Error("мало статей: " + arts.length);
+    codesCache = { at: Date.now(), arts };
+  } catch (e) {
+    console.error("codes", e);
+    if (!codesCache) throw e;
+    codesCache.at = Date.now() - 25 * 60e3; // старая копия, повторим через 5 минут
+  }
+  return codesCache.arts;
+}
+const money = (n) => "$" + String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+function codesChips(p) {
+  const c = [];
+  if (p.stars) c.push(p.stars + "★");
+  if (p.m) c.push("до " + p.m + " мес.");
+  if (p.fmin && p.fmax && p.fmin !== p.fmax) c.push("штраф " + money(p.fmin) + "–" + money(p.fmax));
+  else if (p.fmax || p.fmin) c.push("штраф " + money(p.fmax || p.fmin));
+  if (p.x) c.push(p.x);
+  if (p.rec) c.push("судимость");
+  return c;
+}
+function codesText(a) {
+  const head = `<b>${KIND_NAME[a.k]} ст. ${esc(a.code)} · ${esc(a.title)}</b>`;
+  const body = a.parts.map((p) => {
+    const chips = codesChips(p);
+    const pn = p.part ? "ч." + p.part : a.parts.length > 1 ? "ч.1" : "";
+    return (pn ? `<b>${pn}</b> ` : "") + esc(p.note) + (chips.length ? `\n<i>${esc(chips.join(" · "))}</i>` : "");
+  }).filter((x) => x.trim()).join("\n\n");
+  let t = head + (body ? "\n\n" + body : "") + `\n\n<i>${KIND_FULL[a.k]} · Senko Assistant</i>`;
+  if (t.length > 4000) t = head + "\n\n" + esc(a.parts.map((p) => (p.part ? "ч." + p.part + " " : "") + p.note).join("\n").slice(0, 3600)) + "…\n\n<i>Полный текст в программе Senko Assistant</i>";
+  return t;
+}
+const INLINE_KIND = { "ук": "uk", "uk": "uk", "ак": "ak", "ak": "ak", "коап": "ak", "дк": "dk", "dk": "dk", "пдд": "dk", "пк": "pk", "pk": "pk", "упк": "pk" };
+function codesSearch(arts, q) {
+  q = String(q || "").toLowerCase().replace(/ё/g, "е").replace(/[«»"']/g, " ").replace(/\s+/g, " ").trim();
+  let kind = "";
+  q = q.replace(/(^|\s)(ук|uk|ак|ak|коап|дк|dk|пдд|пк|pk|упк)(?=\s|$|\d)/, (m, sp, k) => { kind = INLINE_KIND[k]; return " "; }).replace(/(^|\s)(ст\.?|статья|статьи)(?=\s|\d|$)/g, " ").replace(/\s+/g, " ").trim();
+  const pool = kind ? arts.filter((a) => a.k === kind) : arts;
+  const num = /^(\d+(?:\.\d+)*)\.?$/.exec(q);
+  if (num) {
+    const n = num[1];
+    const exact = pool.filter((a) => a.code === n);
+    const more = pool.filter((a) => a.code !== n && a.code.startsWith(n + "."));
+    return exact.concat(more).sort((x, y) => (x.code === n ? 0 : 1) - (y.code === n ? 0 : 1) || Object.keys(KIND_NAME).indexOf(x.k) - Object.keys(KIND_NAME).indexOf(y.k));
+  }
+  const words = q.split(" ").filter((w) => w.length >= 2).map((w) => (w.length >= 5 ? w.slice(0, w.length - (w.length >= 7 ? 2 : 1)) : w)); // грубое окончание: «маска» находит «маске»
+  if (!words.length) return [];
+  const scored = [];
+  for (const a of pool) {
+    const title = a.title.toLowerCase().replace(/ё/g, "е");
+    const all = title + " " + a.parts.map((p) => p.note).join(" ").toLowerCase().replace(/ё/g, "е");
+    if (!words.every((w) => all.includes(w))) continue;
+    scored.push({ a, s: words.filter((w) => title.includes(w)).length * 10 + (a.k === "uk" ? 2 : a.k === "ak" ? 1 : 0) });
+  }
+  return scored.sort((x, y) => y.s - x.s).map((x) => x.a);
+}
+async function onInline(iq) {
+  const answer = (results, extra) => tg("answerInlineQuery", { inline_query_id: iq.id, results, cache_time: 300, ...(extra || {}) });
+  const q = String(iq.query || "").slice(0, 100);
+  if (!(await hit(`inl:${iq.from && iq.from.id}`, 120, 600))) return answer([], { cache_time: 30 });
+  if (q.trim().length < 1)
+    return answer([], { cache_time: 3600, button: { text: "Напишите номер статьи или слова: 12.8, ак 2.1, оружие", start_parameter: "inline" } });
+  let arts;
+  try {
+    arts = await codesLoad();
+  } catch (e) {
+    return answer([], { cache_time: 10, button: { text: "Кодексы временно недоступны, попробуйте позже", start_parameter: "inline" } });
+  }
+  const found = codesSearch(arts, q).slice(0, 20);
+  if (!found.length) return answer([], { cache_time: 60, button: { text: "Ничего не нашлось. Попробуйте номер статьи", start_parameter: "inline" } });
+  return answer(found.map((a) => {
+    const p0 = a.parts[0];
+    const chips = codesChips(a.parts.reduce((m, p) => ({ stars: Math.max(m.stars || 0, p.stars || 0), m: Math.max(m.m || 0, p.m || 0), fmin: m.fmin || p.fmin, fmax: Math.max(m.fmax || 0, p.fmax || 0), x: m.x || p.x, rec: m.rec || p.rec }), {}));
+    return {
+      type: "article",
+      id: (a.k + "-" + a.code).slice(0, 64),
+      title: `${KIND_NAME[a.k]} ${a.code} · ${a.title}`.slice(0, 120),
+      description: ((chips.length ? chips.join(" · ") + ". " : "") + (p0.note || "")).slice(0, 200),
+      input_message_content: { message_text: codesText(a), parse_mode: "HTML", link_preview_options: { is_disabled: true } },
+    };
+  }));
+}
+
 async function lawsCmd(chat, arg) {
   if (!GH_LAWS_TOKEN) return send(chat, "Не задан секрет GH_LAWS_TOKEN (токен GitHub). Добавьте его в Supabase → Edge Functions → Secrets.");
   const runs = await gh(`/actions/workflows/${LAWS_WORKFLOW}/runs?per_page=3`);
@@ -2888,19 +3661,20 @@ async function lawsCmd(chat, arg) {
 
 // Вызов из GitHub Actions после обновления законов (scripts/publish-laws.js)
 async function lawsChanged(b) {
+  const srv = parseServer(b.server) || DEFAULT_SERVER;
   const items = Array.isArray(b.items) ? b.items.slice(0, 25) : [];
   if (!items.length) {
     // ручной запуск без изменений — сообщаем только владельцу
-    if (b.manual && OWNER_TG) await send(OWNER_TG, `⚖️ Проверка законов завершена: изменений нет.${Number(b.count) ? " Законов: " + Number(b.count) + "." : ""}`);
+    if (b.manual && OWNER_TG) await send(OWNER_TG, `⚖️ ${esc(srvName(srv))}: проверка законов завершена, изменений нет.${Number(b.count) ? " Законов: " + Number(b.count) + "." : ""}`);
     return { ok: true, sent: b.manual ? 1 : 0 };
   }
   const lines = items.map((it) =>
     `• ${it.type === "new" ? "🆕 Новый закон" : "✏️ Изменён"}: <b>${esc(clean(it.title, 150))}</b>${it.arts ? " — " + esc(clean(it.arts, 200)) : ""}`);
   const more = Array.isArray(b.items) && b.items.length > items.length ? `\n…и ещё ${b.items.length - items.length}` : "";
-  const text = `⚖️ <b>Обновление законов</b>\n${lines.join("\n")}${more}\n\nИзменения уже в программе, раздел «Законы».`;
+  const text = `⚖️ <b>Обновление законов · ${esc(srvName(srv))}</b>\n${lines.join("\n")}${more}\n\nИзменения уже в программе, раздел «Законы».`;
   const chats = new Set();
   if (OWNER_TG) chats.add(OWNER_TG);
-  const rows = await db()`select tg_id from profiles where rank = 'leader' and tg_id is not null and not banned`;
+  const rows = await db()`select tg_id from profiles where rank = 'leader' and server = ${srv} and tg_id is not null and not banned`;
   rows.forEach((r) => chats.add(String(r.tg_id)));
   for (const c of chats) await send(c, text);
   return { ok: true, sent: chats.size };
@@ -2917,7 +3691,7 @@ async function cron(req) {
   if (b && b.action === "laws_failed") {
     const run = /^\d{1,20}$/.test(String(b.run || "")) ? String(b.run) : "";
     if (OWNER_TG)
-      await send(OWNER_TG, `❌ <b>Обновление законов не удалось</b>${b.manual ? " (ручной запуск)" : ""}. В программе остались прошлые версии.${run ? `\n<a href="https://github.com/${GH_REPO}/actions/runs/${run}">Лог на GitHub</a>` : ""}`);
+      await send(OWNER_TG, `❌ <b>Обновление законов не удалось${parseServer(b.server) ? " · " + esc(srvName(parseServer(b.server))) : ""}</b>${b.manual ? " (ручной запуск)" : ""}. В программе остались прошлые версии.${run ? `\n<a href="https://github.com/${GH_REPO}/actions/runs/${run}">Лог на GitHub</a>` : ""}`);
     return J({ ok: true });
   }
   return J(await tick());
@@ -2930,7 +3704,7 @@ async function setup(url) {
   const hook = await tg("setWebhook", {
     url: SELF_URL,
     secret_token: WEBHOOK_SECRET,
-    allowed_updates: ["message", "callback_query"],
+    allowed_updates: ["message", "callback_query", "inline_query"],
     drop_pending_updates: true,
   });
   await tg("setMyCommands", {
@@ -2948,6 +3722,7 @@ async function setup(url) {
       { command: "unban", description: "Разблокировать" },
       { command: "kick", description: "Завершить сессии" },
       { command: "tag", description: "Теги аккаунта" },
+      { command: "beta", description: "Бета-тестеры" },
       { command: "dups", description: "Похожие аккаунты" },
       { command: "setorg", description: "Сменить организацию" },
       { command: "health", description: "Статус сервисов" },
@@ -2971,8 +3746,8 @@ async function setup(url) {
 // Вход: логин и пароль аккаунта + отдельный пароль панели из 32 знаков (его выдаёт бот: /panel).
 // В базе только хэши. Действия панели выполняют те же функции, что и команды бота:
 // ответы бота для «чата» panel:… не уходят в Telegram, а возвращаются в браузер (см. tg() и sendFile()).
-// Секрет SITE_URL (необязательно): адрес сайта, если он не https://senko-assistant.pages.dev
-const SITE_URL = String(Deno.env.get("SITE_URL") || "https://senko-assistant.pages.dev").replace(/\/+$/, "");
+// Секрет SITE_URL (необязательно): адрес сайта, если он не https://senko-assistant.site (с 2.6.6; старый адрес senko-assistant.pages.dev часть провайдеров режет)
+const SITE_URL = String(Deno.env.get("SITE_URL") || "https://senko-assistant.site").replace(/\/+$/, "");
 const PANEL_HOURS = 12; // сессия панели живёт не дольше 12 часов
 const PANEL_IDLE_MIN = 120; // и закрывается после 2 часов без действий
 const PANEL_RANKS = ["owner", "moderator"];
@@ -3101,7 +3876,7 @@ async function pwho(b, ownerOnly = false) {
   if (ownerOnly && a.kind !== "owner") return { err: fail("Это доступно только владельцу.", { code: "forbidden" }) };
   return { p, a, th };
 }
-const panelMe = (p, a) => ({ login: p.login, nick: p.nick, rank: p.rank, rankName: RANKS[p.rank], kind: a.kind, owner: a.kind === "owner", tg: p.tg_id != null || a.kind === "owner" && !!OWNER_TG, idleMin: PANEL_IDLE_MIN });
+const panelMe = (p, a) => ({ login: p.login, nick: p.nick, rank: p.rank, rankName: RANKS[p.rank], kind: a.kind, owner: a.kind === "owner", tg: p.tg_id != null || a.kind === "owner" && !!OWNER_TG, idleMin: PANEL_IDLE_MIN, staffServer: scopeServer(a) });
 
 async function panelLogin(b, ip, ua) {
   const lc = clean(b.login, 24).toLowerCase();
@@ -3261,8 +4036,11 @@ async function panelRevert(b, a) {
   return { ok: true, row: dbRow(t, row) };
 }
 
-async function panelDash(a) {
+async function panelDash(a, b = {}) {
   const sql = db();
+  const srv = scopeServer(a) || parseServer(b.server);
+  const sf = srv ? sql`where server = ${srv}` : sql``;
+  const byServer = await sql`select server, count(*)::int n, count(*) filter (where last_seen > now() - interval '7 days')::int active from profiles group by server order by server`;
   const [u] = await sql`select count(*)::int total,
       count(*) filter (where last_seen > now() - interval '1 hour')::int online,
       count(*) filter (where last_seen > now() - interval '1 day')::int today,
@@ -3270,14 +4048,14 @@ async function panelDash(a) {
       count(*) filter (where banned)::int banned,
       count(*) filter (where approval = 'pending')::int pending,
       count(*) filter (where rank = 'moderator')::int mods,
-      count(*) filter (where rank = 'leader')::int leaders from profiles`;
-  const orgs = await sql`select org, count(*)::int n, count(*) filter (where last_seen > now() - interval '7 days')::int active from profiles group by org order by n desc`;
+      count(*) filter (where rank = 'leader')::int leaders from profiles ${sf}`;
+  const orgs = await sql`select org, count(*)::int n, count(*) filter (where last_seen > now() - interval '7 days')::int active from profiles ${sf} group by org order by n desc`;
   const [{ resets }] = await sql`select count(*)::int resets from reset_requests where status = 'pending' and expires_at > now()`;
   const [{ bugs }] = await sql`select count(*)::int bugs from bug_reports where not answered`;
   const [{ reports }] = await sql`select count(*)::int reports from reports where status = 'new'`;
   const [{ notices }] = await sql`select count(*)::int notices from broadcasts where expires_at > now() and user_id is null`;
   const days = await sql`select to_char(date_trunc('day', created_at + interval '3 hours'), 'DD.MM') d, count(*)::int n from profiles
-                         where created_at > now() - interval '14 days' group by 1 order by min(created_at)`;
+                         where created_at > now() - interval '14 days' ${srv ? sql`and server = ${srv}` : sql``} group by 1 order by min(created_at)`;
   const modes = {
     maintenance: await getSetting("maintenance", { on: false }),
     regs: await getSetting("regs", { open: true, limit: 0 }),
@@ -3288,7 +4066,7 @@ async function panelDash(a) {
     appeal: await getSetting("appeal", null),
     blacklist: await getSetting("blacklist", []),
   };
-  return { ok: true, users: u, orgs, resets, bugs, reports, notices, days, modes: a.kind === "owner" ? modes : { maintenance: modes.maintenance, approval: modes.approval, regs: modes.regs } };
+  return { ok: true, users: u, orgs, resets, bugs, reports, notices, days, server: srv, servers: byServer.map((r) => ({ id: r.server, name: (SERVERS[r.server] || { name: "сервер " + r.server }).name, n: r.n, active: r.active })), modes: a.kind === "owner" ? modes : { maintenance: modes.maintenance, approval: modes.approval, regs: modes.regs } };
 }
 
 async function panelUsers(b, a) {
@@ -3303,12 +4081,16 @@ async function panelUsers(b, a) {
     : sql`(login ilike ${like} or nick ilike ${like} or static_id ilike ${like} or discord ilike ${like})`);
   if (RANKS[b.rank]) conds.push(sql`rank = ${b.rank}`);
   if (DEPTS.includes(b.org)) conds.push(sql`org = ${b.org}`);
+  // сервер: модератор с ограничением видит только свой сервер, остальные могут отфильтровать по серверу
+  const srv = scopeServer(a) || parseServer(b.server);
+  if (srv) conds.push(sql`server = ${srv}`);
+  if (b.beta === true || b.beta === "1") conds.push(sql`beta`);
   if (b.state === "banned") conds.push(sql`banned`);
   if (b.state === "pending") conds.push(sql`approval <> 'ok'`);
   if (b.state === "online") conds.push(sql`last_seen > now() - interval '1 hour'`);
   const where = conds.reduce((x, y) => sql`${x} and ${y}`);
   const order = b.sort === "seen" ? sql`last_seen desc nulls last` : b.sort === "login" ? sql`login_lc` : sql`created_at desc`;
-  const rows = await sql`select id, login, nick, static_id, org, rank, banned, banned_until, approval, tags, app_version, created_at, last_seen, tg_id is not null as has_tg,
+  const rows = await sql`select id, login, nick, static_id, org, server, staff_server, beta, rank, banned, banned_until, approval, tags, app_version, created_at, last_seen, tg_id is not null as has_tg,
                            (select count(*)::int from account_warns w where w.user_id = profiles.id) warns
                          from profiles where ${where} order by ${order} limit 41 offset ${page * 40}`;
   const [{ n }] = await sql`select count(*)::int n from profiles where ${where}`;
@@ -3318,6 +4100,8 @@ async function panelUsers(b, a) {
 async function panelUser(b, a) {
   const p = await findProfile(String(b.login || ""));
   if (!p) return fail("Пользователь не найден.");
+  const sc = scopeServer(a);
+  if (sc && (p.server || DEFAULT_SERVER) !== sc) return fail("Пользователь с другого сервера.");
   const sql = db();
   const owner = a.kind === "owner";
   const [k] = await sql`select created_at, last_used_at from panel_keys where user_id = ${p.id}`;
@@ -3326,7 +4110,7 @@ async function panelUser(b, a) {
   return {
     ok: true,
     html: await fullCard(p, a.kind),
-    user: { login: p.login, nick: p.nick, static: p.static_id, org: p.org, rank: p.rank, rankName: RANKS[p.rank], banned: p.banned, approval: p.approval, tags: p.tags || [], hasTg: p.tg_id != null, self: p.id === a.profile.id },
+    user: { login: p.login, nick: p.nick, static: p.static_id, org: p.org, server: p.server || DEFAULT_SERVER, serverName: srvName(p.server || DEFAULT_SERVER), staffServer: p.staff_server || 0, rank: p.rank, rankName: RANKS[p.rank], banned: p.banned, approval: p.approval, tags: p.tags || [], hasTg: p.tg_id != null, self: p.id === a.profile.id, beta: !!p.beta },
     touch: canTouch(a, p) || "",
     panelKey: owner && k ? { created: k.created_at, used: k.last_used_at } : null,
     logins,
@@ -3336,17 +4120,20 @@ async function panelUser(b, a) {
 
 async function panelStaff(a) {
   const sql = db();
-  const rows = await sql`select p.login, p.nick, p.org, p.rank, p.tg_id is not null as has_tg, p.last_seen, k.created_at as key_at, k.last_used_at as key_used,
+  const rows = await sql`select p.login, p.nick, p.org, p.server, p.staff_server, p.rank, p.tg_id is not null as has_tg, p.last_seen, k.created_at as key_at, k.last_used_at as key_used,
                            (select count(*)::int from panel_sessions s where s.user_id = p.id and s.expires_at > now()) as panels
                          from profiles p left join panel_keys k on k.user_id = p.id
-                         where p.rank in ('owner','moderator','leader') order by array_position(array['owner','moderator','leader'], p.rank), p.org, p.login_lc`;
+                         where p.rank in ('owner','moderator','leader') ${scopeServer(a) ? sql`and (p.server = ${scopeServer(a)} or p.rank = 'owner')` : sql``}
+                         order by array_position(array['owner','moderator','leader'], p.rank), p.server, p.org, p.login_lc`;
   return { ok: true, rows: rows.map((r) => (a.kind === "owner" ? r : { ...r, key_at: null, key_used: null, panels: null })), site: SITE_URL };
 }
 
 async function panelApi(b, ip, ua) {
   const op = String(b.op || "");
   if (op === "login") return panelLogin(b, ip, ua);
-  const owners = ["audit", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert"];
+  const owners = ["audit", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert", "ads_list", "ads_save", "ads_toggle", "ads_delete",
+    "prog_get", "prog_xp", "prog_ach", "prog_ach_new", "prog_ai",
+    "ai_dict_list", "ai_dict_save", "ai_dict_delete", "ai_bad", "ai_gold_list", "ai_gold_save", "ai_gold_delete", "ai_gold_pin", "ai_gold_run"];
   const { p, a, th, err } = await pwho(b, owners.includes(op));
   if (err) return err;
   const sql = db();
@@ -3358,7 +4145,7 @@ async function panelApi(b, ip, ua) {
       await sql`delete from panel_sessions where ${b.all ? sql`user_id = ${p.id}` : sql`token_hash = ${th}`}`;
       return { ok: true };
     case "dash":
-      return panelDash(a);
+      return panelDash(a, b);
     case "health":
       return { ok: true, html: await healthText() };
     case "users":
@@ -3383,10 +4170,12 @@ async function panelApi(b, ip, ua) {
       const q = clean(b.q, 40);
       const page = Math.max(0, Math.min(1000, parseInt(b.page, 10) || 0));
       const like = "%" + likeEsc(q) + "%";
+      const srv = parseServer(b.server);
+      const sf = srv ? sql`server = ${srv}` : sql`true`;
       const rows = q
-        ? await sql`select * from audit_log where action = ${q} or target ilike ${like} or actor ilike ${like} order by id desc limit 51 offset ${page * 50}`
-        : await sql`select * from audit_log order by id desc limit 51 offset ${page * 50}`;
-      return { ok: true, rows: rows.slice(0, 50), more: rows.length > 50, page, actions: AUDIT_ACTIONS };
+        ? await sql`select * from audit_log where (action = ${q} or target ilike ${like} or actor ilike ${like}) and ${sf} order by id desc limit 51 offset ${page * 50}`
+        : await sql`select * from audit_log where ${sf} order by id desc limit 51 offset ${page * 50}`;
+      return { ok: true, rows: rows.slice(0, 50), more: rows.length > 50, page, actions: AUDIT_ACTIONS, servers: Object.keys(SERVERS).map((k) => ({ id: +k, name: SERVERS[k].name })) };
     }
     case "bugs": {
       const rows = await sql`select b.id, b.user_id, b.text, b.app_version, b.answered, b.at, length(b.log)::int as log_len, p.login, p.nick, p.org
@@ -3434,6 +4223,933 @@ async function panelApi(b, ip, ua) {
       return panelDb(b, a);
     case "db_revert":
       return panelRevert(b, a);
+    case "ads_list":
+    case "ads_save":
+    case "ads_toggle":
+    case "ads_delete":
+      return panelAds(b, a);
+    case "col_clear": {
+      // 2.8: модерация профиля для коллег — убрать должность, «о себе» и фото
+      const t = await findProfile(String(b.login || ""));
+      if (!t) return fail("Пользователь не найден.");
+      const no = canTouch(a, t);
+      if (no) return fail(no);
+      await db()`update profiles set post = '', bio = '' where id = ${t.id}`;
+      await db()`delete from avatars where user_id = ${t.id}`;
+      await audit(a.label, "col_clear", t.login, { post: t.post || "", bio: t.bio || "" });
+      return { ok: true };
+    }
+    case "beta_list":
+    case "beta_set":
+    case "beta_task":
+    case "beta_task_save":
+    case "beta_task_delete":
+    case "flags_set":
+      return panelBeta(b, a);
+    case "ideas_list":
+    case "ideas_set":
+    case "ideas_delete":
+      return panelIdeas(b, a);
+    case "prog_get":
+    case "prog_xp":
+    case "prog_ach":
+    case "prog_ach_new":
+    case "prog_ai":
+      return panelProgress(b, a);
+    case "ai_dict_list":
+    case "ai_dict_save":
+    case "ai_dict_delete":
+    case "ai_bad":
+    case "ai_gold_list":
+    case "ai_gold_save":
+    case "ai_gold_delete":
+    case "ai_gold_pin":
+    case "ai_gold_run":
+      return panelAi(b, a);
+  }
+  return fail("Неизвестное действие панели.");
+}
+
+// ───────────── 2.6.3: опыт и достижения пользователя (владелец в панели) ─────────────
+async function progOf(p) {
+  const sql = db();
+  await ensureXpAdj();
+  const [{ sx }] = await sql`select coalesce(max(senko_num(data#>>'{}')), 0)::int sx from sync_items where user_id = ${p.id} and kind = 'xp' and not deleted`;
+  const [{ adj, aib }] = await sql`select xp_adj adj, ai_bonus aib from profiles where id = ${p.id}`;
+  const got = await sql`select code, at from achievements where user_id = ${p.id}`;
+  const G = Object.fromEntries(got.map((r) => [r.code, r.at]));
+  const AX = await getSetting("achx", {});
+  const list = ACH.map((x) => ({ code: x.code, icon: x.icon, name: x.name, desc: x.desc, custom: false, at: G[x.code] || null }))
+    .concat(Object.entries(AX).map(([code, x]) => ({ code, icon: x.icon, name: x.name, desc: x.desc, custom: true, at: G[code] || null })));
+  const xp = Math.max(0, sx + adj);
+  return { ok: true, login: p.login, nick: p.nick, xp, synced: sx, adj, aiBonus: aib || 0, level: lvOf(xp), levels: LVN.map((n, i) => ({ n: i + 1, name: n, from: LVT[i] })), ach: list };
+}
+async function achNotice(p, x, by) {
+  await db()`insert into broadcasts (user_id, title, author, text, expires_at)
+             values (${p.id}, '🏆 Новое достижение', ${by}, ${`${x.icon} ${x.name}${x.desc ? " — " + String(x.desc).toLowerCase() : ""}\nВсе достижения — в личном кабинете.`}, now() + interval '7 days')`;
+}
+async function panelProgress(b, a) {
+  const p = await findProfile(String(b.login || ""));
+  if (!p) return fail("Пользователь не найден.");
+  const sql = db();
+  if (b.op === "prog_get") return progOf(p);
+  if (b.op === "prog_xp") {
+    // опыт задаётся числом («сделать 500») или прибавкой («+50», «−30»)
+    const cur = await progOf(p);
+    const want = b.set != null && b.set !== "" ? Math.floor(+b.set) : cur.xp + Math.floor(+b.add || 0);
+    if (!Number.isFinite(want) || want < 0 || want > 1000000) return fail("Опыт: целое число от 0 до 1 000 000.");
+    if (want === cur.xp) return cur;
+    const adj = want - cur.synced;
+    await sql`update profiles set xp_adj = ${adj} where id = ${p.id}`;
+    await audit(a.label, "xp_set", p.login, { before: cur.xp, after: want, adj });
+    if (b.notify) await sql`insert into broadcasts (user_id, title, author, text, expires_at)
+                            values (${p.id}, ${want > cur.xp ? "⭐ Начислен опыт" : "Опыт изменён"}, ${a.label},
+                                    ${`Опыт: ${cur.xp} → ${want}${b.reason ? "\nПричина: " + clean(b.reason, 200) : ""}`}, now() + interval '7 days')`;
+    await checkAch(p).catch((e) => console.error("ach", e));
+    return progOf(p);
+  }
+  if (b.op === "prog_ai") {
+    // дополнительные запросы к ИИ: числом («сделать 50») или прибавкой («+20»); тратятся, когда кончился дневной лимит
+    const cur = await progOf(p);
+    const want = b.set != null && b.set !== "" ? Math.floor(+b.set) : cur.aiBonus + Math.floor(+b.add || 0);
+    if (!Number.isFinite(want) || want < 0 || want > 100000) return fail("Запросы к ИИ: целое число от 0 до 100 000.");
+    if (want === cur.aiBonus) return cur;
+    await sql`update profiles set ai_bonus = ${want} where id = ${p.id}`;
+    await audit(a.label, "ai_bonus", p.login, { before: cur.aiBonus, after: want });
+    if (b.notify && want > cur.aiBonus) await sql`insert into broadcasts (user_id, title, author, text, expires_at)
+                            values (${p.id}, '🤖 Дополнительные запросы к ИИ', ${a.label},
+                                    ${`Вам выдано дополнительных запросов к ИИ: ${want - cur.aiBonus}. Всего: ${want}.\nОни тратятся, когда закончится дневной лимит, и не сгорают.${b.reason ? "\nПричина: " + clean(b.reason, 200) : ""}`}, now() + interval '7 days')`;
+    return progOf(p);
+  }
+  if (b.op === "prog_ach") {
+    const AA = await achAll();
+    const code = String(b.code || "").slice(0, 40);
+    const x = AA[code];
+    if (!x) return fail("Нет такого достижения.");
+    if (b.on) {
+      const got = await sql`insert into achievements (user_id, code) values (${p.id}, ${code}) on conflict do nothing returning code`;
+      if (got.length) {
+        await audit(a.label, "ach_grant", p.login, { code, name: x.name });
+        if (b.notify !== false) await achNotice(p, x, a.label);
+      }
+    } else {
+      const del = await sql`delete from achievements where user_id = ${p.id} and code = ${code} returning code`;
+      if (del.length) await audit(a.label, "ach_revoke", p.login, { code, name: x.name });
+    }
+    return progOf(p);
+  }
+  if (b.op === "prog_ach_new") {
+    const name = clean(b.name, 60), desc = clean(b.desc, 160), icon = clean(b.icon, 8) || "🏆";
+    if (!name) return fail("Напишите название достижения.");
+    const AX = await getSetting("achx", {});
+    if (Object.keys(AX).length >= 100) return fail("Особых достижений уже 100. Удалите лишние в редакторе базы (bot_settings, ключ achx).");
+    const code = "x" + Date.now().toString(36);
+    AX[code] = { icon, name, desc };
+    await setSetting("achx", AX);
+    await sql`insert into achievements (user_id, code) values (${p.id}, ${code}) on conflict do nothing`;
+    await audit(a.label, "ach_custom", p.login, { code, icon, name, desc });
+    if (b.notify !== false) await achNotice(p, AX[code], a.label);
+    return progOf(p);
+  }
+  return fail("Неизвестное действие.");
+}
+
+// ───────────── Реклама (2.3.0): баннеры на сайте и на главной в программе, правит владелец в панели ─────────────
+let adsCache = null; // { at, rows }
+// Если базу не обновили через schema.sql, таблица рекламы создаётся здесь при первом обращении (то же, что в schema.sql)
+const ADS_DDL = `create table if not exists public.ads (
+  id          bigserial primary key,
+  title       text not null,
+  srv         text not null default '',
+  body        text not null default '',
+  tag         text not null default 'Реклама',
+  style       text not null default 'wide' check (style in ('wide','square')),
+  image       text not null default '',
+  links       jsonb not null default '[]'::jsonb,
+  promo       text not null default '',
+  place       text not null default 'both' check (place in ('both','site','app')),
+  enabled     boolean not null default true,
+  sort        int not null default 0,
+  updated_at  timestamptz not null default now(),
+  updated_by  text not null default ''
+);
+insert into public.ads (title, srv, body, style, image, links, promo, sort)
+select * from (values
+  ('Senko Family', 'Majestic RP · Los Angeles',
+   'Семья на сервере Los Angeles. Заходите в Discord и Telegram: знакомство, набор и новости семьи.',
+   'wide', '/img/senko-family-820.webp',
+   '[{"label":"Discord семьи","url":"https://discord.gg/ZEz5kfG6W8"},{"label":"Telegram семьи","url":"https://t.me/senkofamq"}]'::jsonb, '', 10),
+  ('Docossum | Ассистент GTA 5RP', 'Программа-ассистент · GTA 5 RP',
+   'Помощник для игроков GTA 5 RP, похожий на наш, только умеет ещё больше. Загляните в Discord и Telegram, а с нашим промокодом будет приятнее.',
+   'square', '/img/docossum.webp',
+   '[{"label":"Discord","url":"https://discord.gg/Nnv9YjX3px"},{"label":"Telegram","url":"https://t.me/docossum"}]'::jsonb, 'Senko', 20)
+) v(title, srv, body, style, image, links, promo, sort)
+where not exists (select 1 from public.ads);
+alter table public.ads enable row level security;
+revoke all on table public.ads from anon, authenticated;
+`;
+let adsReady = false;
+async function adsQ(fn) {
+  try {
+    return await fn();
+  } catch (e) {
+    if (adsReady || !/relation .*ads.* does not exist/i.test(String(e && e.message))) throw e;
+    adsReady = true;
+    await db().unsafe(ADS_DDL);
+    return await fn();
+  }
+}
+const AD_HTTPS = /^https:\/\/[^\s"'<>]{4,500}$/i;
+function adPub(r) {
+  return { id: r.id, title: r.title, srv: r.srv, text: r.body, tag: r.tag, style: r.style, image: r.image, links: Array.isArray(r.links) ? r.links : [], promo: r.promo };
+}
+async function adsPublic(b) {
+  const place = b.place === "site" ? "site" : "app";
+  if (!adsCache || Date.now() - adsCache.at > 60 * 1000) {
+    try {
+      adsCache = { at: Date.now(), rows: await adsQ(() => db()`select * from ads where enabled order by sort, id`) };
+    } catch (e) {
+      return fail("Реклама сейчас недоступна.", { code: "ads_off" });
+    }
+  }
+  return { ok: true, ads: adsCache.rows.filter((r) => r.place === "both" || r.place === place).map(adPub) };
+}
+function adClean(b) {
+  const t = (v, n) => clean(v, n);
+  const title = t(b.title, 80);
+  if (!title) return { err: "Укажите название баннера." };
+  const image = String(b.image == null ? "" : b.image).trim();
+  if (image && !/^\/img\/[\w.-]{1,80}$/.test(image) && !AD_HTTPS.test(image)) {
+    if (!/^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(image)) return { err: "Картинка: ссылка https://… или загруженный файл." };
+    if (image.length > 600000) return { err: "Картинка слишком большая: нужно до 400 КБ." };
+  }
+  const links = [];
+  for (const l of (Array.isArray(b.links) ? b.links : []).slice(0, 4)) {
+    const url = String((l && l.url) || "").trim();
+    if (!url) continue;
+    if (!AD_HTTPS.test(url)) return { err: "Ссылка должна начинаться с https://: " + url.slice(0, 60) };
+    links.push({ label: t(l.label, 40) || "Открыть", url });
+  }
+  return {
+    row: {
+      title,
+      srv: t(b.srv, 80),
+      body: String(b.text == null ? "" : b.text).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 400),
+      tag: t(b.tag, 24) || "Реклама",
+      style: b.style === "square" ? "square" : "wide",
+      image,
+      links,
+      promo: t(b.promo, 24),
+      place: ["both", "site", "app"].includes(b.place) ? b.place : "both",
+      enabled: b.enabled !== false,
+      sort: Math.max(-9999, Math.min(9999, parseInt(b.sort, 10) || 0)),
+    },
+  };
+}
+async function panelAds(b, a) {
+  const sql = db();
+  const id = parseInt(b.id, 10) || 0;
+  try {
+    if (b.op === "ads_list") return { ok: true, rows: await adsQ(() => sql`select * from ads order by sort, id`) };
+    if (b.op === "ads_save") {
+      const { row, err } = adClean(b);
+      if (err) return fail(err);
+      let saved;
+      if (id) {
+        [saved] = await sql`update ads set title = ${row.title}, srv = ${row.srv}, body = ${row.body}, tag = ${row.tag}, style = ${row.style}, image = ${row.image},
+                            links = ${sql.json(row.links)}, promo = ${row.promo}, place = ${row.place}, enabled = ${row.enabled}, sort = ${row.sort},
+                            updated_at = now(), updated_by = ${a.label} where id = ${id} returning *`;
+        if (!saved) return fail("Баннер не найден, обновите список.");
+      } else {
+        const [{ n }] = await sql`select count(*)::int as n from ads`;
+        if (n >= 30) return fail("Баннеров уже 30, удалите лишние.");
+        [saved] = await sql`insert into ads (title, srv, body, tag, style, image, links, promo, place, enabled, sort, updated_by)
+                            values (${row.title}, ${row.srv}, ${row.body}, ${row.tag}, ${row.style}, ${row.image}, ${sql.json(row.links)}, ${row.promo}, ${row.place}, ${row.enabled}, ${row.sort}, ${a.label}) returning *`;
+      }
+      adsCache = null;
+      await audit(a.label, "ad_save", saved.title, { id: saved.id, created: !id, enabled: saved.enabled, place: saved.place });
+      return { ok: true, row: saved };
+    }
+    if (b.op === "ads_toggle") {
+      const [r] = await sql`update ads set enabled = ${!!b.enabled}, updated_at = now(), updated_by = ${a.label} where id = ${id} returning *`;
+      if (!r) return fail("Баннер не найден, обновите список.");
+      adsCache = null;
+      await audit(a.label, "ad_toggle", r.title, { id, enabled: r.enabled });
+      return { ok: true, row: r };
+    }
+    if (b.op === "ads_delete") {
+      const [r] = await sql`delete from ads where id = ${id} returning id, title`;
+      if (!r) return fail("Баннер не найден, обновите список.");
+      adsCache = null;
+      await audit(a.label, "ad_delete", r.title, { id });
+      return { ok: true };
+    }
+  } catch (e) {
+    console.error("ads", e);
+    if (/relation .*ads.* does not exist/i.test(String(e && e.message))) return fail("Таблицы рекламы ещё нет. Откройте раздел заново или запустите «Deploy function» на GitHub.");
+    throw e;
+  }
+  return fail("Неизвестное действие панели.");
+}
+
+
+// ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
+// Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
+const SCHEMA_V = 30;
+const SCHEMA_24 = `
+alter table public.profiles add column if not exists beta boolean not null default false;
+alter table public.shares drop constraint if exists shares_kind_check;
+alter table public.shares add constraint shares_kind_check check (kind in ('calc','set','board'));
+create table if not exists public.beta_tasks (
+  id bigserial primary key, title text not null, body text not null default '', author text not null default '',
+  created_at timestamptz not null default now(), closed boolean not null default false);
+create table if not exists public.beta_results (
+  task_id bigint not null references public.beta_tasks(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  status text not null check (status in ('ok','bad')), comment text not null default '', at timestamptz not null default now(),
+  primary key (task_id, user_id));
+create table if not exists public.org_hooks (
+  org text primary key, url text not null, events text[] not null default '{}', updated_by text not null default '',
+  updated_at timestamptz not null default now(), fails int not null default 0, last_error text not null default '');
+create table if not exists public.org_events (
+  id bigserial primary key, org text not null, title text not null, body text not null default '', place text not null default '',
+  starts_at timestamptz not null, author text not null default '', created_at timestamptz not null default now(), reminded boolean not null default false);
+create index if not exists org_events_org_idx on public.org_events (org, starts_at);
+create table if not exists public.ideas (
+  id bigserial primary key, user_id uuid references public.profiles(id) on delete set null, text text not null,
+  status text not null default 'new' check (status in ('new','work','done','no')), answer text not null default '',
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+create table if not exists public.idea_votes (
+  idea_id bigint not null references public.ideas(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade, primary key (idea_id, user_id));
+create table if not exists public.patrols (
+  code text primary key, owner_id uuid references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(), expires_at timestamptz not null);
+create table if not exists public.patrol_members (
+  code text not null references public.patrols(code) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  joined_at timestamptz not null default now(), seen_at timestamptz not null default now(), primary key (code, user_id));
+create table if not exists public.patrol_items (
+  id bigserial primary key, code text not null references public.patrols(code) on delete cascade,
+  user_id uuid references public.profiles(id) on delete cascade, uid text not null default '',
+  data jsonb not null default '{}'::jsonb, updated_at timestamptz not null default now(), deleted boolean not null default false);
+create unique index if not exists patrol_items_key on public.patrol_items (code, user_id, uid);
+alter table public.beta_tasks enable row level security;
+alter table public.beta_results enable row level security;
+alter table public.org_hooks enable row level security;
+alter table public.org_events enable row level security;
+alter table public.ideas enable row level security;
+alter table public.idea_votes enable row level security;
+alter table public.patrols enable row level security;
+alter table public.patrol_members enable row level security;
+alter table public.patrol_items enable row level security;
+revoke all on table public.beta_tasks, public.beta_results, public.org_hooks, public.org_events, public.ideas, public.idea_votes,
+                    public.patrols, public.patrol_members, public.patrol_items from anon, authenticated;
+revoke all on all sequences in schema public from anon, authenticated;
+`;
+// 2.7: словарь ИИ, эталонные вопросы для самопроверки, ответ ИИ в журнале
+const SCHEMA_27 = `
+alter table public.ai_log add column if not exists ans text not null default '';
+create table if not exists public.ai_dict (
+  id bigserial primary key, phrase text not null, refs text[] not null default '{}', note text not null default '',
+  author text not null default '', created_at timestamptz not null default now());
+create table if not exists public.ai_gold (
+  id bigserial primary key, q text not null, expect text not null default '', last text not null default '', last_ref text not null default '',
+  prev text not null default '', prev_ref text not null default '', checked_at timestamptz, created_at timestamptz not null default now());
+alter table public.ai_dict enable row level security;
+alter table public.ai_gold enable row level security;
+revoke all on table public.ai_dict, public.ai_gold from anon, authenticated;
+revoke all on all sequences in schema public from anon, authenticated;
+`;
+// 2.8: должность и «о себе» в профиле, время смены организации, аватары для профилей коллег
+const SCHEMA_28 = `
+alter table public.profiles add column if not exists post text not null default '';
+alter table public.profiles add column if not exists bio text not null default '';
+alter table public.profiles add column if not exists hide_discord boolean not null default false;
+alter table public.profiles add column if not exists org_at timestamptz;
+create table if not exists public.avatars (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  img text not null, updated_at timestamptz not null default now());
+alter table public.avatars enable row level security;
+revoke all on table public.avatars from anon, authenticated;
+create table if not exists public.handoffs (
+  code text primary key, from_id uuid not null references public.profiles(id) on delete cascade,
+  data jsonb not null, created_at timestamptz not null default now(), expires_at timestamptz not null);
+alter table public.handoffs enable row level security;
+revoke all on table public.handoffs from anon, authenticated;
+`;
+// 2.9: мультисерверность. server — сервер игрока (у всех прежних Boston, 12); staff_server — сервер модератора (0 — все серверы)
+const SCHEMA_29 = `
+alter table public.profiles add column if not exists server integer not null default 12;
+alter table public.profiles add column if not exists staff_server integer not null default 0;
+create index if not exists profiles_server_idx on public.profiles (server, org);
+alter table public.audit_log add column if not exists server integer;
+update public.audit_log a set server = p.server from public.profiles p where a.server is null and a.target is not null and p.login_lc = lower(a.target);
+create index if not exists audit_log_server_idx on public.audit_log (server, id desc);
+alter table public.shifts add column if not exists server integer not null default 12;
+alter table public.control_tests add column if not exists server integer not null default 12;
+alter table public.reports add column if not exists server integer not null default 12;
+alter table public.org_events add column if not exists server integer not null default 12;
+alter table public.broadcasts add column if not exists server integer;
+update public.broadcasts set server = 12 where org is not null and server is null;
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'org_hooks' and column_name = 'server') then
+    alter table public.org_hooks add column server integer not null default 12;
+    alter table public.org_hooks drop constraint if exists org_hooks_pkey;
+    alter table public.org_hooks add primary key (org, server);
+  end if;
+end $$;
+`;
+const SCHEMA_30 = `
+create table if not exists public.discord_tickets (
+  id           bigserial primary key,
+  user_id      uuid references public.profiles(id) on delete cascade,
+  discord_id   text not null,
+  discord_name text not null,
+  channel_id   text not null,
+  channel_name text not null,
+  message_id   text not null default '',
+  status       text not null default 'open' check (status in ('open','accepted','closed')),
+  accepted_by  text not null default '',
+  created_at   timestamptz not null default now(),
+  closed_at    timestamptz
+);
+create index if not exists discord_tickets_user_idx on public.discord_tickets (user_id);
+create index if not exists discord_tickets_status_idx on public.discord_tickets (status);
+create index if not exists discord_tickets_channel_idx on public.discord_tickets (channel_id);
+
+create table if not exists public.discord_monitor (
+  id       bigserial primary key,
+  resource text not null,
+  ok       boolean not null default true,
+  latency  integer not null default 0,
+  detail   text not null default '',
+  checked_at timestamptz not null default now()
+);
+create index if not exists discord_monitor_resource_idx on public.discord_monitor (resource, checked_at desc);
+
+alter table public.discord_tickets enable row level security;
+alter table public.discord_monitor enable row level security;
+revoke all on table public.discord_tickets, public.discord_monitor from anon, authenticated;
+`;
+let schemaReady = null;
+function ensureSchema() {
+  if (!schemaReady)
+    schemaReady = (async () => {
+      try {
+        const v = await getSetting("schema_v", 0);
+        if (+v >= SCHEMA_V) return;
+        // база уже на 2.4: повторно 2.4 не выполняем (иначе вернулись бы удалённые баннеры по умолчанию)
+        await db().unsafe(+v >= 30 ? SCHEMA_30 : +v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29);
+        adsReady = true;
+        await setSetting("schema_v", SCHEMA_V);
+      } catch (e) {
+        console.error("schema", e);
+        schemaReady = null; // попробуем при следующем запросе
+      }
+    })();
+  return schemaReady;
+}
+
+// ───────────── 2.4: функции по флагам (владелец включает в панели: всем, только тестерам или никому) ─────────────
+// [название в панели, режим по умолчанию, версия]. В панели сверху функции последней версии, остальные — в «Прошлых версиях»
+const FLAG_DEFS = {
+  patrol: ["Совместный патруль", "beta", "2.4"],
+  board: ["Тактическая доска", "all", "2.4"],
+  mini: ["Мини-окно задержания", "all", "2.4"],
+  tts: ["Озвучка статей", "all", "2.4"],
+  mascot: ["Лиса Senko", "all", "2.4"],
+  season: ["Сезонное оформление", "all", "2.4"],
+  card: ["Карточка сотрудника", "all", "2.4"],
+  ideas: ["Идеи и голосование", "all", "2.4"],
+  events: ["Мероприятия организаций", "all", "2.4"],
+  col28: ["Коллеги и должность в профиле", "beta", "2.8"],
+  det28mk: ["Процессуальные отметки со временем (и голосом в рации)", "beta", "2.8"],
+  det28wait: ["Отсчёт ожидания адвоката и прокурора", "beta", "2.8"],
+  det28rp: ["Проверка рапорта перед отправкой", "beta", "2.8"],
+  det28shift: ["Журнал смены и отчёт о смене", "beta", "2.8"],
+  det28grp: ["Групповое задержание", "beta", "2.8"],
+  det28jur: ["Подсказка по юрисдикции в калькуляторе", "beta", "2.8"],
+  det28note: ["Голосовая заметка в рации", "beta", "2.8"],
+  det28sz: ["Изъятые предметы в карточке задержания", "beta", "2.8"],
+  det28wit: ["Свидетели и потерпевшие", "beta", "2.8"],
+  det28chron: ["Хронология и причины пауз в рапорте", "beta", "2.8"],
+  det28xfer: ["Передача задержанного коллеге по коду", "beta", "2.8"],
+  det28imm: ["Проверка на неприкосновенность", "beta", "2.8"],
+  pad28: ["Блокнот: окно, чек-листы, напоминания", "beta", "2.8"],
+  pad28mini: ["Блокнот в мини-окне задержания", "beta", "2.8"],
+  pad28tpl: ["Шаблоны заметок", "beta", "2.8"],
+  srv29: ["Серверы Los Angeles и Denver (пилот: выбор сервера, законы и настройки)", "beta", "2.9"],
+};
+// функции выпущенных версий включены у всех и флагов больше не имеют; бета 2.7.0 ещё спрашивает общий флаг ai27
+const FLAG_RELEASED = { ai27: "all" };
+const FLAG_MODES = ["all", "beta", "off"];
+async function flagsNow() {
+  const s = (await getSetting("flags", {})) || {};
+  const out = {};
+  for (const k of Object.keys(FLAG_DEFS)) out[k] = FLAG_MODES.includes(s[k]) ? s[k] : FLAG_DEFS[k][1];
+  return { ...FLAG_RELEASED, ...out };
+}
+// Пилот 2.9: Boston доступен всем, остальные серверы — по флагу srv29 (beta: только тестерам, all: всем, off: никому, кроме уже сидящих там)
+async function serverOpen(srv, p) {
+  if (srv === DEFAULT_SERVER || (p && sv(p) === srv)) return true;
+  const m = (await flagsNow()).srv29;
+  return m === "all" || (m === "beta" && isTester(p));
+}
+const isTester = (p) => !!p && (!!p.beta || p.rank === "owner" || p.rank === "moderator");
+
+// ───────────── 2.4: бета-тестеры ─────────────
+async function setBeta(a, p, on) {
+  const sql = db();
+  await sql`update profiles set beta = ${!!on} where id = ${p.id}`;
+  await audit(a.label, "beta", p.login, { on: !!on });
+  if (on) {
+    await sql`insert into broadcasts (user_id, title, author, text, expires_at)
+              values (${p.id}, ${"🧪 Вы бета-тестер"}, ${a.label}, ${"Вам выдана роль «Бета-тестер». В меню программы появилась «Панель тестера»: задания на проверку, экспериментальные функции и ранние версии. Спасибо за помощь!"}, now() + interval '14 days')`;
+    if (p.tg_id != null) await send(String(p.tg_id), "🧪 Вам выдана роль <b>«Бета-тестер»</b> в Senko Assistant. В меню программы появилась «Панель тестера». Перезапустите программу, если её не видно.");
+  }
+}
+async function betaApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!isTester(p)) return fail("Панель тестера доступна только бета-тестерам.", { code: "forbidden" });
+  const sql = db();
+  const op = String(b.op || "tasks");
+  if (op === "tasks") {
+    const rows = await sql`select t.id, t.title, t.body, t.author, t.created_at, r.status, r.comment, r.at,
+                             (select count(*)::int from beta_results x where x.task_id = t.id) as n
+                           from beta_tasks t left join beta_results r on r.task_id = t.id and r.user_id = ${p.id}
+                           where not t.closed order by t.id desc limit 50`;
+    return { ok: true, tasks: rows.map((r) => ({ id: String(r.id), title: r.title, body: r.body, author: r.author, at: r.created_at, n: r.n, my: r.status ? { status: r.status, comment: r.comment, at: r.at } : null })), flags: await flagsNow() };
+  }
+  if (op === "result") {
+    const id = parseInt(b.id, 10) || 0;
+    const status = b.status === "bad" ? "bad" : "ok";
+    const comment = cleanText(b.comment, 800);
+    if (status === "bad" && comment.length < 5) return fail("Опишите, что не работает.");
+    if (!(await hit(`bt:${p.id}`, 60, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const [t] = await sql`select * from beta_tasks where id = ${id} and not closed`;
+    if (!t) return fail("Задание не найдено или уже закрыто.");
+    await sql`insert into beta_results (task_id, user_id, status, comment) values (${id}, ${p.id}, ${status}, ${comment})
+              on conflict (task_id, user_id) do update set status = excluded.status, comment = excluded.comment, at = now()`;
+    await quiet(`🧪 <b>${esc(p.login)}</b> · задание №${id} «${esc(t.title)}»: ${status === "ok" ? "✅ работает" : "❌ не работает"}${comment ? "\n" + esc(comment) : ""}`);
+    return { ok: true };
+  }
+  return fail("Неизвестное действие.");
+}
+
+// ───────────── 2.4: вебхуки Discord для организаций ─────────────
+const HOOK_EVENTS = { rep: "Новые рапорты", join: "Новые сотрудники и заявки", ctrl: "Контрольные тесты", event: "Мероприятия и напоминания", week: "Еженедельный отчёт" };
+const HOOK_RE = /^https:\/\/(?:ptb\.|canary\.)?discord(?:app)?\.com\/api\/webhooks\/\d{5,25}\/[\w-]{20,120}$/;
+const hookMask = (u) => String(u || "").replace(/(\/webhooks\/\d+\/)[\w-]+$/, (m, a) => a + "•••" + String(u).slice(-4));
+// Telegram-HTML в Markdown Discord
+function htmlToMd(s) {
+  return String(s || "")
+    .replace(/<\/?b>/g, "**").replace(/<\/?i>/g, "*").replace(/<\/?code>/g, "`")
+    .replace(/<a href="([^"]+)">([^<]*)<\/a>/g, "[$2]($1)").replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+}
+async function postHook(org, server, ev, title, text, color = 0xff8a3d) {
+  try {
+    const [h] = await db()`select * from org_hooks where org = ${org} and server = ${server || DEFAULT_SERVER}`;
+    if (!h || !(h.events || []).includes(ev) || h.fails >= 20) return false;
+    return await hookSend(h, title, text, color);
+  } catch (e) {
+    console.error("hook", e);
+    return false;
+  }
+}
+async function hookSend(h, title, text, color = 0xff8a3d) {
+  let ok = false, er = "";
+  try {
+    const r = await fetch(h.url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: "Senko Assistant", allowed_mentions: { parse: [] }, embeds: [{ title: clean(htmlToMd(title), 250), description: htmlToMd(text).slice(0, 3900), color, timestamp: new Date().toISOString(), footer: { text: "Senko Assistant · " + h.org } }] }),
+      signal: AbortSignal.timeout(10000),
+    });
+    ok = r.ok;
+    if (!ok) er = r.status === 404 ? "Вебхук удалён в Discord" : "Discord ответил " + r.status;
+  } catch (e) {
+    er = "Discord не отвечает";
+  }
+  await db()`update org_hooks set fails = ${ok ? 0 : h.fails + 1}, last_error = ${ok ? "" : er} where org = ${h.org} and server = ${h.server}`;
+  return ok ? true : er;
+}
+async function hooksApi(b) {
+  const { p, err } = await who(b, ["leader", "moderator", "owner"]);
+  if (err) return err;
+  const org = staffOrg(p, b);
+  if (!org) return fail("Выберите организацию.");
+  const srv = staffSrv(p, b);
+  const sql = db();
+  const op = String(b.op || "get");
+  const label = `${p.login} (${RANKS[p.rank]})`;
+  const out = async () => {
+    const [h] = await sql`select * from org_hooks where org = ${org} and server = ${srv}`;
+    return { ok: true, org, server: srv, events: HOOK_EVENTS, hook: h ? { url: hookMask(h.url), events: h.events || [], by: h.updated_by, at: h.updated_at, fails: h.fails, error: h.last_error } : null };
+  };
+  if (op === "get") return out();
+  if (!(await hit(`hk:${p.id}`, 30, 3600))) return fail(RATE_MSG, { code: "rate" });
+  if (op === "set") {
+    const evs = (Array.isArray(b.events) ? b.events : []).map(String).filter((k) => HOOK_EVENTS[k]);
+    const url = String(b.url || "").trim();
+    const [h] = await sql`select * from org_hooks where org = ${org} and server = ${srv}`;
+    if (url) {
+      if (!HOOK_RE.test(url)) return fail("Нужна ссылка вебхука Discord: https://discord.com/api/webhooks/…");
+      await sql`insert into org_hooks (org, server, url, events, updated_by) values (${org}, ${srv}, ${url}, ${evs}::text[], ${label})
+                on conflict (org, server) do update set url = excluded.url, events = excluded.events, updated_by = excluded.updated_by, updated_at = now(), fails = 0, last_error = ''`;
+    } else if (h) {
+      await sql`update org_hooks set events = ${evs}::text[], updated_by = ${label}, updated_at = now() where org = ${org} and server = ${srv}`;
+    } else return fail("Вставьте ссылку вебхука.");
+    await audit(label, "hook", org, { events: evs, url: !!url });
+    return out();
+  }
+  if (op === "test") {
+    const [h] = await sql`select * from org_hooks where org = ${org} and server = ${srv}`;
+    if (!h) return fail("Сначала сохраните вебхук.");
+    const r = await hookSend(h, "✅ Проверка связи", `Вебхук ${org} подключён к Senko Assistant. Проверил(а): ${p.nick || p.login}.`, 0x2e7d4f);
+    return r === true ? { ok: true, msg: "Сообщение отправлено в Discord." } : fail("Не получилось: " + r + ". Проверьте ссылку вебхука.");
+  }
+  if (op === "del") {
+    await sql`delete from org_hooks where org = ${org} and server = ${srv}`;
+    await audit(label, "hook", org, { deleted: true });
+    return out();
+  }
+  return fail("Неизвестное действие.");
+}
+
+// ───────────── 2.4: мероприятия организаций ─────────────
+const evOut = (e, p) => ({ id: String(e.id), org: e.org, title: e.title, body: e.body, place: e.place, at: e.starts_at, author: e.author, mine: !!p && e.author === (p.nick || p.login) });
+async function eventsFor(org, days = 14, server = DEFAULT_SERVER) {
+  return db()`select * from org_events where org = ${org} and server = ${server} and starts_at > now() - interval '3 hours' and starts_at < now() + make_interval(days => ${days})
+              order by starts_at limit 20`;
+}
+async function eventsApi(b) {
+  const op = String(b.op || "list");
+  const staff = op !== "list" || b.org;
+  const { p, err } = await who(b, staff ? ["leader", "moderator", "owner"] : undefined);
+  if (err) return err;
+  const org = staff ? staffOrg(p, b) : p.org;
+  if (!org) return fail("Выберите организацию.");
+  const srv = staff ? staffSrv(p, b) : sv(p);
+  const sql = db();
+  if (op === "list") return { ok: true, org, server: srv, events: (await eventsFor(org, 60, srv)).map((e) => evOut(e, p)) };
+  if (!(await hit(`ev:${p.id}`, 40, 3600))) return fail(RATE_MSG, { code: "rate" });
+  if (op === "create") {
+    const title = clean(b.title, 80);
+    if (title.length < 3) return fail("Напишите название мероприятия.");
+    const at = new Date(String(b.at || ""));
+    if (isNaN(at.getTime()) || at.getTime() < Date.now() - 60e3) return fail("Укажите дату и время в будущем.");
+    if (at.getTime() > Date.now() + 90 * 864e5) return fail("Не дальше чем на 90 дней вперёд.");
+    const [{ n }] = await sql`select count(*)::int n from org_events where org = ${org} and server = ${srv} and starts_at > now()`;
+    if (n >= 30) return fail("Запланировано уже 30 мероприятий, удалите лишние.");
+    const [e] = await sql`insert into org_events (org, server, title, body, place, starts_at, author)
+                          values (${org}, ${srv}, ${title}, ${cleanText(b.body, 600)}, ${clean(b.place, 80)}, ${at}, ${p.nick || p.login}) returning *`;
+    await audit(`${p.login} (${RANKS[p.rank]})`, "event", org, { id: String(e.id), title });
+    await postHook(org, srv, "event", "📅 Новое мероприятие: " + title, evText(e), 0x3b82f6);
+    return { ok: true, events: (await eventsFor(org, 60, srv)).map((x) => evOut(x, p)) };
+  }
+  if (op === "del") {
+    const id = parseInt(b.id, 10) || 0;
+    const [e] = await sql`delete from org_events where id = ${id} and org = ${org} and server = ${srv} returning *`;
+    if (!e) return fail("Мероприятие не найдено.");
+    await audit(`${p.login} (${RANKS[p.rank]})`, "event", org, { id: String(id), deleted: true });
+    if (e.starts_at > new Date()) await postHook(org, srv, "event", "🚫 Мероприятие отменено: " + e.title, evText(e), 0xb3261e);
+    return { ok: true, events: (await eventsFor(org, 60, srv)).map((x) => evOut(x, p)) };
+  }
+  return fail("Неизвестное действие.");
+}
+const evWhen = (d) => new Date(d).toLocaleString("ru-RU", { timeZone: "Europe/Moscow", day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit" }) + " МСК";
+const evText = (e) => `🕒 ${evWhen(e.starts_at)}${e.place ? "\n📍 " + esc(e.place) : ""}${e.body ? "\n\n" + esc(e.body) : ""}\n\nНазначил(а): ${esc(e.author)}`;
+// Напоминание за час до начала: Telegram сотрудникам организации и вебхук
+async function eventReminders() {
+  const sql = db();
+  const due = await sql`update org_events set reminded = true where id in (
+                          select id from org_events where not reminded and starts_at > now() and starts_at <= now() + interval '60 minutes' limit 3)
+                        returning *`;
+  for (const e of due) {
+    const text = `⏰ <b>Скоро мероприятие ${esc(e.org)}: ${esc(e.title)}</b>\n${evText(e)}`;
+    const rows = await sql`select tg_id from profiles where org = ${e.org} and server = ${e.server || DEFAULT_SERVER} and tg_id is not null and not banned and approval = 'ok' limit 150`;
+    for (const r of rows) await send(String(r.tg_id), text, { disable_notification: false });
+    await postHook(e.org, e.server || DEFAULT_SERVER, "event", "⏰ Через час: " + e.title, evText(e), 0xf59e0b);
+  }
+  return due.length;
+}
+
+// ───────────── 2.4: идеи с голосованием ─────────────
+const IDEA_ST = { new: "Новая", work: "В работе", done: "Сделано", no: "Отклонено" };
+async function ideasApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const sql = db();
+  const op = String(b.op || "list");
+  if (op === "list") {
+    const st = IDEA_ST[b.status] ? String(b.status) : "";
+    const rows = await sql`select i.id, i.text, i.status, i.answer, i.created_at, i.user_id = ${p.id} as mine, coalesce(pr.nick, 'Удалённый аккаунт') as nick,
+                             (select count(*)::int from idea_votes v where v.idea_id = i.id) as votes,
+                             exists (select 1 from idea_votes v where v.idea_id = i.id and v.user_id = ${p.id}) as voted
+                           from ideas i left join profiles pr on pr.id = i.user_id
+                           where ${st ? sql`i.status = ${st}` : sql`i.status <> 'no' or i.user_id = ${p.id}`}
+                           order by ${b.sort === "new" ? sql`i.created_at desc` : sql`votes desc, i.created_at desc`} limit 100`;
+    return { ok: true, ideas: rows.map((r) => ({ id: String(r.id), text: r.text, status: r.status, answer: r.answer, at: r.created_at, mine: r.mine, nick: r.nick, votes: r.votes, voted: r.voted })) };
+  }
+  if (op === "add") {
+    const text = cleanText(b.text, 600);
+    if (text.length < 15) return fail("Опишите идею подробнее: хотя бы одно предложение.");
+    if (!(await hit(`ia:${p.id}`, 3, 86400))) return fail("Можно предложить не больше 3 идей в сутки.", { code: "rate" });
+    const bad = await blacklisted(text);
+    if (bad) return fail("В тексте есть запрещённое слово.");
+    const [r] = await sql`insert into ideas (user_id, text) values (${p.id}, ${text}) returning id`;
+    await sql`insert into idea_votes (idea_id, user_id) values (${r.id}, ${p.id}) on conflict do nothing`;
+    await quiet(`💡 <b>Новая идея №${r.id}</b> от ${esc(p.login)} (${esc(p.org)})\n${esc(text)}`);
+    return { ok: true, id: String(r.id) };
+  }
+  if (op === "vote") {
+    const id = parseInt(b.id, 10) || 0;
+    if (!(await hit(`iv:${p.id}`, 200, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const [i] = await sql`select id, status from ideas where id = ${id}`;
+    if (!i) return fail("Идея не найдена.");
+    if (b.on === false) await sql`delete from idea_votes where idea_id = ${id} and user_id = ${p.id}`;
+    else await sql`insert into idea_votes (idea_id, user_id) values (${id}, ${p.id}) on conflict do nothing`;
+    const [{ n }] = await sql`select count(*)::int n from idea_votes where idea_id = ${id}`;
+    return { ok: true, votes: n, voted: b.on !== false };
+  }
+  if (op === "del") {
+    const id = parseInt(b.id, 10) || 0;
+    const r = await sql`delete from ideas where id = ${id} and user_id = ${p.id} and status = 'new' returning id`;
+    return r.length ? { ok: true } : fail("Удалить можно только свою идею, пока её не взяли в работу.");
+  }
+  return fail("Неизвестное действие.");
+}
+
+// ───────────── 2.4: совместный патруль (экипаж) ─────────────
+const PATROL_MAX = 8;
+const patrolCode = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+function patrolItem(d) {
+  d = d && typeof d === "object" ? d : {};
+  const n = (v, max) => Math.max(0, Math.min(max, Math.round(+v || 0)));
+  return {
+    nick: clean(d.nick, 40), st: clean(d.st, 12), arts: clean(d.arts, 300), mode: clean(d.mode, 8),
+    start: n(d.start, 9e15), pausedTotal: n(d.pausedTotal, 864e5), paused: d.paused && +d.paused.at ? { at: n(d.paused.at, 9e15), k: clean(d.paused.k, 20) } : null,
+    decidedAt: n(d.decidedAt, 864e5), result: clean(d.result, 120),
+  };
+}
+async function patrolApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!(await hit(`pt:${p.id}`, 1500, 3600))) return fail(RATE_MSG, { code: "rate" });
+  const sql = db();
+  const op = String(b.op || "state");
+  const mine = async () => (await sql`select m.code from patrol_members m join patrols t on t.code = m.code where m.user_id = ${p.id} and t.expires_at > now() limit 1`)[0];
+  const state = async (code) => {
+    await sql`update patrol_members set seen_at = now() where code = ${code} and user_id = ${p.id}`;
+    const [t] = await sql`select * from patrols where code = ${code}`;
+    const mem = await sql`select m.user_id, m.seen_at, pr.nick, pr.org from patrol_members m join profiles pr on pr.id = m.user_id where m.code = ${code} order by m.joined_at`;
+    const items = await sql`select i.uid, i.data, i.updated_at, i.user_id, pr.nick from patrol_items i left join profiles pr on pr.id = i.user_id
+                            where i.code = ${code} and not i.deleted and i.updated_at > now() - interval '12 hours' order by i.id`;
+    return {
+      ok: true, code, expires: t ? t.expires_at : null, now: Date.now(),
+      members: mem.map((m) => ({ nick: m.nick, org: m.org, me: m.user_id === p.id, online: Date.now() - new Date(m.seen_at).getTime() < 90e3 })),
+      items: items.map((i) => ({ uid: i.uid, by: i.nick || "", mine: i.user_id === p.id, data: i.data, at: i.updated_at })),
+    };
+  };
+  if (op === "state") {
+    const m = await mine();
+    if (!m) return { ok: true, code: null };
+    return state(m.code);
+  }
+  if (op === "create") {
+    const m = await mine();
+    if (m) return state(m.code);
+    const ABC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    for (let i = 0; i < 6 && !code; i++) {
+      const c = Array.from(crypto.getRandomValues(new Uint8Array(6))).map((x) => ABC[x % ABC.length]).join("");
+      const r = await sql`insert into patrols (code, owner_id, expires_at) values (${c}, ${p.id}, now() + interval '12 hours') on conflict do nothing returning code`;
+      if (r.length) code = c;
+    }
+    if (!code) return fail("Не удалось создать экипаж. Попробуйте ещё раз.");
+    await sql`insert into patrol_members (code, user_id) values (${code}, ${p.id})`;
+    await sql`delete from patrols where expires_at < now() - interval '1 day'`;
+    return state(code);
+  }
+  if (op === "join") {
+    const code = patrolCode(b.code);
+    const [t] = code.length === 6 ? await sql`select * from patrols where code = ${code} and expires_at > now()` : [];
+    if (!t) return fail("Экипаж с таким кодом не найден или уже закончил смену.");
+    const m = await mine();
+    if (m && m.code !== code) await sql`delete from patrol_members where code = ${m.code} and user_id = ${p.id}`;
+    const [{ n }] = await sql`select count(*)::int n from patrol_members where code = ${code}`;
+    if (n >= PATROL_MAX && !(m && m.code === code)) return fail(`В экипаже уже ${PATROL_MAX} человек.`);
+    await sql`insert into patrol_members (code, user_id) values (${code}, ${p.id}) on conflict do nothing`;
+    return state(code);
+  }
+  const m = await mine();
+  if (!m) return fail("Вы не в экипаже.", { code: "nopatrol" });
+  if (op === "leave") {
+    await sql`delete from patrol_items where code = ${m.code} and user_id = ${p.id}`;
+    await sql`delete from patrol_members where code = ${m.code} and user_id = ${p.id}`;
+    const [{ n }] = await sql`select count(*)::int n from patrol_members where code = ${m.code}`;
+    if (!n) await sql`delete from patrols where code = ${m.code}`;
+    return { ok: true, code: null };
+  }
+  if (op === "put") {
+    const uid = clean(b.uid, 24);
+    if (!/^[\w-]{1,24}$/.test(uid)) return fail("Некорректная запись.");
+    const [{ n }] = await sql`select count(*)::int n from patrol_items where code = ${m.code} and not deleted`;
+    if (n >= 60) return fail("В экипаже уже 60 задержаний.");
+    await sql`insert into patrol_items (code, user_id, uid, data) values (${m.code}, ${p.id}, ${uid}, ${sql.json(patrolItem(b.data))})
+              on conflict (code, user_id, uid) do update set data = excluded.data, updated_at = now(), deleted = false`;
+    return state(m.code);
+  }
+  if (op === "del") {
+    await sql`update patrol_items set deleted = true, updated_at = now() where code = ${m.code} and user_id = ${p.id} and uid = ${clean(b.uid, 24)}`;
+    return state(m.code);
+  }
+  return fail("Неизвестное действие.");
+}
+
+// ───────────── 2.4: публичный статус сервисов (страница /status/ на сайте) ─────────────
+let statusCache = null;
+async function statusApi() {
+  if (statusCache && Date.now() - statusCache.at < 60e3) return statusCache.r;
+  const S = [];
+  let t0 = Date.now();
+  try {
+    await db()`select 1`;
+    S.push({ k: "db", name: "База данных", ok: true, ms: Date.now() - t0 });
+  } catch (e) {
+    S.push({ k: "db", name: "База данных", ok: false });
+  }
+  S.push({ k: "api", name: "Сервер (вход, синхронизация, бот)", ok: true });
+  t0 = Date.now();
+  try {
+    const r = await fetch(AI_HEALTH_URL, { signal: AbortSignal.timeout(6000) });
+    const j = await r.json().catch(() => ({}));
+    S.push({ k: "ai", name: "ИИ-помощник", ok: r.ok && j.ok !== false, ms: Date.now() - t0 });
+  } catch (e) {
+    S.push({ k: "ai", name: "ИИ-помощник", ok: false });
+  }
+  let laws = null;
+  const lawsBy = {};
+  for (const id of Object.keys(SERVERS).map(Number)) {
+    const nm = id === DEFAULT_SERVER ? "Обновление законов с форума" : `Законы: ${SERVERS[id].name}`;
+    try {
+      const r = await fetch(lawsStatusUrl(id) + "?t=" + Date.now(), { signal: AbortSignal.timeout(6000) });
+      if (r.status === 404 && id !== DEFAULT_SERVER) continue; // сервер ещё не подключён к сбору законов
+      const j = await r.json();
+      const one = { checkedAt: j.checkedAt || 0, updatedAt: j.updatedAt || 0, count: j.count || 0 };
+      lawsBy[id] = one;
+      if (id === DEFAULT_SERVER) laws = one; // поле laws оставлено для старых версий программы и сайта
+      S.push({ k: id === DEFAULT_SERVER ? "laws" : "laws" + id, name: nm, ok: !!j.ok && Date.now() - j.checkedAt < 36 * 3600e3 });
+    } catch (e) {
+      S.push({ k: id === DEFAULT_SERVER ? "laws" : "laws" + id, name: nm, ok: false });
+    }
+  }
+  let tickAt = 0;
+  try {
+    const tk = await getSetting("tick", null);
+    tickAt = tk ? tk.at : 0;
+  } catch (e) {}
+  S.push({ k: "tick", name: "Уведомления и расписание", ok: Date.now() - tickAt < 10 * 60e3 });
+  let m = { on: false };
+  try {
+    m = (await getSetting("maintenance", { on: false })) || { on: false };
+  } catch (e) {}
+  const r = { ok: true, at: Date.now(), services: S, laws, lawsBy, maintenance: m.on ? { on: true, text: m.text || "" } : { on: false } };
+  statusCache = { at: Date.now(), r };
+  return r;
+}
+
+// 2.4: панель — бета-тестеры, задания, флаги функций, идеи
+async function panelBeta(b, a) {
+  const sql = db();
+  const op = b.op;
+  if (op === "beta_list") {
+    const users = await sql`select p.login, p.nick, p.org, p.server, p.rank, p.last_seen, p.app_version,
+                              (select count(*)::int from beta_results r where r.user_id = p.id) as results
+                            from profiles p where p.beta order by p.last_seen desc nulls last limit 200`;
+    const tasks = await sql`select t.*, (select count(*)::int from beta_results r where r.task_id = t.id and r.status = 'ok') as ok_n,
+                              (select count(*)::int from beta_results r where r.task_id = t.id and r.status = 'bad') as bad_n
+                            from beta_tasks t order by t.closed, t.id desc limit 60`;
+    return { ok: true, users, tasks, flags: await flagsNow(), defs: Object.fromEntries(Object.entries(FLAG_DEFS).map(([k, v]) => [k, v[0]])), vers: Object.fromEntries(Object.entries(FLAG_DEFS).map(([k, v]) => [k, v[2]])), canFlags: a.kind === "owner" };
+  }
+  if (op === "beta_set") {
+    const t = await findProfile(String(b.login || ""));
+    if (!t) return fail("Пользователь не найден.");
+    await setBeta(a, t, !!b.on);
+    return { ok: true };
+  }
+  if (op === "beta_task") {
+    const id = parseInt(b.id, 10) || 0;
+    const rows = await sql`select r.*, p.login, p.nick from beta_results r join profiles p on p.id = r.user_id where r.task_id = ${id} order by r.at desc`;
+    return { ok: true, results: rows.map((r) => ({ login: r.login, nick: r.nick, status: r.status, comment: r.comment, at: r.at })) };
+  }
+  if (op === "beta_task_save") {
+    const title = clean(b.title, 120);
+    if (title.length < 3) return fail("Напишите, что нужно проверить.");
+    const body = cleanText(b.body, 1500);
+    const id = parseInt(b.id, 10) || 0;
+    let t;
+    if (id) [t] = await sql`update beta_tasks set title = ${title}, body = ${body}, closed = ${!!b.closed} where id = ${id} returning *`;
+    else [t] = await sql`insert into beta_tasks (title, body, author) values (${title}, ${body}, ${a.label}) returning *`;
+    if (!t) return fail("Задание не найдено.");
+    await audit(a.label, "beta_task", title, { id: String(t.id), closed: t.closed });
+    if (!id) {
+      const rows = await sql`select tg_id from profiles where beta and tg_id is not null and not banned limit 100`;
+      for (const r of rows) await send(String(r.tg_id), `🧪 <b>Новое задание для тестеров</b>\n${esc(title)}${body ? "\n\n" + esc(body.slice(0, 600)) : ""}\n\nОтметить результат: программа → «Панель тестера».`, { disable_notification: true });
+    }
+    return { ok: true };
+  }
+  if (op === "beta_task_delete") {
+    const [t] = await sql`delete from beta_tasks where id = ${parseInt(b.id, 10) || 0} returning title`;
+    if (!t) return fail("Задание не найдено.");
+    await audit(a.label, "beta_task", t.title, { deleted: true });
+    return { ok: true };
+  }
+  if (op === "flags_set") {
+    if (a.kind !== "owner") return fail("Это доступно только владельцу.", { code: "forbidden" });
+    const k = String(b.key || ""), mode = String(b.mode || "");
+    if (!FLAG_DEFS[k] || !FLAG_MODES.includes(mode)) return fail("Неизвестная функция.");
+    const s = (await getSetting("flags", {})) || {};
+    s[k] = mode;
+    await setSetting("flags", s);
+    await audit(a.label, "flags", k, { mode });
+    return { ok: true, flags: await flagsNow() };
+  }
+  return fail("Неизвестное действие панели.");
+}
+async function panelIdeas(b, a) {
+  const sql = db();
+  if (b.op === "ideas_list") {
+    const st = IDEA_ST[b.status] ? String(b.status) : "";
+    const rows = await sql`select i.*, p.login, p.nick, p.org, (select count(*)::int from idea_votes v where v.idea_id = i.id) as votes
+                           from ideas i left join profiles p on p.id = i.user_id
+                           where ${st ? sql`i.status = ${st}` : sql`true`}
+                           order by ${b.sort === "new" ? sql`i.created_at desc` : sql`votes desc, i.created_at desc`} limit 200`;
+    return { ok: true, ideas: rows.map((r) => ({ id: String(r.id), text: r.text, status: r.status, answer: r.answer, at: r.created_at, login: r.login, nick: r.nick, org: r.org, votes: r.votes })), statuses: IDEA_ST };
+  }
+  if (b.op === "ideas_set") {
+    const id = parseInt(b.id, 10) || 0;
+    const status = IDEA_ST[b.status] ? String(b.status) : "";
+    if (!status) return fail("Выберите статус.");
+    const answer = cleanText(b.answer, 600);
+    const [old] = await sql`select * from ideas where id = ${id}`;
+    if (!old) return fail("Идея не найдена.");
+    const [r] = await sql`update ideas set status = ${status}, answer = ${answer}, updated_at = now() where id = ${id} returning *`;
+    await audit(a.label, "idea", "№" + id, { status });
+    if (r.user_id && (old.status !== status || old.answer !== answer))
+      await sql`insert into broadcasts (user_id, title, author, text, expires_at)
+                values (${r.user_id}, ${"💡 Ваша идея: " + IDEA_ST[status].toLowerCase()}, ${a.label},
+                        ${`«${r.text.slice(0, 160)}${r.text.length > 160 ? "…" : ""}» — ${IDEA_ST[status].toLowerCase()}.${answer ? " Ответ: " + answer : ""}`}, now() + interval '14 days')`;
+    return { ok: true };
+  }
+  if (b.op === "ideas_delete") {
+    const [r] = await sql`delete from ideas where id = ${parseInt(b.id, 10) || 0} returning id`;
+    if (!r) return fail("Идея не найдена.");
+    await audit(a.label, "idea", "№" + r.id, { deleted: true });
+    return { ok: true };
   }
   return fail("Неизвестное действие панели.");
 }
@@ -3443,12 +5159,12 @@ async function panelApi(b, ip, ua) {
 // Секреты (Edge Functions → Secrets). С 2.2.1 ключей нет ни в программе, ни на сайте, оба ходят сюда:
 //   LAWS_KEY   ключ расшифровки законов, тот же, что секрет LAWS_KEY на GitHub (им шифрует sync-laws)
 //   AI_KEY     ключ доступа к ИИ-прокси, тот же, что APP_KEY (или WEB_KEY) у Worker
-//   SITE_ORIGINS  необязательно: адреса сайта через запятую, если он не на senko-assistant.pages.dev
+//   SITE_ORIGINS  необязательно: ещё адреса сайта через запятую (senko-assistant.site, www и pages.dev разрешены всегда)
 const LAWS_KEY = Deno.env.get("LAWS_KEY") || "";
 const AI_KEY = Deno.env.get("AI_KEY") || "";
 const AI_URL = (Deno.env.get("AI_URL") || "https://senko-ai.senko-assistant.workers.dev").replace(/\/+$/, "");
 const LAWS_BASE = Deno.env.get("LAWS_BASE") || "https://raw.githubusercontent.com/Kofemanchik/Senko-Assistant/main/update/";
-const SITE_ORIGINS = ["https://senko-assistant.pages.dev", ...String(Deno.env.get("SITE_ORIGINS") || "").split(",").map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean)];
+const SITE_ORIGINS = ["https://senko-assistant.site", "https://www.senko-assistant.site", "https://senko-assistant.pages.dev", ...String(Deno.env.get("SITE_ORIGINS") || "").split(",").map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean)];
 
 function corsOrigin(req) {
   const o = String(req.headers.get("origin") || "");
@@ -3488,20 +5204,26 @@ function b64(u8) {
 }
 // Законы для программы и сайта: зашифрованный файл из репозитория расшифровывается здесь, ключ наружу не попадает.
 // Отдаём gzip (base64): программа и браузер распаковывают сами. Копия держится в памяти функции.
-let lawsCache = null; // { sig, updatedAt, count, gz, at }
-let lawsStatusAt = 0;
-async function lawsLoad(want) {
+const lawsCaches = new Map(); // номер сервера → { sig, updatedAt, count, gz, at, checkedAt, ok }
+const lawsStatusAt = new Map();
+async function lawsLoad(server, want) {
   // want: подпись, которую программа уже видит в laws-status.json; если копия старее, сверяемся раньше (не чаще раза в 30 с)
-  const fresh = Date.now() - lawsStatusAt < (want && lawsCache && want !== lawsCache.sig ? 30 * 1000 : 5 * 60 * 1000);
-  if (lawsCache && fresh) return lawsCache;
+  const cache = lawsCaches.get(server) || null;
+  const fresh = Date.now() - (lawsStatusAt.get(server) || 0) < (want && cache && want !== cache.sig ? 30 * 1000 : 5 * 60 * 1000);
+  if (cache && fresh) return cache;
   let st = null;
   try {
-    const r = await fetch(LAWS_BASE + "laws-status.json?t=" + Date.now(), { signal: AbortSignal.timeout(15000) });
+    const r = await fetch(LAWS_BASE + "laws-status" + lawsSfx(server) + ".json?t=" + Date.now(), { signal: AbortSignal.timeout(15000) });
     if (r.ok) st = await r.json();
   } catch (e) {}
-  lawsStatusAt = Date.now();
-  if (lawsCache && (!st || st.sig === lawsCache.sig)) return lawsCache;
-  const r = await fetch(LAWS_BASE + "laws.enc?t=" + Date.now(), { signal: AbortSignal.timeout(60000) });
+  lawsStatusAt.set(server, Date.now());
+  if (cache && (!st || st.sig === cache.sig)) return cache;
+  const r = await fetch(LAWS_BASE + "laws" + lawsSfx(server) + ".enc?t=" + Date.now(), { signal: AbortSignal.timeout(60000) });
+  if (r.status === 404) {
+    const e = new Error("законы сервера " + server + " ещё не собраны");
+    e.none = true;
+    throw e;
+  }
   if (!r.ok) throw new Error("GitHub вернул " + r.status);
   const buf = new Uint8Array(await r.arrayBuffer());
   if (buf.length < 32 || String.fromCharCode(...buf.subarray(0, 4)) !== "SLW1") throw new Error("неверный формат файла законов");
@@ -3510,21 +5232,25 @@ async function lawsLoad(want) {
   data.set(buf.subarray(32), 0);
   data.set(buf.subarray(16, 32), buf.length - 32); // WebCrypto ждёт тег в конце
   const gz = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.subarray(4, 16) }, key, data));
-  lawsCache = { sig: (st && st.sig) || (await sha256(b64(gz.subarray(0, 4096)))).slice(0, 40), updatedAt: (st && st.updatedAt) || 0, checkedAt: (st && st.checkedAt) || 0, ok: st ? st.ok !== false : true, gz, at: Date.now() };
-  return lawsCache;
+  const c = { sig: (st && st.sig) || (await sha256(b64(gz.subarray(0, 4096)))).slice(0, 40), updatedAt: (st && st.updatedAt) || 0, checkedAt: (st && st.checkedAt) || 0, ok: st ? st.ok !== false : true, gz, at: Date.now() };
+  lawsCaches.set(server, c);
+  return c;
 }
+// Сервер берётся из профиля игрока (b.server игнорируется: законы чужого сервера не выдаём)
 async function lawsApi(b) {
-  const { err } = await who(b);
+  const { p, err } = await who(b);
   if (err) return err;
   if (!LAWS_KEY) return fail("Законы с форума на сервере ещё не подключены. Сообщите владельцу.", { code: "laws_off" });
+  const server = sv(p);
   let L;
   try {
-    L = await lawsLoad(b.want ? String(b.want).slice(0, 80) : "");
+    L = await lawsLoad(server, b.want ? String(b.want).slice(0, 80) : "");
   } catch (e) {
+    if (e && e.none) return fail(`Законы сервера ${srvName(server)} ещё не собраны с форума. Пока показаны законы Boston.`, { code: "laws_none", server });
     console.error("laws", e);
     return fail("Не удалось получить законы. Попробуйте позже.", { code: "server" });
   }
-  const meta = { sig: L.sig, updatedAt: L.updatedAt, checkedAt: L.checkedAt, srcOk: L.ok };
+  const meta = { server, sig: L.sig, updatedAt: L.updatedAt, checkedAt: L.checkedAt, srcOk: L.ok };
   if (b.sig && String(b.sig) === L.sig) return { ok: true, same: true, ...meta };
   if (b.plain) {
     const text = await new Response(new Blob([L.gz]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
@@ -3542,19 +5268,32 @@ async function aiAsk(b) {
   const { p, err } = await who(b);
   if (err) return err;
   if (!AI_KEY) return fail("ИИ-помощник на сервере ещё не подключён. Сообщите владельцу.", { code: "ai_off" });
-  if (!(await hit(`aiweb:${p.id}`, 60, 86400))) return fail("Дневной лимит вопросов к ИИ исчерпан. Он обновится завтра.", { limit: true });
+  let bonus = 0;
+  try {
+    await ensureXpAdj();
+    const [r] = await db()`select ai_bonus from profiles where id = ${p.id}`;
+    bonus = (r && r.ai_bonus) || 0;
+  } catch (e) {
+    console.error("ai_bonus", e);
+  }
+  if (!(await hit(`aiweb:${p.id}`, 60, 86400)) && bonus <= 0) return fail("Дневной лимит вопросов к ИИ исчерпан. Он обновится завтра.", { limit: true });
   const q = String(b.q == null ? "" : b.q).replace(/\s+/g, " ").trim().slice(0, 500);
   if (q.length < 3) return fail("Напишите вопрос подробнее.");
   const ctx = (Array.isArray(b.ctx) ? b.ctx : []).slice(0, 10).map((c) => ({ ref: clean(c && c.ref, 80), text: String((c && c.text) || "").slice(0, 2000) })).filter((c) => c.ref && c.text);
   const refs = ctx.map((c) => c.ref);
   const cid = (await sha256("web:" + p.id)).slice(0, 32);
   const ts = String(Date.now());
+  // 2.7: встречный вопрос, если не хватает деталей (только в окне ИИ, не в голосовом помощнике)
+  const clar = !b.short;
   let j = null, status = 0;
   try {
     const r = await fetch(AI_URL + "/ask", {
       method: "POST",
-      headers: { "content-type": "application/json", "x-senko-cid": cid, "x-senko-ts": ts, "x-senko-sig": await hmacHex(AI_KEY, cid + "." + ts) },
-      body: JSON.stringify({ short: !!b.short, q, ctx }),
+      headers: {
+        "content-type": "application/json", "x-senko-cid": cid, "x-senko-ts": ts, "x-senko-sig": await hmacHex(AI_KEY, cid + "." + ts),
+        ...(bonus > 0 ? { "x-senko-bsig": await hmacHex(AI_KEY, cid + "." + ts + ".b") } : {}),
+      },
+      body: JSON.stringify({ short: !!b.short, clar: clar, q, ctx }),
       signal: AbortSignal.timeout(35000),
     });
     status = r.status;
@@ -3562,10 +5301,45 @@ async function aiAsk(b) {
   } catch (e) {
     return fail("Не удалось связаться с ИИ-сервисом. Попробуйте позже.");
   }
-  const logged = !(j && j.limit) ? await aiLog({ token: b.token, q, refs, ok: !!(j && j.ok) }).catch(() => null) : null;
+  const logged = !(j && j.limit) ? await aiLog({ token: b.token, q, refs, ok: !!(j && j.ok), ans: j && j.ok ? j.answer : "" }).catch(() => null) : null;
   const logId = logged && logged.ok ? logged.id : "";
   if (!j || !j.ok) return fail((j && j.error) || "ИИ-сервис вернул ошибку (" + status + ").", { limit: !!(j && j.limit) });
-  return { ok: true, answer: String(j.answer || ""), left: typeof j.left === "number" ? j.left : null, cached: !!j.cached, logId };
+  if (j.bonus && bonus > 0) {
+    try {
+      const [u] = await db()`update profiles set ai_bonus = greatest(ai_bonus - 1, 0) where id = ${p.id} returning ai_bonus`;
+      bonus = u ? u.ai_bonus : bonus - 1;
+    } catch (e) {
+      console.error("ai_bonus spend", e);
+    }
+  }
+  return { ok: true, answer: String(j.answer || ""), left: typeof j.left === "number" ? j.left : null, bonus, cached: !!j.cached, logId };
+}
+
+// 2.6.1: распознавание речи для рации. Запись идёт в ИИ-прокси (Whisper), обратно приходит только текст; здесь ничего не сохраняется
+async function sttApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!AI_KEY) return fail("Распознавание на сервере ещё не подключено.", { code: "ai_off" });
+  const audio = typeof b.audio === "string" ? b.audio : "";
+  if (audio.length < 2000 || audio.length > 1100000) return fail("Неверная запись.");
+  if (!(await hit(`stt:${p.id}`, 500, 86400))) return fail("Дневной лимит распознавания исчерпан.", { limit: true });
+  const prompt = String(b.prompt == null ? "" : b.prompt).replace(/\s+/g, " ").slice(0, 600);
+  const cid = (await sha256("web:" + p.id)).slice(0, 32);
+  const ts = String(Date.now());
+  try {
+    const r = await fetch(AI_URL + "/stt", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-senko-cid": cid, "x-senko-ts": ts, "x-senko-sig": await hmacHex(AI_KEY, cid + "." + ts) },
+      body: JSON.stringify({ audio, prompt }),
+      signal: AbortSignal.timeout(20000),
+    });
+    let j = null;
+    try { j = await r.json(); } catch (e) {}
+    if (!j || !j.ok) return fail((j && j.error) || "Распознавание вернуло ошибку (" + r.status + ").", { limit: !!(j && j.limit) });
+    return { ok: true, text: String(j.text || "").slice(0, 600) };
+  } catch (e) {
+    return fail("Не удалось связаться с распознаванием.");
+  }
 }
 
 Deno.serve(async (req) => withCors(req, await handle(req)));
@@ -3573,6 +5347,7 @@ Deno.serve(async (req) => withCors(req, await handle(req)));
 async function handle(req) {
   try {
     if (req.method === "OPTIONS") return preflight(req);
+    await ensureSchema();
     if (req.method === "GET") {
       const url = new URL(req.url);
       if (url.searchParams.has("setup")) return await setup(url);
