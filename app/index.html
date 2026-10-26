@@ -6329,7 +6329,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.8.0-beta.7";
+var APP_VER="2.9.0-beta.1";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6418,6 +6418,12 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.9.0-beta.1",d:"26.10.2026",items:[
+  ["🧪","Только для бета-тестеров","Первая бета мультисерверности: программа работает на нескольких серверах Majestic."],
+  ["🌐","Выбор сервера","Сервер указывается при регистрации и меняется в личном кабинете: Boston (12), Los Angeles (7), Denver (16). Рейтинги, «Коллеги», рапорты, смены, контрольные тесты и заявки теперь отдельные у каждого сервера. После смены сервера роль руководителя снимается, а профили коллег закрыты на 24 часа."],
+  ["⚠️","Законы пока только Boston","Законы Los Angeles и Denver подключим в следующей бете. До этого на любом сервере показываются законы Boston, не ориентируйтесь на них по другим серверам."],
+  ["🛠️","Панель руководителя","У владельца и модераторов в панели появился выбор сервера. Руководство видит только свою организацию на своём сервере."],
+  ["✨","Экран больше не мигает","Исправлено моргание окна при создании и удалении задержания."]]},
  {v:"2.8.0-beta.7",d:"24.10.2026",items:[
   ["🧪","Только для бета-тестеров","Исправление анимаций."],
   ["✨","Интерфейс больше не дёргается","Кнопки при нажатии не сжимаются, а текст статей и раскрывающихся блоков не сдвигается. Отклик на нажатие даёт волна, новый раздел и раскрытый блок плавно проявляются на месте."]]},
@@ -8251,7 +8257,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.8.0-beta.7";
+var APP_VER="2.9.0-beta.1";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
