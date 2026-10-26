@@ -3556,7 +3556,7 @@ async function cron(req) {
   if (b && b.action === "laws_failed") {
     const run = /^\d{1,20}$/.test(String(b.run || "")) ? String(b.run) : "";
     if (OWNER_TG)
-      await send(OWNER_TG, `❌ <b>Обновление законов не удалось</b>${b.manual ? " (ручной запуск)" : ""}. В программе остались прошлые версии.${run ? `\n<a href="https://github.com/${GH_REPO}/actions/runs/${run}">Лог на GitHub</a>` : ""}`);
+      await send(OWNER_TG, `❌ <b>Обновление законов не удалось${parseServer(b.server) ? " · " + esc(srvName(parseServer(b.server))) : ""}</b>${b.manual ? " (ручной запуск)" : ""}. В программе остались прошлые версии.${run ? `\n<a href="https://github.com/${GH_REPO}/actions/runs/${run}">Лог на GitHub</a>` : ""}`);
     return J({ ok: true });
   }
   return J(await tick());

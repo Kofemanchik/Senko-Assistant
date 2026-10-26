@@ -19,20 +19,39 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  sync:
+  # Серверы (scripts/servers.js) обрабатываются параллельно, каждый в своей задаче со своим лимитом времени:
+  # парсинг одного сервера на форуме занимает до получаса, три подряд не уместились бы в общий лимит.
+  # Сбой одного сервера не мешает остальным; сам запуск при этом станет красным.
+  plan:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      LAWS_KEY: ${{ secrets.LAWS_KEY }}
+    timeout-minutes: 5
+    outputs:
+      servers: ${{ steps.list.outputs.servers }}
     steps:
-      # 1. Защита от «тихой остановки»: GitHub отключает расписание после 60 дней без активности.
-      #    Повторное включение workflow сбрасывает этот счётчик. Шаг выполняется первым, даже если дальше всё упадёт.
+      # Защита от «тихой остановки»: GitHub отключает расписание после 60 дней без активности.
+      # Повторное включение workflow сбрасывает этот счётчик. Шаг выполняется первым, даже если дальше всё упадёт.
       - name: Keepalive (продлить расписание)
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/sync-laws.yml/enable"
+      - uses: actions/checkout@v4
+      - name: Список серверов
+        id: list
+        run: echo "servers=$(node -e "console.log(JSON.stringify(require('./scripts/servers.js').SERVERS.map(s=>s.id)))")" >> "$GITHUB_OUTPUT"
 
+  sync:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        server: ${{ fromJSON(needs.plan.outputs.servers) }}
+    env:
+      LAWS_KEY: ${{ secrets.LAWS_KEY }}
+      SERVER: ${{ matrix.server }}
+    steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -42,40 +61,31 @@ jobs:
         run: |
           if [ -z "$LAWS_KEY" ]; then echo "::error::Не задан секрет LAWS_KEY (Settings → Secrets and variables → Actions)"; exit 1; fi
 
+      - name: Расшифровать прошлую версию (для сравнения)
+        env:
+          LAWS_RESET: ${{ inputs.reset && '1' || '' }}
+        run: node scripts/laws-crypt.js decrypt
+
       - name: Install parser deps
         working-directory: scripts
         run: npm install --no-audit --no-fund
       - name: Install Chromium
         working-directory: scripts
         run: npx playwright install --with-deps chromium
-
-      # Серверы обрабатываются по очереди (список — scripts/servers.js). Сбой одного не мешает остальным,
-      # но в конце задача станет красной, а для упавшего сервера в его laws-status*.json появится пометка.
-      - name: Парсинг и публикация законов по серверам
+      - name: Parse forum
         env:
-          LAWS_RESET: ${{ inputs.reset && '1' || '' }}
           FORUM_LOGIN: ${{ secrets.FORUM_LOGIN }}
           FORUM_PASSWORD: ${{ secrets.FORUM_PASSWORD }}
+        run: node scripts/sync-laws.js
+
+      - name: Разметить изменения и зашифровать
+        env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}   # оповещение в Telegram о новых законах
-        run: |
-          failed=""
-          for id in $(node -e "console.log(require('./scripts/servers.js').SERVERS.map(s=>s.id).join(' '))"); do
-            echo "::group::Сервер $id"
-            if SERVER=$id node scripts/laws-crypt.js decrypt \
-               && SERVER=$id node scripts/sync-laws.js \
-               && SERVER=$id node scripts/publish-laws.js; then
-              echo "Сервер $id: готово"
-            else
-              echo "::error::Сервер $id: сбой"
-              failed="$failed $id"
-              SERVER=$id node scripts/mark-failed.js "сервер $id: парсер или публикация завершились с ошибкой (запуск ${{ github.run_id }})" || true
-            fi
-            echo "::endgroup::"
-          done
-          echo "FAILED_SERVERS=$failed" >> "$GITHUB_ENV"
-          # отчёт о числе статей, звёзд и штрафов по каждому серверу (в сводку запуска; на публикацию не влияет)
-          { echo "## Законы по серверам"; SERVER=all node scripts/check-laws.js; } >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
-          if [ -n "$failed" ]; then echo "::warning::Серверы со сбоем:$failed"; fi
+        run: node scripts/publish-laws.js
+
+      - name: Отчёт по серверу (звёзды, штрафы, части)
+        continue-on-error: true
+        run: node scripts/check-laws.js >> "$GITHUB_STEP_SUMMARY"
 
       - name: Commit
         run: |
@@ -85,19 +95,17 @@ jobs:
           if git diff --cached --quiet; then
             echo "Без изменений"
           else
-            git commit -m "laws: автообновление $(date -u +%F)"
-            git pull --rebase --autostash
-            git push
+            git commit -m "laws: автообновление сервера $SERVER $(date -u +%F)"
+            # серверы коммитят параллельно: при гонке подтягиваем чужой коммит и пробуем ещё раз
+            for i in 1 2 3 4 5; do
+              git pull --rebase --autostash && git push && exit 0
+              sleep $((i * 5))
+            done
+            echo "::error::Не удалось отправить коммит"; exit 1
           fi
 
-      - name: Итог
-        if: env.FAILED_SERVERS != ''
-        run: |
-          echo "::error::Не обновились серверы:$FAILED_SERVERS"
-          exit 1
-
-      # 2. Если что-то упало — всё равно коммитим пометку об ошибке: это и «активность» для GitHub,
-      #    и сигнал приложению. Сама задача при этом остаётся красной — GitHub пришлёт письмо о сбое.
+      # Если что-то упало — всё равно коммитим пометку об ошибке: это и «активность» для GitHub,
+      # и сигнал приложению. Сама задача при этом остаётся красной — GitHub пришлёт письмо о сбое.
       - name: Пометить сбой в laws-status*.json
         if: failure()
         env:
@@ -106,13 +114,12 @@ jobs:
           if [ -n "$CRON_SECRET" ]; then
             curl -s -m 20 -X POST "https://wcjspwailippjmyffkei.supabase.co/functions/v1/senko" \
               -H "content-type: application/json" -H "x-senko-cron: $CRON_SECRET" \
-              -d '{"action":"laws_failed","run":"${{ github.run_id }}","manual":${{ github.event_name == 'workflow_dispatch' }}}' || true
+              -d '{"action":"laws_failed","server":${{ matrix.server }},"run":"${{ github.run_id }}","manual":${{ github.event_name == 'workflow_dispatch' }}}' || true
           fi
-          SERVER=all node scripts/mark-failed.js "парсер или публикация завершились с ошибкой (запуск ${{ github.run_id }})"
+          node scripts/mark-failed.js "сервер $SERVER: парсер или публикация завершились с ошибкой (запуск ${{ github.run_id }})"
           git config user.name "laws-bot"
           git config user.email "laws-bot@users.noreply.github.com"
           rm -f update/.prev*.json
           git add update/laws-status*.json
-          git commit -m "laws: сбой автообновления $(date -u +%F)" || true
-          git pull --rebase --autostash || true
-          git push || true
+          git commit -m "laws: сбой автообновления сервера $SERVER $(date -u +%F)" || true
+          for i in 1 2 3 4 5; do git pull --rebase --autostash && git push && break; sleep $((i * 5)); done || true
