@@ -11,7 +11,7 @@ on:
         default: false
 
 permissions:
-  contents: write   # коммит update/laws.enc и update/laws-status.json
+  contents: write   # коммит update/laws*.enc и update/laws-status*.json
   actions: write    # продление расписания (см. шаг Keepalive)
 
 concurrency:
@@ -42,27 +42,38 @@ jobs:
         run: |
           if [ -z "$LAWS_KEY" ]; then echo "::error::Не задан секрет LAWS_KEY (Settings → Secrets and variables → Actions)"; exit 1; fi
 
-      - name: Расшифровать прошлую версию (для сравнения)
-        env:
-          LAWS_RESET: ${{ inputs.reset && '1' || '' }}
-        run: node scripts/laws-crypt.js decrypt
-
       - name: Install parser deps
         working-directory: scripts
         run: npm install --no-audit --no-fund
       - name: Install Chromium
         working-directory: scripts
         run: npx playwright install --with-deps chromium
-      - name: Parse forum
+
+      # Серверы обрабатываются по очереди (список — scripts/servers.js). Сбой одного не мешает остальным,
+      # но в конце задача станет красной, а для упавшего сервера в его laws-status*.json появится пометка.
+      - name: Парсинг и публикация законов по серверам
         env:
+          LAWS_RESET: ${{ inputs.reset && '1' || '' }}
           FORUM_LOGIN: ${{ secrets.FORUM_LOGIN }}
           FORUM_PASSWORD: ${{ secrets.FORUM_PASSWORD }}
-        run: node scripts/sync-laws.js
-
-      - name: Разметить изменения и зашифровать
-        env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}   # оповещение в Telegram о новых законах
-        run: node scripts/publish-laws.js
+        run: |
+          failed=""
+          for id in $(node -e "console.log(require('./scripts/servers.js').SERVERS.map(s=>s.id).join(' '))"); do
+            echo "::group::Сервер $id"
+            if SERVER=$id node scripts/laws-crypt.js decrypt \
+               && SERVER=$id node scripts/sync-laws.js \
+               && SERVER=$id node scripts/publish-laws.js; then
+              echo "Сервер $id: готово"
+            else
+              echo "::error::Сервер $id: сбой"
+              failed="$failed $id"
+              SERVER=$id node scripts/mark-failed.js "сервер $id: парсер или публикация завершились с ошибкой (запуск ${{ github.run_id }})" || true
+            fi
+            echo "::endgroup::"
+          done
+          echo "FAILED_SERVERS=$failed" >> "$GITHUB_ENV"
+          if [ -n "$failed" ]; then echo "::warning::Серверы со сбоем:$failed"; fi
 
       - name: Commit
         run: |
@@ -77,9 +88,15 @@ jobs:
             git push
           fi
 
+      - name: Итог
+        if: env.FAILED_SERVERS != ''
+        run: |
+          echo "::error::Не обновились серверы:$FAILED_SERVERS"
+          exit 1
+
       # 2. Если что-то упало — всё равно коммитим пометку об ошибке: это и «активность» для GitHub,
       #    и сигнал приложению. Сама задача при этом остаётся красной — GitHub пришлёт письмо о сбое.
-      - name: Пометить сбой в laws-status.json
+      - name: Пометить сбой в laws-status*.json
         if: failure()
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}   # сообщение о сбое владельцу в Telegram
@@ -89,11 +106,11 @@ jobs:
               -H "content-type: application/json" -H "x-senko-cron: $CRON_SECRET" \
               -d '{"action":"laws_failed","run":"${{ github.run_id }}","manual":${{ github.event_name == 'workflow_dispatch' }}}' || true
           fi
-          node scripts/mark-failed.js "парсер или публикация завершились с ошибкой (запуск ${{ github.run_id }})"
+          SERVER=all node scripts/mark-failed.js "парсер или публикация завершились с ошибкой (запуск ${{ github.run_id }})"
           git config user.name "laws-bot"
           git config user.email "laws-bot@users.noreply.github.com"
-          rm -f update/.prev.json
-          git add update/laws-status.json
+          rm -f update/.prev*.json
+          git add update/laws-status*.json
           git commit -m "laws: сбой автообновления $(date -u +%F)" || true
           git pull --rebase --autostash || true
           git push || true

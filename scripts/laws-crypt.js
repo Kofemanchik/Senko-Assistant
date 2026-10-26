@@ -2,6 +2,7 @@
    Ключ берётся из LAWS_KEY (секрет репозитория; тот же ключ задан в Supabase, программе он не нужен). В публичном репозитории лежит только шифртекст.
 
    Команды:
+     (сервер задаётся переменной SERVER: 12 Boston — по умолчанию, 7 Los Angeles, 16 Denver; rekey обрабатывает все серверы сразу)
      node scripts/laws-crypt.js decrypt   — перед парсером: расшифровать прошлую версию в update/laws.json и update/.prev.json
      node scripts/laws-crypt.js encrypt   — разово: зашифровать существующий update/laws.json в update/laws.enc
      node scripts/laws-crypt.js rekey     — смена ключа: расшифровать update/laws.enc ключом LAWS_KEY и зашифровать ключом LAWS_KEY_NEW
@@ -34,9 +35,9 @@ function decrypt(buf, secret) {
 module.exports = { encrypt, decrypt };
 
 if (require.main === module) {
-  const dir = path.join(__dirname, "..", "update");
-  const enc = path.join(dir, "laws.enc"), plain = path.join(dir, "laws.json"), prev = path.join(dir, ".prev.json");
+  const SRV = require("./servers.js");
   const cmd = process.argv[2];
+  const { enc, plain, prev } = SRV.files(cmd === "rekey" ? SRV.DEFAULT : SRV.current());
   try {
     if (cmd === "decrypt") {
       if (fs.existsSync(enc)) {
@@ -60,11 +61,18 @@ if (require.main === module) {
     } else if (cmd === "rekey") {
       if (!process.env.LAWS_KEY_NEW) throw new Error("LAWS_KEY_NEW не задан.");
       if (process.env.LAWS_KEY_NEW === process.env.LAWS_KEY) throw new Error("LAWS_KEY_NEW совпадает с LAWS_KEY: ключ уже сменён.");
-      const t = decrypt(fs.readFileSync(enc), process.env.LAWS_KEY);
-      const out = encrypt(t, process.env.LAWS_KEY_NEW);
-      decrypt(out, process.env.LAWS_KEY_NEW); // проверка
-      fs.writeFileSync(enc, out);
-      console.log("laws.enc перешифрован новым ключом. Теперь замените секрет LAWS_KEY значением LAWS_KEY_NEW и удалите LAWS_KEY_NEW.");
+      let n = 0;
+      for (const sv of SRV.SERVERS) {
+        const f = SRV.files(sv.id).enc;
+        if (!fs.existsSync(f)) continue;
+        const t = decrypt(fs.readFileSync(f), process.env.LAWS_KEY);
+        const out = encrypt(t, process.env.LAWS_KEY_NEW);
+        decrypt(out, process.env.LAWS_KEY_NEW); // проверка
+        fs.writeFileSync(f, out);
+        n++;
+      }
+      if (!n) throw new Error("Нет ни одного файла законов (laws*.enc).");
+      console.log("Файлов перешифровано: " + n + ". Файлы законов (laws*.enc) перешифрованы новым ключом. Теперь замените секрет LAWS_KEY значением LAWS_KEY_NEW и удалите LAWS_KEY_NEW.");
     } else { console.error("Использование: decrypt | encrypt | rekey"); process.exit(2); }
   } catch (e) { console.error("Ошибка:", e.message); process.exit(1); }
 }

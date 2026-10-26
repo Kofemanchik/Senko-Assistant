@@ -1097,6 +1097,9 @@ const GH_LAWS_TOKEN = Deno.env.get("GH_LAWS_TOKEN") || ""; // токен GitHub 
 const GH_REPO = Deno.env.get("GH_REPO") || "Kofemanchik/Senko-Assistant";
 const LAWS_WORKFLOW = "sync-laws.yml";
 const LAWS_STATUS_URL = Deno.env.get("LAWS_STATUS_URL") || "https://raw.githubusercontent.com/Kofemanchik/Senko-Assistant/main/update/laws-status.json";
+// Boston хранится как раньше (laws-status.json), остальные серверы — с номером (laws-status-7.json): scripts/servers.js
+const lawsSfx = (n) => (n === DEFAULT_SERVER ? "" : "-" + n);
+const lawsStatusUrl = (n) => (n === DEFAULT_SERVER ? LAWS_STATUS_URL : LAWS_STATUS_URL.replace(/laws-status\.json$/, "laws-status" + lawsSfx(n) + ".json"));
 const NOTICE_DAYS = 7; // сколько дней рассылка видна в программе
 const MILESTONES = [100, 250, 500, 1000, 2000, 5000, 10000];
 const FAIL_ALERT = 5; // неудачных входов за 15 минут, после которых владелец получает уведомление
@@ -1220,13 +1223,19 @@ async function healthText() {
   } catch (e) {
     L.push("❌ ИИ-прокси: не отвечает");
   }
-  try {
-    const r = await fetch(LAWS_STATUS_URL + "?t=" + Date.now(), { signal: AbortSignal.timeout(6000) });
-    const j = await r.json();
-    const age = Math.round((Date.now() - j.checkedAt) / 3600e3);
-    L.push(`${j.ok && age < 36 ? "✅" : "⚠️"} Законы: проверка ${fmtDate(j.checkedAt)} (${age} ч. назад), последнее изменение ${fmtDate(j.updatedAt)}, законов: ${j.count}${j.failed ? ", не прочитано тем: " + j.failed : ""}${j.error ? "\nОшибка: " + esc(j.error) : ""}`);
-  } catch (e) {
-    L.push("⚠️ Законы: не удалось прочитать laws-status.json");
+  for (const id of Object.keys(SERVERS).map(Number)) {
+    try {
+      const r = await fetch(lawsStatusUrl(id) + "?t=" + Date.now(), { signal: AbortSignal.timeout(6000) });
+      if (r.status === 404 && id !== DEFAULT_SERVER) {
+        L.push(`⚠️ Законы ${esc(srvName(id))}: ещё не собирались (запустите /laws)`);
+        continue;
+      }
+      const j = await r.json();
+      const age = Math.round((Date.now() - j.checkedAt) / 3600e3);
+      L.push(`${j.ok && age < 36 ? "✅" : "⚠️"} Законы ${esc(srvName(id))}: проверка ${fmtDate(j.checkedAt)} (${age} ч. назад), последнее изменение ${fmtDate(j.updatedAt)}, законов: ${j.count}${j.failed ? ", не прочитано тем: " + j.failed : ""}${j.error ? "\nОшибка: " + esc(j.error) : ""}`);
+    } catch (e) {
+      L.push(`⚠️ Законы ${esc(srvName(id))}: не удалось прочитать статус`);
+    }
   }
   const tick = await getSetting("tick", null);
   L.push(tick && Date.now() - tick.at < 5 * 60e3 ? `✅ Расписание: последний запуск ${fmtDate(tick.at)}` : `⚠️ Расписание: ${tick ? "последний запуск " + fmtDate(tick.at) : "ни разу не запускалось"} (см. cron.sql)`);
@@ -3515,19 +3524,20 @@ async function lawsCmd(chat, arg) {
 
 // Вызов из GitHub Actions после обновления законов (scripts/publish-laws.js)
 async function lawsChanged(b) {
+  const srv = parseServer(b.server) || DEFAULT_SERVER;
   const items = Array.isArray(b.items) ? b.items.slice(0, 25) : [];
   if (!items.length) {
     // ручной запуск без изменений — сообщаем только владельцу
-    if (b.manual && OWNER_TG) await send(OWNER_TG, `⚖️ Проверка законов завершена: изменений нет.${Number(b.count) ? " Законов: " + Number(b.count) + "." : ""}`);
+    if (b.manual && OWNER_TG) await send(OWNER_TG, `⚖️ ${esc(srvName(srv))}: проверка законов завершена, изменений нет.${Number(b.count) ? " Законов: " + Number(b.count) + "." : ""}`);
     return { ok: true, sent: b.manual ? 1 : 0 };
   }
   const lines = items.map((it) =>
     `• ${it.type === "new" ? "🆕 Новый закон" : "✏️ Изменён"}: <b>${esc(clean(it.title, 150))}</b>${it.arts ? " — " + esc(clean(it.arts, 200)) : ""}`);
   const more = Array.isArray(b.items) && b.items.length > items.length ? `\n…и ещё ${b.items.length - items.length}` : "";
-  const text = `⚖️ <b>Обновление законов</b>\n${lines.join("\n")}${more}\n\nИзменения уже в программе, раздел «Законы».`;
+  const text = `⚖️ <b>Обновление законов · ${esc(srvName(srv))}</b>\n${lines.join("\n")}${more}\n\nИзменения уже в программе, раздел «Законы».`;
   const chats = new Set();
   if (OWNER_TG) chats.add(OWNER_TG);
-  const rows = await db()`select tg_id from profiles where rank = 'leader' and tg_id is not null and not banned`;
+  const rows = await db()`select tg_id from profiles where rank = 'leader' and server = ${srv} and tg_id is not null and not banned`;
   rows.forEach((r) => chats.add(String(r.tg_id)));
   for (const c of chats) await send(c, text);
   return { ok: true, sent: chats.size };
@@ -4500,6 +4510,7 @@ const FLAG_DEFS = {
   pad28: ["Блокнот: окно, чек-листы, напоминания", "beta", "2.8"],
   pad28mini: ["Блокнот в мини-окне задержания", "beta", "2.8"],
   pad28tpl: ["Шаблоны заметок", "beta", "2.8"],
+  srv29: ["Серверы Los Angeles и Denver (пилот: выбор сервера, законы и настройки)", "beta", "2.9"],
 };
 // функции выпущенных версий включены у всех и флагов больше не имеют; бета 2.7.0 ещё спрашивает общий флаг ai27
 const FLAG_RELEASED = { ai27: "all" };
@@ -4509,6 +4520,12 @@ async function flagsNow() {
   const out = {};
   for (const k of Object.keys(FLAG_DEFS)) out[k] = FLAG_MODES.includes(s[k]) ? s[k] : FLAG_DEFS[k][1];
   return { ...FLAG_RELEASED, ...out };
+}
+// Пилот 2.9: Boston доступен всем, остальные серверы — по флагу srv29 (beta: только тестерам, all: всем, off: никому, кроме уже сидящих там)
+async function serverOpen(srv, p) {
+  if (srv === DEFAULT_SERVER || (p && sv(p) === srv)) return true;
+  const m = (await flagsNow()).srv29;
+  return m === "all" || (m === "beta" && isTester(p));
 }
 const isTester = (p) => !!p && (!!p.beta || p.rank === "owner" || p.rank === "moderator");
 
@@ -4846,13 +4863,20 @@ async function statusApi() {
     S.push({ k: "ai", name: "ИИ-помощник", ok: false });
   }
   let laws = null;
-  try {
-    const r = await fetch(LAWS_STATUS_URL + "?t=" + Date.now(), { signal: AbortSignal.timeout(6000) });
-    const j = await r.json();
-    laws = { checkedAt: j.checkedAt || 0, updatedAt: j.updatedAt || 0, count: j.count || 0 };
-    S.push({ k: "laws", name: "Обновление законов с форума", ok: !!j.ok && Date.now() - j.checkedAt < 36 * 3600e3 });
-  } catch (e) {
-    S.push({ k: "laws", name: "Обновление законов с форума", ok: false });
+  const lawsBy = {};
+  for (const id of Object.keys(SERVERS).map(Number)) {
+    const nm = id === DEFAULT_SERVER ? "Обновление законов с форума" : `Законы: ${SERVERS[id].name}`;
+    try {
+      const r = await fetch(lawsStatusUrl(id) + "?t=" + Date.now(), { signal: AbortSignal.timeout(6000) });
+      if (r.status === 404 && id !== DEFAULT_SERVER) continue; // сервер ещё не подключён к сбору законов
+      const j = await r.json();
+      const one = { checkedAt: j.checkedAt || 0, updatedAt: j.updatedAt || 0, count: j.count || 0 };
+      lawsBy[id] = one;
+      if (id === DEFAULT_SERVER) laws = one; // поле laws оставлено для старых версий программы и сайта
+      S.push({ k: id === DEFAULT_SERVER ? "laws" : "laws" + id, name: nm, ok: !!j.ok && Date.now() - j.checkedAt < 36 * 3600e3 });
+    } catch (e) {
+      S.push({ k: id === DEFAULT_SERVER ? "laws" : "laws" + id, name: nm, ok: false });
+    }
   }
   let tickAt = 0;
   try {
@@ -4864,7 +4888,7 @@ async function statusApi() {
   try {
     m = (await getSetting("maintenance", { on: false })) || { on: false };
   } catch (e) {}
-  const r = { ok: true, at: Date.now(), services: S, laws, maintenance: m.on ? { on: true, text: m.text || "" } : { on: false } };
+  const r = { ok: true, at: Date.now(), services: S, laws, lawsBy, maintenance: m.on ? { on: true, text: m.text || "" } : { on: false } };
   statusCache = { at: Date.now(), r };
   return r;
 }
@@ -5011,20 +5035,26 @@ function b64(u8) {
 }
 // Законы для программы и сайта: зашифрованный файл из репозитория расшифровывается здесь, ключ наружу не попадает.
 // Отдаём gzip (base64): программа и браузер распаковывают сами. Копия держится в памяти функции.
-let lawsCache = null; // { sig, updatedAt, count, gz, at }
-let lawsStatusAt = 0;
-async function lawsLoad(want) {
+const lawsCaches = new Map(); // номер сервера → { sig, updatedAt, count, gz, at, checkedAt, ok }
+const lawsStatusAt = new Map();
+async function lawsLoad(server, want) {
   // want: подпись, которую программа уже видит в laws-status.json; если копия старее, сверяемся раньше (не чаще раза в 30 с)
-  const fresh = Date.now() - lawsStatusAt < (want && lawsCache && want !== lawsCache.sig ? 30 * 1000 : 5 * 60 * 1000);
-  if (lawsCache && fresh) return lawsCache;
+  const cache = lawsCaches.get(server) || null;
+  const fresh = Date.now() - (lawsStatusAt.get(server) || 0) < (want && cache && want !== cache.sig ? 30 * 1000 : 5 * 60 * 1000);
+  if (cache && fresh) return cache;
   let st = null;
   try {
-    const r = await fetch(LAWS_BASE + "laws-status.json?t=" + Date.now(), { signal: AbortSignal.timeout(15000) });
+    const r = await fetch(LAWS_BASE + "laws-status" + lawsSfx(server) + ".json?t=" + Date.now(), { signal: AbortSignal.timeout(15000) });
     if (r.ok) st = await r.json();
   } catch (e) {}
-  lawsStatusAt = Date.now();
-  if (lawsCache && (!st || st.sig === lawsCache.sig)) return lawsCache;
-  const r = await fetch(LAWS_BASE + "laws.enc?t=" + Date.now(), { signal: AbortSignal.timeout(60000) });
+  lawsStatusAt.set(server, Date.now());
+  if (cache && (!st || st.sig === cache.sig)) return cache;
+  const r = await fetch(LAWS_BASE + "laws" + lawsSfx(server) + ".enc?t=" + Date.now(), { signal: AbortSignal.timeout(60000) });
+  if (r.status === 404) {
+    const e = new Error("законы сервера " + server + " ещё не собраны");
+    e.none = true;
+    throw e;
+  }
   if (!r.ok) throw new Error("GitHub вернул " + r.status);
   const buf = new Uint8Array(await r.arrayBuffer());
   if (buf.length < 32 || String.fromCharCode(...buf.subarray(0, 4)) !== "SLW1") throw new Error("неверный формат файла законов");
@@ -5033,21 +5063,25 @@ async function lawsLoad(want) {
   data.set(buf.subarray(32), 0);
   data.set(buf.subarray(16, 32), buf.length - 32); // WebCrypto ждёт тег в конце
   const gz = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.subarray(4, 16) }, key, data));
-  lawsCache = { sig: (st && st.sig) || (await sha256(b64(gz.subarray(0, 4096)))).slice(0, 40), updatedAt: (st && st.updatedAt) || 0, checkedAt: (st && st.checkedAt) || 0, ok: st ? st.ok !== false : true, gz, at: Date.now() };
-  return lawsCache;
+  const c = { sig: (st && st.sig) || (await sha256(b64(gz.subarray(0, 4096)))).slice(0, 40), updatedAt: (st && st.updatedAt) || 0, checkedAt: (st && st.checkedAt) || 0, ok: st ? st.ok !== false : true, gz, at: Date.now() };
+  lawsCaches.set(server, c);
+  return c;
 }
+// Сервер берётся из профиля игрока (b.server игнорируется: законы чужого сервера не выдаём)
 async function lawsApi(b) {
-  const { err } = await who(b);
+  const { p, err } = await who(b);
   if (err) return err;
   if (!LAWS_KEY) return fail("Законы с форума на сервере ещё не подключены. Сообщите владельцу.", { code: "laws_off" });
+  const server = sv(p);
   let L;
   try {
-    L = await lawsLoad(b.want ? String(b.want).slice(0, 80) : "");
+    L = await lawsLoad(server, b.want ? String(b.want).slice(0, 80) : "");
   } catch (e) {
+    if (e && e.none) return fail(`Законы сервера ${srvName(server)} ещё не собраны с форума. Пока показаны законы Boston.`, { code: "laws_none", server });
     console.error("laws", e);
     return fail("Не удалось получить законы. Попробуйте позже.", { code: "server" });
   }
-  const meta = { sig: L.sig, updatedAt: L.updatedAt, checkedAt: L.checkedAt, srcOk: L.ok };
+  const meta = { server, sig: L.sig, updatedAt: L.updatedAt, checkedAt: L.checkedAt, srcOk: L.ok };
   if (b.sig && String(b.sig) === L.sig) return { ok: true, same: true, ...meta };
   if (b.plain) {
     const text = await new Response(new Blob([L.gz]).stream().pipeThrough(new DecompressionStream("gzip"))).text();

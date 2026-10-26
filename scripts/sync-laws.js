@@ -1,15 +1,18 @@
 // Серверный парсер законодательной базы Majestic RP (XenForo).
 // Запуск: node scripts/sync-laws.js   (нужны переменные FORUM_LOGIN и FORUM_PASSWORD)
-// Результат: update/laws.json — его читает приложение Senko Assistant.
+// Результат: update/laws.json (Boston) или update/laws-<сервер>.json — его обрабатывает publish-laws.js.
+// Сервер задаётся переменной SERVER (12 Boston, 7 Los Angeles, 16 Denver); по умолчанию Boston.
 "use strict";
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const cheerio = require("cheerio");
 
-const BASE = "https://forum.majestic-rp.ru";
-const START = process.env.FORUM_START || BASE + "/forums/zakonodatel-naya-baza.1017/";
-const OUT = path.join(__dirname, "..", "update", "laws.json");
+const SRV = require("./servers.js");
+const SERVER = SRV.current();
+const BASE = SRV.BASE;
+const START = process.env.FORUM_START || SRV.startUrl(SERVER);
+const OUT = SRV.files(SERVER).plain;
 const LOGIN = process.env.FORUM_LOGIN;
 const PASS = process.env.FORUM_PASSWORD;
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
@@ -195,6 +198,7 @@ async function main() {
   const first = !prevMap.size;
   const now = Date.now();
 
+  console.log("Сервер:", SRV.nameOf(SERVER) + " (" + SERVER + "), раздел форума:", START);
   const $start = await login();
   const list = new Map();
   await collectForum(START, "", new Set(), list, $start);
@@ -248,6 +252,7 @@ async function main() {
   const allChanges = changes.concat(prev.changes || []).slice(0, 60);
   const touched = changes.length > 0;
   const out = {
+    server: SERVER,
     updatedAt: touched ? now : (prev.updatedAt || now),
     checkedAt: now,
     laws, changes: allChanges,

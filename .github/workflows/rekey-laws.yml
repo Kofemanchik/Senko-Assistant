@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Перешифровать update/laws.enc
+      - name: Перешифровать update/laws*.enc
         run: |
           if [ -z "$LAWS_KEY" ] || [ -z "$LAWS_KEY_NEW" ]; then echo "::error::Нужны секреты LAWS_KEY (старый) и LAWS_KEY_NEW (новый)"; exit 1; fi
           node scripts/laws-crypt.js rekey
@@ -33,7 +33,7 @@ jobs:
         run: |
           git config user.name "laws-bot"
           git config user.email "laws-bot@users.noreply.github.com"
-          git add update/laws.enc
+          git add update/laws*.enc
           git commit -m "laws: новый ключ шифрования"
           git pull --rebase --autostash
           git push
