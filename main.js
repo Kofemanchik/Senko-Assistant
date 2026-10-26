@@ -1004,9 +1004,16 @@ ipcMain.handle("senko:staff-list", async (e) => {
 // Личный кабинет: изменение данных в аккаунте (сервер уведомляет владельца в Telegram)
 ipcMain.handle("senko:profile-update", async (e, d) => {
   if (!fromMain(e)) return { ok: false, error: "Недоступно." };
+  const srvBefore = parseInt((accounts.current() || {}).server, 10) || 12;
   const r = await accounts.updateProfile(d || {});
   if (r && (r.code === "auth" || r.code === "banned")) setTimeout(() => logout(r.error), 0);
-  else if (r && r.ok) { updateTrayMenu(); pushState(); }
+  else if (r && r.ok) {
+    updateTrayMenu(); pushState();
+    // 2.9: сервер сменился — у него свои законы и таблицы кодексов: подгружаем их и перезагружаем окно
+    if ((parseInt((accounts.current() || {}).server, 10) || 12) !== srvBefore) {
+      laws.sync().catch(() => {}).then(() => { if (win && !win.isDestroyed()) win.loadFile(pickIndex().file); });
+    }
+  }
   return r;
 });
 // Копия текущих данных перед сбросом или загрузкой из файла: дневная копия за сегодня потом перезапишется
@@ -1232,7 +1239,7 @@ ipcMain.handle("senko:save-info", (e) => {
   const ud = app.getPath("userData");
   return {
     savedAt, size: fileSize(mainFile()), backups, backupsSize,
-    laws: fileSize(path.join(ud, "laws.json")) + (() => { let n = 0; try { fs.readdirSync(path.join(ud, "laws-history")).forEach((f) => { n += fileSize(path.join(ud, "laws-history", f)); }); } catch (err) {} return n; })(),
+    laws: (() => { let n = 0; try { fs.readdirSync(ud).forEach((f) => { if (/^laws(-\d+)?\.json$/.test(f)) n += fileSize(path.join(ud, f)); else if (/^laws-history(-\d+)?$/.test(f)) fs.readdirSync(path.join(ud, f)).forEach((h) => { n += fileSize(path.join(ud, f, h)); }); }); } catch (err) {} return n; })(),
     extra: fileSize(path.join(ud, "detainees.json")) + fileSize(path.join(ud, "article-edits.json")),
     folder: saveDir().split(require("os").homedir()).join("~")
   };
@@ -1329,6 +1336,8 @@ ipcMain.handle("senko:sync", async (e) => {
 // ───────────── Законы с форума (сервер парсит форум раз в сутки в 00:05 МСК, приложение сверяет версию каждые 3 часа) ─────────────
 const laws = require("./laws-sync")({
   dataDir: () => app.getPath("userData"),
+  // 2.9: законы берутся для сервера вошедшего игрока (Boston, если не вошёл или старый профиль)
+  server: () => { const u = accounts.current(); return (u && parseInt(u.server, 10)) || 12; },
   // тексты законов отдаёт сервер (расшифровка там, ключа в программе нет)
   api: (b) => accounts.authed(b, 90000),
   onProgress: (p) => {

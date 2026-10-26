@@ -73,6 +73,8 @@ jobs:
             echo "::endgroup::"
           done
           echo "FAILED_SERVERS=$failed" >> "$GITHUB_ENV"
+          # отчёт о числе статей, звёзд и штрафов по каждому серверу (в сводку запуска; на публикацию не влияет)
+          { echo "## Законы по серверам"; SERVER=all node scripts/check-laws.js; } >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
           if [ -n "$failed" ]; then echo "::warning::Серверы со сбоем:$failed"; fi
 
       - name: Commit

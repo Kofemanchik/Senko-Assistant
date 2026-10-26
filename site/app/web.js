@@ -105,13 +105,18 @@
   }
 
   /* ───── законы ───── */
+  /* 2.9: у каждого сервера свои законы; Boston хранится под прежним ключом "laws" */
+  var LAWS_MISSING = false;
+  function srvNum() { var n = parseInt(user && user.server, 10); return n > 0 ? n : 12; }
+  function lawsKey() { return srvNum() === 12 ? "laws" : "laws-" + srvNum(); }
   function lawsView() {
     var d = LAWS || { updatedAt: 0, checkedAt: 0, laws: [], changes: [] };
     var checked = (lawsRemote && lawsRemote.checkedAt) || d.checkedAt || 0, warn = "";
-    if (!feat.laws && !LAWS) warn = "На сайте пока только встроенные кодексы: законы с форума появятся, когда владелец подключит их на сервере.";
+    if (LAWS_MISSING && !LAWS) warn = "Законы сервера " + srvNum() + " ещё не собраны с форума, пока показаны законы Boston. Как только их соберут, они появятся здесь.";
+    else if (!feat.laws && !LAWS) warn = "На сайте пока только встроенные кодексы: законы с форума появятся, когда владелец подключит их на сервере.";
     else if (checked && Date.now() - checked > 3 * 864e5) warn = "Сервер давно не проверял форум (последняя проверка: " + new Date(checked).toLocaleString("ru-RU") + "). Автообновление законов могло остановиться — сообщите владельцу.";
     else if (lawsRemote && lawsRemote.srcOk === false) warn = "Последняя проверка форума на сервере прошла с ошибкой. Показаны ранее загруженные данные.";
-    return Object.assign({}, d, { checkedAt: checked, running: lawsRunning, auth: false, warn: warn, status: lawsErr ? { ok: false, error: lawsErr } : { ok: true, failed: 0 } });
+    return Object.assign({}, d, { server: srvNum(), missing: LAWS_MISSING && !LAWS, checkedAt: checked, running: lawsRunning, auth: false, warn: warn, status: lawsErr ? { ok: false, error: lawsErr } : { ok: true, failed: 0 } });
   }
   function lawsEmit(ev) { lawsListeners.slice().forEach(function (f) { try { f(ev); } catch (e) {} }); }
   function lawsFetch() {
@@ -119,16 +124,19 @@
     if (!feat.laws) return Promise.resolve(lawsView());
     lawsRunning = true;
     lawsEmit({ type: "progress", progress: { phase: "list", done: 0 } });
-    var before = LAWS;
-    return authed({ action: "laws", sig: (LAWS && LAWS.sig) || "", plain: !W.canGunzip }).then(function (r) {
+    var before = LAWS, forSrv = srvNum(), key = lawsKey();
+    return authed({ action: "laws", server: forSrv, sig: (LAWS && LAWS.sig) || "", plain: !W.canGunzip }).then(function (r) {
+      if (r && !r.ok && r.code === "laws_none") { LAWS_MISSING = true; return null; }
       if (!r || !r.ok) throw new Error((r && r.error) || "нет ответа");
+      if (forSrv !== srvNum()) return null; // сервер сменили во время загрузки
+      LAWS_MISSING = false;
       lawsRemote = r;
       if (r.same) return null;
       return (r.data ? Promise.resolve(r.data) : W.gunzipB64(r.gz).then(JSON.parse)).then(function (j) {
         if (!j || !Array.isArray(j.laws) || !j.laws.length) throw new Error("файл законов пустой");
         if (!j.sig) j.sig = r.sig;
         LAWS = j;
-        return W.idbSet("laws", j).then(function () { return j; });
+        return W.idbSet(key, j).then(function () { return j; });
       });
     }).then(function (j) {
       lawsErr = ""; lawsRunning = false;
@@ -315,7 +323,12 @@
       d = d || {};
       var c = function (s, m) { return String(s == null ? "" : s).replace(/[\u0000-\u001f]/g, " ").trim().slice(0, m); };
       return act("update_profile", { nick: c(d.nick, 40), static: c(d.static, 12), discord: c(d.discord, 40), telegram: c(d.telegram, 60), phone: c(d.phone, 20), org: c(d.org, 60), server: c(d.server, 4) }).then(function (r) {
-        if (r && r.ok && r.user) { user = r.user; W.cacheUser(r.user); pushState(); }
+        if (r && r.ok && r.user) {
+          var was = srvNum();
+          user = r.user; W.cacheUser(r.user); pushState();
+          // сервер сменился: другие законы и таблицы кодексов, поэтому страницу перезагружаем
+          if (srvNum() !== was) setTimeout(function () { location.reload(); }, 400);
+        }
         return r;
       });
     },
@@ -392,7 +405,7 @@
         var res = sync.startup(syncSnap());
         if (res && res.values) Object.keys(res.values).forEach(function (k) { if (W.SYNC_KEYS.indexOf(k) >= 0) W.ls(k, res.values[k]); });
         syncLast = syncSnap();
-        return W.idbGet("laws");
+        return W.idbGet(lawsKey());
       }).then(function (j) {
         if (j && Array.isArray(j.laws) && j.laws.length) LAWS = j;
         if (!LAWS && feat.laws && !offline) { step("Загружаем законы…"); return withTimeout(lawsFetch(), 25000).then(function () { return true; }); }

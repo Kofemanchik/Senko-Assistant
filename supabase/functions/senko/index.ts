@@ -321,6 +321,7 @@ async function register(b, ip) {
   if (!(await hit(`reg:${ip}`, 8, 3600))) return fail(RATE_MSG, { code: "rate" });
   const v = validate(b);
   if (v.error) return fail(v.error);
+  if (!(await serverOpen(v.server, null))) return fail(`Сервер ${srvName(v.server)} пока доступен только бета-тестерам. Выберите Boston (12): сервер можно будет сменить в личном кабинете, когда он откроется.`, { code: "server_closed" });
   const sql = db();
   const mt = await getSetting("maintenance", { on: false });
   if (mt && mt.on) return fail("Идут технические работы, регистрация временно недоступна. Попробуйте позже.", { code: "maintenance" });
@@ -520,6 +521,7 @@ async function updateProfile(b) {
   // сервер: не указан — остаётся прежним (старые версии программы его не присылают)
   v.server = b.server == null || b.server === "" ? p.server || DEFAULT_SERVER : parseServer(b.server);
   if (!v.server) return fail("Выберите сервер из списка.");
+  if (!(await serverOpen(v.server, p))) return fail(`Сервер ${srvName(v.server)} пока доступен только бета-тестерам.`, { code: "server_closed" });
   const shown = (k, x) => (k === "server" ? srvName(+x || DEFAULT_SERVER) : String(x == null ? "" : x));
   const changes = PROFILE_FIELDS.filter(([k, col]) => String(p[col] || (k === "server" ? DEFAULT_SERVER : "")) !== String(v[k])).map(([k, col, label]) => ({ label, from: shown(k, p[col]), to: shown(k, v[k]) }));
   if (!changes.length) return { ok: true, user: pub(p), changed: 0 };

@@ -1212,7 +1212,7 @@ var DKG = [[1,2,"Документы и действия сотрудника"],[
 })(typeof window !== "undefined" ? window : this);
 
 /* LAWCORE:END */
-var LAWSYNC = { raw: null, sig: "", at: 0, merged: {}, skipped: {}, added: 0 };
+var LAWSYNC = { raw: null, sig: "", at: 0, merged: {}, skipped: {}, added: 0, server: 12, rebuilt: {}, fallback: false };
 var BADGE_MS = 14 * 864e5; // сколько дней висят метки «Изменено» и «Новый закон»
 function lawKindOf(t){
   t = String(t||"");
@@ -1240,8 +1240,18 @@ function lawNat(a,b){
 }
 (function(){
   var A = window.senkoApp, raw = null;
+  // 2.9: сервер игрока. Встроенные таблицы УК/АК/ДК/ПК собраны по законам Boston (12); для другого сервера они пересобираются из его законов
+  var MYSRV = 12;
+  try{ var _s = A && A.state && A.state(); if(_s && _s.user && parseInt(_s.user.server,10) > 0) MYSRV = parseInt(_s.user.server,10); }catch(e){}
+  LAWSYNC.server = MYSRV;
   try{ raw = A && A.laws && A.laws.getSync ? A.laws.getSync() : null; }catch(e){ raw = null; }
-  if(!raw || !Array.isArray(raw.laws) || !raw.laws.length || !window.LawCore) return;
+  if(!raw || !Array.isArray(raw.laws) || !raw.laws.length || !window.LawCore){
+    // законов этого сервера пока нет: остаются встроенные таблицы Boston, об этом предупреждаем в разделе «Законы» и в справке
+    if(MYSRV !== 12) LAWSYNC.fallback = true;
+    return;
+  }
+  if(MYSRV !== 12 && raw.server && parseInt(raw.server,10) !== MYSRV){ LAWSYNC.fallback = true; LAWSYNC.raw = null; return; } // законы другого сервера не применяем
+  var REBUILD = MYSRV !== 12;
   LAWSYNC.raw = raw; LAWSYNC.sig = raw.sig || ""; LAWSYNC.at = raw.updatedAt || 0;
   var JOK = {"R":1,"F/R":1,"M":1,"F":1,"E":1}; // JN объявлен ниже по файлу, поэтому свой список
   var pn = function(p){ return p === "" || p == null ? "1" : String(p); };
@@ -1291,7 +1301,16 @@ function lawNat(a,b){
     arr.forEach(function(r){ baseCodes[r.code] = 1; var s = parseInt(r.code,10); if(s < minSeg) minSeg = s; });
     P.units.forEach(function(u){ fcodes[u.n] = 1; chapOf[u.n] = u.chap; });
     var codes = Object.keys(baseCodes), hit = codes.filter(function(c){ return fcodes[c]; }).length;
-    if(P.units.length < 5 || hit < codes.length * 0.85){
+    if(REBUILD){
+      // другой сервер: строки Boston не подходят (номера и числа статей свои), таблица собирается заново из законов этого сервера
+      if(P.units.length < 5 || !rows.length){
+        LAWSYNC.skipped[kind] = "текст законов сервера не распознан (статей: " + P.units.length + "), показаны данные Boston";
+        return;
+      }
+      arr.length = 0; baseCodes = {}; minSeg = 0;
+      if((kind === "uk" || kind === "ak") && CH[kind]) Object.keys(CH[kind]).forEach(function(k){ delete CH[kind][k]; });
+      LAWSYNC.rebuilt[kind] = true;
+    } else if(P.units.length < 5 || hit < codes.length * 0.85){
       LAWSYNC.skipped[kind] = "структура текста на форуме не совпала со справочником (" + hit + " из " + codes.length + " статей)";
       return;
     }
@@ -1309,7 +1328,8 @@ function lawNat(a,b){
       if((kind === "uk" || kind === "ak") && !baseCodes[f.code] && parseInt(f.code,10) < minSeg) return; // общая часть — в разделе «Общая часть»
       if(/^\s*Утратил[аио]?\s+силу/i.test((f.title||"")+" "+(f.text||""))) return; // отменённые статьи не добавляем
       var r = newRow(kind, f, chapOf); have[key] = 1;
-      if(ev[f.code]) r.chg = ev[f.code]; else r.chg = {n:f.code, k:"added", at:LAWSYNC.at};
+      if(ev[f.code]) r.chg = ev[f.code]; else if(!REBUILD) r.chg = {n:f.code, k:"added", at:LAWSYNC.at};
+      if(REBUILD) delete r.nw;
       var i = 0; while(i < arr.length && (lawNat(arr[i].code, r.code) || lawNat(arr[i].part || "1", r.part || "1")) <= 0) i++;
       arr.splice(i, 0, r); added++;
       if((kind === "uk" || kind === "ak") && CH[kind] && !CH[kind][String(parseInt(r.code,10))]){
@@ -1319,13 +1339,14 @@ function lawNat(a,b){
     });
     if(kind === "uk" || kind === "ak" || kind === "dk") arr.forEach(function(r){ r.id = r.id || (r.k + r.code + "-" + r.part); });
     LAWSYNC.merged[kind] = {updated:upd, added:added};
-    LAWSYNC.added += added;
+    if(!REBUILD) LAWSYNC.added += added;
   }
 })();
 function syncNote(){
   var m = LAWSYNC.merged, ks = Object.keys(m);
+  if(LAWSYNC.fallback) return ' Законы вашего сервера ещё не собраны с форума, поэтому таблицы показаны по законам Boston: ставки, звёзды и номера статей могут отличаться. Как только законы вашего сервера соберут, программа обновится сама.';
   if(!ks.length) return "";
-  var t = ' Числа и тексты ' + ks.map(function(k){ return {uk:"УК",ak:"АК",dk:"ДК",pk:"ПК"}[k]; }).join(", ") + ' автоматически сверяются с законами на форуме'
+  var t = (LAWSYNC.server !== 12 && Object.keys(LAWSYNC.rebuilt).length ? ' Таблицы собраны из законов вашего сервера.' : '') + ' Числа и тексты ' + ks.map(function(k){ return {uk:"УК",ak:"АК",dk:"ДК",pk:"ПК"}[k]; }).join(", ") + ' автоматически сверяются с законами на форуме'
         + (LAWSYNC.at ? ' (данные от ' + SYNC + ')' : '') + (LAWSYNC.added ? '; добавлено новых строк: ' + LAWSYNC.added : '') + '.';
   var sk = Object.keys(LAWSYNC.skipped);
   if(sk.length) t += ' Не обновлено: ' + sk.map(function(k){ return {uk:"УК",ak:"АК",dk:"ДК",pk:"ПК"}[k]; }).join(", ") + ' (структура текста на форуме изменилась).';
@@ -6329,7 +6350,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.9.0-beta.1";
+var APP_VER="2.9.0-beta.2";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6418,6 +6439,11 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.9.0-beta.2",d:"26.10.2026",items:[
+  ["🧪","Только для бета-тестеров","Вторая бета мультисерверности: законы Los Angeles и Denver."],
+  ["⚖️","Законы по серверам","Законы собираются с форума отдельно для Boston, Los Angeles и Denver. Программа показывает законы вашего сервера, а таблицы УК, АК, ДК и ПК (звёзды, штрафы, части статей) и калькулятор строятся по ним."],
+  ["⚠️","Пока законов сервера нет","Если законы вашего сервера ещё не собраны, показываются таблицы Boston и предупреждение: числа по другому серверу могут отличаться."],
+  ["🔒","Пилот: LA и Denver","Пока серверы Los Angeles и Denver доступны только бета-тестерам. Остальным они откроются после проверки."]]},
  {v:"2.9.0-beta.1",d:"26.10.2026",items:[
   ["🧪","Только для бета-тестеров","Первая бета мультисерверности: программа работает на нескольких серверах Majestic."],
   ["🌐","Выбор сервера","Сервер указывается при регистрации и меняется в личном кабинете: Boston (12), Los Angeles (7), Denver (16). Рейтинги, «Коллеги», рапорты, смены, контрольные тесты и заявки теперь отдельные у каждого сервера. После смены сервера роль руководителя снимается, а профили коллег закрыты на 24 часа."],
@@ -8257,7 +8283,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.9.0-beta.1";
+var APP_VER="2.9.0-beta.2";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
