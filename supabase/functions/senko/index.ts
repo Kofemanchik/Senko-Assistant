@@ -937,6 +937,8 @@ async function api(req) {
       return J(await betaApi(b));
     case "hooks":
       return J(await hooksApi(b));
+    case "discord_link":
+      return J(await discordLinkApi(b));
     case "events":
       return J(await eventsApi(b));
     case "ideas":
@@ -2366,6 +2368,7 @@ const AUDIT_ACTIONS = [
   "ban", "unban", "tempban", "tempban_end", "autoban", "warn", "unwarn", "kick", "note", "tag", "untag",
   "role", "rename", "setstatic", "setorg", "delete", "profile_update", "password_reset", "reset_approve", "reset_reject",
   "broadcast", "maintenance", "regs", "reglimit", "blacklist", "appeal", "delay", "backup", "laws",
+  "dc_save", "dc_publish", "dc_news",
   "approve", "reject", "approval", "shift_start", "shift_end", "ctrl_create", "sync_reset",
   "report_create", "report_delete", "report_review",
   "panel_login", "panel_key", "panel_revoke", "db_edit", "db_delete", "db_revert",
@@ -2904,6 +2907,7 @@ async function onMessage(m, opts = {}) {
       const t = v === "on" ? clean(text.replace(/^\/\S+\s+\S+\s*/, ""), 300) : "";
       await setSetting("maintenance", { on: v === "on", text: t, at: Date.now() });
       await audit(a.label, "maintenance", v, { text: t });
+      dcLater(dcAnnounce(v === "on" ? "maint_on" : "maint_off", t));
       return send(chat, v === "on"
         ? `🛠 Режим техработ включён. Пользователи увидят «Идут технические работы»${t ? ": " + esc(t) : ""}. Регистрация закрыта. Вы и модераторы работаете как обычно.`
         : "✅ Режим техработ выключен.");
@@ -2950,6 +2954,7 @@ async function onMessage(m, opts = {}) {
       if (v !== "on" && v !== "off") return send(chat, `Регистрация: ${cur.open === false ? "закрыта" : "открыта"}${cur.limit ? ", лимит " + cur.limit + " в сутки" : ""}.\nИспользование: /regs on|off, /reglimit &lt;число&gt;|off`);
       await setSetting("regs", { ...cur, open: v === "on" });
       await audit(a.label, "regs", v, {});
+      dcLater(dcAnnounce(v === "on" ? "reg_on" : "reg_off"));
       return send(chat, v === "on" ? "✅ Регистрация открыта." : "⛔ Регистрация закрыта. Вход для зарегистрированных работает.");
     }
 
@@ -3326,6 +3331,8 @@ async function tick() {
       console.error("job", e);
     }
   }
+  // Discord: приветствие новых участников, роли по кругу, мониторинг (сбой не мешает остальному расписанию)
+  await dcTick();
   // ежедневная сводка в заданное время (МСК)
   const s = await getSetting("summary", null);
   if (s && s.time && s.last !== mskDay() && mskHM() >= s.time) {
@@ -3553,6 +3560,7 @@ async function cron(req) {
     b = await req.json();
   } catch (e) {}
   if (b && b.action === "laws_changed") return J(await lawsChanged(b));
+  if (b && b.action === "dc_changelog") return J(await dcChangelog(b));
   if (b && b.action === "laws_failed") {
     const run = /^\d{1,20}$/.test(String(b.run || "")) ? String(b.run) : "";
     if (OWNER_TG)
@@ -3998,11 +4006,13 @@ async function panelApi(b, ip, ua) {
   if (op === "login") return panelLogin(b, ip, ua);
   const owners = ["audit", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert", "ads_list", "ads_save", "ads_toggle", "ads_delete",
     "prog_get", "prog_xp", "prog_ach", "prog_ach_new", "prog_ai",
-    "ai_dict_list", "ai_dict_save", "ai_dict_delete", "ai_bad", "ai_gold_list", "ai_gold_save", "ai_gold_delete", "ai_gold_pin", "ai_gold_run"];
+    "ai_dict_list", "ai_dict_save", "ai_dict_delete", "ai_bad", "ai_gold_list", "ai_gold_save", "ai_gold_delete", "ai_gold_pin", "ai_gold_run",
+    "dc_get", "dc_save", "dc_sync", "dc_publish", "dc_news", "dc_monitor"];
   const { p, a, th, err } = await pwho(b, owners.includes(op));
   if (err) return err;
   const sql = db();
   if (!(await hit(`pa:${p.id}`, 300, 600))) return fail(RATE_MSG, { code: "rate" });
+  if (op.startsWith("dc_")) return dcPanel(op, b, a);
   switch (op) {
     case "me":
       return { ok: true, me: panelMe(p, a) };
@@ -4360,7 +4370,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 29;
+const SCHEMA_V = 30;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -4473,7 +4483,7 @@ function ensureSchema() {
         const v = await getSetting("schema_v", 0);
         if (+v >= SCHEMA_V) return;
         // база уже на 2.4: повторно 2.4 не выполняем (иначе вернулись бы удалённые баннеры по умолчанию)
-        await db().unsafe(+v >= 28 ? SCHEMA_29 : +v >= 27 ? SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29);
+        await db().unsafe((+v >= 29 ? "" : +v >= 28 ? SCHEMA_29 : +v >= 27 ? SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + DC_SCHEMA);
         adsReady = true;
         await setSetting("schema_v", SCHEMA_V);
       } catch (e) {
@@ -5175,6 +5185,735 @@ async function sttApi(b) {
   }
 }
 
+// ───────────── 2.9: Discord-бот Senko (закрытый сервер: владелец, бета-тестеры, модерация, поддержка) ─────────────
+// Работает без постоянного процесса: Discord присылает команды и нажатия кнопок POST-запросом на адрес этой функции
+// (Developer Portal → General Information → Interactions Endpoint URL), запрос подписан Ed25519.
+// Всё, что бот пишет в каналы, правится в панели владельца (страница «Discord») и публикуется оттуда же.
+// Секрет (Supabase → Edge Functions → Secrets): DISCORD_BOT_TOKEN. Не обязательны: DISCORD_PUBLIC_KEY, DISCORD_APP_ID, DISCORD_GUILD_ID (ID сервера можно указать в панели).
+// Приветствие новых участников бот отправляет сам: раз в минуту сверяет список участников (в Developer Portal → Bot включите «Server Members Intent»).
+const DC_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN") || "";
+// Публичный ключ и ID приложения не секретны (они видны в Developer Portal), поэтому лежат здесь по умолчанию; секретом остаётся только токен бота
+const DC_PUBKEY = (Deno.env.get("DISCORD_PUBLIC_KEY") || "79e4b336ef252e666d0e5a5c3abfc75c4c61f7a76ebb71b4d257bb5183578bec").trim();
+const DC_APP = (Deno.env.get("DISCORD_APP_ID") || "1564239530981204018").trim();
+const DC_GUILD_ENV = (Deno.env.get("DISCORD_GUILD_ID") || "").trim();
+const DC_API = "https://discord.com/api/v10";
+const DC_ID_RE = /^\d{15,25}$/;
+const DC_SCHEMA = `
+alter table public.profiles add column if not exists dc_id text;
+alter table public.profiles add column if not exists dc_sync timestamptz;
+create unique index if not exists profiles_dc_id_uq on public.profiles (dc_id) where dc_id is not null;
+create table if not exists public.dc_links (
+  code text primary key, user_id uuid not null references public.profiles(id) on delete cascade, expires_at timestamptz not null);
+create table if not exists public.dc_tickets (
+  id serial primary key, channel_id text not null, dc_user text not null, dc_name text not null default '', status text not null default 'open',
+  accepted_by text not null default '', created_at timestamptz not null default now(), closed_at timestamptz);
+create index if not exists dc_tickets_user_idx on public.dc_tickets (dc_user, status);
+alter table public.dc_links enable row level security;
+alter table public.dc_tickets enable row level security;
+revoke all on table public.dc_links, public.dc_tickets from anon, authenticated;
+`;
+
+// Каналы сервера: ключ → часть названия (в названиях есть эмодзи и точки, поэтому ищем по вхождению)
+const DC_CHANNELS = {
+  rules: ["Правила", "правила"], info: ["Информация", "информация"], news: ["Новости", "новости"], changelog: ["Обновления (changelog)", "changelog"],
+  laws: ["Законы", "законы"], assistants: ["Ассистенты", "ассистенты"], support: ["Поддержка", "поддержка"], monitor: ["Мониторинг", "мониторинг"],
+  welcome: ["Приветствие", "приветств"],
+};
+// Роли: ключ → [название по умолчанию, цвет, управляется ли ролью в Senko]. Support выдаёт владелец в Discord вручную
+const DC_ROLES = {
+  owner: ["Владелец", 0xe74c3c, true], moderator: ["Модератор", 0x3498db, true], beta: ["БетаТестер", 0x2ecc71, true], support: ["Support", 0xf1c40f, false],
+};
+const DC_SUPPORT_NAME = "support";
+// Сообщения, которые бот держит в каналах (публикуются и обновляются из панели). Текст: блоки через строку «---», заголовок блока — строка «# …»
+const DC_MSGS = {
+  rules: { ch: "rules", color: 0xff8a3d, label: "Правила сервера" },
+  info: { ch: "info", color: 0xff8a3d, label: "Информация" },
+  laws: { ch: "laws", color: 0x3b82f6, label: "Законы" },
+  assistants: { ch: "assistants", color: 0x8b5cf6, label: "Ассистенты" },
+  support: { ch: "support", color: 0xf59e0b, label: "Поддержка (кнопка тикетов)" },
+  welcome: { ch: "welcome", color: 0xff8a3d, label: "Приветствие новых участников", template: true },
+};
+const DC_LINKS_DEFAULT = {
+  site: SITE_URL,
+  download: "https://github.com/Kofemanchik/Senko-Assistant/releases/latest",
+  telegram: "https://t.me/senkofamq",
+  banner: SITE_URL + "/img/senko-banner.webp",
+};
+const DC_DEFAULT_CONTENT = {
+  rules: {
+    src: `# 📜 Правила сервера
+Здесь общаются владелец, бета-тестеры и команда поддержки Senko Assistant. Заходя на сервер, вы принимаете эти правила.
+---
+# 🤝 Общение
+Относитесь друг к другу с уважением. Оскорбления, травля и провокации запрещены.
+Пишите в нужных каналах и не засоряйте чат: без спама, флуда и лишних упоминаний.
+---
+# 🔒 Безопасность
+Никому не сообщайте пароль от аккаунта Senko, пароль панели и коды восстановления: ни поддержке, ни владельцу, ни «администраторам». Мы никогда их не спрашиваем.
+Не публикуйте чужие личные данные.
+---
+# 🐞 Ошибки и предложения
+Нашли ошибку? Опишите, что делали и что произошло, и приложите скриншот или журнал из «Настройки → Сообщить об ошибке».
+По вопросам и проблемам с аккаунтом пишите в канал «поддержка»: бот создаст личное обращение.
+---
+# ⚠️ Наказания
+За нарушения: предупреждение, затем мут, затем бан. Решение принимает модерация, обжаловать его можно через обращение в поддержку.`,
+    buttons: "", image: "",
+  },
+  info: {
+    src: `# 👋 Senko Assistant
+Помощник сотрудника для GTA 5 Majestic RP: законы и статьи под рукой, калькулятор наказаний, рапорты и задержания, памятки и ИИ-ассистент.
+Работает в программе для Windows и на сайте, данные синхронизируются между ними.
+---
+# 🧭 Что внутри
+• Поиск по законам и статьям, изменения отмечаются отдельным разделом
+• Калькулятор срока, штрафа и звёзд розыска
+• Задержание, рапорт, рация и заметки
+• ИИ-ассистент, отвечающий по законам вашего сервера
+• Серверы Boston, Los Angeles и Denver
+---
+# 🔗 Наши ресурсы
+Сайт и веб-версия: {site}
+Скачать программу: {download}
+Telegram: {telegram}`,
+    buttons: "Открыть сайт | {site}\nСкачать программу | {download}\nTelegram | {telegram}", image: "{banner}",
+  },
+  laws: {
+    src: `# 🔍 Поиск по законам
+Мы собрали законодательную базу серверов Majestic RP и сделали сервис, где нужные законы и статьи ищутся так же быстро, как в поисковике: достаточно ввести номер статьи или пару слов.
+
+Законодательная база обновляется с форума каждый день автоматически, отдельно для каждого сервера.
+Найденные изменения собираются в разделе «Законы», где видно, что поменялось.`,
+    buttons: "Открыть на сайте | {site}", image: "",
+  },
+  assistants: {
+    src: `# 🧠 Ассистенты
+Мы загрузили законодательную базу в нейросеть и предлагаем вам задавать любые вопросы по законам.
+
+Ассистент доступен:
+• в программе Senko Assistant, раздел «Ассистент»
+• на нашем сайте: {site}
+---
+# О работе нейросетей
+Ассистент отвечает на основе законов вашего сервера, но остаётся нейросетью: он может ошибаться и придумывать детали. Не воспринимайте ответ как истину в последней инстанции: перепроверяйте статью, на которую он сослался.
+Ответ нейросети не заменяет решения судебной или исполнительной власти вашего сервера.
+---
+# Правила, чтобы ответы были лучше
+**Не задавайте заведомо некорректные вопросы.** Ассистент работает только с IC-пространством по законам одного сервера, сокращения и термины из OOC он может не понять.
+**Изъясняйтесь просто и понятно.** Формулируйте вопрос максимально ясно и без сленга.
+**Задавайте вопросы на разные темы в разных диалогах.** Ассистент учитывает контекст разговора, и лишняя информация влияет на качество ответа.
+**Управляйте ожиданиями.** Уточняйте детали и пожелания по формату ответа. Если ответ не устроил, переформулируйте вопрос или попросите ответ заново.`,
+    buttons: "Открыть на сайте | {site}", image: "",
+  },
+  support: {
+    src: `# 🛟 Поддержка
+Нужна помощь с программой, аккаунтом или нашли ошибку? Нажмите кнопку ниже: бот создаст личный канал, где вам ответит команда поддержки.
+
+Одновременно можно держать одно открытое обращение.`,
+    buttons: "", image: "",
+  },
+  welcome: {
+    src: `# 👋 Привет, ты попал(а) на сервер Senko Assistant!
+Мы делаем инструменты для сотрудников государственных структур Majestic RP: законы, калькулятор, рапорты и ИИ-ассистент.
+
+Загляни в {#info}, чтобы подробнее узнать, какие сервисы у нас есть.
+
+Коротко:
+• в {#laws} собрана законодательная база с историей изменений и поиском
+• в {#assistants} можно узнать, как ИИ-ассистент отвечает на вопросы по законам
+• в {#news} мы рассказываем о новостях, а в {#changelog} — об обновлениях программы
+
+Прочитай {#rules}, а по любым вопросам и проблемам приходи в {#support}.`,
+    buttons: "", image: "{banner}",
+  },
+};
+
+// ───────── общие помощники
+const hexBytes = (h) => new Uint8Array((String(h).match(/../g) || []).map((x) => parseInt(x, 16)));
+async function dcVerify(raw, sig, ts) {
+  try {
+    if (!DC_PUBKEY || !/^[0-9a-f]{128}$/i.test(sig) || !/^\d{9,12}$/.test(ts)) return false;
+    if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false; // старые запросы не принимаем
+    const key = await crypto.subtle.importKey("raw", hexBytes(DC_PUBKEY), { name: "Ed25519" }, false, ["verify"]);
+    return await crypto.subtle.verify("Ed25519", key, hexBytes(sig), enc.encode(ts + raw));
+  } catch (e) {
+    return false;
+  }
+}
+async function dc(method, path, body, reason) {
+  if (!DC_TOKEN) return { ok: false, status: 0, j: null, error: "Не задан секрет DISCORD_BOT_TOKEN." };
+  for (let i = 0; i < 2; i++) {
+    try {
+      const r = await fetch(DC_API + path, {
+        method,
+        headers: { authorization: "Bot " + DC_TOKEN, "content-type": "application/json", ...(reason ? { "x-audit-log-reason": encodeURIComponent(reason) } : {}) },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(12000),
+      });
+      if (r.status === 429 && i === 0) {
+        const j = await r.json().catch(() => ({}));
+        await new Promise((x) => setTimeout(x, Math.min(5000, Math.ceil((j.retry_after || 1) * 1000))));
+        continue;
+      }
+      const t = await r.text();
+      let j = null;
+      try { j = t ? JSON.parse(t) : null; } catch (e) {}
+      return { ok: r.ok, status: r.status, j, error: r.ok ? "" : (j && j.message) || "Discord ответил " + r.status };
+    } catch (e) {
+      return { ok: false, status: 0, j: null, error: "Discord не отвечает" };
+    }
+  }
+  return { ok: false, status: 429, j: null, error: "Слишком много запросов к Discord, повторите позже." };
+}
+async function dcCfg() {
+  const c = (await getSetting("dc", {})) || {};
+  return {
+    guild: c.guild || DC_GUILD_ENV || "", channels: c.channels || {}, roles: c.roles || {}, cat: c.cat || "", n: c.n || 0, msgs: c.msgs || {},
+    auto: { reg: true, maint: true, welcome: true, ...(c.auto || {}) }, welcome: c.welcome || { since: 0 }, links: { ...DC_LINKS_DEFAULT, ...(c.links || {}) }, monitor: c.monitor || { states: {}, at: 0, hash: "" },
+  };
+}
+const dcSave = (c) => setSetting("dc", c);
+async function dcContent() {
+  const s = (await getSetting("dc_content", {})) || {};
+  const out = {};
+  for (const k of Object.keys(DC_DEFAULT_CONTENT)) out[k] = { ...DC_DEFAULT_CONTENT[k], ...(s[k] || {}) };
+  return out;
+}
+const fillLinks = (t, links) => String(t || "").replace(/\{(site|download|telegram|banner)\}/g, (m, k) => links[k] || m);
+// {#info} → упоминание канала (если канал найден), иначе его название
+const fillChannels = (t, cfg) => String(t || "").replace(/\{#(\w+)\}/g, (m, k) => (cfg.channels[k] ? `<#${cfg.channels[k]}>` : DC_CHANNELS[k] ? "«" + DC_CHANNELS[k][0] + "»" : m));
+
+// Текст → вложения (embed) и кнопки-ссылки
+function dcEmbeds(src, links, color, image, cfg) {
+  image = fillLinks(image, links);
+  const blocks = fillChannels(fillLinks(src, links), cfg || { channels: {} }).replace(/\r/g, "").split(/\n-{3,}\n/).map((x) => x.trim()).filter(Boolean).slice(0, 10);
+  const embeds = blocks.map((b, i) => {
+    const m = /^#\s+(.+)\n?/.exec(b);
+    const e = { color, description: (m ? b.slice(m[0].length) : b).trim().slice(0, 4000) };
+    if (m) e.title = m[1].trim().slice(0, 250);
+    if (!e.description) delete e.description;
+    if (i === 0 && image && /^https:\/\//.test(image)) e.image = { url: image };
+    return e;
+  });
+  return embeds.length ? embeds : [{ color, description: "—" }];
+}
+function dcButtons(text, links) {
+  const btns = fillLinks(text, links).split("\n").map((l) => l.split("|").map((x) => x.trim())).filter((a) => a.length === 2 && a[0] && /^https:\/\//.test(a[1]))
+    .slice(0, 5).map((a) => ({ type: 2, style: 5, label: a[0].slice(0, 80), url: a[1].slice(0, 500) }));
+  return btns;
+}
+
+// Найти каналы и роли на сервере, создать недостающие роли, зарегистрировать команды
+async function dcSetup(cfg) {
+  const rep = [];
+  if (!DC_TOKEN) return { cfg, rep: ["❌ Не задан секрет DISCORD_BOT_TOKEN (Supabase → Edge Functions → Secrets)."] };
+  const me = await dc("GET", "/users/@me");
+  if (!me.ok) return { cfg, rep: ["❌ Токен бота не подошёл: " + me.error] };
+  rep.push("✅ Бот: " + clean(me.j.username, 40));
+  if (!DC_PUBKEY) rep.push("⚠️ Не задан секрет DISCORD_PUBLIC_KEY: команды и кнопки работать не будут.");
+  if (!DC_APP) rep.push("⚠️ Не задан секрет DISCORD_APP_ID: команды зарегистрировать нельзя.");
+  if (!cfg.guild) return { cfg, rep: rep.concat("❌ Не указан ID Discord-сервера.") };
+  const g = await dc("GET", `/guilds/${cfg.guild}`);
+  if (!g.ok) return { cfg, rep: rep.concat("❌ Сервер не найден или бот не приглашён: " + g.error) };
+  rep.push("✅ Сервер: " + clean(g.j.name, 60));
+  const chs = await dc("GET", `/guilds/${cfg.guild}/channels`);
+  if (chs.ok) {
+    const list = chs.j || [];
+    for (const k of Object.keys(DC_CHANNELS)) {
+      const cur = cfg.channels[k];
+      if (cur && list.some((c) => c.id === cur)) continue;
+      const f = list.find((c) => (c.type === 0 || c.type === 5) && String(c.name || "").toLowerCase().includes(DC_CHANNELS[k][1]));
+      if (f) { cfg.channels[k] = f.id; rep.push(`✅ Канал «${DC_CHANNELS[k][0]}»: #${f.name}`); }
+      else rep.push(`⚠️ Канал «${DC_CHANNELS[k][0]}» не найден. Создайте его (в названии должно быть «${DC_CHANNELS[k][1]}») или укажите ID вручную.`);
+    }
+    if (!cfg.cat || !list.some((c) => c.id === cfg.cat)) {
+      const cat = list.find((c) => c.type === 4 && /обращен|тикет|ticket/i.test(c.name || ""));
+      if (cat) { cfg.cat = cat.id; rep.push("✅ Категория обращений: " + cat.name); }
+      else {
+        const mk = await dc("POST", `/guilds/${cfg.guild}/channels`, { name: "Обращения", type: 4 }, "Senko: категория обращений");
+        if (mk.ok) { cfg.cat = mk.j.id; rep.push("✅ Создана категория «Обращения»."); } else rep.push("⚠️ Категорию «Обращения» создать не вышло: " + mk.error);
+      }
+    }
+  } else rep.push("⚠️ Список каналов не получен: " + chs.error);
+  const rl = await dc("GET", `/guilds/${cfg.guild}/roles`);
+  if (rl.ok) {
+    const list = rl.j || [];
+    for (const k of Object.keys(DC_ROLES)) {
+      const cur = cfg.roles[k];
+      if (cur && list.some((r) => r.id === cur)) continue;
+      const want = DC_ROLES[k][0].toLowerCase();
+      const f = list.find((r) => String(r.name).toLowerCase() === want || (k === "support" && String(r.name).toLowerCase() === DC_SUPPORT_NAME));
+      if (f) { cfg.roles[k] = f.id; rep.push(`✅ Роль «${DC_ROLES[k][0]}» найдена.`); continue; }
+      const mk = await dc("POST", `/guilds/${cfg.guild}/roles`, { name: DC_ROLES[k][0], color: DC_ROLES[k][1], mentionable: k === "support", hoist: k !== "support" }, "Senko: роль");
+      if (mk.ok) { cfg.roles[k] = mk.j.id; rep.push(`✅ Создана роль «${DC_ROLES[k][0]}».`); } else rep.push(`⚠️ Роль «${DC_ROLES[k][0]}» создать не вышло: ${mk.error}. Дайте боту право «Управление ролями» и поднимите его роль выше ролей Senko.`);
+    }
+  } else rep.push("⚠️ Список ролей не получен: " + rl.error);
+  if (DC_APP) {
+    const cm = await dc("PUT", `/applications/${DC_APP}/guilds/${cfg.guild}/commands`, DC_COMMANDS);
+    rep.push(cm.ok ? "✅ Команды зарегистрированы: /привязать, /отвязать, /роли, /senko" : "⚠️ Команды не зарегистрированы: " + cm.error);
+  }
+  return { cfg, rep };
+}
+const DC_COMMANDS = [
+  { name: "привязать", description: "Привязать аккаунт Senko Assistant по коду из личного кабинета", type: 1, options: [{ type: 3, name: "код", description: "Код из программы: Личный кабинет → Discord", required: true }] },
+  { name: "отвязать", description: "Отвязать аккаунт Senko Assistant", type: 1 },
+  { name: "роли", description: "Обновить мои роли по аккаунту Senko Assistant", type: 1 },
+  { name: "senko", description: "Команда модерации Senko (только владелец и модераторы)", type: 1, options: [{ type: 3, name: "команда", description: "Например: find login или help", required: true }] },
+];
+
+// ───────── роли участников
+async function dcDesired(cfg, p) {
+  const want = new Set();
+  if (!p || p.banned) return want;
+  if (p.rank === "owner" && cfg.roles.owner) want.add(cfg.roles.owner);
+  if (p.rank === "moderator" && cfg.roles.moderator) want.add(cfg.roles.moderator);
+  if (p.beta && cfg.roles.beta) want.add(cfg.roles.beta);
+  return want;
+}
+// Приводит управляемые роли участника в соответствие с аккаунтом; возвращает описание изменений или null, если участника нет на сервере
+async function dcSyncMember(cfg, dcId, p) {
+  if (!cfg.guild || !DC_ID_RE.test(String(dcId))) return null;
+  const m = await dc("GET", `/guilds/${cfg.guild}/members/${dcId}`);
+  if (m.status === 404) return null;
+  if (!m.ok) return { error: m.error, added: [], removed: [] };
+  const have = new Set(m.j.roles || []);
+  const want = await dcDesired(cfg, p);
+  const managed = Object.keys(DC_ROLES).filter((k) => DC_ROLES[k][2]).map((k) => cfg.roles[k]).filter(Boolean);
+  const out = { added: [], removed: [] };
+  for (const id of want) if (!have.has(id)) { const r = await dc("PUT", `/guilds/${cfg.guild}/members/${dcId}/roles/${id}`, undefined, "Senko: синхронизация ролей"); if (r.ok) out.added.push(id); else out.error = r.error; }
+  for (const id of managed) if (have.has(id) && !want.has(id)) { const r = await dc("DELETE", `/guilds/${cfg.guild}/members/${dcId}/roles/${id}`, undefined, "Senko: синхронизация ролей"); if (r.ok) out.removed.push(id); else out.error = r.error; }
+  return out;
+}
+// Каждую минуту обновляем несколько участников по кругу: изменения ранга, бета-роли и блокировки доходят до Discord сами
+async function dcRoleTick() {
+  const cfg = await dcCfg();
+  if (!DC_TOKEN || !cfg.guild) return;
+  const rows = await db()`select * from profiles where dc_id is not null order by dc_sync nulls first limit 5`;
+  for (const p of rows) {
+    try { await dcSyncMember(cfg, p.dc_id, p); } catch (e) { console.error("dcrole", e); }
+    await db()`update profiles set dc_sync = now() where id = ${p.id}`;
+  }
+}
+function dcRoleNames(cfg, ids) {
+  return ids.map((id) => { const k = Object.keys(cfg.roles).find((x) => cfg.roles[x] === id); return k ? DC_ROLES[k][0] : id; });
+}
+
+// Код привязки: создаётся в программе (action "discord_link"), вводится в Discord командой /привязать
+async function discordLinkApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const op = String(b.op || "code");
+  if (op === "status") return { ok: true, linked: !!p.dc_id, configured: !!(DC_TOKEN && DC_PUBKEY) };
+  if (op === "unlink") {
+    if (p.dc_id) {
+      const cfg = await dcCfg();
+      const was = p.dc_id;
+      await db()`update profiles set dc_id = null, dc_sync = null where id = ${p.id}`;
+      try { await dcSyncMember(cfg, was, null); } catch (e) {}
+    }
+    return { ok: true, linked: false };
+  }
+  if (!(await hit(`dlk:${p.id}`, 6, 3600))) return fail(RATE_MSG, { code: "rate" });
+  if (!DC_TOKEN || !DC_PUBKEY) return fail("Discord-бот ещё не подключён. Сообщите владельцу.", { code: "dc_off" });
+  const sql = db();
+  await sql`delete from dc_links where user_id = ${p.id} or expires_at < now()`;
+  const a = new Uint8Array(8);
+  crypto.getRandomValues(a);
+  const code = [...a].map((x) => CODE_ALPH[x & 31]).join("");
+  await sql`insert into dc_links (code, user_id, expires_at) values (${code}, ${p.id}, now() + interval '10 minutes')`;
+  return { ok: true, code: code.slice(0, 4) + "-" + code.slice(4), minutes: 10, linked: !!p.dc_id };
+}
+
+// ───────── публикации в каналы
+async function dcPublish(key, cfg) {
+  const d = DC_MSGS[key];
+  if (!d) return fail("Неизвестное сообщение.");
+  const chId = cfg.channels[d.ch];
+  if (!chId) return fail(`Канал «${DC_CHANNELS[d.ch][0]}» не найден. Нажмите «Проверить и подключить» или укажите ID канала.`);
+  const c = (await dcContent())[key];
+  const body = { embeds: dcEmbeds(c.src, cfg.links, d.color, c.image, cfg), allowed_mentions: { parse: [] } };
+  const btns = dcButtons(c.buttons, cfg.links);
+  if (key === "support") btns.push({ type: 2, style: 1, label: "Создать обращение", custom_id: "dc:ticket", emoji: { name: "🛟" } });
+  body.components = btns.length ? [{ type: 1, components: btns.slice(0, 5) }] : [];
+  if (d.template) {
+    // шаблон приветствия не хранится в канале: отправляется предпросмотр без упоминания
+    const pr = await dc("POST", `/channels/${chId}/messages`, { ...body, content: "👀 Предпросмотр приветствия (так бот встретит нового участника)" }, "Senko: предпросмотр");
+    return pr.ok ? { ok: true, id: pr.j.id } : fail("Discord не принял сообщение: " + pr.error);
+  }
+  const old = cfg.msgs[key];
+  let r = null;
+  if (old && old.ch === chId && old.id) {
+    r = await dc("PATCH", `/channels/${chId}/messages/${old.id}`, body, "Senko: обновление сообщения");
+    if (r.status === 404) r = null;
+  }
+  if (!r) r = await dc("POST", `/channels/${chId}/messages`, body, "Senko: публикация");
+  if (!r.ok) return fail("Discord не принял сообщение: " + r.error + (r.status === 403 ? " Дайте боту права на канал: просмотр, отправка сообщений, встраивание ссылок." : ""));
+  cfg.msgs[key] = { ch: chId, id: r.j.id, at: Date.now() };
+  return { ok: true, id: r.j.id };
+}
+async function dcPost(chKey, payload, cfg) {
+  const cf = cfg || (await dcCfg());
+  const ch = cf.channels[chKey];
+  if (!DC_TOKEN || !ch) return { ok: false, error: "Канал не настроен." };
+  return dc("POST", `/channels/${ch}/messages`, { allowed_mentions: { parse: [] }, ...payload });
+}
+// Автоматические объявления в «Новости» (регистрация, техработы); сбой отправки не мешает основному действию
+async function dcAnnounce(kind, extra) {
+  try {
+    const cfg = await dcCfg();
+    if (!DC_TOKEN || !cfg.channels.news) return;
+    const e = {
+      reg_on: { on: "reg", t: "✅ Регистрация открыта", d: "Регистрация новых пользователей в Senko Assistant снова доступна.", c: 0x2ecc71 },
+      reg_off: { on: "reg", t: "⛔ Регистрация закрыта", d: "Регистрация новых пользователей временно закрыта. Вход для зарегистрированных работает.", c: 0xe74c3c },
+      maint_on: { on: "maint", t: "🛠 Технические работы", d: "Идут технические работы: часть функций Senko Assistant может быть недоступна." + (extra ? "\n\n" + clean(extra, 400) : ""), c: 0xf59e0b },
+      maint_off: { on: "maint", t: "✅ Технические работы завершены", d: "Senko Assistant снова работает в обычном режиме. Спасибо за ожидание!", c: 0x2ecc71 },
+    }[kind];
+    if (!e || cfg.auto[e.on] === false) return;
+    await dcPost("news", { embeds: [{ title: e.t, description: e.d, color: e.c, timestamp: new Date().toISOString() }] }, cfg);
+  } catch (e) {
+    console.error("dcAnnounce", e);
+  }
+}
+// Новость от владельца (панель → Discord → Новость)
+async function dcNews(b, label) {
+  const cfg = await dcCfg();
+  const title = clean(b.title, 200), text = String(b.text == null ? "" : b.text).replace(/\r/g, "").trim().slice(0, 3800);
+  if (!text) return fail("Напишите текст новости.");
+  if (!cfg.channels.news) return fail("Канал «Новости» не найден. Нажмите «Проверить и подключить».");
+  const payload = { embeds: [{ title: title || undefined, description: fillLinks(text, cfg.links), color: 0xff8a3d, timestamp: new Date().toISOString(), footer: { text: "Senko Assistant" } }] };
+  if (b.everyone === true) { payload.content = "@everyone"; payload.allowed_mentions = { parse: ["everyone"] }; }
+  const r = await dcPost("news", payload, cfg);
+  if (!r.ok) return fail("Не отправилось: " + r.error);
+  await audit(label, "dc_news", null, { title });
+  return { ok: true };
+}
+// Changelog после выпуска: вызывает workflow «Build installer» (action dc_changelog, версия и текст из «Что нового»)
+async function dcChangelog(b) {
+  const cfg = await dcCfg();
+  const v = clean(b.version, 40);
+  if (!v) return { ok: false, error: "Нет версии." };
+  if (!cfg.channels.changelog) return { ok: false, error: "Канал changelog не настроен." };
+  const beta = b.prerelease === true || v.includes("-");
+  const notes = String(b.notes == null ? "" : b.notes).replace(/\r/g, "").replace(/^##[^\n]*\n+/, "").replace(/\n+Установите[^\n]*$/m, "").trim().slice(0, 3800);
+  const r = await dcPost("changelog", {
+    embeds: [{ title: `${beta ? "🧪" : "🚀"} Senko Assistant ${v}`, description: (beta ? "**Бета-версия** — доступна бета-тестерам, новые функции видны только им.\n\n" : "") + (notes || "Список изменений не указан."), color: beta ? 0xf59e0b : 0x2ecc71,
+      url: "https://github.com/Kofemanchik/Senko-Assistant/releases/tag/v" + encodeURIComponent(v), timestamp: new Date().toISOString() }],
+  }, cfg);
+  return r.ok ? { ok: true } : { ok: false, error: r.error };
+}
+
+// ───────── приветствие новых участников (без Gateway: раз в минуту сверяем список участников по времени входа)
+async function dcWelcomeTick() {
+  const cfg = await dcCfg();
+  if (!DC_TOKEN || !cfg.guild || cfg.auto.welcome === false) return;
+  const w = cfg.welcome || { since: 0 };
+  if (!w.since) { cfg.welcome = { since: Date.now() }; await dcSave(cfg); return; } // первый запуск: старых участников не приветствуем
+  const fresh = [];
+  let after = "0";
+  for (let page = 0; page < 5; page++) {
+    const r = await dc("GET", `/guilds/${cfg.guild}/members?limit=1000&after=${after}`);
+    if (!r.ok) {
+      const msg = r.status === 403 ? "Нужно включить «Server Members Intent» в Developer Portal → Bot." : r.error;
+      if (w.err !== msg) { cfg.welcome = { ...w, err: msg }; await dcSave(cfg); }
+      return;
+    }
+    const list = r.j || [];
+    for (const m of list) {
+      const t = Date.parse(m.joined_at || "");
+      if (m.user && !m.user.bot && t > w.since) fresh.push({ id: m.user.id, t });
+    }
+    if (list.length < 1000) break;
+    after = list[list.length - 1].user.id;
+  }
+  if (!fresh.length) { if (w.err) { cfg.welcome = { since: w.since }; await dcSave(cfg); } return; }
+  fresh.sort((x, y) => x.t - y.t);
+  const batch = fresh.slice(0, 5);
+  const c = (await dcContent()).welcome;
+  for (const m of batch) {
+    const embeds = dcEmbeds(c.src, cfg.links, DC_MSGS.welcome.color, c.image, cfg);
+    const body = { content: `<@${m.id}>`, embeds, allowed_mentions: { users: [m.id] } };
+    let ok = false;
+    if (cfg.channels.welcome) ok = (await dc("POST", `/channels/${cfg.channels.welcome}/messages`, body)).ok;
+    if (!ok) { // канала приветствий нет: пробуем личное сообщение
+      const dm = await dc("POST", "/users/@me/channels", { recipient_id: m.id });
+      if (dm.ok) await dc("POST", `/channels/${dm.j.id}/messages`, { embeds });
+    }
+  }
+  cfg.welcome = { since: batch[batch.length - 1].t };
+  await dcSave(cfg);
+}
+async function dcTick() {
+  if (!DC_TOKEN) return;
+  for (const f of [dcWelcomeTick, dcRoleTick, () => dcMonitor(false)]) {
+    try { await f(); } catch (e) { console.error("dcTick", e); }
+  }
+}
+
+// ───────── мониторинг ресурсов
+async function dcMonitor(force) {
+  const cfg = await dcCfg();
+  if (!DC_TOKEN || !cfg.channels.monitor) return;
+  const m = cfg.monitor;
+  if (!force && Date.now() - (m.at || 0) < 5 * 60e3) return;
+  const st = await statusApi();
+  const S = st.services.slice();
+  let t0 = Date.now(), siteOk = false;
+  try { const r = await fetch(SITE_URL + "/", { method: "GET", signal: AbortSignal.timeout(6000) }); siteOk = r.ok; } catch (e) {}
+  S.push({ k: "site", name: "Сайт и веб-версия", ok: siteOk, ms: siteOk ? Date.now() - t0 : undefined });
+  S.unshift({ k: "fn", name: "Серверная функция", ok: true });
+  const states = {};
+  S.forEach((s) => { states[s.k] = !!s.ok; });
+  const prev = m.states || {};
+  const down = S.filter((s) => !s.ok && prev[s.k] !== false && Object.keys(prev).length);
+  const up = S.filter((s) => s.ok && prev[s.k] === false);
+  const all = S.every((s) => s.ok);
+  const line = (s) => `${s.ok ? "🟢" : "🔴"} ${s.name}${s.ok && s.ms ? ` · ${s.ms} мс` : ""}`;
+  const embed = { title: all ? "✅ Все системы работают" : "⚠️ Есть проблемы", description: S.map(line).join("\n"), color: all ? 0x2ecc71 : 0xe74c3c,
+    footer: { text: "Обновляется автоматически" }, timestamp: new Date().toISOString() };
+  if (st.maintenance && st.maintenance.on) embed.description += "\n\n🛠 Идут технические работы" + (st.maintenance.text ? ": " + st.maintenance.text : "");
+  const body = { embeds: [embed], allowed_mentions: { parse: [] } };
+  const chId = cfg.channels.monitor, old = cfg.msgs.monitor;
+  let r = null;
+  if (old && old.ch === chId && old.id) { r = await dc("PATCH", `/channels/${chId}/messages/${old.id}`, body); if (r.status === 404) r = null; }
+  if (!r) r = await dc("POST", `/channels/${chId}/messages`, body);
+  if (r.ok) cfg.msgs.monitor = { ch: chId, id: r.j.id, at: Date.now() };
+  // тревога только при переходе «работало → не работает» и обратно, чтобы не спамить
+  if (down.length || up.length) {
+    const ping = down.length && cfg.roles.owner ? `<@&${cfg.roles.owner}> ` : "";
+    await dc("POST", `/channels/${chId}/messages`, {
+      content: ping + [...down.map((s) => `🔴 **${s.name}** не отвечает`), ...up.map((s) => `🟢 **${s.name}** снова работает`)].join("\n"),
+      allowed_mentions: { roles: down.length && cfg.roles.owner ? [cfg.roles.owner] : [] },
+    });
+  }
+  cfg.monitor = { states, at: Date.now() };
+  await dcSave(cfg);
+}
+
+// ───────── тикеты
+const slugName = (s) => String(s || "user").toLowerCase().replace(/[^a-z0-9а-яё_-]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "user";
+const dcHasRole = (i, cfg, k) => !!cfg.roles[k] && ((i.member && i.member.roles) || []).includes(cfg.roles[k]);
+const eph = (content, extra = {}) => ({ type: 4, data: { content: String(content).slice(0, 1900), flags: 64, allowed_mentions: { parse: [] }, ...extra } });
+const TICKET_PERMS = 117760; // просмотр канала, отправка, ссылки, файлы, история
+
+async function dcTicketOpen(i, cfg) {
+  const user = (i.member && i.member.user) || i.user;
+  if (!user) return { ok: false, text: "Не удалось определить пользователя." };
+  if (!(await hit(`dct:${user.id}`, 4, 3600))) return { ok: false, text: "Слишком много обращений за час. Подождите немного." };
+  const sql = db();
+  const [open] = await sql`select channel_id from dc_tickets where dc_user = ${user.id} and status <> 'closed' limit 1`;
+  if (open) return { ok: false, text: `У вас уже есть открытое обращение: <#${open.channel_id}>` };
+  const [{ id }] = await sql`insert into dc_tickets (channel_id, dc_user, dc_name) values ('', ${user.id}, ${clean(user.username, 60)}) returning id`;
+  const name = `${slugName(user.username)}-${id}`;
+  const ow = [{ id: cfg.guild, type: 0, deny: "1024" }, { id: user.id, type: 1, allow: String(TICKET_PERMS) }];
+  if (cfg.roles.support) ow.push({ id: cfg.roles.support, type: 0, allow: String(TICKET_PERMS) });
+  if (DC_APP) ow.push({ id: DC_APP, type: 1, allow: String(TICKET_PERMS + 16) });
+  const ch = await dc("POST", `/guilds/${cfg.guild}/channels`, { name, type: 0, parent_id: cfg.cat || undefined, permission_overwrites: ow, topic: `Обращение №${id} · ${clean(user.username, 40)}` }, "Senko: обращение №" + id);
+  if (!ch.ok) {
+    await sql`delete from dc_tickets where id = ${id}`;
+    return { ok: false, text: "Не получилось создать канал обращения: " + ch.error + ". Сообщите владельцу." };
+  }
+  await sql`update dc_tickets set channel_id = ${ch.j.id} where id = ${id}`;
+  const sup = cfg.roles.support ? `<@&${cfg.roles.support}> ` : "";
+  await dc("POST", `/channels/${ch.j.id}/messages`, {
+    content: `${sup}<@${user.id}>`,
+    allowed_mentions: { roles: cfg.roles.support ? [cfg.roles.support] : [], users: [user.id] },
+    embeds: [{ title: `🛟 Обращение №${id}`, description: `Здравствуйте, <@${user.id}>! Опишите вопрос или проблему: что делали, что ожидали и что получилось. Приложите скриншот или журнал, если есть.\n\nКоманда поддержки уже уведомлена и ответит здесь, как только освободится.`, color: 0xf59e0b }],
+    components: [{ type: 1, components: [
+      { type: 2, style: 3, label: "Принять обращение", custom_id: "dc:accept:" + id },
+      { type: 2, style: 4, label: "Закрыть обращение", custom_id: "dc:close:" + id },
+    ] }],
+  });
+  return { ok: true, text: `Обращение создано: <#${ch.j.id}>`, id };
+}
+async function dcTicketAction(i, cfg, act, id) {
+  const sql = db();
+  const [t] = await sql`select * from dc_tickets where id = ${id}`;
+  if (!t) return eph("Обращение не найдено.");
+  if (!dcHasRole(i, cfg, "support")) return eph("Это действие доступно только роли Support.");
+  const me = (i.member && i.member.user && i.member.user.id) || "";
+  const msg = i.message || {};
+  const emb = (msg.embeds || [])[0] || {};
+  const rowBtns = (acc, cls) => [{ type: 1, components: [
+    { type: 2, style: 3, label: "Принять обращение", custom_id: "dc:accept:" + id, disabled: acc || cls },
+    { type: 2, style: 4, label: "Закрыть обращение", custom_id: "dc:close:" + id, disabled: cls },
+  ] }];
+  if (t.status === "closed") return eph("Обращение уже закрыто.");
+  if (act === "accept") {
+    if (t.status === "accepted") return eph("Обращение уже принято: <@" + t.accepted_by + ">");
+    await sql`update dc_tickets set status = 'accepted', accepted_by = ${me} where id = ${id}`;
+    return { type: 7, data: { embeds: [{ ...emb, description: String(emb.description || "") + `\n\n✅ Обращение принял(а) <@${me}>.`, color: 0x2ecc71 }], components: rowBtns(true, false), allowed_mentions: { parse: [] } } };
+  }
+  // закрытие: пользователь теряет доступ к каналу, канал переименовывается, кнопки гаснут
+  await sql`update dc_tickets set status = 'closed', closed_at = now() where id = ${id}`;
+  const after = async () => {
+    await dc("DELETE", `/channels/${t.channel_id}/permissions/${t.dc_user}`, undefined, "Senko: обращение закрыто");
+    await dc("PATCH", `/channels/${t.channel_id}`, { name: `закрыто-${id}` }, "Senko: обращение закрыто");
+    await dc("POST", `/channels/${t.channel_id}/messages`, { content: `🔒 Обращение №${id} закрыл(а) <@${me}>. Канал виден только поддержке; удалить его можно вручную.`, allowed_mentions: { parse: [] } });
+  };
+  dcLater(after());
+  return { type: 7, data: { embeds: [{ ...emb, description: String(emb.description || "") + `\n\n🔒 Обращение закрыто (<@${me}>).`, color: 0x95a5a6 }], components: rowBtns(true, true), allowed_mentions: { parse: [] } } };
+}
+// Работа, которая должна закончиться после ответа Discord (ответ нужен за 3 секунды)
+function dcLater(p) {
+  const q = p.catch((e) => console.error("dcLater", e));
+  try { if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) { EdgeRuntime.waitUntil(q); return; } } catch (e) {}
+}
+
+// ───────── команды и кнопки
+async function dcProfileOf(i) {
+  const user = (i.member && i.member.user) || i.user;
+  if (!user) return null;
+  const [p] = await db()`select * from profiles where dc_id = ${user.id}`;
+  return p || null;
+}
+async function dcCommand(i, cfg) {
+  const name = String(i.data && i.data.name || "");
+  const opt = (k) => { const o = ((i.data && i.data.options) || []).find((x) => x.name === k); return o ? String(o.value == null ? "" : o.value) : ""; };
+  const user = (i.member && i.member.user) || i.user;
+  if (!user) return eph("Не удалось определить пользователя.");
+  if (name === "привязать") {
+    if (!(await hit(`dcl:${user.id}`, 8, 900))) return eph("Слишком много попыток. Подождите несколько минут.");
+    const code = normCode(opt("код"));
+    const sql = db();
+    const [l] = code.length === 8 ? await sql`select * from dc_links where code = ${code} and expires_at > now()` : [];
+    if (!l) return eph("Код не подошёл или устарел. Получите новый в программе: Личный кабинет → Discord.");
+    const p = await profileById(l.user_id);
+    if (!p || p.banned) return eph("Аккаунт недоступен.");
+    await sql`update profiles set dc_id = null, dc_sync = null where dc_id = ${user.id} and id <> ${p.id}`;
+    await sql`update profiles set dc_id = ${user.id}, dc_sync = now() where id = ${p.id}`;
+    await sql`delete from dc_links where user_id = ${p.id}`;
+    const r = await dcSyncMember(cfg, user.id, { ...p, dc_id: user.id });
+    const got = r ? dcRoleNames(cfg, r.added) : [];
+    return eph(`✅ Аккаунт **${clean(p.login, 30)}** привязан.` + (got.length ? `\nВыданы роли: ${got.join(", ")}.` : "\nРолей по аккаунту пока нет: роли получают владелец, модераторы и бета-тестеры.") + (r && r.error ? `\n⚠️ Часть ролей выдать не получилось (${r.error}), сообщите владельцу.` : ""));
+  }
+  const p = await dcProfileOf(i);
+  if (name === "отвязать") {
+    if (!p) return eph("Аккаунт не привязан.");
+    await db()`update profiles set dc_id = null, dc_sync = null where id = ${p.id}`;
+    try { await dcSyncMember(cfg, user.id, null); } catch (e) {}
+    return eph("Аккаунт отвязан, роли сняты.");
+  }
+  if (name === "роли") {
+    if (!p) return eph("Сначала привяжите аккаунт: `/привязать` и код из программы (Личный кабинет → Discord).");
+    if (!(await hit(`dcr:${user.id}`, 10, 600))) return eph("Слишком часто. Подождите немного.");
+    const r = await dcSyncMember(cfg, user.id, p);
+    await db()`update profiles set dc_sync = now() where id = ${p.id}`;
+    if (!r) return eph("Вас не нашли на сервере.");
+    const add = dcRoleNames(cfg, r.added), rem = dcRoleNames(cfg, r.removed);
+    return eph(!add.length && !rem.length ? "Роли уже в порядке." : `${add.length ? "Выданы: " + add.join(", ") + ". " : ""}${rem.length ? "Сняты: " + rem.join(", ") + "." : ""}` + (r.error ? `\n⚠️ ${r.error}` : ""));
+  }
+  if (name === "senko") {
+    // те же команды, что в Telegram-боте и консоли панели, с теми же правами: только владелец и модераторы
+    if (!p || p.banned || !PANEL_RANKS.includes(p.rank)) return eph("Команда доступна только владельцу и модераторам с привязанным аккаунтом.");
+    if (!(await hit(`dcs:${p.id}`, 40, 600))) return eph("Слишком часто. Подождите немного.");
+    let text = opt("команда").trim();
+    if (!text.startsWith("/")) text = "/" + text;
+    if (!/^\/[a-z_]{2,20}\b/i.test(text)) return eph("Команда начинается с названия, например: `find login` или `help`.");
+    const a = panelActor(p);
+    const out = await panelRun((pid) => onMessage({ from: { id: a.tg }, chat: { id: pid, type: "private" }, text, panelActor: a }));
+    const t = out.map((o) => (o.t === "msg" ? htmlToMd(o.html) : o.t === "file" ? `📎 ${o.name} (файл отправляется только в панель или Telegram)` : "")).filter(Boolean).join("\n\n");
+    return eph(t || "Готово.");
+  }
+  return eph("Неизвестная команда.");
+}
+async function discordInteraction(req) {
+  const raw = await req.text();
+  if (!(await dcVerify(raw, req.headers.get("x-signature-ed25519") || "", req.headers.get("x-signature-timestamp") || ""))) return new Response("invalid request signature", { status: 401 });
+  let i;
+  try { i = JSON.parse(raw); } catch (e) { return new Response("bad", { status: 400 }); }
+  if (i.type === 1) return J({ type: 1 });
+  const cfg = await dcCfg();
+  try {
+    if (i.guild_id && cfg.guild && i.guild_id !== cfg.guild) return J(eph("Этот бот работает только на сервере Senko."));
+    if (i.type === 2) return J(await dcCommand(i, cfg));
+    if (i.type === 3) {
+      const id = String((i.data && i.data.custom_id) || "");
+      if (id === "dc:ticket") {
+        const work = async () => {
+          const r = await dcTicketOpen(i, cfg);
+          return r.text;
+        };
+        if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) {
+          EdgeRuntime.waitUntil(work().then((text) => dc("PATCH", `/webhooks/${DC_APP}/${i.token}/messages/@original`, { content: text, allowed_mentions: { parse: [] } })).catch((e) => console.error("ticket", e)));
+          return J({ type: 5, data: { flags: 64 } });
+        }
+        return J(eph(await work()));
+      }
+      const m = /^dc:(accept|close):(\d{1,9})$/.exec(id);
+      if (m) return J(await dcTicketAction(i, cfg, m[1], +m[2]));
+    }
+  } catch (e) {
+    console.error("discord", e);
+    return J(eph("Ошибка бота. Попробуйте позже."));
+  }
+  return J(eph("Неизвестное действие."));
+}
+
+// ───────── панель владельца (страница «Discord»)
+const dcSecretsOk = () => ({ token: !!DC_TOKEN, pubkey: !!DC_PUBKEY, app: !!DC_APP });
+async function dcPanel(op, b, a) {
+  const cfg = await dcCfg();
+  const content = await dcContent();
+  const view = async () => ({
+    ok: true, secrets: dcSecretsOk(), endpoint: SELF_URL, guild: cfg.guild, guildEnv: !!DC_GUILD_ENV, auto: cfg.auto, links: cfg.links, welcomeErr: (cfg.welcome && cfg.welcome.err) || "",
+    channels: Object.keys(DC_CHANNELS).map((k) => ({ key: k, label: DC_CHANNELS[k][0], id: cfg.channels[k] || "" })),
+    roles: Object.keys(DC_ROLES).map((k) => ({ key: k, label: DC_ROLES[k][0], id: cfg.roles[k] || "", managed: DC_ROLES[k][2] })),
+    messages: Object.keys(DC_MSGS).map((k) => ({ key: k, label: DC_MSGS[k].label, channel: DC_CHANNELS[DC_MSGS[k].ch][0], template: !!DC_MSGS[k].template, src: content[k].src, buttons: content[k].buttons, image: content[k].image || "", published: cfg.msgs[k] ? cfg.msgs[k].at : 0 })),
+    linked: Number((await db()`select count(*)::int n from profiles where dc_id is not null`)[0].n), tickets: Number((await db()`select count(*)::int n from dc_tickets where status <> 'closed'`)[0].n),
+  });
+  if (op === "dc_get") return view();
+  if (op === "dc_save") {
+    if (b.guild != null) {
+      const g = String(b.guild).trim();
+      if (g && !DC_ID_RE.test(g)) return fail("ID сервера — число из 17–20 цифр (в Discord: правой кнопкой по серверу → Копировать ID, нужен режим разработчика).");
+      cfg.guild = g;
+    }
+    if (b.channels && typeof b.channels === "object") for (const k of Object.keys(DC_CHANNELS)) if (k in b.channels) { const v = String(b.channels[k] || "").trim(); if (v && !DC_ID_RE.test(v)) return fail(`Канал «${DC_CHANNELS[k][0]}»: нужен числовой ID.`); cfg.channels[k] = v; }
+    if (b.roles && typeof b.roles === "object") for (const k of Object.keys(DC_ROLES)) if (k in b.roles) { const v = String(b.roles[k] || "").trim(); if (v && !DC_ID_RE.test(v)) return fail(`Роль «${DC_ROLES[k][0]}»: нужен числовой ID.`); cfg.roles[k] = v; }
+    if (b.auto && typeof b.auto === "object") cfg.auto = { reg: b.auto.reg !== false, maint: b.auto.maint !== false, welcome: b.auto.welcome !== false };
+    if (b.links && typeof b.links === "object") for (const k of Object.keys(DC_LINKS_DEFAULT)) if (k in b.links) { const v = String(b.links[k] || "").trim(); if (v && !/^https:\/\/[^\s]{3,300}$/.test(v)) return fail(`Ссылка «${k}»: нужен адрес вида https://…`); cfg.links[k] = v || DC_LINKS_DEFAULT[k]; }
+    if (b.message && typeof b.message === "object" && DC_MSGS[b.message.key]) {
+      const m = b.message, k = m.key;
+      const src = String(m.src == null ? "" : m.src).replace(/\r/g, "").trim().slice(0, 12000);
+      if (!src) return fail("Текст сообщения не может быть пустым.");
+      const img = String(m.image || "").trim();
+      if (img && !/^https:\/\/[^\s]{3,500}$/.test(img)) return fail("Картинка: нужен адрес вида https://…");
+      const all = (await getSetting("dc_content", {})) || {};
+      all[k] = { src, buttons: String(m.buttons || "").slice(0, 1500), image: img };
+      await setSetting("dc_content", all);
+    }
+    await dcSave(cfg);
+    await audit(a.label, "dc_save", null, { keys: Object.keys(b).filter((x) => x !== "op" && x !== "ptoken") });
+    return view();
+  }
+  if (op === "dc_sync") {
+    if (b.guild) { if (!DC_ID_RE.test(String(b.guild).trim())) return fail("ID сервера — число из 17–20 цифр."); cfg.guild = String(b.guild).trim(); }
+    const r = await dcSetup(cfg);
+    await dcSave(r.cfg);
+    return { ...(await view()), report: r.rep };
+  }
+  if (op === "dc_publish") {
+    const keys = b.key === "all" ? Object.keys(DC_MSGS).filter((k) => !DC_MSGS[k].template) : [String(b.key)];
+    const rep = [];
+    for (const k of keys) {
+      const r = await dcPublish(k, cfg);
+      rep.push(r.ok ? `✅ ${DC_MSGS[k].label}: опубликовано` : `❌ ${DC_MSGS[k] ? DC_MSGS[k].label : k}: ${r.error}`);
+    }
+    await dcSave(cfg);
+    await audit(a.label, "dc_publish", String(b.key), {});
+    return { ...(await view()), report: rep };
+  }
+  if (op === "dc_news") {
+    if (!(await hit(`dcn:${a.label}`, 10, 3600))) return fail(RATE_MSG, { code: "rate" });
+    return dcNews(b, a.label);
+  }
+  if (op === "dc_monitor") {
+    await dcMonitor(true);
+    return { ok: true };
+  }
+  return fail("Неизвестное действие.");
+}
+
 Deno.serve(async (req) => withCors(req, await handle(req)));
 
 async function handle(req) {
@@ -5189,6 +5928,7 @@ async function handle(req) {
     }
     if (req.method !== "POST") return J(fail("Метод не поддерживается."), 405);
     if (req.headers.get("x-telegram-bot-api-secret-token")) return await bot(req);
+    if (req.headers.get("x-signature-ed25519")) return await discordInteraction(req); // команды и кнопки Discord
     if (req.headers.get("x-senko-cron")) return await cron(req);
     return await api(req);
   } catch (e) {

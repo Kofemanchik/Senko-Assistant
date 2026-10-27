@@ -260,7 +260,7 @@
     del.forEach(function (k) { W.ls(k, null); });
   }
 
-  var PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password", "ads", "status", "beta", "hooks", "events", "ideas", "patrol", "ai_dict", "ai_hist", "ai_check", "colleagues", "handoff"]; // 2.7: словарь ИИ, история вопросов, самопроверка; 2.8: коллеги, передача задержанного
+  var PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password", "ads", "status", "beta", "hooks", "discord_link", "events", "ideas", "patrol", "ai_dict", "ai_hist", "ai_check", "colleagues", "handoff"]; // 2.7: словарь ИИ, история вопросов, самопроверка; 2.8: коллеги, передача задержанного
   function act(action, data) {
     return W.call(Object.assign({}, W.client(), data && typeof data === "object" ? data : {}, { action: action, token: (W.session() || {}).token })).then(function (r) {
       if (r && (r.code === "auth" || r.code === "banned")) setTimeout(function () { lost(r.code === "banned" ? r.error : ""); }, 0);

@@ -512,3 +512,17 @@ create table if not exists public.handoffs (
   data jsonb not null, created_at timestamptz not null default now(), expires_at timestamptz not null);
 alter table public.handoffs enable row level security;
 revoke all on table public.handoffs from anon, authenticated;
+
+-- 2.9: Discord-бот (привязка аккаунта, обращения); функция создаёт то же самое сама (DC_SCHEMA в functions/senko/index.ts)
+alter table public.profiles add column if not exists dc_id text;
+alter table public.profiles add column if not exists dc_sync timestamptz;
+create unique index if not exists profiles_dc_id_uq on public.profiles (dc_id) where dc_id is not null;
+create table if not exists public.dc_links (
+  code text primary key, user_id uuid not null references public.profiles(id) on delete cascade, expires_at timestamptz not null);
+create table if not exists public.dc_tickets (
+  id serial primary key, channel_id text not null, dc_user text not null, dc_name text not null default '', status text not null default 'open',
+  accepted_by text not null default '', created_at timestamptz not null default now(), closed_at timestamptz);
+create index if not exists dc_tickets_user_idx on public.dc_tickets (dc_user, status);
+alter table public.dc_links enable row level security;
+alter table public.dc_tickets enable row level security;
+revoke all on table public.dc_links, public.dc_tickets from anon, authenticated;

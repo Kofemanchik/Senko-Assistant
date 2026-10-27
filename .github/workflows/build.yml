@@ -128,3 +128,18 @@ jobs:
             dist/*.yml
             dist/*.blockmap
           fail_on_unmatched_files: true
+
+      # Changelog в Discord: бот публикует версию и список изменений в канал обновлений (нужен секрет CRON_SECRET, тот же, что у Sync laws)
+      - name: Changelog в Discord
+        if: (startsWith(github.ref, 'refs/tags/') || inputs.release) && success()
+        continue-on-error: true
+        shell: bash
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then echo "CRON_SECRET не задан, changelog в Discord пропущен"; exit 0; fi
+          V="${{ steps.ver.outputs.v }}"
+          PRE=false; case "$V" in *-*) PRE=true;; esac
+          jq -n --arg v "$V" --argjson pre "$PRE" --rawfile notes release-notes.md '{action:"dc_changelog",version:$v,prerelease:$pre,notes:$notes}' > dc.json
+          curl -sS -m 30 -X POST "https://wcjspwailippjmyffkei.supabase.co/functions/v1/senko" \
+            -H "content-type: application/json" -H "x-senko-cron: $CRON_SECRET" --data @dc.json
