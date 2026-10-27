@@ -1,9 +1,10 @@
 {
- "checkedAt": 1792970476557,
+ "server": 12,
+ "checkedAt": 1793062473734,
  "updatedAt": 1792970476557,
  "sig": "3a0475c174310ec5a182a021e56bce03f85928eb",
  "count": 41,
  "ok": true,
- "failed": 0,
+ "failed": 21,
  "error": ""
 }
