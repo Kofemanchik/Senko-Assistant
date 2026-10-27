@@ -278,7 +278,7 @@
     ["Люди", [["users", "i-users", "Пользователи", "Поиск и действия"], ["staff", "i-key", "Роли и доступ", "Модераторы и руководство"], ["queue", "i-inbox", "Заявки и сбросы", "Новички и пароли", "queue"]]],
     ["Работа", [["reports", "i-file", "Рапорты", "Рапорты сотрудников", "reports"], ["rating", "i-trophy", "Рейтинг", "Неделя и контрольные"], ["news", "i-mega", "Рассылки", "Сообщения в программе", null, 1], ["bugs", "i-bug", "Ошибки", "Сообщения пользователей", "bugs", 1], ["ideas", "i-mega", "Идеи", "Предложения пользователей"], ["ai", "i-ai", "ИИ-помощник", "Словарь, плохие ответы, самопроверка", null, 1]]],
     ["Тестирование", [["beta", "i-shield", "Тестеры", "Роль, задания, функции"]]],
-    ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1]]],
+    ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["discord", "i-mega", "Discord", "Бот, каналы, обращения", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1]]],
     ["Сервис", [["console", "i-term", "Консоль бота", "Любая команда"]]],
   ];
   function buildNav() {
@@ -1438,6 +1438,125 @@
 
   var HIST = [];
   try { HIST = JSON.parse(ss("sa-panel-hist") || "[]"); } catch (e) {}
+  PAGES.discord = function (el) {
+    if (!ME.owner) return ownerOnly(el);
+    head(el, "Discord", "Бот сервера Senko: каналы, роли, сообщения, новости, приветствие и обращения");
+    var root = h("div");
+    el.appendChild(root);
+    var reportBox = h("div");
+    function lab(t, c, hint) { return h("label", { class: "fld" }, h("span", { text: t }), c, hint ? h("span", { class: "hint", text: hint }) : null); }
+    function line(ok, text) { return h("div", { class: "row", style: "gap:8px;margin:4px 0" }, pill(ok ? "есть" : "нет", ok ? "on" : "bad"), h("span", { text: text })); }
+    function showReport(rep) {
+      reportBox.textContent = "";
+      if (!rep || !rep.length) return;
+      reportBox.appendChild(h("div", { class: "msg", style: "margin-top:10px;white-space:pre-wrap", text: rep.join("\n") }));
+    }
+    function load() {
+      return api("dc_get").then(function (r) {
+        root.textContent = "";
+        if (!r.ok) return root.appendChild(errMsg(r));
+        draw(r);
+      });
+    }
+    function draw(d) {
+      // 1. состояние и подключение
+      var guild = h("input", { type: "text", maxlength: 25, placeholder: "ID Discord-сервера", value: d.guild || "", spellcheck: "false", inputmode: "numeric" });
+      var c1 = card("Подключение", "Бот принимает команды по HTTP, постоянно работающий процесс не нужен.");
+      c1.appendChild(line(d.secrets.token, "Секрет DISCORD_BOT_TOKEN в Supabase (токен бота)"));
+      c1.appendChild(line(d.secrets.pubkey, "Публичный ключ приложения"));
+      c1.appendChild(line(d.secrets.app, "ID приложения"));
+      c1.appendChild(h("div", { class: "muted small", style: "margin:10px 0", text: "Привязано аккаунтов: " + d.linked + " · Открытых обращений: " + d.tickets }));
+      if (d.welcomeErr) c1.appendChild(h("div", { class: "msg err", style: "margin-bottom:10px", text: "Приветствие: " + d.welcomeErr }));
+      c1.appendChild(lab("Interactions Endpoint URL", h("input", { type: "text", readonly: true, value: d.endpoint, on: { focus: function (e) { e.target.select(); } } }),
+        "Вставьте в Developer Portal → General Information → Interactions Endpoint URL. Discord проверит адрес, сохранится только если функция уже залита."));
+      c1.appendChild(lab("ID Discord-сервера", guild, "В Discord включите режим разработчика, затем правой кнопкой по значку сервера → «Копировать ID сервера»."));
+      c1.appendChild(h("div", { class: "row", style: "gap:8px" },
+        btn("Проверить и подключить", function () {
+          api("dc_sync", { guild: guild.value.trim() }).then(function (r) { if (!r.ok) return toast(r.error, true); root.textContent = ""; showReport(r.report); draw(r); toast("Проверка выполнена."); });
+        }, "btn-p", "i-refresh"),
+        btn("Обновить мониторинг", function () { api("dc_monitor").then(function (r) { toast(r.ok ? "Мониторинг обновлён." : r.error, !r.ok); }); }, "btn-sm", "i-pulse")));
+      c1.appendChild(reportBox);
+
+      // 2. каналы и роли
+      var chIn = {}, roleIn = {};
+      var c2 = card("Каналы и роли", "Бот находит их сам по названию. Если не нашёл, впишите ID вручную (правой кнопкой по каналу или роли → «Копировать ID»).");
+      var g2 = h("div", { class: "grid g2" });
+      d.channels.forEach(function (x) { chIn[x.key] = h("input", { type: "text", maxlength: 25, value: x.id, placeholder: "не найден", spellcheck: "false", inputmode: "numeric" }); g2.appendChild(lab("Канал: " + x.label, chIn[x.key])); });
+      d.roles.forEach(function (x) { roleIn[x.key] = h("input", { type: "text", maxlength: 25, value: x.id, placeholder: "не найдена", spellcheck: "false", inputmode: "numeric" }); g2.appendChild(lab("Роль: " + x.label, roleIn[x.key], x.managed ? "Выдаётся и снимается по аккаунту Senko" : "Выдаёте вы вручную; только эта роль принимает и закрывает обращения")); });
+      c2.appendChild(g2);
+
+      // 3. автоматика и ссылки
+      var autoReg = h("input", { type: "checkbox" }), autoMaint = h("input", { type: "checkbox" }), autoWelcome = h("input", { type: "checkbox" });
+      autoReg.checked = d.auto.reg !== false; autoMaint.checked = d.auto.maint !== false; autoWelcome.checked = d.auto.welcome !== false;
+      var linkIn = {};
+      var c3 = card("Автоматика и ссылки");
+      c3.appendChild(h("label", { class: "chk", style: "display:block;margin-bottom:8px" }, autoReg, " Сообщать в «Новости» об открытии и закрытии регистрации"));
+      c3.appendChild(h("label", { class: "chk", style: "display:block;margin-bottom:8px" }, autoMaint, " Сообщать в «Новости» о начале и конце технических работ"));
+      c3.appendChild(h("label", { class: "chk", style: "display:block;margin-bottom:14px" }, autoWelcome, " Приветствовать новых участников (проверка раз в минуту)"));
+      var g3 = h("div", { class: "grid g2" });
+      [["site", "Сайт"], ["download", "Скачать программу"], ["telegram", "Telegram"], ["banner", "Баннер (картинка)"]].forEach(function (x) {
+        linkIn[x[0]] = h("input", { type: "text", maxlength: 300, value: (d.links || {})[x[0]] || "", spellcheck: "false" });
+        g3.appendChild(lab(x[1], linkIn[x[0]], x[0] === "site" ? "В текстах можно писать {site}, {download}, {telegram}, {banner}" : null));
+      });
+      c3.appendChild(g3);
+      var saveAll = btn("Сохранить настройки", function () {
+        var ch = {}, rl = {}, lk = {};
+        Object.keys(chIn).forEach(function (k) { ch[k] = chIn[k].value.trim(); });
+        Object.keys(roleIn).forEach(function (k) { rl[k] = roleIn[k].value.trim(); });
+        Object.keys(linkIn).forEach(function (k) { lk[k] = linkIn[k].value.trim(); });
+        api("dc_save", { guild: guild.value.trim(), channels: ch, roles: rl, links: lk, auto: { reg: autoReg.checked, maint: autoMaint.checked, welcome: autoWelcome.checked } })
+          .then(function (r) { toast(r.ok ? "Сохранено." : r.error, !r.ok); });
+      }, "btn-p", "i-save");
+      c3.appendChild(h("div", { style: "margin-top:6px" }, saveAll));
+
+      var top = h("div", { class: "grid g2" }, c1, h("div", null, c2, c3));
+      root.appendChild(top);
+
+      // 4. новость
+      var nt = h("input", { type: "text", maxlength: 200, placeholder: "Заголовок (необязательно)" });
+      var nx = h("textarea", { rows: 5, maxlength: 3800, placeholder: "Текст новости. Можно **жирный**, ссылки [текст](https://…), {site}" });
+      var ne = h("input", { type: "checkbox" });
+      var cn = card("Новость", "Бот опубликует её в канале «Новости».");
+      cn.appendChild(lab("Заголовок", nt)); cn.appendChild(lab("Текст", nx));
+      cn.appendChild(h("label", { class: "chk", style: "display:block;margin-bottom:10px" }, ne, " Упомянуть @everyone"));
+      cn.appendChild(btn("Опубликовать новость", function () {
+        if (!nx.value.trim()) return toast("Напишите текст новости.", true);
+        confirmDlg("Опубликовать новость", ne.checked ? "Новость увидят все участники сервера, с уведомлением @everyone." : "Новость появится в канале «Новости».", "Опубликовать", function () {
+          api("dc_news", { title: nt.value.trim(), text: nx.value, everyone: ne.checked }).then(function (r) { if (r.ok) { nt.value = ""; nx.value = ""; ne.checked = false; } toast(r.ok ? "Новость опубликована." : r.error, !r.ok); });
+        });
+      }, "btn-p", "i-mega"));
+      root.appendChild(cn);
+
+      // 5. сообщения в каналах
+      var cm = card("Сообщения бота", "Тексты каналов. Блоки разделяйте строкой «---», заголовок блока — строка «# Заголовок». Поддерживаются **жирный**, [ссылки](https://…) и {#info}, {#laws}, {#support} — упоминание канала.");
+      d.messages.forEach(function (m) {
+        var src = h("textarea", { rows: 10, maxlength: 12000, spellcheck: "false" }); src.value = m.src;
+        var btns = h("textarea", { rows: 3, maxlength: 1500, spellcheck: "false", placeholder: "Текст кнопки | https://ссылка (по одной на строку, до 5)" }); btns.value = m.buttons || "";
+        var img = h("input", { type: "text", maxlength: 500, value: m.image || "", placeholder: "https://… или {banner}", spellcheck: "false" });
+        function save() { return api("dc_save", { message: { key: m.key, src: src.value, buttons: btns.value, image: img.value.trim() } }); }
+        var meta = m.template ? "Отправляется каждому новому участнику; предпросмотр уходит в канал приветствия." : "Канал: " + m.channel + (m.published ? " · опубликовано " + fmt(m.published) : " · ещё не опубликовано");
+        var box = h("details", { class: "card", style: "margin:10px 0;padding:12px" }, h("summary", { style: "cursor:pointer;font-weight:600", text: m.label }),
+          h("div", { class: "muted small", style: "margin:8px 0", text: meta }), lab("Текст", src), m.key === "support" ? null : lab("Кнопки-ссылки", btns), lab("Картинка", img),
+          h("div", { class: "row", style: "gap:8px" },
+            btn("Сохранить", function () { save().then(function (r) { toast(r.ok ? "Сохранено." : r.error, !r.ok); }); }, "btn-sm", "i-save"),
+            btn(m.template ? "Сохранить и показать предпросмотр" : m.published ? "Сохранить и обновить в канале" : "Сохранить и опубликовать", function () {
+              save().then(function (r) {
+                if (!r.ok) return toast(r.error, true);
+                api("dc_publish", { key: m.key }).then(function (r2) { if (!r2.ok) return toast(r2.error, true); showReport(r2.report); toast(r2.report && r2.report[0] || "Готово."); if (!m.template) load(); });
+              });
+            }, "btn-sm btn-p", "i-mega")));
+        cm.appendChild(box);
+      });
+      cm.appendChild(h("div", { class: "row", style: "gap:8px;margin-top:8px" }, btn("Опубликовать всё (кроме приветствия)", function () {
+        confirmDlg("Опубликовать всё", "Правила, информация, законы, ассистенты и поддержка будут отправлены или обновлены в своих каналах.", "Опубликовать", function () {
+          api("dc_publish", { key: "all" }).then(function (r) { if (!r.ok) return toast(r.error, true); root.textContent = ""; showReport(r.report); draw(r); toast("Готово."); });
+        });
+      }, "btn-sm", "i-refresh")));
+      root.appendChild(cm);
+    }
+    return load();
+  };
+
   PAGES.console = function (el) {
     head(el, "Консоль бота", "Те же команды, что в Telegram. Ответы бота и кнопки появятся здесь.");
     var feed = feedBox();

@@ -4014,6 +4014,14 @@ function testHtml(){
   h+='<div class="sbtns"><button type="button" class="btn" data-cab="tlexp" data-v="txt">Экспорт .txt</button><button type="button" class="btn" data-cab="tlexp" data-v="csv">Экспорт .csv</button><button type="button" class="btn" data-cab="tlclr">Очистить результаты</button></div>';
   return h;
 }
+/* 2.9: привязка аккаунта к Discord-серверу Senko (роли владельца, модераторов и бета-тестеров, обращения в поддержку) */
+function dcCabHtml(){
+  if(!(window.senkoApp&&window.senkoApp.api)) return "";
+  return '<div class="cab-h">Discord Senko<small>роли и поддержка на нашем сервере</small></div>'+
+    '<div class="cab-empty" style="text-align:left">Привяжите аккаунт, чтобы бот выдал роли (владелец, модератор, бета-тестер). Нажмите «Получить код» и отправьте боту на сервере команду <b>/привязать</b> с этим кодом.'+
+    '<div class="sbtns" style="margin-top:10px"><button type="button" class="btn" data-cab="dclink">Получить код</button><button type="button" class="btn" data-cab="dcunlink">Отвязать</button></div>'+
+    '<div id="dcMsg" role="status" aria-live="polite" style="margin-top:8px;font-size:13px"></div></div>';
+}
 function cabHtml(){
   // В программе данные кабинета — это данные аккаунта: кнопка «Сохранить» отправляет их на сервер
   var acc=null, AL=[], SV=[]; try{var _st=window.senkoApp&&window.senkoApp.updateProfile&&window.senkoApp.state(); if(_st&&_st.user){acc=_st.user; AL=(_st.depts||[]).slice(); SV=(_st.servers||[]).slice()}}catch(e){}
@@ -4032,7 +4040,7 @@ function cabHtml(){
       fld("discord","Discord",acc.discord,40,"ник в Discord")+fld("telegram","Telegram",acc.telegram,33,"@name или пусто")+fld("phone","Номер в игре",acc.phone,12,"только цифры или пусто")+
       '<div class="sbtns" style="margin:0"><button type="button" class="btn" data-cab="accsave" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Сохранить</button></div>'+
       '<div id="accMsg" role="status" aria-live="polite" style="font-size:12.5px;color:var(--muted);min-height:1.2em"></div></div></div>';
-    ah+=deptInfo(acc.org||dept)+(window.SA_PROG?window.SA_PROG.html():"")+(window.SA_CAB11?window.SA_CAB11(true):"")+(window.SA_CAB13?window.SA_CAB13(true):"")+(window.SA_CAB24?window.SA_CAB24():"")+(window.SA_CAB28?window.SA_CAB28():"")+(window.SA_RP?window.SA_RP.cabHtml():"")+detHtml()+testHtml();
+    ah+=deptInfo(acc.org||dept)+(window.SA_PROG?window.SA_PROG.html():"")+(window.SA_CAB11?window.SA_CAB11(true):"")+(window.SA_CAB13?window.SA_CAB13(true):"")+(window.SA_CAB24?window.SA_CAB24():"")+(window.SA_CAB28?window.SA_CAB28():"")+dcCabHtml()+(window.SA_RP?window.SA_RP.cabHtml():"")+detHtml()+testHtml();
     ah+='<p class="cab-foot">Данные кабинета хранятся в вашем аккаунте. После смены ведомства или сервера программу нужно перезапустить: законы и подсказки подстроятся под выбранный сервер.</p>';
     return ah;
   }
@@ -4142,6 +4150,16 @@ ov.addEventListener("click",function(e){
   var c=b.dataset.cab;
   if(c){
     if(c==="avpick"){var f=$("#saFile"); if(f) f.click(); return}
+    if(c==="dclink"||c==="dcunlink"){
+      var dm=$("#dcMsg"), say=function(t,bad){ if(dm){ dm.textContent=t; dm.style.color=bad?"#c0392b":"var(--muted)"; } };
+      say("Подождите…");
+      window.senkoApp.api("discord_link",{op:c==="dclink"?"code":"unlink"}).then(function(r){
+        if(!r||!r.ok) return say((r&&r.error)||"Не получилось. Попробуйте позже.",true);
+        if(c==="dcunlink") return say("Аккаунт отвязан от Discord.");
+        say("Код: "+r.code+" (действует "+r.minutes+" мин.). В Discord на сервере Senko введите: /привязать код:"+r.code+(r.linked?". Сейчас аккаунт уже привязан, новый код заменит привязку.":""));
+      }).catch(function(){ say("Нет связи с сервером.",true); });
+      return;
+    }
     if(c==="accsave"){
       var A2=window.senkoApp, am=$("#accMsg"), d={};
       sheet.querySelectorAll("[data-acc]").forEach(function(i){d[i.dataset.acc]=i.value.trim()});
@@ -6350,7 +6368,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.9.0-beta.2";
+var APP_VER="2.9.0-beta.3";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6439,6 +6457,10 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.9.0-beta.3",d:"27.10.2026",items:[
+  ["🧪","Только для бета-тестеров","Третья бета: Discord-сервер Senko."],
+  ["💬","Discord Senko","В личном кабинете появился блок «Discord Senko»: получите код и отправьте боту команду /привязать. Бот выдаст роль бета-тестера, а в канале «поддержка» можно создать своё обращение."],
+  ["⚖️","Законы по серверам","Исправления сбора законов Los Angeles и Denver: серверы обновляются параллельно и не мешают друг другу."]]},
  {v:"2.9.0-beta.2",d:"26.10.2026",items:[
   ["🧪","Только для бета-тестеров","Вторая бета мультисерверности: законы Los Angeles и Denver."],
   ["⚖️","Законы по серверам","Законы собираются с форума отдельно для Boston, Los Angeles и Denver. Программа показывает законы вашего сервера, а таблицы УК, АК, ДК и ПК (звёзды, штрафы, части статей) и калькулятор строятся по ним."],
@@ -8283,7 +8305,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.9.0-beta.2";
+var APP_VER="2.9.0-beta.3";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}

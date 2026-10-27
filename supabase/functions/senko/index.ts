@@ -5893,7 +5893,7 @@ async function dcPanel(op, b, a) {
     return { ...(await view()), report: r.rep };
   }
   if (op === "dc_publish") {
-    const keys = b.key === "all" ? Object.keys(DC_MSGS) : [String(b.key)];
+    const keys = b.key === "all" ? Object.keys(DC_MSGS).filter((k) => !DC_MSGS[k].template) : [String(b.key)];
     const rep = [];
     for (const k of keys) {
       const r = await dcPublish(k, cfg);
