@@ -3297,29 +3297,38 @@ async function onCallback(cb) {
 // Доступен владельцу и модераторам (кто подключён к панели). Приватные ключи
 // и токен бота читаются из Secrets Edge Function, не из тела запроса.
 async function discordApi(b) {
-  const { p, err } = await who(b);
-  if (err) return err;
-  const isOwner = p.rank === "owner";
   const sql = db();
   const op = String(b.op || "get");
-  const a = { kind: "discord", label: p.login || String(p.id), profile: p };
+  const a = { kind: "discord", label: "discord-bot", profile: null };
 
+  // settings_get доступен без авторизации (публичные настройки каналов)
   if (op === "settings_get") {
-    const keys = [
-      "discord_channel_info", "discord_channel_news", "discord_channel_laws",
-      "discord_channel_assistants", "discord_channel_changelog",
-      "discord_channel_support", "discord_channel_monitor",
-      "discord_role_support",
-      "discord_info_links", "discord_laws_text", "discord_assistants_text",
-      "discord_news_enabled", "discord_changelog_enabled", "discord_monitor_enabled",
-    ];
+    // settings_get: принимает либо один ключ (key), либо массив ключей (keys)
+    const reqKeys = b.keys || (b.key ? [b.key] : []);
+    const keys = Array.isArray(reqKeys) ? reqKeys : [reqKeys];
     const out: Record<string, any> = {};
     for (const key of keys) {
-      const [r] = await sql`select value from bot_settings where key = ${key}`;
-      out[key] = r ? r.value : null;
+      const k = String(key || "").slice(0, 100);
+      if (!k) continue;
+      const [r] = await sql`select value from bot_settings where key = ${k}`;
+      out[k] = r ? r.value : null;
     }
     return { ok: true, settings: out };
   }
+
+  // Остальные операции требуют авторизации (токен приложения или панельная сессия)
+  let p: any = null;
+  if (b.token) {
+    const r = await who(b);
+    if (r.err) return r.err;
+    p = r.p;
+  } else if (b.ptoken) {
+    const pr = await pwho(b);
+    if (pr.err) return pr.err;
+    p = pr.p;
+  }
+  if (!p) return fail("Сессия недействительна. Войдите заново.", { code: "auth" });
+  const isOwner = p.rank === "owner";
 
   if (op === "settings_set") {
     if (!isOwner) return fail("Только владелец может менять настройки Discord-бота.", { code: "forbidden" });
