@@ -1467,6 +1467,7 @@
       c1.appendChild(line(d.secrets.app, "ID приложения"));
       c1.appendChild(h("div", { class: "muted small", style: "margin:10px 0", text: "Привязано аккаунтов: " + d.linked + " · Открытых обращений: " + d.tickets }));
       if (d.welcomeErr) c1.appendChild(h("div", { class: "msg err", style: "margin-bottom:10px", text: "Приветствие: " + d.welcomeErr }));
+      if (d.roleErr) c1.appendChild(h("div", { class: "msg err", style: "margin-bottom:10px", text: "Выдача роли новым участникам: " + d.roleErr }));
       c1.appendChild(lab("Interactions Endpoint URL", h("input", { type: "text", readonly: true, value: d.endpoint, on: { focus: function (e) { e.target.select(); } } }),
         "Вставьте в Developer Portal → General Information → Interactions Endpoint URL. Discord проверит адрес, сохранится только если функция уже залита."));
       c1.appendChild(lab("ID Discord-сервера", guild, "В Discord включите режим разработчика, затем правой кнопкой по значку сервера → «Копировать ID сервера»."));
@@ -1482,17 +1483,18 @@
       var c2 = card("Каналы и роли", "Бот находит их сам по названию. Если не нашёл, впишите ID вручную (правой кнопкой по каналу или роли → «Копировать ID»).");
       var g2 = h("div", { class: "grid g2" });
       d.channels.forEach(function (x) { chIn[x.key] = h("input", { type: "text", maxlength: 25, value: x.id, placeholder: "не найден", spellcheck: "false", inputmode: "numeric" }); g2.appendChild(lab("Канал: " + x.label, chIn[x.key])); });
-      d.roles.forEach(function (x) { roleIn[x.key] = h("input", { type: "text", maxlength: 25, value: x.id, placeholder: "не найдена", spellcheck: "false", inputmode: "numeric" }); g2.appendChild(lab("Роль: " + x.label, roleIn[x.key], x.managed ? "Выдаётся и снимается по аккаунту Senko" : "Выдаёте вы вручную; только эта роль принимает и закрывает обращения")); });
+      d.roles.forEach(function (x) { roleIn[x.key] = h("input", { type: "text", maxlength: 25, value: x.id, placeholder: "не найдена", spellcheck: "false", inputmode: "numeric" }); g2.appendChild(lab("Роль: " + x.label, roleIn[x.key], x.key === "member" ? "Бот выдаёт её каждому, кто зашёл на сервер (включается ниже). Должна быть ниже роли бота" : x.managed ? "Выдаётся и снимается по аккаунту Senko" : "Выдаёте вы вручную; только эта роль принимает и закрывает обращения")); });
       c2.appendChild(g2);
 
       // 3. автоматика и ссылки
-      var autoReg = h("input", { type: "checkbox" }), autoMaint = h("input", { type: "checkbox" }), autoWelcome = h("input", { type: "checkbox" });
-      autoReg.checked = d.auto.reg !== false; autoMaint.checked = d.auto.maint !== false; autoWelcome.checked = d.auto.welcome !== false;
+      var autoReg = h("input", { type: "checkbox" }), autoMaint = h("input", { type: "checkbox" }), autoWelcome = h("input", { type: "checkbox" }), autoMember = h("input", { type: "checkbox" });
+      autoReg.checked = d.auto.reg !== false; autoMaint.checked = d.auto.maint !== false; autoWelcome.checked = d.auto.welcome !== false; autoMember.checked = d.auto.member !== false;
       var linkIn = {};
       var c3 = card("Автоматика и ссылки");
       c3.appendChild(h("label", { class: "chk", style: "display:block;margin-bottom:8px" }, autoReg, " Сообщать в «Новости» об открытии и закрытии регистрации"));
       c3.appendChild(h("label", { class: "chk", style: "display:block;margin-bottom:8px" }, autoMaint, " Сообщать в «Новости» о начале и конце технических работ"));
-      c3.appendChild(h("label", { class: "chk", style: "display:block;margin-bottom:14px" }, autoWelcome, " Приветствовать новых участников (проверка раз в минуту)"));
+      c3.appendChild(h("label", { class: "chk", style: "display:block;margin-bottom:8px" }, autoWelcome, " Приветствовать новых участников (проверка раз в минуту)"));
+      c3.appendChild(h("label", { class: "chk", style: "display:block;margin-bottom:14px" }, autoMember, " Выдавать роль «Участник» новым участникам (проверка раз в минуту)"));
       var g3 = h("div", { class: "grid g2" });
       [["site", "Сайт"], ["download", "Скачать программу"], ["telegram", "Telegram"], ["banner", "Баннер (картинка)"]].forEach(function (x) {
         linkIn[x[0]] = h("input", { type: "text", maxlength: 300, value: (d.links || {})[x[0]] || "", spellcheck: "false" });
@@ -1504,7 +1506,7 @@
         Object.keys(chIn).forEach(function (k) { ch[k] = chIn[k].value.trim(); });
         Object.keys(roleIn).forEach(function (k) { rl[k] = roleIn[k].value.trim(); });
         Object.keys(linkIn).forEach(function (k) { lk[k] = linkIn[k].value.trim(); });
-        api("dc_save", { guild: guild.value.trim(), channels: ch, roles: rl, links: lk, auto: { reg: autoReg.checked, maint: autoMaint.checked, welcome: autoWelcome.checked } })
+        api("dc_save", { guild: guild.value.trim(), channels: ch, roles: rl, links: lk, auto: { reg: autoReg.checked, maint: autoMaint.checked, welcome: autoWelcome.checked, member: autoMember.checked } })
           .then(function (r) { toast(r.ok ? "Сохранено." : r.error, !r.ok); });
       }, "btn-p", "i-save");
       c3.appendChild(h("div", { style: "margin-top:6px" }, saveAll));

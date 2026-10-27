@@ -5222,7 +5222,10 @@ const DC_CHANNELS = {
 // Роли: ключ → [название по умолчанию, цвет, управляется ли ролью в Senko]. Support выдаёт владелец в Discord вручную
 const DC_ROLES = {
   owner: ["Владелец", 0xe74c3c, true], moderator: ["Модератор", 0x3498db, true], beta: ["БетаТестер", 0x2ecc71, true], support: ["Support", 0xf1c40f, false],
+  // базовая роль: бот выдаёт её каждому, кто зашёл на сервер (см. dcWelcomeTick); по аккаунту Senko не снимается
+  member: ["Участник", 0x95a5a6, false],
 };
+const DC_MEMBER_ROLE = "member";
 const DC_SUPPORT_NAME = "support";
 // Сообщения, которые бот держит в каналах (публикуются и обновляются из панели). Текст: блоки через строку «---», заголовок блока — строка «# …»
 const DC_MSGS = {
@@ -5369,7 +5372,7 @@ async function dcCfg() {
   const c = (await getSetting("dc", {})) || {};
   return {
     guild: c.guild || DC_GUILD_ENV || "", channels: c.channels || {}, roles: c.roles || {}, cat: c.cat || "", n: c.n || 0, msgs: c.msgs || {},
-    auto: { reg: true, maint: true, welcome: true, ...(c.auto || {}) }, welcome: c.welcome || { since: 0 }, links: { ...DC_LINKS_DEFAULT, ...(c.links || {}) }, monitor: c.monitor || { states: {}, at: 0, hash: "" },
+    auto: { reg: true, maint: true, welcome: true, member: true, ...(c.auto || {}) }, welcome: c.welcome || { since: 0 }, links: { ...DC_LINKS_DEFAULT, ...(c.links || {}) }, monitor: c.monitor || { states: {}, at: 0, hash: "" },
   };
 }
 const dcSave = (c) => setSetting("dc", c);
@@ -5444,7 +5447,7 @@ async function dcSetup(cfg) {
       const want = DC_ROLES[k][0].toLowerCase();
       const f = list.find((r) => String(r.name).toLowerCase() === want || (k === "support" && String(r.name).toLowerCase() === DC_SUPPORT_NAME));
       if (f) { cfg.roles[k] = f.id; rep.push(`✅ Роль «${DC_ROLES[k][0]}» найдена.`); continue; }
-      const mk = await dc("POST", `/guilds/${cfg.guild}/roles`, { name: DC_ROLES[k][0], color: DC_ROLES[k][1], mentionable: k === "support", hoist: k !== "support" }, "Senko: роль");
+      const mk = await dc("POST", `/guilds/${cfg.guild}/roles`, { name: DC_ROLES[k][0], color: DC_ROLES[k][1], mentionable: k === "support", hoist: k !== "support" && k !== DC_MEMBER_ROLE }, "Senko: роль");
       if (mk.ok) { cfg.roles[k] = mk.j.id; rep.push(`✅ Создана роль «${DC_ROLES[k][0]}».`); } else rep.push(`⚠️ Роль «${DC_ROLES[k][0]}» создать не вышло: ${mk.error}. Дайте боту право «Управление ролями» и поднимите его роль выше ролей Senko.`);
     }
   } else rep.push("⚠️ Список ролей не получен: " + rl.error);
@@ -5605,7 +5608,10 @@ async function dcChangelog(b) {
 // ───────── приветствие новых участников (без Gateway: раз в минуту сверяем список участников по времени входа)
 async function dcWelcomeTick() {
   const cfg = await dcCfg();
-  if (!DC_TOKEN || !cfg.guild || cfg.auto.welcome === false) return;
+  const hello = cfg.auto.welcome !== false;
+  const memberRole = cfg.roles[DC_MEMBER_ROLE] || "";
+  const giveRole = cfg.auto.member !== false && !!memberRole; // базовая роль новым участникам: работает и при выключенном приветствии
+  if (!DC_TOKEN || !cfg.guild || (!hello && !giveRole)) return;
   const w = cfg.welcome || { since: 0 };
   if (!w.since) { cfg.welcome = { since: Date.now() }; await dcSave(cfg); return; } // первый запуск: старых участников не приветствуем
   const fresh = [];
@@ -5620,16 +5626,22 @@ async function dcWelcomeTick() {
     const list = r.j || [];
     for (const m of list) {
       const t = Date.parse(m.joined_at || "");
-      if (m.user && !m.user.bot && t > w.since) fresh.push({ id: m.user.id, t });
+      if (m.user && !m.user.bot && t > w.since) fresh.push({ id: m.user.id, t, roles: m.roles || [] });
     }
     if (list.length < 1000) break;
     after = list[list.length - 1].user.id;
   }
-  if (!fresh.length) { if (w.err) { cfg.welcome = { since: w.since }; await dcSave(cfg); } return; }
+  if (!fresh.length) { if (w.err) { cfg.welcome = { since: w.since, ...(w.roleErr ? { roleErr: w.roleErr } : {}) }; await dcSave(cfg); } return; }
   fresh.sort((x, y) => x.t - y.t);
   const batch = fresh.slice(0, 5);
   const c = (await dcContent()).welcome;
+  let roleErr = "";
   for (const m of batch) {
+    if (giveRole && !m.roles.includes(memberRole)) {
+      const rr = await dc("PUT", `/guilds/${cfg.guild}/members/${m.id}/roles/${memberRole}`, undefined, "Senko: роль новому участнику");
+      if (!rr.ok && rr.status !== 404) roleErr = rr.status === 403 ? "Роль «" + DC_ROLES[DC_MEMBER_ROLE][0] + "» не выдаётся: дайте боту право «Управление ролями» и поднимите его роль выше этой." : rr.error;
+    }
+    if (!hello) continue;
     const embeds = dcEmbeds(c.src, cfg.links, DC_MSGS.welcome.color, c.image, cfg);
     const body = { content: `<@${m.id}>`, embeds, allowed_mentions: { users: [m.id] } };
     let ok = false;
@@ -5639,7 +5651,7 @@ async function dcWelcomeTick() {
       if (dm.ok) await dc("POST", `/channels/${dm.j.id}/messages`, { embeds });
     }
   }
-  cfg.welcome = { since: batch[batch.length - 1].t };
+  cfg.welcome = { since: batch[batch.length - 1].t, ...(roleErr ? { roleErr } : {}) };
   await dcSave(cfg);
 }
 async function dcTick() {
@@ -5855,7 +5867,7 @@ async function dcPanel(op, b, a) {
   const cfg = await dcCfg();
   const content = await dcContent();
   const view = async () => ({
-    ok: true, secrets: dcSecretsOk(), endpoint: SELF_URL, guild: cfg.guild, guildEnv: !!DC_GUILD_ENV, auto: cfg.auto, links: cfg.links, welcomeErr: (cfg.welcome && cfg.welcome.err) || "",
+    ok: true, secrets: dcSecretsOk(), endpoint: SELF_URL, guild: cfg.guild, guildEnv: !!DC_GUILD_ENV, auto: cfg.auto, links: cfg.links, welcomeErr: (cfg.welcome && cfg.welcome.err) || "", roleErr: (cfg.welcome && cfg.welcome.roleErr) || "",
     channels: Object.keys(DC_CHANNELS).map((k) => ({ key: k, label: DC_CHANNELS[k][0], id: cfg.channels[k] || "" })),
     roles: Object.keys(DC_ROLES).map((k) => ({ key: k, label: DC_ROLES[k][0], id: cfg.roles[k] || "", managed: DC_ROLES[k][2] })),
     messages: Object.keys(DC_MSGS).map((k) => ({ key: k, label: DC_MSGS[k].label, channel: DC_CHANNELS[DC_MSGS[k].ch][0], template: !!DC_MSGS[k].template, src: content[k].src, buttons: content[k].buttons, image: content[k].image || "", published: cfg.msgs[k] ? cfg.msgs[k].at : 0 })),
@@ -5870,7 +5882,7 @@ async function dcPanel(op, b, a) {
     }
     if (b.channels && typeof b.channels === "object") for (const k of Object.keys(DC_CHANNELS)) if (k in b.channels) { const v = String(b.channels[k] || "").trim(); if (v && !DC_ID_RE.test(v)) return fail(`Канал «${DC_CHANNELS[k][0]}»: нужен числовой ID.`); cfg.channels[k] = v; }
     if (b.roles && typeof b.roles === "object") for (const k of Object.keys(DC_ROLES)) if (k in b.roles) { const v = String(b.roles[k] || "").trim(); if (v && !DC_ID_RE.test(v)) return fail(`Роль «${DC_ROLES[k][0]}»: нужен числовой ID.`); cfg.roles[k] = v; }
-    if (b.auto && typeof b.auto === "object") cfg.auto = { reg: b.auto.reg !== false, maint: b.auto.maint !== false, welcome: b.auto.welcome !== false };
+    if (b.auto && typeof b.auto === "object") cfg.auto = { reg: b.auto.reg !== false, maint: b.auto.maint !== false, welcome: b.auto.welcome !== false, member: b.auto.member !== false };
     if (b.links && typeof b.links === "object") for (const k of Object.keys(DC_LINKS_DEFAULT)) if (k in b.links) { const v = String(b.links[k] || "").trim(); if (v && !/^https:\/\/[^\s]{3,300}$/.test(v)) return fail(`Ссылка «${k}»: нужен адрес вида https://…`); cfg.links[k] = v || DC_LINKS_DEFAULT[k]; }
     if (b.message && typeof b.message === "object" && DC_MSGS[b.message.key]) {
       const m = b.message, k = m.key;
