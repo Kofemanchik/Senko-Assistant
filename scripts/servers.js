@@ -10,8 +10,14 @@ const DEFAULT = 12; // Boston: его файлы называются как р�
 const SERVERS = [
   { id: 12, name: "Boston", forum: 1017 },
   { id: 7, name: "Los Angeles", forum: 693 },
-  { id: 16, name: "Denver", forum: 1276 },
+  // ignore — номера подразделов форума, которые парсер пропускает (например, «Отменённые законопроекты»)
+  { id: 16, name: "Denver", forum: 1276, ignore: [1277] },
 ];
+
+// номер раздела из ссылки вида /forums/otmenennyye-zakonoproyekty.1277/
+const forumIdOf = (u) => { const m = /\/forums\/[^/]*?\.(\d+)\/?/.exec(u || ""); return m ? parseInt(m[1], 10) : null; };
+// список игнорируемых разделов сервера
+const ignoredOf = (id) => ((SERVERS.find((s) => s.id === id) || {}).ignore || []).slice();
 
 // номер сервера из переменной окружения SERVER (по умолчанию Boston)
 function current(env) {
@@ -34,4 +40,4 @@ function files(id, dir) {
 const startUrl = (id) => BASE + "/forums/zakonodatel-naya-baza." + SERVERS.find((s) => s.id === id).forum + "/";
 const nameOf = (id) => (SERVERS.find((s) => s.id === id) || { name: "сервер " + id }).name;
 
-module.exports = { BASE, DEFAULT, SERVERS, current, suffix, files, startUrl, nameOf };
+module.exports = { BASE, DEFAULT, SERVERS, current, suffix, files, startUrl, nameOf, forumIdOf, ignoredOf };

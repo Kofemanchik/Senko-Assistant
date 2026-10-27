@@ -47,7 +47,9 @@ function main() {
   const prevById = {}; if (prev && Array.isArray(prev.laws)) prev.laws.forEach((l) => { prevById[l.id] = l; });
   const havePrev = !!(prev && prev.laws && prev.laws.length);
 
-  if (havePrev && cur.laws.length < prev.laws.length * MIN_KEEP_RATIO) fail("Законов стало " + cur.laws.length + " вместо " + prev.laws.length + " — похоже на сбой парсера, файл не обновлён.");
+  // если изменился список игнорируемых разделов (servers.js → ignore), падение числа законов ожидаемо
+  const ignoreChanged = havePrev && (prev.ignoreKey || "") !== (cur.ignoreKey || "");
+  if (havePrev && !ignoreChanged && cur.laws.length < prev.laws.length * MIN_KEEP_RATIO) fail("Законов стало " + cur.laws.length + " вместо " + prev.laws.length + " — похоже на сбой парсера, файл не обновлён.");
 
   const changes = Array.isArray(cur.changes) ? cur.changes.slice() : [];
   const notify = []; // что изменилось в этот запуск — уходит владельцу и руководству в Telegram
