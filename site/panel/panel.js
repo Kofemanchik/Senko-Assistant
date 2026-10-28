@@ -1655,7 +1655,7 @@
 
     // ───── функции ─────
     function apiPranks(op, payload) {
-      var body = Object.assign({ action: "pranks", op: op }, payload || {});
+      var body = Object.assign({ action: "pranks", op: op, ptoken: TOKEN || undefined }, payload || {});
       return fetch(API, { method: "POST", body: JSON.stringify(body), cache: "no-store" })
         .then(function (r) { return r.json().catch(function () { return { ok: false, error: "Сервер вернул ошибку " + r.status + "." }; }); })
         .catch(function () { return { ok: false, error: "Нет связи с сервером." }; });
