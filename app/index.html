@@ -1212,7 +1212,29 @@ var DKG = [[1,2,"Документы и действия сотрудника"],[
 })(typeof window !== "undefined" ? window : this);
 
 /* LAWCORE:END */
-var LAWSYNC = { raw: null, sig: "", at: 0, merged: {}, skipped: {}, added: 0, server: 12, rebuilt: {}, fallback: false };
+var LAWSYNC = { raw: null, sig: "", at: 0, merged: {}, skipped: {}, added: 0, server: 12, rebuilt: {}, fallback: false, miranda: "" };
+/* 2.9: подсказки под сервер. Часть подсказок (чек-лист задержания, текст Миранды) написана по законам Boston.
+   Владелец задаёт для сервера свой текст Миранды и замену номеров статей (панель → Серверы); настройка приходит с сервера (srv_cfg) и хранится здесь. */
+var SRVCFG = (function(){
+  var n = 12, c = null;
+  try{ var st = window.senkoApp && window.senkoApp.state && window.senkoApp.state(); if(st && st.user && parseInt(st.user.server,10) > 0) n = parseInt(st.user.server,10); }catch(e){}
+  try{ c = JSON.parse(localStorage.getItem("sa-srvcfg-" + n) || "null"); }catch(e){}
+  c = c && typeof c === "object" ? c : {};
+  return { server: n, cfg: { miranda: String(c.miranda || ""), refs: c.refs && typeof c.refs === "object" ? c.refs : {}, verified: n === 12 || !!c.verified } };
+})();
+// «ст. 17 ч.3» → «ст. 21 ч.3» по таблице владельца; списки «ст. 7.1, 12.1» заменяются поэлементно
+function SR(t){
+  var m = SRVCFG.cfg.refs; t = String(t == null ? "" : t);
+  if(!m || !Object.keys(m).length) return t;
+  return t.replace(/(ст\.\s*)(\d{1,3}(?:\.\d{1,3}){0,3}(?:\s*,\s*\d{1,3}(?:\.\d{1,3}){0,3})*)/g, function(all, pre, list){
+    return pre + list.replace(/\d{1,3}(?:\.\d{1,3}){0,3}/g, function(n){ return Object.prototype.hasOwnProperty.call(m, n) ? m[n] : n; });
+  });
+}
+// предупреждение, пока подсказки сервера (не Boston) не проверены владельцем
+function SRNOTE(){
+  if(SRVCFG.cfg.verified) return "";
+  return '<p class="sub" style="color:#b45309;margin:6px 0">⚠️ Подсказки этого раздела составлены по законам Boston. На вашем сервере номера статей и формулировки могут отличаться, сверяйтесь с законами сервера (раздел «Законы»).</p>';
+}
 var BADGE_MS = 14 * 864e5; // сколько дней висят метки «Изменено» и «Новый закон»
 function lawKindOf(t){
   t = String(t||"");
@@ -1252,6 +1274,13 @@ function lawNat(a,b){
   }
   if(MYSRV !== 12 && raw.server && parseInt(raw.server,10) !== MYSRV){ LAWSYNC.fallback = true; LAWSYNC.raw = null; return; } // законы другого сервера не применяем
   var REBUILD = MYSRV !== 12;
+  if(REBUILD){
+    // текст Миранды берём из законов сервера, если он там есть (владелец может задать свой в панели)
+    try{
+      var mre = /Вы имеете право хранить молчание[\s\S]{40,900}?(?:Вам\s+ясны\s+(?:ли\s+)?ваши\s+права\s*[?.]?|ясны\s+ли\s+вам\s+(?:ваши\s+)?права\s*[?.]?)/i;
+      for(var mi = 0; mi < raw.laws.length; mi++){ var mm = mre.exec(String(raw.laws[mi].text || "")); if(mm){ LAWSYNC.miranda = mm[0].replace(/\s+/g, " ").trim(); break; } }
+    }catch(e){}
+  }
   LAWSYNC.raw = raw; LAWSYNC.sig = raw.sig || ""; LAWSYNC.at = raw.updatedAt || 0;
   var JOK = {"R":1,"F/R":1,"M":1,"F":1,"E":1}; // JN объявлен ниже по файлу, поэтому свой список
   var pn = function(p){ return p === "" || p == null ? "1" : String(p); };
@@ -2147,7 +2176,7 @@ var CHK = {
     {id:"mil",t:"Военный билет?",d:"При ордере или решении суда по ст. 7.1, 7.3, 12.1, 12.1.1, 12.1.2, 12.4, 12.5, 12.11, 12.12, 14.2, 14.2.1 вызовите руководство SANG для изъятия билета."}
   ]
 };
-var MIRANDA = "Вы имеете право хранить молчание. Всё, что вы скажете, может и будет использовано против Вас в суде. Вы имеете право на один телефонный звонок длительностью не более 3 минут. Также Вы имеете право на адвоката частного либо государственного. Если вам необходим адвокат, он будет для Вас запрошен. Вам ясны ваши права?";
+var MIRANDA = SRVCFG.cfg.miranda || (LAWSYNC.miranda ? LAWSYNC.miranda : "Вы имеете право хранить молчание. Всё, что вы скажете, может и будет использовано против Вас в суде. Вы имеете право на один телефонный звонок длительностью не более 3 минут. Также Вы имеете право на адвоката частного либо государственного. Если вам необходим адвокат, он будет для Вас запрошен. Вам ясны ваши права?");
 
 function fmt(ms){
   ms=Math.max(0,ms); var s=Math.floor(ms/1000), m=Math.floor(s/60); s%=60;
@@ -2326,15 +2355,15 @@ function renderTimer(){
       '<ul class="plog evlist">'+tm.events.slice().reverse().map(evLi).join("")+'</ul>';
     h+='</section>';
   }
-  h+='<section class="panel"><h2>Чек-лист ст. 17 ПК</h2><p class="sub">Порядок задержания'+(started?' для «'+esc(tName(tm))+'»':'')+'. Выполнено: <b id="chkProg">'+chkProgress()+'</b></p>'+
+  h+='<section class="panel"><h2>'+SR('Чек-лист ст. 17 ПК')+'</h2>'+SRNOTE()+'<p class="sub">Порядок задержания'+(started?' для «'+esc(tName(tm))+'»':'')+'. Выполнено: <b id="chkProg">'+chkProgress()+'</b></p>'+
     '<div class="filters" style="padding-top:0"><button class="pill" data-mode="inv" aria-pressed="'+(tm.mode==="inv")+'">По следствию (ч.1)</button><button class="pill" data-mode="war" aria-pressed="'+(tm.mode==="war")+'">По ордеру (ч.2)</button></div>'+
     '<div style="margin-top:10px">'+CHK[tm.mode].map(function(i){
       var k=tm.mode+":"+i.id, ck=!!tm.checks[k];
-      return '<label class="chk'+(ck?' done':'')+'"><input type="checkbox" data-chk="'+k+'"'+(ck?' checked':'')+'><span><b>'+i.t+'</b><small>'+esc(i.d)+'</small></span></label>';
+      return '<label class="chk'+(ck?' done':'')+'"><input type="checkbox" data-chk="'+k+'"'+(ck?' checked':'')+'><span><b>'+SR(i.t)+'</b><small>'+esc(SR(i.d))+'</small></span></label>';
     }).join("")+'</div>'+
-    '<div class="mir"><b>Текст Миранды (ст. 17 ч.3)</b><br>'+esc(MIRANDA)+'<p style="margin:8px 0 0"><button class="btn" type="button" data-copy="mir">Скопировать</button></p></div></section>';
+    '<div class="mir"><b>'+SR('Текст Миранды (ст. 17 ч.3)')+'</b><br>'+esc(MIRANDA)+'<p style="margin:8px 0 0"><button class="btn" type="button" data-copy="mir">Скопировать</button></p></div></section>';
   h+=histHtml();
-  h+='<section class="panel"><h2>Что делает улики недопустимыми</h2><p class="sub">ПК ст. 12 ч.2 и ст. 17 ч.3.</p><ul class="warnlist">'+
+  h+='<section class="panel"><h2>Что делает улики недопустимыми</h2><p class="sub">'+SR('ПК ст. 12 ч.2 и ст. 17 ч.3.')+'</p><ul class="warnlist">'+
     '<li>Нарушение, ставшее первичным основанием для действий (обыск транспорта или личный досмотр без основания, незаконная остановка): улики аннулируются, задержанного освобождают (п. «в»).</li>'+
     '<li>Нарушения уже начатого процесса (лишняя сила, ошибка в порядке, этика): при фактических уликах задержанного не освобождают, но сотрудник отвечает отдельно (п. «в.1»).</li>'+
     '<li>Предметы, изъятые из оборота (нелегальное оружие, наркотики сверх нормы, спецсредства, взрывчатка), остаются допустимыми и после такого нарушения.</li>'+
@@ -6368,7 +6397,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.9.0-beta.3";
+var APP_VER="2.9.0-beta.4";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6457,6 +6486,11 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.9.0-beta.4",d:"28.10.2026",items:[
+  ["🧪","Только для бета-тестеров","Четвёртая бета мультисерверности: подсказки и ИИ под ваш сервер."],
+  ["📋","Подсказки по серверам","Текст Миранды берётся из законов вашего сервера, номера статей в чек-листе задержания подставляются по настройке владельца. Пока настройка не проверена, показывается предупреждение."],
+  ["🤖","ИИ по законам вашего сервера","Ассистент отвечает по законам именно вашего сервера, ответы Boston, Los Angeles и Denver не смешиваются."],
+ ]},
  {v:"2.9.0-beta.3",d:"27.10.2026",items:[
   ["🧪","Только для бета-тестеров","Третья бета: Discord-сервер Senko."],
   ["💬","Discord Senko","В личном кабинете появился блок «Discord Senko»: получите код и отправьте боту команду /привязать. Бот выдаст роль бета-тестера, а в канале «поддержка» можно создать своё обращение."],
@@ -8305,7 +8339,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.9.0-beta.3";
+var APP_VER="2.9.0-beta.4";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
@@ -13939,7 +13973,10 @@ function jset(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(x){}}
 function today(){return new Date().toISOString().slice(0,10)}
 
 /* ---------- словарь владельца ---------- */
-var DICT=jget("bos-ai27dict",null);if(!DICT||!Array.isArray(DICT.items))DICT={at:0,items:[]};
+// 2.9: словарь у каждого сервера свой, поэтому и копия в браузере хранится отдельно (Boston — под прежним ключом)
+function dsrv(){var u=user();return parseInt(u&&u.server,10)||12}
+var DKEY="bos-ai27dict"+(dsrv()===12?"":"-"+dsrv());
+var DICT=jget(DKEY,null);if(!DICT||!Array.isArray(DICT.items))DICT={at:0,items:[]};
 function words(s){return String(s||"").toLowerCase().replace(/ё/g,"е").replace(/[^а-яa-z0-9\s]/g," ").split(/\s+/).filter(function(w){return w.length>=3})}
 // основа слова: «тачку» → «тач», «угнал» → «угн»; совпадение с начала слова вопроса
 function stem(w){return w.length>6?w.slice(0,w.length-3):w.length>4?w.slice(0,w.length-2):w.length>3?w.slice(0,w.length-1):w}
@@ -13953,7 +13990,7 @@ window.SA_aiDict=function(q){
 function loadDict(force){
  if(!online()||!on("ai27dict"))return Promise.resolve();
  if(!force&&Date.now()-DICT.at<10*60e3)return Promise.resolve();
- return api("ai_dict").then(function(r){if(r&&r.ok&&Array.isArray(r.items)){DICT={at:Date.now(),items:r.items.slice(0,500)};jset("bos-ai27dict",DICT)}})}
+ return api("ai_dict").then(function(r){if(r&&r.ok&&Array.isArray(r.items)){DICT={at:Date.now(),items:r.items.slice(0,500)};jset(DKEY,DICT)}})}
 
 /* ---------- законы своего ведомства ---------- */
 var AGENCY={FIB:/federal investigation|фбр|(^|[^a-z])fib([^a-z]|$)/i,SANG:/national guard|нацгвард|(^|[^a-z])sang([^a-z]|$)/i};
@@ -14053,6 +14090,19 @@ function selfCheck(){
    return {id:x.id,top:f?(f.go||("law:"+(f.lw||f.ref))):"",ref:f?String(f.ref||"").slice(0,150):""}});
   return api("ai_check",{op:"report",res:res,ver:(st()&&st().version)||""}).then(function(y){if(y&&y.ok)jset("bos-ai27chk",today())});
  })}
+/* 2.9: подсказки под сервер (текст Миранды и замена номеров статей, панель владельца → Серверы). Применяются при старте из сохранённой копии;
+   если на сервере настройка другая, сохраняем её и один раз за сеанс перезагружаем окно, чтобы подсказки перерисовались */
+function loadSrvCfg(){
+ if(!online())return;
+ api("srv_cfg").then(function(r){
+  if(!r||!r.ok||!r.cfg)return;
+  var norm=function(c){return JSON.stringify({miranda:String(c.miranda||""),refs:c.refs||{},verified:!!c.verified})};
+  var nw=norm(r.cfg),applied=norm(window.SRVCFG?SRVCFG.cfg:{});
+  try{localStorage.setItem("sa-srvcfg-"+(r.server||dsrv()),JSON.stringify(r.cfg))}catch(x){}
+  if(nw!==applied){try{if(!sessionStorage.getItem("sa-srvcfg-rl")){sessionStorage.setItem("sa-srvcfg-rl","1");location.reload()}}catch(x){}}
+ })}
+setTimeout(loadSrvCfg,5000);
+setInterval(loadSrvCfg,30*60e3);
 setTimeout(function(){loadDict(true);selfCheck()},90e3);
 setInterval(function(){loadDict(false)},30*60e3);
 })();

@@ -16,7 +16,7 @@
   function srvOpts(first) { return [["", first || "Все серверы"]].concat(SERVERS.map(function (x) { return [String(x[0]), x[1] + " (" + x[0] + ")"]; })); }
   // роль «БетаТестер»: зелёная метка
   function betaPill() { return pill("БетаТестер", "on"); }
-  var ME = null, TOKEN = null, DASH = null, DSRV = "";
+  var ME = null, TOKEN = null, DASH = null, DSRV = "", AISRV = 12; // AISRV: сервер, чей словарь и чьи эталонные вопросы ИИ сейчас правятся
 
   function $(id) { return document.getElementById(id); }
   function ss(k, v) { try { if (v === undefined) return sessionStorage.getItem(k); if (v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch (e) {} return null; }
@@ -98,6 +98,7 @@
 
   // ───── связь с сервером
   function api(op, data) {
+    if (/^ai_(dict|gold|bad)/.test(op) && !(data && data.server != null)) data = Object.assign({ server: AISRV }, data || {}); // у каждого сервера свой словарь ИИ
     var body = Object.assign({ action: "panel", op: op, ptoken: TOKEN || undefined }, data || {});
     if (!API) return Promise.resolve({ ok: false, error: "Не найден адрес сервера (app/config.js). Сайт собран без tools/build-site.js." });
     return fetch(API, { method: "POST", body: JSON.stringify(body), cache: "no-store" })
@@ -278,7 +279,7 @@
     ["Люди", [["users", "i-users", "Пользователи", "Поиск и действия"], ["staff", "i-key", "Роли и доступ", "Модераторы и руководство"], ["queue", "i-inbox", "Заявки и сбросы", "Новички и пароли", "queue"]]],
     ["Работа", [["reports", "i-file", "Рапорты", "Рапорты сотрудников", "reports"], ["rating", "i-trophy", "Рейтинг", "Неделя и контрольные"], ["news", "i-mega", "Рассылки", "Сообщения в программе", null, 1], ["bugs", "i-bug", "Ошибки", "Сообщения пользователей", "bugs", 1], ["ideas", "i-mega", "Идеи", "Предложения пользователей"], ["ai", "i-ai", "ИИ-помощник", "Словарь, плохие ответы, самопроверка", null, 1]]],
     ["Тестирование", [["beta", "i-shield", "Тестеры", "Роль, задания, функции"]]],
-    ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["discord", "i-mega", "Discord", "Бот, каналы, обращения", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1]]],
+    ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["discord", "i-mega", "Discord", "Бот, каналы, обращения", null, 1], ["srvs", "i-sliders", "Серверы", "Подсказки по серверам", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1]]],
     ["Сервис", [["console", "i-term", "Консоль бота", "Любая команда"]]],
   ];
   function buildNav() {
@@ -1256,8 +1257,11 @@
         })))));
       });
     }
-    head(el, "ИИ-помощник", "Словарь, разбор плохих ответов и ежедневная самопроверка подбора статей",
-      btn("Обновить", function () { loadDict(); loadBad(); loadGold(); }, "btn-sm", "i-refresh"));
+    var asel = h("select", { "aria-label": "Сервер", style: "width:auto", on: { change: function () { AISRV = +asel.value; loadDict(); loadBad(); loadGold(); } } },
+      SERVERS.map(function (x) { return h("option", { value: x[0], text: x[1] + " (" + x[0] + ")" }); }));
+    asel.value = String(AISRV);
+    head(el, "ИИ-помощник", "У каждого сервера свой словарь и свои эталонные вопросы: выберите сервер справа. Плохие ответы и самопроверка тоже по серверу",
+      h("div", { class: "row" }, asel, btn("Обновить", function () { loadDict(); loadBad(); loadGold(); }, "btn-sm", "i-refresh")));
     el.appendChild(dict); el.appendChild(bad); el.appendChild(gold);
     return Promise.all([loadDict(), loadBad(), loadGold()]);
   };
@@ -1394,7 +1398,7 @@
     el.appendChild(c2);
   };
 
-  var ACT_RU = { ban: "блокировка", unban: "разблокировка", tempban: "блокировка на срок", tempban_end: "конец блокировки", autoban: "автоблокировка", warn: "предупреждение", unwarn: "снято предупреждение", kick: "завершены сессии", note: "заметка", tag: "тег", untag: "убран тег", role: "роль", rename: "ник", setstatic: "статик", setorg: "организация", delete: "удаление аккаунта", profile_update: "изменение профиля", password_reset: "сброс пароля", reset_approve: "сброс подтверждён", reset_reject: "сброс отклонён", broadcast: "рассылка", maintenance: "техработы", regs: "регистрация", reglimit: "лимит регистраций", blacklist: "чёрный список", appeal: "обжалование", delay: "отложенная команда", backup: "резервная копия", laws: "законы", approve: "заявка принята", reject: "заявка отклонена", approval: "приём новичков", shift_start: "начало смены", shift_end: "конец смены", ctrl_create: "контрольный тест", sync_reset: "сброс синхронизации", report_create: "рапорт", report_delete: "рапорт удалён", report_review: "рапорт проверен", panel_login: "вход в панель", panel_key: "пароль панели", panel_revoke: "закрыт вход в панель", db_edit: "правка базы", db_delete: "удаление из базы", db_revert: "возврат правки", ad_save: "баннер сохранён", ad_toggle: "баннер вкл/выкл", ad_delete: "баннер удалён", dc_save: "настройки Discord", dc_publish: "публикация в Discord", dc_news: "новость в Discord" };
+  var ACT_RU = { ban: "блокировка", unban: "разблокировка", tempban: "блокировка на срок", tempban_end: "конец блокировки", autoban: "автоблокировка", warn: "предупреждение", unwarn: "снято предупреждение", kick: "завершены сессии", note: "заметка", tag: "тег", untag: "убран тег", role: "роль", rename: "ник", setstatic: "статик", setorg: "организация", delete: "удаление аккаунта", profile_update: "изменение профиля", password_reset: "сброс пароля", reset_approve: "сброс подтверждён", reset_reject: "сброс отклонён", broadcast: "рассылка", maintenance: "техработы", regs: "регистрация", reglimit: "лимит регистраций", blacklist: "чёрный список", appeal: "обжалование", delay: "отложенная команда", backup: "резервная копия", laws: "законы", approve: "заявка принята", reject: "заявка отклонена", approval: "приём новичков", shift_start: "начало смены", shift_end: "конец смены", ctrl_create: "контрольный тест", sync_reset: "сброс синхронизации", report_create: "рапорт", report_delete: "рапорт удалён", report_review: "рапорт проверен", panel_login: "вход в панель", panel_key: "пароль панели", panel_revoke: "закрыт вход в панель", db_edit: "правка базы", db_delete: "удаление из базы", db_revert: "возврат правки", ad_save: "баннер сохранён", ad_toggle: "баннер вкл/выкл", ad_delete: "баннер удалён", dc_save: "настройки Discord", dc_publish: "публикация в Discord", dc_news: "новость в Discord", srv_save: "подсказки сервера" };
   PAGES.audit = function (el, arg) {
     if (!ME.owner) return ownerOnly(el);
     var S = { q: arg === "db" ? "db_edit" : "", server: "", page: 0 };
@@ -1553,6 +1557,48 @@
         });
       }, "btn-sm", "i-refresh")));
       root.appendChild(cm);
+    }
+    return load();
+  };
+
+  var SRVSEL = 12;
+  PAGES.srvs = function (el) {
+    if (!ME.owner) return ownerOnly(el);
+    var sel = h("select", { "aria-label": "Сервер", style: "width:auto", on: { change: function () { SRVSEL = +sel.value; load(); } } },
+      SERVERS.map(function (x) { return h("option", { value: x[0], text: x[1] + " (" + x[0] + ")" }); }));
+    sel.value = String(SRVSEL);
+    head(el, "Серверы", "Подсказки под сервер: текст Миранды и номера статей, которые отличаются от Boston", sel);
+    var root = h("div");
+    el.appendChild(root);
+    function lab(t, c, hint) { return h("label", { class: "fld" }, h("span", { text: t }), c, hint ? h("span", { class: "hint", text: hint }) : null); }
+    function load() {
+      root.textContent = "";
+      root.appendChild(h("div", { class: "load", text: "Загружаю…" }));
+      return api("srv_get", { server: SRVSEL }).then(function (r) {
+        root.textContent = "";
+        if (!r.ok) return root.appendChild(errMsg(r));
+        var c = r.cfg || {};
+        var mir = h("textarea", { rows: 5, maxlength: 900, placeholder: "Пусто: программа возьмёт текст из законов сервера, а если его там нет, останется текст Boston" }); mir.value = c.miranda || "";
+        var refs = h("textarea", { rows: 8, maxlength: 1200, spellcheck: "false", placeholder: "17 → 21\n19 → 23" });
+        refs.value = Object.keys(c.refs || {}).map(function (k) { return k + " → " + c.refs[k]; }).join("\n");
+        var note = h("input", { type: "text", maxlength: 300, value: c.note || "", placeholder: "Заметка для себя (пользователи её не видят)" });
+        var ver = h("input", { type: "checkbox" }); ver.checked = !!c.verified || r.default;
+        var card1 = card("Подсказки сервера " + r.servers.filter(function (x) { return x.id === r.server; })[0].name,
+          r.default ? "Boston: подсказки в программе уже написаны по его законам. Здесь можно поправить текст Миранды или замену номеров, но обычно ничего менять не нужно." :
+            "В программе подсказки (чек-лист задержания, ПК ст. 17, 19 и другие) написаны по законам Boston. Пока вы не отметите их проверенными, игроки этого сервера видят предупреждение.");
+        card1.appendChild(lab("Текст Миранды", mir, "Показывается в чек-листе задержания и зачитывается голосом. Если пусто, программа ищет его в законах сервера."));
+        card1.appendChild(lab("Замена номеров статей", refs, "По одной строке: «номер в Boston → номер на этом сервере». Заменяются номера после «ст.» в чек-листе и подсказках задержания: «ст. 17 ч.3» превратится в «ст. 21 ч.3»."));
+        card1.appendChild(lab("Заметка", note));
+        card1.appendChild(h("label", { class: "chk", style: "display:block;margin-bottom:12px" }, ver, " Подсказки проверены, предупреждение не показывать"));
+        card1.appendChild(btn("Сохранить", function () {
+          api("srv_save", { server: SRVSEL, miranda: mir.value, refs: refs.value, verified: ver.checked, note: note.value }).then(function (y) {
+            toast(y.ok ? "Сохранено. Программы получат изменения при следующем запуске." : y.error, !y.ok);
+            if (y.ok) load();
+          });
+        }, "btn-p", "i-save"));
+        if (c.at) card1.appendChild(h("p", { class: "muted small", style: "margin-top:10px", text: "Изменено " + fmt(new Date(c.at).toISOString()) + (c.by ? ", " + c.by : "") }));
+        root.appendChild(card1);
+      });
     }
     return load();
   };

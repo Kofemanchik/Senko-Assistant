@@ -1164,7 +1164,7 @@ ipcMain.handle("senko:sync-rebase", async (e) => {
 
 // Прогресс, рейтинг недели, смены и контрольные тесты (этап 4): только перечисленные действия сервера
 const PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password", "ads",
-  "status", "beta", "hooks", "discord_link", "events", "ideas", "patrol", // 2.4
+  "status", "beta", "hooks", "discord_link", "srv_cfg", "events", "ideas", "patrol", // 2.4
   "ai_dict", "ai_hist", "ai_check", "colleagues", "handoff"]; // 2.7, 2.8: коллеги, передача задержанного
 // 2.3: список микрофонов и проверка уровня для настроек (микрофон доступен только окну оверлея)
 ipcMain.handle("senko:voice-mics", async (e) => (fromMain(e) ? voice.mics() : { ok: false, error: "Недоступно." }));

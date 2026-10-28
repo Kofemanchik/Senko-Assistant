@@ -6,8 +6,10 @@
 // Привязка KV: LIMITS (счётчики запросов по пользователям).
 // Необязательные переменные: GEMINI_MODEL, GROQ_MODEL, OPENROUTER_MODEL, DAILY_PER_USER, DAILY_GLOBAL.
 
+// 2.9: у каждого сервера свои законы. Сервер приходит в запросе (srv), его название подставляется в системный текст
+const SRV_NAMES = { 12: "Boston", 7: "Los Angeles", 16: "Denver" };
 const SYSTEM = [
-  "Ты — справочный помощник по законодательству игрового проекта Majestic RP (Boston). Это игровая, а не реальная юридическая система.",
+  "Ты — справочный помощник по законодательству игрового проекта Majestic RP, сервер {SRV}. Это игровая, а не реальная юридическая система.",
   "Отвечай ТОЛЬКО на основе выдержек из законов, которые даны ниже в блоке «ВЫДЕРЖКИ». Ничего не добавляй из общих знаний и не выдумывай номера статей, суммы и сроки.",
   "Если в выдержках нет ответа — прямо скажи: «В найденных статьях ответа нет», и предложи уточнить вопрос или воспользоваться поиском по памятке.",
   "Каждое утверждение подкрепляй ссылкой на статью в точном формате из заголовков выдержек, например [УК ст. 12.8] или [ПК ст. 17]. Не придумывай другой формат ссылок.",
@@ -58,14 +60,15 @@ function cleanBody(b) {
     total += text.length;
     ctx.push({ ref, text });
   }
-  return { q, ctx, short: !!b.short, clar: !!b.clar && !b.short };
+  const srv = SRV_NAMES[parseInt(b.srv, 10)] ? parseInt(b.srv, 10) : 12;
+  return { q, ctx, short: !!b.short, clar: !!b.clar && !b.short, srv };
 }
 
 const SHORT = "\nФорматирование: ответ ОЧЕНЬ короткий — не более 3 предложений (до 450 символов), без списков и заголовков; первым предложением сам ответ; ссылки на статьи сохрани.";
 // 2.7: встречный вопрос. Сервер включает его по флагу ai27 (сначала только тестерам) и не включает в голосовом помощнике
 const CLAR = "\nУточнение: если от недостающей детали зависит, какая статья или какое наказание (кто действовал — гражданский или сотрудник при исполнении; было ли оружие; где это было; умышленно или нет), а в вопросе этой детали нет, не гадай. Ответь одной строкой, которая начинается словом «Уточните:», и задай один-два коротких вопроса. Если деталь на ответ не влияет или в вопросе уже есть «уточнение:», отвечай сразу, как обычно.";
 // m — режим: { short, clar } (раньше передавался только short)
-const sys = (m) => SYSTEM + (m.short ? SHORT : "") + (m.clar ? CLAR : "");
+const sys = (m) => SYSTEM.replace("{SRV}", SRV_NAMES[m.srv] || "Boston") + "\nОтвечай по законам именно этого сервера: выдержки взяты из его законодательной базы, законы других серверов могут отличаться." + (m.short ? SHORT : "") + (m.clar ? CLAR : "");
 
 function buildUserPrompt(q, ctx) {
   const blocks = ctx.length
@@ -255,7 +258,7 @@ async function handle(request, env, ctxW) {
   if (!list.length) return json({ ok: false, error: "ИИ-сервис не настроен." }, 503);
 
   // кэш одинаковых вопросов (бесплатный Cache API; не тратит ни квоту ИИ, ни лимит игрока)
-  const cacheKey = new Request("https://cache.senko.local/" + (await sha256Hex("v23|" + (body.short ? "s|" : "") + (body.clar ? "c|" : "") + body.q.toLowerCase() + "|" + body.ctx.map((c) => c.ref).join(","))));
+  const cacheKey = new Request("https://cache.senko.local/" + (await sha256Hex("v24|" + body.srv + "|" + (body.short ? "s|" : "") + (body.clar ? "c|" : "") + body.q.toLowerCase() + "|" + body.ctx.map((c) => c.ref + ":" + c.text.length + ":" + c.text.slice(0, 40)).join(","))));
   const cache = typeof caches !== "undefined" ? caches.default : null;
   if (cache) {
     const hit = await cache.match(cacheKey);
@@ -274,7 +277,7 @@ async function handle(request, env, ctxW) {
     let ctxTry = body.ctx;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const answer = await fn(env, body.q, ctxTry, { short: body.short, clar: body.clar });
+        const answer = await fn(env, body.q, ctxTry, { short: body.short, clar: body.clar, srv: body.srv });
         if (cache) ctxW.waitUntil(cache.put(cacheKey, new Response(JSON.stringify({ answer }), { headers: { "content-type": "application/json", "cache-control": "max-age=21600" } })));
         if (!quota.ok) return json({ ok: true, answer, provider: name, left: 0, bonus: true });
         return json({ ok: true, answer, provider: name, left: await commitQuota(env, uid, quota) });

@@ -939,6 +939,8 @@ async function api(req) {
       return J(await hooksApi(b));
     case "discord_link":
       return J(await discordLinkApi(b));
+    case "srv_cfg":
+      return J(await srvCfgApi(b));
     case "events":
       return J(await eventsApi(b));
     case "ideas":
@@ -1978,17 +1980,18 @@ function aiRefKeys(v) {
   return out.slice(0, 6);
 }
 const aiRefLabel = (k) => { const [kind, code] = String(k || "").split("|"); return AI_KN[kind] ? AI_KN[kind] + " " + code : String(k || "").replace(/^law:/, ""); };
-let aiDictCache = null;
-async function aiDictRows() {
-  if (aiDictCache && Date.now() - aiDictCache.at < 60e3) return aiDictCache.rows;
-  const rows = await db()`select id, phrase, refs, note, author, created_at from ai_dict order by id`;
-  aiDictCache = { at: Date.now(), rows };
+const aiDictCache = new Map(); // сервер → { at, rows }: у каждого сервера свой словарь
+async function aiDictRows(server = DEFAULT_SERVER) {
+  const c = aiDictCache.get(server);
+  if (c && Date.now() - c.at < 60e3) return c.rows;
+  const rows = await db()`select id, phrase, refs, note, author, created_at from ai_dict where server = ${server} order by id`;
+  aiDictCache.set(server, { at: Date.now(), rows });
   return rows;
 }
 async function aiDictApi(b) {
-  const { err } = await who(b);
+  const { p, err } = await who(b);
   if (err) return err;
-  const rows = await aiDictRows();
+  const rows = await aiDictRows(sv(p));
   return { ok: true, items: rows.map((r) => ({ p: r.phrase, r: r.refs })) };
 }
 // история: свои вопросы за последние 90 дней (столько хранится журнал)
@@ -2004,13 +2007,15 @@ const AI_GOLD_DEFAULT = [
   "дал взятку полицейскому", "оскорбил сотрудника полиции", "проехал на красный свет", "похитил человека", "хранение наркотиков",
   "можно ли обыскать без ордера", "напал на сотрудника полиции", "ложный вызов полиции", "сколько ждать адвоката", "залез на охраняемую территорию",
 ];
-async function aiGoldRows() {
+// Boston хранит прежние ключи настроек (aigold_seeded, aicheck), остальные серверы — с номером
+const aiKey = (base, server) => (server === DEFAULT_SERVER ? base : base + ":" + server);
+async function aiGoldRows(server = DEFAULT_SERVER) {
   const sql = db();
-  let rows = await sql`select * from ai_gold order by id`;
-  if (!rows.length && !(await getSetting("aigold_seeded", false))) {
-    for (const q of AI_GOLD_DEFAULT) await sql`insert into ai_gold (q) values (${q})`;
-    await setSetting("aigold_seeded", true);
-    rows = await sql`select * from ai_gold order by id`;
+  let rows = await sql`select * from ai_gold where server = ${server} order by id`;
+  if (!rows.length && !(await getSetting(aiKey("aigold_seeded", server), false))) {
+    for (const q of AI_GOLD_DEFAULT) await sql`insert into ai_gold (q, server) values (${q}, ${server})`;
+    await setSetting(aiKey("aigold_seeded", server), true);
+    rows = await sql`select * from ai_gold where server = ${server} order by id`;
   }
   return rows;
 }
@@ -2021,15 +2026,17 @@ async function aiCheck(b) {
   const { p, err } = await who(b, ["owner", "moderator"]);
   if (err) return err;
   const sql = db();
-  const st = (await getSetting("aicheck", {})) || {};
+  // проверка идёт по законам сервера того, кто её запускает (в его программе загружены его законы)
+  const srv = sv(p);
+  const st = (await getSetting(aiKey("aicheck", srv), {})) || {};
   if (b.op === "list") {
-    const rows = await aiGoldRows();
+    const rows = await aiGoldRows(srv);
     return { ok: true, due: st.day !== dayUtc(), items: rows.map((r) => ({ id: String(r.id), q: r.q })) };
   }
   if (b.op !== "report") return fail("Неизвестное действие.");
   if (st.day === dayUtc() && !b.force) return { ok: true, skipped: true };
   const res = (Array.isArray(b.res) ? b.res : []).slice(0, 60);
-  const rows = await aiGoldRows();
+  const rows = await aiGoldRows(srv);
   const byId = new Map(rows.map((r) => [String(r.id), r]));
   const changed = [];
   let n = 0;
@@ -2041,9 +2048,9 @@ async function aiCheck(b) {
     if ((r.last && r.last !== top) || (r.expect && r.expect !== top)) changed.push({ q: r.q, was: r.last_ref || aiRefLabel(r.last) || "—", now: label || aiRefLabel(top) || "ничего не найдено", expect: r.expect });
     await sql`update ai_gold set prev = last, prev_ref = last_ref, last = ${top}, last_ref = ${label}, checked_at = now() where id = ${r.id}`;
   }
-  await setSetting("aicheck", { day: dayUtc(), at: Date.now(), by: p.login, n, changed: changed.length, ver: clean(b.ver, 30) });
+  await setSetting(aiKey("aicheck", srv), { day: dayUtc(), at: Date.now(), by: p.login, n, changed: changed.length, ver: clean(b.ver, 30) });
   if (changed.length && OWNER_TG)
-    await send(OWNER_TG, `🧪 <b>Самопроверка ИИ</b>: первая статья поменялась в ${changed.length} из ${n} вопросов\n` +
+    await send(OWNER_TG, `🧪 <b>Самопроверка ИИ · ${esc(srvName(srv))}</b>: первая статья поменялась в ${changed.length} из ${n} вопросов\n` +
       changed.slice(0, 15).map((c) => `• «${esc(c.q)}»: было ${esc(c.was)}, стало ${esc(c.now)}${c.expect && c.expect !== c.now ? ` (закреплена ${esc(aiRefLabel(c.expect))})` : ""}`).join("\n") +
       `\n\nЗапуск: ${esc(p.login)}. Подробности — в панели, раздел «ИИ-помощник».`, { disable_notification: true });
   return { ok: true, n, changed: changed.length };
@@ -2052,7 +2059,10 @@ async function aiCheck(b) {
 async function panelAi(b, a) {
   const sql = db();
   const op = b.op;
-  if (op === "ai_dict_list") return { ok: true, rows: await sql`select * from ai_dict order by id desc` };
+  // сервер, с которым работает владелец (у каждого сервера свой словарь и свои эталонные вопросы)
+  const srv = parseServer(b.server) || DEFAULT_SERVER;
+  const servers = Object.keys(SERVERS).map((k) => ({ id: +k, name: SERVERS[k].name }));
+  if (op === "ai_dict_list") return { ok: true, server: srv, servers, rows: await sql`select * from ai_dict where server = ${srv} order by id desc` };
   if (op === "ai_dict_save") {
     const phrase = String(b.phrase == null ? "" : b.phrase).replace(/\s+/g, " ").trim().toLowerCase().slice(0, 80);
     const refs = aiRefKeys(b.refs);
@@ -2061,27 +2071,28 @@ async function panelAi(b, a) {
     if (!refs.length) return fail("Статьи: например «УК 10.5» или «УК 10.5, АК 3».");
     const id = parseInt(b.id, 10) || 0;
     const [r] = id
-      ? await sql`update ai_dict set phrase = ${phrase}, refs = ${refs}, note = ${note}, author = ${a.label} where id = ${id} returning *`
-      : await sql`insert into ai_dict (phrase, refs, note, author) values (${phrase}, ${refs}, ${note}, ${a.label}) returning *`;
+      ? await sql`update ai_dict set phrase = ${phrase}, refs = ${refs}, note = ${note}, author = ${a.label} where id = ${id} and server = ${srv} returning *`
+      : await sql`insert into ai_dict (phrase, refs, note, author, server) values (${phrase}, ${refs}, ${note}, ${a.label}, ${srv}) returning *`;
     if (!r) return fail("Запись не найдена.");
-    aiDictCache = null;
-    await audit(a.label, "ai_dict", phrase, { refs, id: r.id, edit: !!id });
+    aiDictCache.delete(srv);
+    await audit(a.label, "ai_dict", phrase, { refs, id: r.id, edit: !!id, server: srv });
     return { ok: true, row: r };
   }
   if (op === "ai_dict_delete") {
-    const [r] = await sql`delete from ai_dict where id = ${parseInt(b.id, 10) || 0} returning *`;
+    const [r] = await sql`delete from ai_dict where id = ${parseInt(b.id, 10) || 0} and server = ${srv} returning *`;
     if (!r) return fail("Запись не найдена.");
-    aiDictCache = null;
-    await audit(a.label, "ai_dict", r.phrase, { deleted: true, refs: r.refs });
+    aiDictCache.delete(srv);
+    await audit(a.label, "ai_dict", r.phrase, { deleted: true, refs: r.refs, server: srv });
     return { ok: true };
   }
   if (op === "ai_bad") {
     const days = Math.max(1, Math.min(90, parseInt(b.days, 10) || 30));
-    const rows = await sql`select l.id, l.q, l.refs, l.ans, l.ok, l.at, p.login, p.org from ai_log l left join profiles p on p.id = l.user_id
-                           where l.vote < 0 and l.at > now() - make_interval(days => ${days}) order by l.at desc limit 100`;
-    return { ok: true, rows, days };
+    const only = parseServer(b.server); // не указан — плохие ответы всех серверов
+    const rows = await sql`select l.id, l.q, l.refs, l.ans, l.ok, l.at, p.login, p.org, p.server from ai_log l left join profiles p on p.id = l.user_id
+                           where l.vote < 0 and l.at > now() - make_interval(days => ${days}) ${only ? sql`and p.server = ${only}` : sql``} order by l.at desc limit 100`;
+    return { ok: true, rows, days, servers };
   }
-  if (op === "ai_gold_list") return { ok: true, rows: await aiGoldRows(), last: (await getSetting("aicheck", {})) || {} };
+  if (op === "ai_gold_list") return { ok: true, server: srv, servers, rows: await aiGoldRows(srv), last: (await getSetting(aiKey("aicheck", srv), {})) || {} };
   if (op === "ai_gold_save") {
     const q = String(b.q == null ? "" : b.q).replace(/\s+/g, " ").trim().slice(0, 300);
     if (q.length < 3) return fail("Вопрос: от 3 символов.");
@@ -2089,14 +2100,14 @@ async function panelAi(b, a) {
     if (b.expect && !exp) return fail("Ожидаемая статья: например «УК 6.1».");
     const id = parseInt(b.id, 10) || 0;
     const [r] = id
-      ? await sql`update ai_gold set q = ${q}, expect = ${exp} where id = ${id} returning *`
-      : await sql`insert into ai_gold (q, expect) values (${q}, ${exp}) returning *`;
+      ? await sql`update ai_gold set q = ${q}, expect = ${exp} where id = ${id} and server = ${srv} returning *`
+      : await sql`insert into ai_gold (q, expect, server) values (${q}, ${exp}, ${srv}) returning *`;
     if (!r) return fail("Вопрос не найден.");
     await audit(a.label, "ai_gold", q, { expect: exp, edit: !!id });
     return { ok: true, row: r };
   }
   if (op === "ai_gold_delete") {
-    const [r] = await sql`delete from ai_gold where id = ${parseInt(b.id, 10) || 0} returning *`;
+    const [r] = await sql`delete from ai_gold where id = ${parseInt(b.id, 10) || 0} and server = ${srv} returning *`;
     if (!r) return fail("Вопрос не найден.");
     await audit(a.label, "ai_gold", r.q, { deleted: true });
     return { ok: true };
@@ -2104,15 +2115,15 @@ async function panelAi(b, a) {
   if (op === "ai_gold_pin") {
     // закрепить текущий результат как правильный (у одного вопроса или у всех)
     const id = parseInt(b.id, 10) || 0;
-    const rows = id ? await sql`update ai_gold set expect = last where id = ${id} and last <> '' returning id`
-      : await sql`update ai_gold set expect = last where last <> '' returning id`;
+    const rows = id ? await sql`update ai_gold set expect = last where id = ${id} and server = ${srv} and last <> '' returning id`
+      : await sql`update ai_gold set expect = last where server = ${srv} and last <> '' returning id`;
     await audit(a.label, "ai_gold", id ? String(id) : "все", { pin: true, n: rows.length });
     return { ok: true, n: rows.length };
   }
   if (op === "ai_gold_run") {
     // следующий запуск программы владельца или модератора проверит заново
-    const st = (await getSetting("aicheck", {})) || {};
-    await setSetting("aicheck", { ...st, day: "" });
+    const st = (await getSetting(aiKey("aicheck", srv), {})) || {};
+    await setSetting(aiKey("aicheck", srv), { ...st, day: "" });
     return { ok: true };
   }
   return fail("Неизвестное действие панели.");
@@ -2368,7 +2379,7 @@ const AUDIT_ACTIONS = [
   "ban", "unban", "tempban", "tempban_end", "autoban", "warn", "unwarn", "kick", "note", "tag", "untag",
   "role", "rename", "setstatic", "setorg", "delete", "profile_update", "password_reset", "reset_approve", "reset_reject",
   "broadcast", "maintenance", "regs", "reglimit", "blacklist", "appeal", "delay", "backup", "laws",
-  "dc_save", "dc_publish", "dc_news",
+  "dc_save", "dc_publish", "dc_news", "srv_save",
   "approve", "reject", "approval", "shift_start", "shift_end", "ctrl_create", "sync_reset",
   "report_create", "report_delete", "report_review",
   "panel_login", "panel_key", "panel_revoke", "db_edit", "db_delete", "db_revert",
@@ -4007,12 +4018,13 @@ async function panelApi(b, ip, ua) {
   const owners = ["audit", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert", "ads_list", "ads_save", "ads_toggle", "ads_delete",
     "prog_get", "prog_xp", "prog_ach", "prog_ach_new", "prog_ai",
     "ai_dict_list", "ai_dict_save", "ai_dict_delete", "ai_bad", "ai_gold_list", "ai_gold_save", "ai_gold_delete", "ai_gold_pin", "ai_gold_run",
-    "dc_get", "dc_save", "dc_sync", "dc_publish", "dc_news", "dc_monitor"];
+    "dc_get", "dc_save", "dc_sync", "dc_publish", "dc_news", "dc_monitor", "srv_get", "srv_save"];
   const { p, a, th, err } = await pwho(b, owners.includes(op));
   if (err) return err;
   const sql = db();
   if (!(await hit(`pa:${p.id}`, 300, 600))) return fail(RATE_MSG, { code: "rate" });
   if (op.startsWith("dc_")) return dcPanel(op, b, a);
+  if (op.startsWith("srv_")) return panelSrv(op, b, a);
   switch (op) {
     case "me":
       return { ok: true, me: panelMe(p, a) };
@@ -4370,7 +4382,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 30;
+const SCHEMA_V = 31;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -4475,6 +4487,13 @@ do $$ begin
   end if;
 end $$;
 `;
+// 2.9 (заход 3): словарь владельца и эталонные вопросы ИИ у каждого сервера свои (у прежних записей сервер Boston, 12)
+const SCHEMA_31 = `
+alter table public.ai_dict add column if not exists server integer not null default 12;
+alter table public.ai_gold add column if not exists server integer not null default 12;
+create index if not exists ai_dict_server_idx on public.ai_dict (server);
+create index if not exists ai_gold_server_idx on public.ai_gold (server);
+`;
 let schemaReady = null;
 function ensureSchema() {
   if (!schemaReady)
@@ -4483,7 +4502,7 @@ function ensureSchema() {
         const v = await getSetting("schema_v", 0);
         if (+v >= SCHEMA_V) return;
         // база уже на 2.4: повторно 2.4 не выполняем (иначе вернулись бы удалённые баннеры по умолчанию)
-        await db().unsafe((+v >= 29 ? "" : +v >= 28 ? SCHEMA_29 : +v >= 27 ? SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + DC_SCHEMA);
+        await db().unsafe((+v >= 29 ? "" : +v >= 28 ? SCHEMA_29 : +v >= 27 ? SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + DC_SCHEMA + SCHEMA_31);
         adsReady = true;
         await setSetting("schema_v", SCHEMA_V);
       } catch (e) {
@@ -5102,6 +5121,48 @@ async function lawsApi(b) {
   return { ok: true, ...meta, gz: b64(L.gz) };
 }
 
+// ───────────── 2.9 (заход 3): подсказки под сервер ─────────────
+// Часть подсказок в программе написана по законам Boston: текст Миранды, номера статей ПК в чек-листе задержания.
+// У каждого сервера владелец может задать свой текст Миранды и замену номеров статей (например, 17 → 21); пока этого нет, а сервер не Boston,
+// программа показывает предупреждение. Настройка хранится в bot_settings под ключом srvcfg:<сервер>, правится в панели («Серверы»).
+const SRVCFG_MAX_REFS = 60;
+function srvCfgClean(b) {
+  const refs = {};
+  const src = Array.isArray(b.refs) ? b.refs : String(b.refs == null ? "" : b.refs).split(/\n+/).map((l) => l.split(/→|->|=>|=|:/).map((x) => x.trim()));
+  for (const r of src.slice(0, SRVCFG_MAX_REFS)) {
+    const a = String((r && r[0]) == null ? "" : r[0]).replace(/^ст\.?\s*/i, "").trim(), c = String((r && r[1]) == null ? "" : r[1]).replace(/^ст\.?\s*/i, "").trim();
+    if (/^\d{1,3}(?:\.\d{1,3}){0,3}$/.test(a) && /^\d{1,3}(?:\.\d{1,3}){0,3}$/.test(c) && a !== c) refs[a] = c;
+  }
+  return {
+    miranda: String(b.miranda == null ? "" : b.miranda).replace(/\s+/g, " ").trim().slice(0, 900),
+    refs, verified: b.verified === true, note: clean(b.note, 300),
+  };
+}
+async function srvCfgGet(server) {
+  const c = (await getSetting("srvcfg:" + server, null)) || {};
+  return { miranda: c.miranda || "", refs: c.refs || {}, verified: !!c.verified, note: c.note || "", at: c.at || 0, by: c.by || "" };
+}
+// для программы и сайта: настройка подсказок сервера игрока
+async function srvCfgApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const server = sv(p);
+  const c = await srvCfgGet(server);
+  return { ok: true, server, cfg: { miranda: c.miranda, refs: c.refs, verified: c.verified || server === DEFAULT_SERVER, note: c.note } };
+}
+async function panelSrv(op, b, a) {
+  const srv = parseServer(b.server) || DEFAULT_SERVER;
+  const servers = Object.keys(SERVERS).map((k) => ({ id: +k, name: SERVERS[k].name }));
+  if (op === "srv_get") return { ok: true, server: srv, servers, cfg: await srvCfgGet(srv), default: srv === DEFAULT_SERVER };
+  if (op === "srv_save") {
+    const c = srvCfgClean(b);
+    await setSetting("srvcfg:" + srv, { ...c, at: Date.now(), by: a.label });
+    await audit(a.label, "srv_save", String(srv), { refs: Object.keys(c.refs).length, miranda: !!c.miranda, verified: c.verified, server: srv });
+    return { ok: true, server: srv, servers, cfg: await srvCfgGet(srv), default: srv === DEFAULT_SERVER };
+  }
+  return fail("Неизвестное действие.");
+}
+
 // ИИ для программы и сайта: запрос подписывается здесь (ключ AI_KEY), лимит считается по аккаунту
 async function hmacHex(secret, msg) {
   const k = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
@@ -5136,7 +5197,7 @@ async function aiAsk(b) {
         "content-type": "application/json", "x-senko-cid": cid, "x-senko-ts": ts, "x-senko-sig": await hmacHex(AI_KEY, cid + "." + ts),
         ...(bonus > 0 ? { "x-senko-bsig": await hmacHex(AI_KEY, cid + "." + ts + ".b") } : {}),
       },
-      body: JSON.stringify({ short: !!b.short, clar: clar, q, ctx }),
+      body: JSON.stringify({ short: !!b.short, clar: clar, q, ctx, srv: sv(p) }),
       signal: AbortSignal.timeout(35000),
     });
     status = r.status;
