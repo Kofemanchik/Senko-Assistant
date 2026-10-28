@@ -2551,11 +2551,19 @@ async function onMessage(m, opts = {}) {
   if (a.kind === "leader" && !["help", "broadcast_org", "top", "results", "pending", "approve", "reports", "report"].includes(cmd)) return send(chat, "Эта команда руководству недоступна. Список: /help");
   const owner = a.kind === "owner";
   const ownerOnly = () => send(chat, "Эта команда доступна только владельцу.");
+  // 2.9: модератор с серверной привязкой видит и трогает только игроков своего сервера (0 — все серверы)
+  const sc = scopeServer(a);
+  const scQ = sc ? sql`and server = ${sc}` : sql``;
+  const scP = sc ? sql`and p.server = ${sc}` : sql``;
   // цель команды: первый аргумент — логин
   const target = async (usage) => {
     const p = args[0] ? await findProfile(args[0]) : null;
     if (!p) {
       await send(chat, args[0] ? "Пользователь не найден." : "Использование: " + usage);
+      return null;
+    }
+    if (sc && sv(p) !== sc) {
+      await send(chat, `Пользователь с другого сервера (${esc(srvName(sv(p)))}). У вас доступ только к серверу ${esc(srvName(sc))}.`);
       return null;
     }
     return p;
@@ -2571,15 +2579,15 @@ async function onMessage(m, opts = {}) {
       if (q.startsWith("#")) {
         const tag = normTag(q);
         if (!tag) return send(chat, "Использование: /find #тег");
-        const rows = await sql`select * from profiles where ${tag} = any(tags) order by created_at desc limit 30`;
+        const rows = await sql`select * from profiles where ${tag} = any(tags) ${scQ} order by created_at desc limit 30`;
         if (!rows.length) return send(chat, `С тегом #${esc(tag)} никого нет.`);
         return send(chat, `<b>#${esc(tag)}</b> (${rows.length})\n` + rows.map((r) => `• <code>${esc(r.login)}</code> — ${esc(r.nick)} · ${esc(r.org)}${r.banned ? " 🚫" : ""}`).join("\n"));
       }
       if (q.length < 2) return send(chat, "Использование: /find &lt;текст&gt; (минимум 2 символа) или /find #тег");
       const like = "%" + likeEsc(q) + "%";
       const rows = owner
-        ? await sql`select * from profiles where login ilike ${like} or nick ilike ${like} or static_id ilike ${like} or discord ilike ${like} or telegram ilike ${like} order by created_at desc limit 10`
-        : await sql`select * from profiles where login ilike ${like} or nick ilike ${like} or static_id ilike ${like} or discord ilike ${like} order by created_at desc limit 10`;
+        ? await sql`select * from profiles where (login ilike ${like} or nick ilike ${like} or static_id ilike ${like} or discord ilike ${like} or telegram ilike ${like}) ${scQ} order by created_at desc limit 10`
+        : await sql`select * from profiles where (login ilike ${like} or nick ilike ${like} or static_id ilike ${like} or discord ilike ${like}) ${scQ} order by created_at desc limit 10`;
       if (!rows.length) return send(chat, "Ничего не найдено.");
       return send(
         chat,
@@ -2700,7 +2708,7 @@ async function onMessage(m, opts = {}) {
 
     case "beta": {
       if (args[0] === "list" || !args[0]) {
-        const rows = await sql`select login, nick, org from profiles where beta order by login_lc limit 100`;
+        const rows = await sql`select login, nick, org from profiles where beta ${scQ} order by login_lc limit 100`;
         return send(chat, rows.length ? `🧪 <b>Бета-тестеры: ${rows.length}</b>\n` + rows.map((r) => `• <code>${esc(r.login)}</code> — ${esc(r.nick)} · ${esc(r.org)}`).join("\n") + "\n\nВыдать: /beta &lt;логин&gt; on, забрать: /beta &lt;логин&gt; off" : "Бета-тестеров пока нет. Выдать роль: /beta &lt;логин&gt; on");
       }
       const p = await target("/beta &lt;логин&gt; on|off");
@@ -2711,7 +2719,7 @@ async function onMessage(m, opts = {}) {
     }
 
     case "online": {
-      const rows = await sql`select login, nick, org, rank, last_seen from profiles where last_seen > now() - interval '1 hour' and not banned order by last_seen desc limit 50`;
+      const rows = await sql`select login, nick, org, rank, last_seen from profiles where last_seen > now() - interval '1 hour' and not banned ${scQ} order by last_seen desc limit 50`;
       if (!rows.length) return send(chat, "За последний час в сети никого не было.");
       return send(chat, `🟢 <b>В сети за час: ${rows.length}</b>\n` + rows.map((r) => `• <code>${esc(r.login)}</code> — ${esc(r.nick)} · ${esc(r.org)} · ${fmtDate(r.last_seen)}`).join("\n"));
     }
@@ -2729,7 +2737,7 @@ async function onMessage(m, opts = {}) {
     case "dups": {
       const groups = async (label, expr) => {
         const rows = await sql`select k, array_agg(login order by created_at) logins from (
-                                 select ${sql.unsafe(expr)} as k, login, created_at from profiles) t
+                                 select ${sql.unsafe(expr)} as k, login, created_at from profiles where true ${scQ}) t
                                where k <> '' group by k having count(*) > 1 order by count(*) desc limit 10`;
         return rows.length ? `<b>${label}</b>\n` + rows.map((r) => `• ${esc(r.k)}: ${r.logins.map((l) => "<code>" + esc(l) + "</code>").join(", ")}`).join("\n") : "";
       };
@@ -2749,6 +2757,7 @@ async function onMessage(m, opts = {}) {
       if (p.org === org) return send(chat, `У ${esc(p.login)} уже указана организация ${org}.`);
       if (a.kind === "moderator" && (p.rank === "owner" || p.rank === "moderator"))
         return send(chat, "Организацию модераторов и владельца меняет только владелец.");
+      if (sc && sv(p) !== sc) return send(chat, `Пользователь с другого сервера (${esc(srvName(sv(p)))}).`);
       await sql`update profiles set org = ${org}, dept = ${org} where id = ${p.id}`;
       await audit(a.label, "setorg", p.login, { from: p.org, to: org });
       await tellOwner(a, `сменил организацию <b>${esc(p.login)}</b>: ${esc(p.org)} → ${org}`);
@@ -2816,7 +2825,7 @@ async function onMessage(m, opts = {}) {
     case "resets": {
       const rows = await sql`
         select r.id, p.* from reset_requests r join profiles p on p.id = r.user_id
-        where r.status = 'pending' and r.expires_at > now() order by r.created_at limit 10`;
+        where r.status = 'pending' and r.expires_at > now() ${scP} order by r.created_at limit 10`;
       if (!rows.length) return send(chat, "Ожидающих запросов нет.");
       for (const r of rows)
         await send(chat, `🔑 <b>Запрос на сброс пароля</b>\n\n${card(r, a.kind)}`, {
@@ -3287,6 +3296,13 @@ async function onCallback(cb) {
   if (!m) return answer("Неизвестное действие.");
   if (a.kind === "leader") return answer("Нет доступа.", true);
   const approve = m[1] === "ok";
+  { // 2.9: модератор сервера решает сбросы только своих игроков
+    const msc = scopeServer(a);
+    if (msc) {
+      const [rq] = await sql`select p.server from reset_requests r join profiles p on p.id = r.user_id where r.id = ${m[2]}`;
+      if (rq && (rq.server || DEFAULT_SERVER) !== msc) return answer("Игрок с другого сервера.", true);
+    }
+  }
   let r;
   if (approve) {
     [r] = await sql`update reset_requests set status = 'approved', decided_by = ${a.label}, decided_at = now(),
