@@ -4,6 +4,11 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Выпустить релиз v<версия из package.json> (тег создастся сам). Версия вида 2.5.0-beta.1 выходит бета-версией для тестеров"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -27,9 +32,60 @@ jobs:
           V=$(node -p "require('./package.json').version")
           if [ "v$V" != "$GITHUB_REF_NAME" ]; then echo "package.json=$V, тег=$GITHUB_REF_NAME"; exit 1; fi
 
+      - name: Версия
+        id: ver
+        shell: bash
+        run: echo "v=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
       - run: npm ci
 
+      # Модель голоса (Vosk, 46 МБ) не лежит в репозитории. Без неё голосовой ввод и рация пишут «модель не найдена»,
+      # так было во всех сборках с 2.3.0. Качаем официальную модель, сверяем каждый файл с voice-model/manifest.sha256
+      # и пакуем в model.tar.gz с записями папок (без них модель не открывается).
+      - name: Кэш модели голоса
+        uses: actions/cache@v4
+        with:
+          path: voice-model/model.tar.gz
+          key: voice-model-${{ hashFiles('voice-model/manifest.sha256') }}
+
+      - name: Модель голоса
+        shell: bash
+        env:
+          VOSK_URL: https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip
+        run: |
+          M="$PWD/voice-model/model.tar.gz"
+          fail(){ echo "::error::Модель голоса: $1"; exit 1; }
+          if [ ! -s "$M" ]; then
+            R="${RUNNER_TEMP:-/tmp}"; if command -v cygpath >/dev/null; then R=$(cygpath -u "$R"); fi
+            W="$R/vm"; rm -rf "$W"; mkdir -p "$W"
+            # на Windows git отдаёт файл с CRLF: убираем \r, иначе sha256sum и список файлов ломаются
+            tr -d '\r' < voice-model/manifest.sha256 > "$W/manifest" || fail "нет manifest.sha256"
+            curl -fsSL --retry 4 --retry-delay 5 -o "$W/m.zip" "$VOSK_URL" || fail "не скачалась ($VOSK_URL)"
+            ( cd "$W" && { unzip -q m.zip 2>/dev/null || 7z x -y m.zip >/dev/null; } ) || fail "не распаковалась"
+            ( cd "$W" && sha256sum --quiet -c manifest ) || fail "файлы не совпали с manifest.sha256"
+            L=$(cut -d' ' -f3 "$W/manifest")
+            D=$(for f in $L; do d=$(dirname "$f"); while [ "$d" != "." ]; do echo "$d"; d=$(dirname "$d"); done; done | sort -u)
+            ( cd "$W" && tar --format=ustar --owner=0 --group=0 --no-recursion -czf model.tar.gz $D $L ) || fail "tar не собрал архив"
+            mv -f "$W/model.tar.gz" "$M" || fail "не удалось положить архив"
+            rm -rf "$W"
+          fi
+          S=$(wc -c < "$M")
+          echo "model.tar.gz: $S байт"
+          [ "$S" -ge 40000000 ] || fail "архив слишком маленький ($S байт)"
+
       - run: npm run dist
+
+      - name: Модель голоса попала в сборку
+        shell: bash
+        run: |
+          F=dist/win-unpacked/resources/voice-model/model.tar.gz
+          if [ ! -s "$F" ]; then echo "::error::В сборке нет $F"; exit 1; fi
+          echo "в сборке: $(wc -c < "$F") байт"
+
+      # обычная версия даёт latest.yml, бета (2.5.0-beta.1) — beta.yml; служебный файл сборщика в релиз не нужен
+      - name: Убрать служебные файлы сборки
+        shell: bash
+        run: rm -f dist/builder-debug.yml && ls dist
 
       # С 2.2.1 ключей в программе нет: законы и ИИ идут через сервер. Сборка не пройдёт, если ключ законов попал внутрь.
       - name: Проверка, что ключей нет в сборке
@@ -49,23 +105,41 @@ jobs:
           name: Senko-Assistant-Setup
           path: |
             dist/*.exe
-            dist/latest.yml
+            dist/*.yml
             dist/*.blockmap
           if-no-files-found: error
 
       # Описание релиза берётся из «Что нового» программы (NEWS в app/index.html)
       - name: Текст релиза
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release
         shell: bash
         run: node tools/release-notes.js > release-notes.md
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release
         uses: softprops/action-gh-release@v2
         with:
           body_path: release-notes.md
+          tag_name: v${{ steps.ver.outputs.v }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ contains(steps.ver.outputs.v, '-') }}
           files: |
             dist/*.exe
-            dist/latest.yml
+            dist/*.yml
             dist/*.blockmap
           fail_on_unmatched_files: true
+
+      # Changelog в Discord: бот публикует версию и список изменений в канал обновлений (нужен секрет CRON_SECRET, тот же, что у Sync laws)
+      - name: Changelog в Discord
+        if: (startsWith(github.ref, 'refs/tags/') || inputs.release) && success()
+        continue-on-error: true
+        shell: bash
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then echo "CRON_SECRET не задан, changelog в Discord пропущен"; exit 0; fi
+          V="${{ steps.ver.outputs.v }}"
+          PRE=false; case "$V" in *-*) PRE=true;; esac
+          jq -n --arg v "$V" --argjson pre "$PRE" --rawfile notes release-notes.md '{action:"dc_changelog",version:$v,prerelease:$pre,notes:$notes}' > dc.json
+          curl -sS -m 30 -X POST "https://wcjspwailippjmyffkei.supabase.co/functions/v1/senko" \
+            -H "content-type: application/json" -H "x-senko-cron: $CRON_SECRET" --data @dc.json

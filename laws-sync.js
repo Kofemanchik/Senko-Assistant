@@ -14,18 +14,28 @@ const EVERY_MS = 3 * 60 * 60 * 1000;   // как часто сверять по�
 const STALE_MS = 3 * 24 * 60 * 60 * 1000; // если сервер не проверял форум дольше — предупредить: автообновление встало
 const RETRY_MS = 60 * 1000;            // не вошли или нет связи: попробовать снова через минуту
 
-module.exports = function (opts) {
-  const file = () => path.join(opts.dataDir(), "laws.json");
-  const metaFile = () => path.join(opts.dataDir(), "laws-meta.json");
-  const histDir = () => path.join(opts.dataDir(), "laws-history"); // 2.2: прошлые версии для отката (3 последние)
-  let data = null, running = false, timer = null, retry = null, lastErr = "", remote = null, lastOkAt = 0, hold = 0;
+const DEFAULT_SERVER = 12; // Boston: его файлы называются как раньше (laws.json, laws-meta.json, laws-history), остальные — с номером сервера
 
+module.exports = function (opts) {
+  // 2.9: у каждого сервера свои законы. Сервер берётся из профиля вошедшего игрока (opts.server), при его смене состояние перечитывается
+  const srv = () => { const n = parseInt(opts.server && opts.server(), 10); return n > 0 ? n : DEFAULT_SERVER; };
+  const sfx = () => (srv() === DEFAULT_SERVER ? "" : "-" + srv());
+  const file = () => path.join(opts.dataDir(), "laws" + sfx() + ".json");
+  const metaFile = () => path.join(opts.dataDir(), "laws-meta" + sfx() + ".json");
+  const histDir = () => path.join(opts.dataDir(), "laws-history" + sfx()); // 2.2: прошлые версии для отката (3 последние)
+  let data = null, running = false, timer = null, retry = null, lastErr = "", remote = null, lastOkAt = 0, hold = 0, loadedFor = 0, missing = false;
+
+  function loadState() {
+    if (loadedFor === srv()) return;
+    loadedFor = srv(); data = null; remote = null; lastOkAt = 0; hold = 0; lastErr = ""; missing = false;
+    try { const m = JSON.parse(fs.readFileSync(metaFile(), "utf8")); remote = m.remote || null; lastOkAt = m.lastOkAt || 0; hold = m.hold || 0; } catch (e) {}
+  }
   function read() {
+    loadState();
     if (data) return data;
     try { data = JSON.parse(fs.readFileSync(file(), "utf8")); } catch (e) { data = null; }
     return data;
   }
-  try { const m = JSON.parse(fs.readFileSync(metaFile(), "utf8")); remote = m.remote || null; lastOkAt = m.lastOkAt || 0; hold = m.hold || 0; } catch (e) {}
   const saveMeta = () => { try { fs.writeFileSync(metaFile(), JSON.stringify({ remote, lastOkAt, hold })); } catch (e) {} };
   function keepHistory() {
     try {
@@ -65,13 +75,17 @@ module.exports = function (opts) {
 
   function view() {
     const d = read() || { updatedAt: 0, checkedAt: 0, laws: [], changes: [] };
+    const sn = srv();
     const checked = Math.max((remote && remote.checkedAt) || 0, lastOkAt || 0);
     let warn = "";
     if (checked && Date.now() - checked > STALE_MS) warn = "Сервер давно не проверял форум (последняя проверка: " + new Date(checked).toLocaleString("ru-RU") + "). Автообновление законов могло остановиться — сообщите владельцу.";
+    else if (missing && !read()) warn = "Законы сервера " + sn + " ещё не собраны с форума, пока показаны законы Boston. Как только их соберут, программа обновится сама.";
     else if (remote && remote.ok === false) warn = "Последняя проверка форума на сервере прошла с ошибкой" + (remote.error ? ": " + remote.error : "") + ". Показаны ранее загруженные данные.";
     return Object.assign({}, d, {
       checkedAt: checked || d.checkedAt || 0,
       running,
+      server: sn,
+      missing: !!missing && !read(),
       auth: true,
       warn,
       status: lastErr ? { ok: false, error: lastErr } : { ok: true, failed: (remote && remote.failed) || 0 }
@@ -85,25 +99,37 @@ module.exports = function (opts) {
   }
 
   async function sync() {
+    loadState();
     if (running) return view();
     running = true;
+    const sn = srv();
     opts.onProgress && opts.onProgress({ phase: "list", done: 0 });
     const before = read();
     try {
       let st = null;
-      try { st = JSON.parse((await getBuf(BASE + "laws-status.json", 20000)).toString("utf8")); } catch (e) { st = null; }
+      try { st = JSON.parse((await getBuf(BASE + "laws-status" + sfx() + ".json", 20000)).toString("utf8")); } catch (e) { st = null; }
       if (st) { remote = st; saveMeta(); }
 
       // после отката пользователь сам возвращает обновления: до этого новую версию не скачиваем
       const same = hold || (st && before && before.sig && st.sig === before.sig);
       let changed = false, newCh = [];
       if (!same) {
-        const r = await opts.api({ action: "laws", sig: (before && before.sig) || "", want: (st && st.sig) || "" });
+        const r = await opts.api({ action: "laws", server: sn, sig: (before && before.sig) || "", want: (st && st.sig) || "" });
+        if (r && !r.ok && r.code === "laws_none") {
+          // законы этого сервера ещё не собраны: это не ошибка связи, повторять каждую минуту не нужно
+          missing = true; lastErr = "";
+          running = false;
+          opts.onUpdate && opts.onUpdate({ notify: false, changed: false, changes: [] });
+          return view();
+        }
         if (!r || !r.ok) {
           const e = new Error((r && r.error) || "сервер не ответил");
           e.code = r && r.code;
           throw e;
         }
+        // сервер мог вернуть законы другого сервера, если профиль сменился во время загрузки: не сохраняем
+        if (r.server && r.server !== srv()) throw new Error("сервер игрока изменился во время загрузки, повторим");
+        missing = false;
         // сервер ответил «та же версия» (например, если GitHub не отдал laws-status.json): ничего не меняем
         if (!r.same) {
           let j = null;
@@ -146,6 +172,7 @@ module.exports = function (opts) {
     diagnose: async () => {
       const d = read();
       return [
+        "Сервер игрока: " + srv() + (missing ? " (законы ещё не собраны, используются законы Boston)" : ""),
         "Источник: " + BASE + " (версия), сервер Senko (тексты)",
         "Файл на диске: " + file() + (fs.existsSync(file()) ? "" : " (нет)"),
         "Законов: " + ((d && d.laws.length) || 0),

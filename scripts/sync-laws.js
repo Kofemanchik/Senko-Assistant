@@ -1,15 +1,20 @@
 // Серверный парсер законодательной базы Majestic RP (XenForo).
 // Запуск: node scripts/sync-laws.js   (нужны переменные FORUM_LOGIN и FORUM_PASSWORD)
-// Результат: update/laws.json — его читает приложение Senko Assistant.
+// Результат: update/laws.json (Boston) или update/laws-<сервер>.json — его обрабатывает publish-laws.js.
+// Сервер задаётся переменной SERVER (12 Boston, 7 Los Angeles, 16 Denver); по умолчанию Boston.
 "use strict";
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const cheerio = require("cheerio");
 
-const BASE = "https://forum.majestic-rp.ru";
-const START = process.env.FORUM_START || BASE + "/forums/zakonodatel-naya-baza.1017/";
-const OUT = path.join(__dirname, "..", "update", "laws.json");
+const SRV = require("./servers.js");
+const SERVER = SRV.current();
+const BASE = SRV.BASE;
+const START = process.env.FORUM_START || SRV.startUrl(SERVER);
+const OUT = SRV.files(SERVER).plain;
+const IGNORE = SRV.ignoredOf(SERVER);   // разделы форума, которые не парсим (отменённые законопроекты и т.п.)
+const IGNORE_KEY = IGNORE.slice().sort((a, b) => a - b).join(",");
 const LOGIN = process.env.FORUM_LOGIN;
 const PASS = process.env.FORUM_PASSWORD;
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
@@ -130,7 +135,9 @@ async function collectForum(url, section, seen, out, $first) {
   const sec = section || (url === START ? "" : title);
   const subs = [];
   $(".node--forum .node-title a, .node--category .node-title a").each((_, a) => {
-    const h = $(a).attr("href"); if (h && /\/forums\//.test(h)) subs.push([abs(h), $(a).text().trim()]);
+    const h = $(a).attr("href"); if (!h || !/\/forums\//.test(h)) return;
+    if (IGNORE.includes(SRV.forumIdOf(h))) { console.log("Раздел пропущен (в списке игнорируемых):", $(a).text().trim(), h); return; }
+    subs.push([abs(h), $(a).text().trim()]);
   });
   let cur = url, n = 0;
   for (;;) {
@@ -195,11 +202,15 @@ async function main() {
   const first = !prevMap.size;
   const now = Date.now();
 
+  console.log("Сервер:", SRV.nameOf(SERVER) + " (" + SERVER + "), раздел форума:", START);
   const $start = await login();
   const list = new Map();
   await collectForum(START, "", new Set(), list, $start);
   console.log("Найдено тем:", list.size);
-  if (!list.size || (prevMap.size && list.size < prevMap.size * 0.5)) {
+  // если список игнорируемых разделов изменился, число тем закономерно упадёт: проверку «слишком мало тем» и отметки «удалён» пропускаем один раз
+  const ignoreChanged = !first && (prev.ignoreKey || "") !== IGNORE_KEY;
+  if (ignoreChanged) console.log("Список игнорируемых разделов изменился (" + (prev.ignoreKey || "—") + " → " + (IGNORE_KEY || "—") + ").");
+  if (!list.size || (!ignoreChanged && prevMap.size && list.size < prevMap.size * 0.5)) {
     throw new Error("Подозрительно мало тем (" + list.size + " против " + prevMap.size + "). Файл не обновлён.");
   }
 
@@ -241,13 +252,15 @@ async function main() {
   laws.sort((a, b) => (order.has(a.id) ? order.get(a.id) : 1e9) - (order.has(b.id) ? order.get(b.id) : 1e9));
   const alive = new Set(list.keys());
   for (const old of prevMap.values()) {
-    if (!alive.has(old.id)) changes.push({ type: "removed", id: old.id, title: old.title, at: now });
+    if (!alive.has(old.id) && !ignoreChanged) changes.push({ type: "removed", id: old.id, title: old.title, at: now });
   }
   if (!laws.length) throw new Error("Не прочитано ни одной темы.");
 
   const allChanges = changes.concat(prev.changes || []).slice(0, 60);
   const touched = changes.length > 0;
   const out = {
+    server: SERVER,
+    ignoreKey: IGNORE_KEY,
     updatedAt: touched ? now : (prev.updatedAt || now),
     checkedAt: now,
     laws, changes: allChanges,

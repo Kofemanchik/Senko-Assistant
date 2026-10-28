@@ -11,8 +11,10 @@ protocol.registerSchemesAsPrivileged([
   { scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }
 ]);
 
-const OVERLAY_W = 480;
-const OVERLAY_H = 460;
+// 2.3: размер окна выбирается в настройках (voiceSize)
+const SIZES = { s: [400, 380], m: [480, 460], l: [580, 560] };
+const ow = () => (SIZES[ctx && ctx.getCfg().voiceSize] || SIZES.m)[0];
+const oh = () => (SIZES[ctx && ctx.getCfg().voiceSize] || SIZES.m)[1];
 const MIN_VISIBLE = 120; // сколько пикселей окна минимум должно оставаться на экране при перетаскивании
 const IDLE_DESTROY_MS = 10 * 60 * 1000; // выгрузить распознавание (и освободить память) после 10 минут без использования
 const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".gz": "application/gzip" };
@@ -37,13 +39,17 @@ function fileMap() {
     "overlay.js": path.join(dir, "overlay.js"),
     "numbers.js": path.join(dir, "numbers.js"),
     "vosk.js": path.join(dir, "vosk.js"),
+    "radio.html": path.join(__dirname, "app", "radio", "radio.html"), // 2.6: окно рации диспетчера
+    "radio.js": path.join(__dirname, "app", "radio", "radio.js"),
     "model.tar.gz": path.join(modelDir, "model.tar.gz")
   };
 }
 
-// Код, который выполняется внутри страницы памятки: подставляет запрос в строку поиска и читает найденные статьи.
+// Код, который выполняется внутри страницы памятки. С 2.3 ищет по данным всех кодексов и законов (window.__senkoVoiceSearch),
+// не трогая открытую вкладку и строку поиска. Старый путь через строку поиска — запасной.
 function pageSearch(cands) {
   try {
+    if (typeof window.__senkoVoiceSearch === "function") return window.__senkoVoiceSearch(cands);
     var KN = { uk: "УК", ak: "АК", dk: "ДК", pk: "ПК" };
     var sel = document.querySelector('.tab[aria-selected="true"]');
     var cur = sel && sel.getAttribute("data-tab");
@@ -104,14 +110,24 @@ async function runSearch(cands) {
 
 function setupPermissions() {
   const ses = session.defaultSession;
-  const isOverlay = (wc) => live() && !!wc && wc === overlay.webContents;
+  // 2.6: микрофон нужен и окну рации диспетчера (ctx.micOk)
+  const isOverlay = (wc) => (live() && !!wc && wc === overlay.webContents) || (!!wc && typeof ctx.micOk === "function" && ctx.micOk(wc));
   // Микрофон — только окну оверлея. Остальное ведёт себя как раньше (по умолчанию разрешено).
   ses.setPermissionRequestHandler((wc, permission, cb) => cb(permission === "media" ? isOverlay(wc) : true));
   ses.setPermissionCheckHandler((wc, permission) => (permission === "media" ? isOverlay(wc) : true));
 }
 
 function sendOpts() {
-  if (live() && overlayReady) overlay.webContents.send("voice:opts", { opacity: ctx.getCfg().voiceOpacity, hotkey: ctx.getCfg().voiceHotkey, enabled: !!ctx.getCfg().voiceEnabled, mode: ctx.getCfg().voiceMode === "ai" ? "ai" : "search", aiOk: !!(typeof ctx.aiAvailable === "function" && ctx.aiAvailable()) });
+  if (!live()) return;
+  const c = ctx.getCfg();
+  // размер окна мог поменяться в настройках
+  if (overlay.isVisible()) { const b = overlay.getBounds(); if (b.width !== ow() || b.height !== oh()) overlay.setBounds({ x: b.x, y: b.y, width: ow(), height: oh() }); }
+  try { overlay.webContents.setZoomFactor(Math.min(1.5, Math.max(0.8, (+c.voiceFont || 100) / 100))); } catch (e) {} // шрифт оверлея
+  if (overlayReady) overlay.webContents.send("voice:opts", {
+    opacity: c.voiceOpacity, hotkey: c.voiceHotkey, enabled: !!c.voiceEnabled, mode: c.voiceMode === "ai" ? "ai" : "search",
+    aiOk: !!(typeof ctx.aiAvailable === "function" && ctx.aiAvailable()),
+    hide: c.voiceHide || 10, font: c.voiceFont || 100, ptt: !!c.voicePtt, mic: c.voiceMic || ""
+  });
 }
 
 function ensureOverlay() {
@@ -119,7 +135,7 @@ function ensureOverlay() {
   if (live()) return overlay;
   overlayReady = false;
   const w = new BrowserWindow({
-    width: OVERLAY_W, height: OVERLAY_H, show: false,
+    width: ow(), height: oh(), show: false,
     frame: false, transparent: true, backgroundColor: "#00000000", hasShadow: false,
     resizable: false, movable: true, minimizable: false, maximizable: false, fullscreenable: false,
     skipTaskbar: true, focusable: false, alwaysOnTop: true,
@@ -145,7 +161,7 @@ function ensureOverlay() {
 // Позиция по умолчанию: по центру сверху, на мониторе, где сейчас курсор
 function defaultPos() {
   const a = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
-  return { x: Math.round(a.x + (a.width - OVERLAY_W) / 2), y: a.y + 16 };
+  return { x: Math.round(a.x + (a.width - ow()) / 2), y: a.y + 16 };
 }
 
 // Сохранённая позиция — только если окно всё ещё попадает на какой-либо экран (монитор мог отключиться)
@@ -154,7 +170,7 @@ function savedPos() {
   if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
   const ok = screen.getAllDisplays().some((d) => {
     const a = d.workArea;
-    return p.x + OVERLAY_W - MIN_VISIBLE > a.x && p.x + MIN_VISIBLE < a.x + a.width && p.y >= a.y - 8 && p.y < a.y + a.height - 60;
+    return p.x + ow() - MIN_VISIBLE > a.x && p.x + MIN_VISIBLE < a.x + a.width && p.y >= a.y - 8 && p.y < a.y + a.height - 60;
   });
   return ok ? { x: Math.round(p.x), y: Math.round(p.y) } : null;
 }
@@ -163,7 +179,7 @@ function showOverlay() {
   if (!live()) return;
   if (!overlay.isVisible()) { // уже на экране — не двигаем, чтобы не сбрасывать позицию, выбранную мышкой
     const p = savedPos() || defaultPos();
-    overlay.setBounds({ x: p.x, y: p.y, width: OVERLAY_W, height: OVERLAY_H });
+    overlay.setBounds({ x: p.x, y: p.y, width: ow(), height: oh() });
   }
   overlay.setIgnoreMouseEvents(true, { forward: true });
   overlay.setAlwaysOnTop(true, "screen-saver");
@@ -177,7 +193,7 @@ let drag = null;
 function clampPos(x, y, cursor) {
   const a = screen.getDisplayNearestPoint(cursor).workArea;
   return {
-    x: Math.round(Math.min(a.x + a.width - MIN_VISIBLE, Math.max(a.x - OVERLAY_W + MIN_VISIBLE, x))),
+    x: Math.round(Math.min(a.x + a.width - MIN_VISIBLE, Math.max(a.x - ow() + MIN_VISIBLE, x))),
     y: Math.round(Math.min(a.y + a.height - 60, Math.max(a.y - 8, y)))
   };
 }
@@ -188,7 +204,7 @@ function tickDrag() {
   if (p.x === drag.last.x && p.y === drag.last.y) return;
   drag.last = p;
   drag.moved = true;
-  overlay.setBounds({ x: p.x, y: p.y, width: OVERLAY_W, height: OVERLAY_H }); // размер задаём явно — без «ползущих» размеров при масштабе 125/150%
+  overlay.setBounds({ x: p.x, y: p.y, width: ow(), height: oh() }); // размер задаём явно — без «ползущих» размеров при масштабе 125/150%
 }
 function startDrag() {
   if (!live()) return;
@@ -214,13 +230,73 @@ function scheduleIdle() {
   idleTimer = setTimeout(() => { if (live() && state === "idle") overlay.destroy(); }, IDLE_DESTROY_MS);
 }
 
+// 2.3: «нажал и держи». Пока клавиша зажата, Windows повторяет сочетание (автоповтор клавиатуры),
+// и globalShortcut срабатывает снова и снова. Повторы прекратились — клавишу отпустили: останавливаем запись.
+// Если повторов нет совсем (короткое нажатие или система их не шлёт), запись идёт как обычно: до паузы или второго нажатия.
+const PTT_RELEASE_MS = 450, PTT_FIRST_MS = 1100;
+let ptt = null; // {t0, last, reps, timer}
+function pttStop() { if (ptt) { clearInterval(ptt.timer); ptt = null; } }
+function pttTick() {
+  if (!ptt) return;
+  const now = Date.now();
+  if (ptt.reps > 0 && now - ptt.last > PTT_RELEASE_MS) { pttStop(); send("voice:cmd", "stop"); return; }
+  if (ptt.reps === 0 && now - ptt.t0 > PTT_FIRST_MS) { pttStop(); send("voice:cmd", "ptt-off"); }
+}
+function send(ch, v) { if (live() && overlayReady) overlay.webContents.send(ch, v); }
 function onHotkey() {
   const cfg = ctx.getCfg();
   if (!cfg.voiceEnabled || !ctx.getWin()) return;
+  if (ptt) { ptt.last = Date.now(); ptt.reps++; return; } // автоповтор зажатой клавиши
   const w = ensureOverlay();
   showOverlay();
+  if (cfg.voicePtt && state !== "listening") {
+    ptt = { t0: Date.now(), last: Date.now(), reps: 0, timer: setInterval(pttTick, 60) };
+    if (!overlayReady) { pendingStart = "start-ptt"; return; }
+    w.webContents.send("voice:cmd", "start-ptt");
+    return;
+  }
   if (!overlayReady) { pendingStart = true; return; }
   w.webContents.send("voice:cmd", state === "listening" ? "stop" : "start");
+}
+
+// 2.3: список микрофонов и проверка уровня для настроек памятки. Доступ к микрофону есть только у окна оверлея,
+// поэтому запрос идёт через него (окно при этом не показывается).
+let micSeq = 0;
+const micWait = new Map();
+function whenReady(ms) {
+  return new Promise((resolve) => {
+    const t0 = Date.now();
+    const tick = () => { if (live() && overlayReady) resolve(true); else if (Date.now() - t0 > ms) resolve(false); else setTimeout(tick, 80); };
+    tick();
+  });
+}
+async function mics() {
+  if (!ctx) return { ok: false, error: "Недоступно." };
+  ensureOverlay();
+  if (!(await whenReady(8000))) return { ok: false, error: "Окно голосового ввода не запустилось." };
+  const id = ++micSeq;
+  const r = await new Promise((resolve) => {
+    micWait.set(id, resolve);
+    overlay.webContents.send("voice:mics-req", id);
+    setTimeout(() => { if (micWait.has(id)) { micWait.delete(id); resolve({ ok: false, error: "Нет ответа от окна голосового ввода." }); } }, 8000);
+  });
+  if (!overlay.isVisible()) scheduleIdle();
+  return r;
+}
+async function test(on) {
+  if (!ctx) return { ok: false, error: "Недоступно." };
+  if (!on) { send("voice:test", { on: false }); return { ok: true }; }
+  ensureOverlay();
+  if (!(await whenReady(8000))) return { ok: false, error: "Окно голосового ввода не запустилось." };
+  overlay.webContents.send("voice:test", { on: true, mic: ctx.getCfg().voiceMic || "" });
+  scheduleIdle();
+  return { ok: true };
+}
+function resetPos() {
+  if (!live()) return;
+  stopDrag(false);
+  const p = defaultPos();
+  if (overlay.isVisible()) overlay.setBounds({ x: p.x, y: p.y, width: ow(), height: oh() });
 }
 
 function registerHotkey() {
@@ -239,7 +315,7 @@ function registerHotkey() {
 
 function destroy() {
   clearTimeout(idleTimer);
-  stopDrag(false);
+  stopDrag(false); pttStop();
   if (hotkeyActive) { try { globalShortcut.unregister(hotkeyActive); } catch (e) {} hotkeyActive = null; }
   if (live()) overlay.destroy();
   overlay = null; overlayReady = false; state = "idle"; pendingStart = false;
@@ -268,12 +344,12 @@ function init(c) {
     if (!fromOverlay(e)) return;
     overlayReady = true;
     sendOpts();
-    if (pendingStart) { pendingStart = false; overlay.webContents.send("voice:cmd", "start"); }
+    if (pendingStart) { const c = pendingStart === "start-ptt" ? "start-ptt" : "start"; pendingStart = false; overlay.webContents.send("voice:cmd", c); }
   });
   ipcMain.on("voice:status", (e, s) => { if (fromOverlay(e)) state = String(s); });
   ipcMain.on("voice:hide", (e) => {
     if (!fromOverlay(e)) return;
-    stopDrag(false);
+    stopDrag(false); pttStop();
     overlay.setIgnoreMouseEvents(true, { forward: true });
     overlay.hide(); state = "idle";
     if (ctx.getCfg().voiceEnabled) scheduleIdle();
@@ -293,7 +369,7 @@ function init(c) {
     ctx.getCfg().voicePos = null;
     ctx.saveCfg();
     const p = defaultPos();
-    overlay.setBounds({ x: p.x, y: p.y, width: OVERLAY_W, height: OVERLAY_H });
+    overlay.setBounds({ x: p.x, y: p.y, width: ow(), height: oh() });
   });
   ipcMain.on("voice:set-opacity", (e, v) => {
     if (!fromOverlay(e)) return;
@@ -309,6 +385,33 @@ function init(c) {
     return { ok: r.ok !== false, error: r.error || "", enabled: !!ctx.getCfg().voiceEnabled };
   });
   ipcMain.handle("voice:search", (e, cands) => (fromOverlay(e) ? runSearch(cands) : { ok: false, error: "Недоступно." }));
+  // 2.3: клик по карточке → статья в окне памятки; голосовые команды выполняет страница памятки (window.SA_voiceCmd)
+  ipcMain.on("voice:open", (e, t) => { if (fromOverlay(e) && typeof ctx.openTarget === "function") ctx.openTarget(String(t || "").slice(0, 120)); });
+  ipcMain.handle("voice:page-cmd", async (e, o) => {
+    if (!fromOverlay(e)) return { handled: false };
+    const w = ctx.getWin();
+    if (!w || w.isDestroyed()) return { handled: false };
+    const arg = { text: String((o && o.text) || "").slice(0, 300), query: String((o && o.query) || "").slice(0, 300) };
+    try {
+      const r = await w.webContents.executeJavaScript(`(typeof window.SA_voiceCmd==="function")?window.SA_voiceCmd(${JSON.stringify(arg)}):{handled:false}`, false);
+      if (r && r.handled && r.show && typeof ctx.showMain === "function") ctx.showMain();
+      return r && typeof r === "object" ? { handled: !!r.handled, ok: r.ok !== false, text: String(r.text || "").slice(0, 300) } : { handled: false };
+    } catch (err) {
+      return { handled: false };
+    }
+  });
+  ipcMain.on("voice:mics-res", (e, id, r) => {
+    if (!fromOverlay(e)) return;
+    const done = micWait.get(id);
+    if (!done) return;
+    micWait.delete(id);
+    const list = r && Array.isArray(r.list) ? r.list.slice(0, 30).map((m) => ({ id: String((m && m.id) || "").slice(0, 200), label: String((m && m.label) || "").slice(0, 120) })) : [];
+    done(r && r.ok ? { ok: true, list } : { ok: false, error: String((r && r.error) || "Микрофон недоступен.").slice(0, 200) });
+  });
+  ipcMain.on("voice:level", (e, v) => {
+    if (!fromOverlay(e) || typeof ctx.sendMain !== "function") return;
+    ctx.sendMain("senko:voice-level", { level: Math.max(0, Math.min(1, +((v && v.level) || 0))), end: !!(v && v.end), error: v && v.error ? String(v.error).slice(0, 200) : "" });
+  });
   // Вопрос ИИ из оверлея (текст уже распознан офлайн; аудио никуда не уходит)
   ipcMain.handle("voice:ai", (e, q) => (fromOverlay(e) && typeof ctx.askAi === "function" ? ctx.askAi(String(q || "").slice(0, 500), { short: true }) : { ok: false, error: "Недоступно." }));
 }
@@ -326,4 +429,4 @@ function status() {
   return { inited: !!ctx, state, overlay: live(), model, hotkey: hotkeyActive || "", hotkeyError };
 }
 
-module.exports = { init, registerHotkey, destroy, applyOpts: sendOpts, hotkeyError: () => hotkeyError, status };
+module.exports = { init, registerHotkey, destroy, applyOpts: sendOpts, hotkeyError: () => hotkeyError, status, mics, test, resetPos };

@@ -6,6 +6,10 @@ const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
 const voice = require("./voice"); // голосовой ввод и оверлей
+const radio = require("./dispatch"); // 2.6: рация диспетчера
+const mini = require("./mini"); // 2.4: мини-окно задержания поверх игры
+const trayMenu = require("./traymenu"); // 2.5: своё меню значка в трее вместо системного
+const dialogs = require("./dialogs"); // 2.8.0-beta.5: окна-сообщения в стиле программы
 const ai = require("./ai");       // ИИ-помощник (через прокси)
 
 // ───────────── НАСТРОЙКИ ─────────────
@@ -175,8 +179,30 @@ const DEFAULTS = {
   voiceOpacity: 80,          // непрозрачность оверлея, %
   voicePos: null,            // позиция оверлея на экране {x, y} (null — по центру сверху)
   voiceMode: "search",       // режим оверлея: search — поиск по памятке, ai — вопрос ИИ
+  voiceHide: 10,             // 2.3: через сколько секунд оверлей прячется после ответа (3–60)
+  voiceSize: "m",            // 2.3: размер окна оверлея s | m | l
+  voiceFont: 100,            // 2.3: размер шрифта оверлея, % (80–150)
+  voicePtt: false,           // 2.3: «нажал и держи» — запись, пока клавиша зажата
+  voiceMic: "",              // 2.3: выбранный микрофон (deviceId окна оверлея; пусто — как в Windows)
   ghost: false,              // «призрачный режим»: окно становится полупрозрачным, когда переключаешься в игру
-  ghostOpacity: 55           // прозрачность окна в призрачном режиме, %
+  ghostOpacity: 55,          // прозрачность окна в призрачном режиме, %
+  miniEnabled: true,         // 2.4: мини-окно задержания по горячей клавише
+  miniHotkey: "Ctrl+Alt+M",
+  miniOpacity: 90,           // непрозрачность мини-окна, %
+  miniWidth: 320,            // ширина мини-окна: 260 | 320 | 400
+  miniPos: null,             // позиция мини-окна {x, y}
+  betaUpdates: false,        // 2.4: бета-версии через автообновление (только для тестеров)
+  radioEnabled: true,        // 2.6: рация диспетчера (говорить, пока зажата клавиша)
+  radioHotkey: "Ctrl+Alt+R",
+  radioPin: false,           // рация всегда на экране (иначе прячется после ответа)
+  radioHide: 20,             // через сколько секунд прятать рацию (5–120)
+  radioVoice: true,          // диспетчер отвечает голосом
+  radioVoiceName: "",        // голос Windows (пусто — первый русский)
+  radioRate: 105,            // скорость речи, % (60–180)
+  radioSfx: true,            // щелчки и шипение рации
+  radioOnline: true,         // 2.6.1: распознавать речь онлайн (Whisper через ИИ-прокси), без сети — офлайн
+  radioSize: "m",            // размер рации s | m | l
+  radioPos: null             // позиция рации {x, y}
 };
 // 2.2: режимы окна (призрак по курсору, полоска, прилипание, профили, реакция на программу, поиск OBS и т. п.)
 const winx = require("./winx")({
@@ -190,13 +216,27 @@ const cfgFile = () => path.join(app.getPath("userData"), "app-settings.json");
 function loadCfg() {
   const j = readJson(cfgFile()) || {};
   cfg = { ...DEFAULTS, ...j };
-  for (const k of ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "maximized", "voiceEnabled", "ghost"]) cfg[k] = !!cfg[k];
+  for (const k of ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "maximized", "voiceEnabled", "ghost", "voicePtt", "miniEnabled", "betaUpdates", "radioEnabled", "radioPin", "radioVoice", "radioSfx", "radioOnline"]) cfg[k] = !!cfg[k];
+  if (!validHotkey(cfg.radioHotkey)) cfg.radioHotkey = DEFAULTS.radioHotkey;
+  cfg.radioHide = Math.min(120, Math.max(5, Math.round(+cfg.radioHide || DEFAULTS.radioHide)));
+  cfg.radioRate = Math.min(180, Math.max(60, Math.round(+cfg.radioRate || DEFAULTS.radioRate)));
+  if (!["s", "m", "l"].includes(cfg.radioSize)) cfg.radioSize = "m";
+  cfg.radioVoiceName = typeof cfg.radioVoiceName === "string" ? cfg.radioVoiceName.slice(0, 200) : "";
+  { const rp = cfg.radioPos; cfg.radioPos = rp && Number.isFinite(+rp.x) && Number.isFinite(+rp.y) ? { x: Math.round(+rp.x), y: Math.round(+rp.y) } : null; }
+  cfg.miniOpacity = Math.min(100, Math.max(30, Math.round(+cfg.miniOpacity || DEFAULTS.miniOpacity)));
+  if (!validHotkey(cfg.miniHotkey)) cfg.miniHotkey = DEFAULTS.miniHotkey;
+  const mp = cfg.miniPos;
+  cfg.miniPos = mp && Number.isFinite(+mp.x) && Number.isFinite(+mp.y) ? { x: Math.round(+mp.x), y: Math.round(+mp.y) } : null;
   cfg.ghostOpacity = Math.min(90, Math.max(20, Math.round(+cfg.ghostOpacity || DEFAULTS.ghostOpacity)));
   cfg.voiceOpacity = Math.min(100, Math.max(30, Math.round(+cfg.voiceOpacity || DEFAULTS.voiceOpacity)));
   const vp = cfg.voicePos;
   cfg.voicePos = vp && Number.isFinite(+vp.x) && Number.isFinite(+vp.y) ? { x: Math.round(+vp.x), y: Math.round(+vp.y) } : null;
   if (!validHotkey(cfg.voiceHotkey)) cfg.voiceHotkey = DEFAULTS.voiceHotkey;
   if (cfg.voiceMode !== "ai") cfg.voiceMode = "search";
+  cfg.voiceHide = Math.min(60, Math.max(3, Math.round(+cfg.voiceHide || DEFAULTS.voiceHide)));
+  if (!["s", "m", "l"].includes(cfg.voiceSize)) cfg.voiceSize = "m";
+  cfg.voiceFont = Math.min(150, Math.max(80, Math.round(+cfg.voiceFont || DEFAULTS.voiceFont)));
+  cfg.voiceMic = typeof cfg.voiceMic === "string" && cfg.voiceMic.length <= 200 ? cfg.voiceMic : "";
   cfg.opacity = Math.min(100, Math.max(30, Math.round(+cfg.opacity || 100)));
   if (!validHotkey(cfg.hotkey)) cfg.hotkey = DEFAULTS.hotkey;
   winx.fix(cfg);
@@ -250,9 +290,16 @@ function currentVersion() {
 function dlgParent() {
   return win && !win.isDestroyed() && win.isVisible() && !win.isMinimized() ? win : null;
 }
+// 2.8.0-beta.5: сообщения рисуются своим окном в стиле программы; системное окно Windows — только если своё не открылось
 function box(opts) {
   const p = dlgParent();
-  return p ? dialog.showMessageBox(p, opts) : dialog.showMessageBox(opts);
+  try {
+    return dialogs.show(opts, p);
+  } catch (e) {
+    const o = { ...opts }; delete o.rows;
+    if (opts.rows && opts.rows.length) o.detail = opts.rows.map((r) => r[0] + ": " + r[1]).join("\n") + (opts.detail ? "\n\n" + opts.detail : "");
+    return p ? dialog.showMessageBox(p, o) : dialog.showMessageBox(o);
+  }
 }
 
 async function checkForUpdate(manual) {
@@ -312,6 +359,35 @@ let updater = null;
 let manualCheck = false;
 let manualTimer = null;
 const upd = { state: "idle", version: "", percent: 0 };
+
+// 2.9: экран загрузки обновления. Появляется, когда найдена новая версия, и не исчезает, пока она не скачается; показывает шкалу и проценты
+let updWin = null;
+function showUpdScreen() {
+  if (updWin && !updWin.isDestroyed()) { updWin.show(); return; }
+  updWin = new BrowserWindow({
+    width: 440, height: 330, resizable: false, minimizable: false, maximizable: false, fullscreenable: false,
+    alwaysOnTop: true, center: true, frame: false, show: false, title: "Обновление Senko Assistant", autoHideMenuBar: true,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#0A0A0B" : "#F6F3EE", icon: iconPath(),
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
+  });
+  const w = updWin;
+  w.setMenu(null);
+  w.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  w.webContents.on("will-navigate", (e) => e.preventDefault());
+  w.once("ready-to-show", () => { if (!w.isDestroyed()) { w.show(); setUpdScreen(); } });
+  w.on("close", (e) => { if (!quitting && updWin === w) e.preventDefault(); }); // пока идёт загрузка, окно не закрывается (кроме выхода из программы)
+  w.on("closed", () => { if (updWin === w) updWin = null; });
+  w.loadFile(path.join(__dirname, "app", "update.html")).catch(() => {});
+}
+function setUpdScreen() {
+  if (!updWin || updWin.isDestroyed()) return;
+  updWin.webContents.executeJavaScript(`setV(${JSON.stringify(String(upd.version || ""))});setP(${+upd.percent || 0})`).catch(() => {});
+}
+function hideUpdScreen() {
+  if (!updWin || updWin.isDestroyed()) { updWin = null; return; }
+  const w = updWin; updWin = null;
+  w.destroy();
+}
 
 function info(message, detail) {
   return box({ type: "info", title: "Senko Assistant", message, detail, buttons: ["OK"], noLink: true });
@@ -388,16 +464,17 @@ function initUpdater() {
     const { autoUpdater } = require("electron-updater");
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.allowPrerelease = !!cfg.betaUpdates; // 2.4: тестеры получают бета-версии
     autoUpdater.logger = { info: (...a) => updLog("info", ...a), warn: (...a) => updLog("warn", ...a), error: (...a) => updLog("error", ...a), debug: () => {} };
     autoUpdater.on("checking-for-update", () => { if (upd.state !== "ready" && upd.state !== "downloading") upd.state = "checking"; });
     autoUpdater.on("update-available", (i) => {
       upd.state = "downloading"; upd.version = i.version; upd.percent = 0;
+      showUpdScreen();
       if (manualCheck) {
         endManual();
-        info(`Найдена версия ${i.version}`, "Она скачивается в фоне. Когда загрузка закончится, программа предложит перезапуск.");
       }
     });
-    autoUpdater.on("download-progress", (p) => { upd.percent = Math.round(p.percent || 0); });
+    autoUpdater.on("download-progress", (p) => { upd.percent = Math.round(p.percent || 0); setUpdScreen(); });
     autoUpdater.on("update-not-available", () => {
       if (upd.state === "checking") upd.state = "idle";
       if (manualCheck) {
@@ -409,6 +486,7 @@ function initUpdater() {
       updLog("error", "updater:", err);
       upd.lastError = { at: Date.now(), message: "Фоновая проверка", why: updReason(err).why, raw: updReason(err).raw };
       if (upd.state !== "ready") upd.state = "idle";
+      hideUpdScreen();
       if (manualCheck) {
         endManual();
         updFail("Не удалось проверить или скачать обновление.", err);
@@ -417,7 +495,8 @@ function initUpdater() {
     autoUpdater.on("update-downloaded", (i) => {
       endManual();
       upd.state = "ready"; upd.version = i.version; upd.percent = 100;
-      askRestart();
+      setUpdScreen();
+      setTimeout(() => { hideUpdScreen(); askRestart(); }, 900);
     });
     updater = autoUpdater;
     updLog("info", `start ${app.getVersion()}`);
@@ -436,7 +515,7 @@ function checkForAppUpdate(manual) {
     // обновление уже скачано или качается: сразу говорим, что с ним
     if (upd.state === "ready") { askRestart(); return; }
     if (upd.state === "downloading") {
-      info(`Скачивается версия ${upd.version}: ${upd.percent}%`, "Когда загрузка закончится, программа предложит перезапуск.");
+      showUpdScreen();
       return;
     }
     manualCheck = true;
@@ -587,6 +666,8 @@ function ensureTray() {
       tray = new Tray(nativeImage.createFromPath(iconPath()));
       tray.setToolTip("Senko Assistant");
       tray.on("click", toggleWindow);
+      // В Linux значок трея не получает правый щелчок без системного меню, там остаётся оно
+      if (process.platform !== "linux") tray.on("right-click", (e, b) => trayMenu.show(b || (tray && tray.getBounds())));
       updateTrayMenu();
     } catch (e) {
       tray = null;
@@ -596,8 +677,38 @@ function ensureTray() {
     tray = null;
   }
 }
+function trayState() {
+  const u = accounts.current();
+  const P = cfg.winProfiles || {};
+  return {
+    version: app.getVersion(),
+    user: u ? { login: u.login, nick: u.nick, offline: !!u.offline } : null,
+    visible: !!(win && !win.isDestroyed() && win.isVisible() && !win.isMinimized()),
+    alwaysOnTop: !!cfg.alwaysOnTop, compact: !!cfg.compact,
+    voiceEnabled: !!cfg.voiceEnabled, voiceHotkey: cfg.voiceHotkey,
+    mini: mini.isOpen(), miniHotkey: cfg.miniHotkey,
+    radio: radio.isOpen(), radioEnabled: !!cfg.radioEnabled, radioHotkey: cfg.radioHotkey,
+    profiles: [["game", "В игре"], ["desk", "За столом"]].filter(([k]) => P[k]).map(([k, n]) => ({ k, n, on: cfg.winProfile === k })),
+    staff: accounts.isStaff()
+  };
+}
+// действие из меню трея; true — меню остаётся открытым (переключатели), false — закрывается
+function trayAct(k, v) {
+  if (["alwaysOnTop", "compact", "voiceEnabled", "mini", "radio"].includes(k)) { applySet(k, !!v); return true; }
+  if (k === "profile") { if (cfg.winProfiles && cfg.winProfiles[v]) { winx.profUse(v); updateTrayMenu(); } return true; }
+  if (k === "toggle") {
+    if (win && !win.isDestroyed() && win.isVisible() && !win.isMinimized()) { if (cfg.tray) win.hide(); else win.minimize(); }
+    else showWindow();
+  } else if (k === "staff") openStaff();
+  else if (k === "update") { checkForAppUpdate(true); checkForUpdate(true); }
+  else if (k === "about") showAbout();
+  else if (k === "logout") logout();
+  else if (k === "quit") { quitting = true; app.quit(); }
+  return false;
+}
 function updateTrayMenu() {
   if (!tray) return;
+  if (process.platform !== "linux") { trayMenu.refresh(); return; }
   const u = accounts.current();
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -607,6 +718,8 @@ function updateTrayMenu() {
       { label: "Компактный режим", type: "checkbox", checked: cfg.compact, click: (m) => applySet("compact", m.checked) },
       ...(cfg.winProfiles.game || cfg.winProfiles.desk ? [{ label: "Профиль окна", submenu: [["game", "В игре"], ["desk", "За столом"]].filter(([k]) => cfg.winProfiles[k]).map(([k, n]) => ({ label: n, type: "radio", checked: cfg.winProfile === k, click: () => { winx.profUse(k); updateTrayMenu(); } })) }] : []),
       { label: `Голосовой ввод (${cfg.voiceHotkey})`, type: "checkbox", checked: cfg.voiceEnabled, click: (m) => applySet("voiceEnabled", m.checked) },
+      { label: `Мини-окно задержания (${cfg.miniHotkey})`, type: "checkbox", checked: mini.isOpen(), click: (m) => applySet("mini", m.checked) },
+      ...(cfg.radioEnabled ? [{ label: `Рация диспетчера (${cfg.radioHotkey})`, type: "checkbox", checked: radio.isOpen(), click: (m) => applySet("radio", m.checked) }] : []),
       { type: "separator" },
       ...(accounts.isStaff() ? [{ label: "Список сотрудников", click: openStaff }] : []),
       { label: "О программе", click: showAbout },
@@ -662,8 +775,16 @@ function getState() {
       compact: cfg.compact, rememberBounds: cfg.rememberBounds, opacity: cfg.opacity,
       tray: cfg.tray, notify: cfg.notify, ghost: cfg.ghost, ghostOpacity: cfg.ghostOpacity,
       voiceEnabled: cfg.voiceEnabled, voiceHotkey: cfg.voiceHotkey, voiceOpacity: cfg.voiceOpacity, voiceMode: cfg.voiceMode,
-      ghostBy: cfg.ghostBy, strip: cfg.strip, snap: cfg.snap, watchApps: cfg.watchApps.slice(), watchMode: cfg.watchMode, watchOpacity: cfg.watchOpacity, streamAuto: cfg.streamAuto
+      voiceHide: cfg.voiceHide, voiceSize: cfg.voiceSize, voiceFont: cfg.voiceFont, voicePtt: cfg.voicePtt, voiceMic: cfg.voiceMic,
+      ghostBy: cfg.ghostBy, strip: cfg.strip, snap: cfg.snap, watchApps: cfg.watchApps.slice(), watchMode: cfg.watchMode, watchOpacity: cfg.watchOpacity, streamAuto: cfg.streamAuto,
+      miniEnabled: cfg.miniEnabled, miniHotkey: cfg.miniHotkey, miniOpacity: cfg.miniOpacity, betaUpdates: cfg.betaUpdates,
+      radioEnabled: cfg.radioEnabled, radioHotkey: cfg.radioHotkey, radioPin: cfg.radioPin, radioHide: cfg.radioHide, radioVoice: cfg.radioVoice,
+      radioVoiceName: cfg.radioVoiceName, radioRate: cfg.radioRate, radioSfx: cfg.radioSfx, radioOnline: cfg.radioOnline, radioSize: cfg.radioSize
     },
+    miniOpen: mini.isOpen(),
+    radioOpen: radio.isOpen(),
+    radioError: radio.hotkeyError(),
+    miniError: mini.hotkeyError(),
     win: winx.state(),
     platform: process.platform,
     autostart: getAutostart(),
@@ -673,9 +794,10 @@ function getState() {
     version: app.getVersion(),
     dataVersion: currentVersion(),
     depts: accounts.DEPTS,
+    servers: accounts.SERVERS,
     shareUrl: require("./server-config").API_URL,
     sys: accounts.sys(),
-    user: u ? { login: u.login, nick: u.nick, static: u.static, discord: u.discord, telegram: u.telegram, phone: u.phone, role: u.role, roleName: u.roleName, org: u.org, rank: u.rank, rankName: u.rankName, offline: !!u.offline } : null
+    user: u ? { login: u.login, nick: u.nick, static: u.static, discord: u.discord, telegram: u.telegram, phone: u.phone, role: u.role, roleName: u.roleName, org: u.org, server: u.server || accounts.DEFAULT_SERVER, serverName: u.serverName || "", staffServer: u.staffServer || 0, rank: u.rank, rankName: u.rankName, offline: !!u.offline } : null
   };
 }
 function pushState() {
@@ -684,7 +806,7 @@ function pushState() {
 }
 
 function applySet(key, val) {
-  const bools = ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "voiceEnabled", "ghost"];
+  const bools = ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "voiceEnabled", "ghost", "voicePtt", "miniEnabled", "betaUpdates", "radioEnabled", "radioPin", "radioVoice", "radioSfx", "radioOnline"];
   let result = { ok: true };
   if (key === "autostart") {
     if (!app.isPackaged) return { ok: false, error: "Автозапуск доступен только в установленной версии." };
@@ -706,7 +828,65 @@ function applySet(key, val) {
     if (key === "voiceEnabled") {
       result = voice.registerHotkey();
       if (!result.ok) { cfg.voiceEnabled = false; voice.registerHotkey(); }
+      voice.applyOpts();
     }
+    if (key === "voicePtt") voice.applyOpts();
+    if (key === "miniEnabled") {
+      result = mini.registerHotkey();
+      if (!result.ok) { cfg.miniEnabled = false; mini.registerHotkey(); }
+      if (!val) mini.toggle(false);
+    }
+    if (key === "radioEnabled") {
+      result = radio.registerHotkey();
+      if (!result.ok) { cfg.radioEnabled = false; radio.registerHotkey(); }
+      if (!cfg.radioEnabled) radio.toggle(false);
+    }
+    if (key === "radioPin" || key === "radioVoice" || key === "radioSfx" || key === "radioOnline") radio.applyOpts();
+    if (key === "betaUpdates") {
+      if (updater) updater.allowPrerelease = val;
+      if (val) setTimeout(() => checkForAppUpdate(false), 1500);
+    }
+  } else if (key === "mini") {
+    mini.toggle(val === undefined || val === null ? undefined : !!val);
+  } else if (key === "miniHotkey") {
+    if (!validHotkey(val)) return { ok: false, error: "Нужно сочетание с Ctrl, Alt или Win и обычной клавишей." };
+    if ((val === cfg.hotkey && cfg.hotkeyEnabled) || (val === cfg.voiceHotkey && cfg.voiceEnabled)) return { ok: false, error: "Это сочетание уже занято в программе." };
+    const oldM = cfg.miniHotkey;
+    cfg.miniHotkey = val;
+    if (cfg.miniEnabled) {
+      result = mini.registerHotkey();
+      if (!result.ok) { cfg.miniHotkey = oldM; mini.registerHotkey(); }
+    }
+  } else if (key === "radio") {
+    if (!cfg.radioEnabled) return { ok: false, error: "Рация выключена в настройках." };
+    radio.toggle(val === undefined || val === null ? undefined : !!val);
+  } else if (key === "radioHotkey") {
+    if (!validHotkey(val)) return { ok: false, error: "Нужно сочетание с Ctrl, Alt или Win и обычной клавишей." };
+    if ((val === cfg.hotkey && cfg.hotkeyEnabled) || (val === cfg.voiceHotkey && cfg.voiceEnabled) || (val === cfg.miniHotkey && cfg.miniEnabled)) return { ok: false, error: "Это сочетание уже занято в программе." };
+    const oldR = cfg.radioHotkey;
+    cfg.radioHotkey = val;
+    if (cfg.radioEnabled) {
+      result = radio.registerHotkey();
+      if (!result.ok) { cfg.radioHotkey = oldR; radio.registerHotkey(); }
+    }
+    radio.applyOpts();
+  } else if (key === "radioHide") {
+    cfg.radioHide = Math.min(120, Math.max(5, Math.round(+val || DEFAULTS.radioHide)));
+    radio.applyOpts();
+  } else if (key === "radioRate") {
+    cfg.radioRate = Math.min(180, Math.max(60, Math.round(+val || DEFAULTS.radioRate)));
+    radio.applyOpts();
+  } else if (key === "radioVoiceName") {
+    cfg.radioVoiceName = typeof val === "string" ? val.slice(0, 200) : "";
+    radio.applyOpts();
+  } else if (key === "radioSize") {
+    cfg.radioSize = ["s", "m", "l"].includes(val) ? val : "m";
+    radio.applyOpts();
+  } else if (key === "radioPosReset") {
+    cfg.radioPos = null;
+  } else if (key === "miniOpacity") {
+    cfg.miniOpacity = Math.min(100, Math.max(30, Math.round(+val || DEFAULTS.miniOpacity)));
+    mini.applyOpacity();
   } else if (key === "hotkey") {
     if (!validHotkey(val)) return { ok: false, error: "Нужно сочетание с Ctrl, Alt или Win и обычной клавишей." };
     const old = cfg.hotkey;
@@ -731,6 +911,21 @@ function applySet(key, val) {
   } else if (key === "voiceOpacity") {
     cfg.voiceOpacity = Math.min(100, Math.max(30, Math.round(+val || DEFAULTS.voiceOpacity)));
     voice.applyOpts();
+  } else if (key === "voiceHide") {
+    cfg.voiceHide = Math.min(60, Math.max(3, Math.round(+val || DEFAULTS.voiceHide)));
+    voice.applyOpts();
+  } else if (key === "voiceSize") {
+    cfg.voiceSize = ["s", "m", "l"].includes(val) ? val : "m";
+    voice.applyOpts();
+  } else if (key === "voiceFont") {
+    cfg.voiceFont = Math.min(150, Math.max(80, Math.round(+val || DEFAULTS.voiceFont)));
+    voice.applyOpts();
+  } else if (key === "voiceMic") {
+    cfg.voiceMic = typeof val === "string" && val.length <= 200 ? val : "";
+    voice.applyOpts();
+  } else if (key === "voicePosReset") {
+    cfg.voicePos = null;
+    voice.resetPos();
   } else if (key === "opacity") {
     cfg.opacity = Math.min(100, Math.max(30, Math.round(+val || 100)));
     applyWindowCfg();
@@ -745,7 +940,7 @@ function applySet(key, val) {
   }
   saveCfg();
   // ползунки прозрачности шлют значение на каждом шаге: окно меняется сразу, а меню трея и страница обновляются после паузы
-  if (key === "opacity" || key === "ghostOpacity" || key === "voiceOpacity" || key === "watchOpacity") {
+  if (key === "opacity" || key === "ghostOpacity" || key === "voiceOpacity" || key === "watchOpacity" || key === "voiceHide" || key === "voiceFont" || key === "miniOpacity" || key === "radioRate" || key === "radioHide") {
     clearTimeout(slideTimer);
     slideTimer = setTimeout(() => { updateTrayMenu(); pushState(); }, 250);
     return result;
@@ -770,19 +965,19 @@ function releaseDate() {
 async function showAbout() {
   const u = accounts.current();
   const dv = currentVersion();
-  const lines = [
-    `Версия программы: ${app.getVersion()}`,
-    `Версия данных памятки: ${dv}`,
-    `Дата выпуска: ${releaseDate()}`,
-    `Автор: Hanami Senko | Senko Corporation`,
-    `Electron ${process.versions.electron} · Chromium ${process.versions.chrome}`
+  const rows = [
+    ["Версия программы", app.getVersion()],
+    ["Данные памятки", dv],
+    ["Дата выпуска", releaseDate()],
+    ["Автор", "Hanami Senko | Senko Corporation"],
+    ["Движок", `Electron ${process.versions.electron} · Chromium ${process.versions.chrome}`]
   ];
-  if (u) lines.push("", `Вы вошли как: ${u.login} (${u.nick})`);
+  if (u) rows.push(["Вы вошли как", `${u.login} (${u.nick})`]);
   const r = await box({
     type: "info",
     title: "О программе",
     message: "Senko Assistant",
-    detail: lines.join("\n"),
+    rows,
     buttons: ["Закрыть", "Проверить обновления", "Папка с данными"],
     defaultId: 0,
     cancelId: 0,
@@ -840,9 +1035,16 @@ ipcMain.handle("senko:staff-list", async (e) => {
 // Личный кабинет: изменение данных в аккаунте (сервер уведомляет владельца в Telegram)
 ipcMain.handle("senko:profile-update", async (e, d) => {
   if (!fromMain(e)) return { ok: false, error: "Недоступно." };
+  const srvBefore = parseInt((accounts.current() || {}).server, 10) || 12;
   const r = await accounts.updateProfile(d || {});
   if (r && (r.code === "auth" || r.code === "banned")) setTimeout(() => logout(r.error), 0);
-  else if (r && r.ok) { updateTrayMenu(); pushState(); }
+  else if (r && r.ok) {
+    updateTrayMenu(); pushState();
+    // 2.9: сервер сменился — у него свои законы и таблицы кодексов: подгружаем их и перезагружаем окно
+    if ((parseInt((accounts.current() || {}).server, 10) || 12) !== srvBefore) {
+      laws.sync().catch(() => {}).then(() => { if (win && !win.isDestroyed()) win.loadFile(pickIndex().file); });
+    }
+  }
   return r;
 });
 // Копия текущих данных перед сбросом или загрузкой из файла: дневная копия за сегодня потом перезапишется
@@ -992,7 +1194,12 @@ ipcMain.handle("senko:sync-rebase", async (e) => {
 });
 
 // Прогресс, рейтинг недели, смены и контрольные тесты (этап 4): только перечисленные действия сервера
-const PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password"];
+const PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password", "ads",
+  "status", "beta", "hooks", "discord_link", "srv_cfg", "events", "ideas", "patrol", // 2.4
+  "ai_dict", "ai_hist", "ai_check", "colleagues", "handoff"]; // 2.7, 2.8: коллеги, передача задержанного
+// 2.3: список микрофонов и проверка уровня для настроек (микрофон доступен только окну оверлея)
+ipcMain.handle("senko:voice-mics", async (e) => (fromMain(e) ? voice.mics() : { ok: false, error: "Недоступно." }));
+ipcMain.handle("senko:voice-test", async (e, on) => (fromMain(e) ? voice.test(!!on) : { ok: false, error: "Недоступно." }));
 ipcMain.handle("senko:api", async (e, action, data) => {
   if (!fromMain(e) || !PAGE_ACTIONS.includes(String(action))) return { ok: false, error: "Недоступно." };
   const r = await accounts.act(String(action), data && typeof data === "object" ? data : {});
@@ -1000,7 +1207,21 @@ ipcMain.handle("senko:api", async (e, action, data) => {
   return r;
 });
 // Сообщение об ошибке (уходит владельцу в Telegram) и ручная сверка с сервером (кнопка «Проверить снова»)
-ipcMain.handle("senko:bug", async (e, text, log) => (fromMain(e) ? accounts.bugReport(text, log) : { ok: false, error: "Недоступно." }));
+ipcMain.handle("senko:bug", async (e, text, log, shot) => (fromMain(e) ? accounts.bugReport(text, log, shot) : { ok: false, error: "Недоступно." }));
+// 2.4: снимок окна программы для сообщения об ошибке (JPEG, не больше 1280 px по ширине)
+ipcMain.handle("senko:shot", async (e) => {
+  if (!fromMain(e) || !win || win.isDestroyed()) return null;
+  try {
+    let img = await win.webContents.capturePage();
+    const sz = img.getSize();
+    if (sz.width > 1280) img = img.resize({ width: 1280, quality: "good" });
+    let q = 75, buf = img.toJPEG(q);
+    while (buf.length > 480000 && q > 35) { q -= 15; buf = img.toJPEG(q); }
+    return "data:image/jpeg;base64," + buf.toString("base64");
+  } catch (err) {
+    return null;
+  }
+});
 ipcMain.handle("senko:recheck", async (e) => {
   if (!fromMain(e)) return null;
   await verifySession();
@@ -1049,7 +1270,7 @@ ipcMain.handle("senko:save-info", (e) => {
   const ud = app.getPath("userData");
   return {
     savedAt, size: fileSize(mainFile()), backups, backupsSize,
-    laws: fileSize(path.join(ud, "laws.json")) + (() => { let n = 0; try { fs.readdirSync(path.join(ud, "laws-history")).forEach((f) => { n += fileSize(path.join(ud, "laws-history", f)); }); } catch (err) {} return n; })(),
+    laws: (() => { let n = 0; try { fs.readdirSync(ud).forEach((f) => { if (/^laws(-\d+)?\.json$/.test(f)) n += fileSize(path.join(ud, f)); else if (/^laws-history(-\d+)?$/.test(f)) fs.readdirSync(path.join(ud, f)).forEach((h) => { n += fileSize(path.join(ud, f, h)); }); }); } catch (err) {} return n; })(),
     extra: fileSize(path.join(ud, "detainees.json")) + fileSize(path.join(ud, "article-edits.json")),
     folder: saveDir().split(require("os").homedir()).join("~")
   };
@@ -1146,6 +1367,8 @@ ipcMain.handle("senko:sync", async (e) => {
 // ───────────── Законы с форума (сервер парсит форум раз в сутки в 00:05 МСК, приложение сверяет версию каждые 3 часа) ─────────────
 const laws = require("./laws-sync")({
   dataDir: () => app.getPath("userData"),
+  // 2.9: законы берутся для сервера вошедшего игрока (Boston, если не вошёл или старый профиль)
+  server: () => { const u = accounts.current(); return (u && parseInt(u.server, 10)) || 12; },
   // тексты законов отдаёт сервер (расшифровка там, ключа в программе нет)
   api: (b) => accounts.authed(b, 90000),
   onProgress: (p) => {
@@ -1198,6 +1421,8 @@ ipcMain.handle("auth:state", (e) =>
     ? {
         lastLogin: accounts.lastLogin(),
         depts: accounts.DEPTS,
+        servers: accounts.SERVERS,
+        defaultServer: accounts.DEFAULT_SERVER,
         roles: accounts.ROLES,
         gov: accounts.GOV_ORG,
         version: app.getVersion(),
@@ -1360,14 +1585,21 @@ function initSystem() {
   ensureTray();
   registerHotkey();
   voice.registerHotkey();
+  mini.registerHotkey();
+  radio.registerHotkey();
   applyWindowCfg();
   updateTrayMenu();
 }
 function tearDownSystem() {
   if (tray) { tray.destroy(); tray = null; }
+  trayMenu.destroy();
   try { globalShortcut.unregisterAll(); } catch (e) {}
   hotkeyActive = null;
   voice.destroy();
+  mini.destroy();
+  radio.destroy();
+  mini.registerHotkey(); // сбросить запомненную клавишу (все уже сняты выше); снова включится в initSystem
+
 }
 
 function createMainWindow() {
@@ -1482,7 +1714,47 @@ app.whenReady().then(() => {
     applySet,  // оверлей переключает настройки через общий обработчик (трей и окно памятки обновятся сами)
     saveCfg,   // сохранить конфиг (позиция оверлея)
     askAi: ai.ask,               // вопрос ИИ из оверлея
-    aiAvailable: ai.configured   // подключён ли ИИ-сервис (иначе переключатель режима неактивен)
+    // 2.3: клик по карточке или команда «открой…» — показать окно памятки на нужной статье или вкладке
+    openTarget: (t) => {
+      if (!win || win.isDestroyed()) return;
+      showWindow();
+      if (typeof t === "string" && (OPEN_RE.test(t) || /^law:[\w-]{1,40}(?::[\w.\-]{1,60})?$/.test(t))) win.webContents.send("senko:open", t);
+    },
+    showMain: () => { if (win && !win.isDestroyed()) showWindow(); },
+    sendMain: (ch, data) => { if (win && !win.isDestroyed()) win.webContents.send(ch, data); },
+    aiAvailable: ai.configured,  // подключён ли ИИ-сервис (иначе переключатель режима неактивен)
+    micOk: (wc) => radio.isWc(wc) // 2.6: микрофон и окну рации
+  });
+  trayMenu.init({ state: trayState, act: trayAct });
+  dialogs.init();
+  mini.init({
+    getCfg: () => cfg,
+    saveCfg,
+    changed: () => { updateTrayMenu(); pushState(); },
+    fromMain,
+    openTarget: (t) => {
+      if (!win || win.isDestroyed()) return;
+      showWindow();
+      if (OPEN_RE.test(t)) win.webContents.send("senko:open", t);
+    },
+    padCheck: (i) => { // 2.8: блокнот в мини-окне: галочка или -1 — открыть блокнот
+      if (!win || win.isDestroyed()) return;
+      if (i < 0) showWindow();
+      win.webContents.send("senko:pad-check", i);
+    }
+  });
+  radio.init({
+    getWin: () => (win && !win.isDestroyed() ? win : null),
+    getCfg: () => cfg,
+    saveCfg,
+    changed: () => { updateTrayMenu(); pushState(); },
+    fromMain,
+    stt: (d) => accounts.act("stt", d, 22000),
+    openTarget: (t) => {
+      if (!win || win.isDestroyed()) return;
+      showWindow();
+      if (OPEN_RE.test(t)) win.webContents.send("senko:open", t);
+    }
   });
   ai.init({
     getWin: () => (win && !win.isDestroyed() ? win : null),

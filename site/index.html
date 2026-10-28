@@ -10,7 +10,7 @@
 <meta property="og:type" content="website">
 <meta property="og:title" content="Senko Assistant · памятка по законам Majestic RP Boston">
 <meta property="og:description" content="Кодексы с поиском, таймер задержания, калькулятор наказаний, рапорты и обучение. Законы обновляются сами каждый день.">
-<meta property="og:image" content="https://senko-assistant.pages.dev/img/og.png">
+<meta property="og:image" content="https://senko-assistant.site/img/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -40,6 +40,8 @@
  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></symbol>
  <symbol id="i-auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor"/></symbol>
+ <symbol id="i-web" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3Z"/></symbol>
+ <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></symbol>
  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
@@ -56,11 +58,13 @@
    <a href="/#features">Возможности</a>
    <a href="/#screens">Скриншоты</a>
    <a href="/#download">Скачать</a>
+   <a href="/app/">Веб-версия</a>
    <a href="/#team">Команда</a>
    <a href="/#faq">Вопросы</a>
   </nav>
   <div class="top-act">
    <button class="icon-btn" id="themeBtn" type="button" aria-label="Тема: как в системе" title="Тема: как в системе"><svg class="ico"><use href="#i-auto"/></svg></button>
+   <a class="btn btn-s btn-sm top-web" href="/app/"><svg class="ico" style="width:18px;height:18px"><use href="#i-web"/></svg>Открыть</a>
    <a class="btn btn-p btn-sm" href="/#download"><svg class="ico" style="width:18px;height:18px"><use href="#i-down"/></svg>Скачать</a>
    <button class="icon-btn burger" id="burger" type="button" aria-label="Меню" aria-expanded="false" aria-controls="nav"><svg class="ico"><use href="#i-menu"/></svg></button>
   </div>
@@ -77,10 +81,10 @@
    <p class="lead">Senko Assistant помогает сотрудникам LSPD, LSCSD, FIB, SANG и Government на Majestic RP Boston: найдёт статью, посчитает наказание, проведёт по порядку задержания и проверит знания. Законы обновляются сами каждый день.</p>
    <div class="hero-cta">
     <a class="btn btn-p btn-lg" href="#download" data-dl><svg class="ico"><use href="#i-win"/></svg>Скачать для Windows</a>
-    <a class="btn btn-s btn-lg" href="https://t.me/majestic_judiciary" target="_blank" rel="noopener"><svg class="ico" style="color:#2AABEE"><use href="#i-tg"/></svg>Telegram-канал</a>
+    <a class="btn btn-s btn-lg" href="/app/"><svg class="ico"><use href="#i-web"/></svg>Открыть в браузере</a>
    </div>
    <div class="hero-note">
-    <span><svg class="ico"><use href="#i-check"/></svg>Windows 10 и 11</span>
+    <span><svg class="ico"><use href="#i-check"/></svg>Windows 10 и 11, телефон и браузер</span>
     <span><svg class="ico"><use href="#i-check"/></svg>Обновляется сама</span>
     <span><svg class="ico"><use href="#i-check"/></svg>Работает без интернета</span>
    </div>
@@ -172,7 +176,7 @@
     <div class="adv-item rv"><div class="ic"><svg class="ico"><use href="#i-bolt"/></svg></div><div><h3>Законы всегда актуальные</h3><p>Сервер каждый день сверяет законы с форумом и сам обновляет кодексы. Новые и изменённые статьи помечаются на 14 дней.</p></div></div>
     <div class="adv-item rv"><div class="ic"><svg class="ico"><use href="#i-offline"/></svg></div><div><h3>Работает без интернета</h3><p>Кодексы, калькулятор, таймеры и заметки хранятся на компьютере. Интернет нужен только для входа, синхронизации и обновлений.</p></div></div>
     <div class="adv-item rv"><div class="ic"><svg class="ico"><use href="#i-shield"/></svg></div><div><h3>Ваши данные под защитой</h3><p>Пароль хранится только как хэш, есть PIN при запуске. Заметки, задержания и вопросы ИИ руководству не видны.</p></div></div>
-    <div class="adv-item rv"><div class="ic"><svg class="ico"><use href="#i-gift"/></svg></div><div><h3>Бесплатно и без рекламы внутри</h3><p>Все функции доступны всем. Новые версии приходят сами и ставятся в один клик.</p></div></div>
+    <div class="adv-item rv"><div class="ic"><svg class="ico"><use href="#i-gift"/></svg></div><div><h3>Бесплатно для всех</h3><p>Все функции доступны всем, без подписок и платных уровней. Новые версии приходят сами и ставятся в один клик.</p></div></div>
    </div>
   </div>
   <div class="rv">
@@ -194,6 +198,7 @@
     <p style="color:var(--muted)">Одна кнопка, и установщик последней версии начнёт скачиваться. Дальше программа обновляется сама.</p>
     <a class="btn btn-p btn-lg" href="https://github.com/Kofemanchik/Senko-Assistant/releases/latest" data-dl id="dlBtn"><svg class="ico"><use href="#i-down"/></svg>Скачать <span data-ver>2.2.0</span> <small data-size></small></a>
     <p class="dl-alt" id="dlAlt">Ссылка всегда ведёт на самую новую версию.</p>
+    <a class="dl-web" href="/app/"><svg class="ico"><use href="#i-phone"/></svg><span><b>Нет Windows или вы с телефона?</b> Откройте веб-версию: тот же аккаунт, избранное, заметки и история задержаний. Её можно поставить на экран телефона как приложение.</span><svg class="ico go"><use href="#i-web"/></svg></a>
     <ol class="steps">
      <li><span><b>Скачайте и запустите установщик.</b> Программа ставится в вашу папку пользователя, права администратора не нужны.</span></li>
      <li><span><b>Если Windows покажет «Система Windows защитила ваш компьютер»,</b> нажмите «Подробнее», затем «Выполнить в любом случае». Так бывает с программами без платной цифровой подписи.</span></li>
@@ -293,7 +298,7 @@
    <details><summary>Как обновляются законы?</summary><p>Каждый день в 00:05 по московскому времени сервер сверяет законы с форумом. Программа проверяет изменения при запуске и каждые 3 часа и сама обновляет кодексы. Изменённые статьи помечаются, чтобы вы их не пропустили.</p></details>
    <details><summary>Почему Windows предупреждает при установке?</summary><p>У установщика нет платной цифровой подписи, поэтому SmartScreen показывает предупреждение для новых программ. Нажмите «Подробнее», затем «Выполнить в любом случае». Скачивайте программу только с этого сайта или из нашего Telegram-канала.</p></details>
    <details><summary>Кто видит мои данные?</summary><p>Руководство вашего ведомства видит ваш ник, статик, роль и сводку работы. Заметки, подробности задержаний и вопросы ИИ-помощнику не видит никто, кроме вас. Подробно всё описано в <a href="/privacy.html">Политике конфиденциальности</a>.</p></details>
-   <details><summary>Будет ли версия для телефона?</summary><p>Да, мы готовим веб-версию для ПК и телефона с тем же аккаунтом, что и в программе.</p></details>
+   <details><summary>Есть ли версия для телефона?</summary><p>Да, <a href="/app/">веб-версия</a> открывается на телефоне и в любом браузере. Вход тот же, что в программе, а избранное, заметки, папки и история задержаний общие. На телефоне её можно добавить на экран «Домой», и она откроется как приложение. Окно поверх игры, горячие клавиши Windows и голосовой ввод есть только в программе.</p></details>
    <details><summary>Нашёл ошибку. Куда писать?</summary><p>В программе есть кнопка «Сообщить об ошибке» в настройках и флажок ⚑ у каждой статьи. Ещё можно написать в Discord: <b>hanamis1</b>.</p></details>
   </div>
  </div>
@@ -328,7 +333,11 @@
      <li><a href="/#features">Возможности</a></li>
      <li><a href="/#screens">Скриншоты</a></li>
      <li><a href="/#download">Скачать</a></li>
+     <li><a href="/app/">Веб-версия</a></li>
      <li><a href="/#faq">Вопросы</a></li>
+     <li><a href="/guide.html">Как пользоваться</a></li>
+     <li><a href="/status.html">Состояние сервисов</a></li>
+     <li><a href="/panel/" rel="nofollow">Панель модератора</a></li>
     </ul>
    </div>
    <div>
@@ -360,6 +369,7 @@
 </footer>
 <!--/FOOTER-->
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="/app/config.js" defer></script>
 <script src="/assets/site.js" defer></script>
 </body>
 </html>

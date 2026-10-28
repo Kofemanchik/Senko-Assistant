@@ -30,6 +30,20 @@ async function retrieve(question) {
   }
 }
 
+async function local(question) {
+  const w = ctx.getWin();
+  if (!w || w.isDestroyed()) return null;
+  try {
+    const r = await w.webContents.executeJavaScript(
+      `(typeof window.__senkoAiLocal==="function")?window.__senkoAiLocal(${JSON.stringify(question)}):null`, false);
+    if (!r || typeof r.answer !== "string" || !r.answer) return null;
+    const sources = (Array.isArray(r.sources) ? r.sources : []).slice(0, 10).map((s) => ({ ref: String((s && s.ref) || ""), go: String((s && s.go) || ""), lw: String((s && s.lw) || "") }));
+    return { answer: r.answer.slice(0, 4000), sources };
+  } catch (e) {
+    return null;
+  }
+}
+
 // Номер записи журнала (его возвращает сервер) нужен только для оценки 👍/👎
 function track(logId) {
   if (!logId) return "";
@@ -79,6 +93,9 @@ async function ask(question, opts) {
   if (aboutCreator(question)) {
     return { ok: true, answer: CREATOR_ANSWERS[creatorTurn++ % CREATOR_ANSWERS.length], left: null, cached: false, sources: [], fid: "" };
   }
+  // 2.3: номер статьи без кодекса («17.1») и «какие законы знаешь» — ответ из памятки, без ИИ и без лимита
+  const loc = await local(question);
+  if (loc) return { ok: true, answer: loc.answer, left: null, cached: false, local: true, sources: loc.sources, fid: "" };
   if (busy) return { ok: false, error: "Предыдущий вопрос ещё обрабатывается." };
   if (Date.now() - lastAt < MIN_GAP_MS) return { ok: false, error: "Подождите пару секунд перед следующим вопросом." };
   busy = true; lastAt = Date.now();
@@ -90,7 +107,7 @@ async function ask(question, opts) {
       const error = j && j.code === "auth" ? "Войдите в аккаунт, чтобы задавать вопросы ИИ." : (j && j.error) || "ИИ-сервис не ответил. Попробуйте позже.";
       return { ok: false, error, limit: !!(j && j.limit), sources };
     }
-    return { ok: true, answer: String(j.answer || ""), left: typeof j.left === "number" ? j.left : null, cached: !!j.cached, sources, fid: track(j.logId) };
+    return { ok: true, answer: String(j.answer || ""), left: typeof j.left === "number" ? j.left : null, bonus: typeof j.bonus === "number" ? j.bonus : null, cached: !!j.cached, sources, fid: track(j.logId) };
   } catch (e) {
     return { ok: false, error: "Не удалось связаться с ИИ-сервисом. Проверьте подключение к интернету." };
   } finally {

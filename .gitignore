@@ -1,5 +1,10 @@
 node_modules/
 dist/
+*.log
+
+voice-model/model.tar.gz
+update/.prev*.json
+
 # ключи никогда не коммитятся (с 2.2.1 программе они не нужны)
 laws-key.json
 ai-key.json

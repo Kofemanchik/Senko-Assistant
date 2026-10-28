@@ -4,13 +4,14 @@
   var $ = function (id) { return document.getElementById(id); };
   var MODEL_URL = "senko-voice://app/model.tar.gz";
   var MAX_LISTEN_MS = 15000;   // запись останавливается сама
-  var HIDE_AFTER_MS = 10000;   // оверлей прячется сам после ответа
+  var HIDE_AFTER_MS = 10000;    // оверлей прячется сам после ответа (с 2.3 время задаётся в настройках)
+  var MAX_PTT_MS = 30000;      // «нажал и держи»: запись не дольше 30 секунд
   var panel = $("panel"), title = $("title"), said = $("said"), res = $("res"), foot = $("foot");
   var bars = $("bars").children;
-  var tools = $("tools"), grip = $("grip"), op = $("op"), opv = $("opv"), pwr = $("pwr"), modeBtn = $("mode"), modeT = $("modeT");
+  var tools = $("tools"), grip = $("grip"), modeBtn = $("mode"), modeT = $("modeT");
 
   var S = { state: "idle", modelP: null, model: null, token: 0, sess: null, hideT: null, hideMs: 0, hotkey: "",
-            enabled: true, over: false, dragging: false, sliding: false, opT: null, mode: "search", aiOk: false };
+            enabled: true, over: false, overRes: false, dragging: false, mode: "search", aiOk: false, mic: "", ptt: false, test: null };
 
   function setState(st, titleText, saidNode) {
     S.state = st;
@@ -28,8 +29,8 @@
     var b = document.createElement("b"); b.textContent = text; f.appendChild(b);
     return f;
   }
-  // Пока курсор над панелью управления, тянут окно или двигают ползунок — оверлей не прячем
-  function busy() { return S.over || S.dragging || S.sliding; }
+  // Пока курсор над панелью управления или над ответом, или окно тянут мышкой — оверлей не прячем
+  function busy() { return S.over || S.overRes || S.dragging; }
   function scheduleHide(ms) {
     clearTimeout(S.hideT);
     S.hideMs = ms || HIDE_AFTER_MS;
@@ -42,7 +43,7 @@
   function hide() {
     clearTimeout(S.hideT); S.hideMs = 0;
     S.state = "idle"; panel.className = ""; clearRes();
-    S.over = false; S.dragging = false; S.sliding = false;
+    S.over = false; S.overRes = false; S.dragging = false;
     grip.classList.remove("drag");
     api.hide();
   }
@@ -54,23 +55,18 @@
     scheduleHide(o.ms);
   }
 
-  /* ───── панель управления: прозрачность, вкл/выкл, перетаскивание ───── */
+  /* ───── панель управления: перетаскивание и режим ───── */
   function applyAlpha(p) {
     p = Math.min(100, Math.max(30, Math.round(+p || 80)));
     document.documentElement.style.setProperty("--a", String(p / 100));
-    opv.textContent = p + "%";
     return p;
-  }
-  function renderPower() {
-    pwr.classList.toggle("off", !S.enabled);
-    pwr.title = S.enabled ? "Отключить голосовой ввод" : "Включить голосовой ввод";
   }
 
   // Мышь ловим только над панелью управления — остальной оверлей по-прежнему пропускает клики
   tools.addEventListener("mouseenter", function () { S.over = true; clearTimeout(S.hideT); api.interactive(true); });
   tools.addEventListener("mouseleave", function () {
     S.over = false;
-    if (!S.dragging && !S.sliding) { api.interactive(false); resumeHide(); }
+    if (!S.dragging) { api.interactive(false); resumeHide(); }
   });
   function settle() { // после перетаскивания / ползунка: если курсор уже не над панелью — снова «насквозь»
     if (!tools.matches(":hover")) { S.over = false; api.interactive(false); }
@@ -98,22 +94,7 @@
   grip.addEventListener("lostpointercapture", endDrag);
   grip.addEventListener("dblclick", function () { api.resetPos(); });
 
-  // прозрачность
-  function sendOpacity() { clearTimeout(S.opT); api.setOpacity(+op.value); }
-  op.addEventListener("pointerdown", function () { S.sliding = true; clearTimeout(S.hideT); });
-  op.addEventListener("input", function () {
-    applyAlpha(op.value);                  // сразу видно на экране
-    clearTimeout(S.opT); S.opT = setTimeout(sendOpacity, 150); // сохранение — когда ползунок притормозил
-  });
-  function endSlide() {
-    if (!S.sliding) return;
-    S.sliding = false;
-    sendOpacity();
-    settle();
-  }
-  op.addEventListener("change", endSlide);
-  window.addEventListener("pointerup", endSlide);
-  window.addEventListener("blur", function () { endSlide(); endDrag(); });
+  window.addEventListener("blur", function () { endDrag(); });
 
   // режим работы: «Поиск» по памятке или вопрос «ИИ»
   function renderMode() {
@@ -134,23 +115,19 @@
     }
   });
 
-  // включить / отключить голосовой ввод
-  pwr.addEventListener("click", async function () {
-    var want = !S.enabled, r;
-    try { r = await api.setEnabled(want); } catch (e) { r = { ok: false, enabled: S.enabled, error: "Не удалось переключить." }; }
-    S.enabled = !!(r && r.enabled);
-    renderPower();
-    if (!want) { // выключаем: остановить запись и отменить поиск, который мог идти
-      S.token++;
-      if (S.sess) { S.sess.done = true; cleanup(S.sess); }
-    }
-    if (!r || !r.ok) {
-      showMessage("error", (r && r.error) || "Не удалось переключить", "Голосовой ввод " + (S.enabled ? "включён" : "отключён") + ".", { noHint: true });
-    } else if (S.enabled) {
-      showMessage("answer", "Голосовой ввод включён", S.hotkey ? "Нажмите " + S.hotkey + ", чтобы задать вопрос." : "", { noHint: true, ms: 6000 });
-    } else {
-      showMessage("off", "Голосовой ввод отключён", "Включить снова: кнопка справа вверху (пока окно на экране), значок в трее или настройки программы.", { noHint: true, ms: 9000 });
-    }
+  // 2.3: над ответом мышь тоже ловим — карточки кликабельны (открывают статью в окне памятки)
+  res.addEventListener("mouseenter", function () { if (!res.querySelector(".go")) return; S.overRes = true; clearTimeout(S.hideT); api.interactive(true); });
+  res.addEventListener("mouseleave", function () {
+    if (!S.overRes) return;
+    S.overRes = false;
+    if (!S.over && !S.dragging) { api.interactive(false); resumeHide(); }
+  });
+  res.addEventListener("click", function (e) {
+    var t = e.target.closest && e.target.closest("[data-target]");
+    if (!t) return;
+    api.open(t.getAttribute("data-target"));
+    S.overRes = false; api.interactive(false);
+    hide();
   });
 
   /* ───── модель ───── */
@@ -185,14 +162,15 @@
   function finish(sess) {
     if (sess.done) return;
     sess.done = true;
-    var text = (sess.text || sess.partial || "").trim();
+    var text = (sess.ptt ? ((sess.text ? sess.text + " " : "") + (sess.partial || "")) : (sess.text || sess.partial || "")).trim();
     cleanup(sess);
     if (!text) { showMessage("error", "Не расслышал", "Нажмите горячую клавишу и повторите запрос."); return; }
     answer(text);
   }
 
-  async function startListening() {
+  async function startListening(ptt) {
     if (S.state === "listening") return;
+    stopTest(false);
     clearTimeout(S.hideT); S.hideMs = 0;
     var token = ++S.token;
     S.state = "starting"; // чтобы поздний ответ прежнего поиска не затёр новую запись
@@ -204,24 +182,26 @@
     if (token !== S.token) return;
 
     var stream;
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } }); }
+    try { stream = await openMic(); }
     catch (e) { return showMessage("error", "Нет доступа к микрофону", "Включите доступ к микрофону для классических приложений: Параметры Windows → Конфиденциальность → Микрофон."); }
     if (token !== S.token) { stream.getTracks().forEach(function (t) { t.stop(); }); return; }
 
     var actx = new AudioContext();
     try { await actx.resume(); } catch (e) {}
     var rec = new model.KaldiRecognizer(actx.sampleRate);
-    var sess = { stream: stream, ctx: actx, rec: rec, text: "", partial: "", done: false, timer: null, node: null, src: null };
+    var sess = { stream: stream, ctx: actx, rec: rec, text: "", partial: "", done: false, timer: null, node: null, src: null, ptt: !!ptt };
     S.sess = sess;
 
     rec.on("result", function (m) {
       var t = (m && m.result && m.result.text || "").trim();
-      if (t) { sess.text = t; finish(sess); }
+      if (!t) return;
+      if (sess.ptt) { sess.text = (sess.text ? sess.text + " " : "") + t; said.textContent = sess.text; return; } // клавиша зажата — копим фразы
+      sess.text = t; finish(sess);
     });
     rec.on("partialresult", function (m) {
       var p = (m && m.result && m.result.partial || "").trim();
       sess.partial = p;
-      if (p && !sess.done) said.textContent = p;
+      if (p && !sess.done) said.textContent = (sess.ptt && sess.text ? sess.text + " " : "") + p;
     });
 
     sess.node = actx.createScriptProcessor(4096, 1, 1);
@@ -235,10 +215,11 @@
     sess.src = actx.createMediaStreamSource(stream);
     sess.src.connect(sess.node);
     sess.node.connect(actx.destination); // выход тихий (нули), нужен чтобы узел работал
-    sess.timer = setTimeout(function () { finish(sess); }, MAX_LISTEN_MS);
+    sess.timer = setTimeout(function () { finish(sess); }, ptt ? MAX_PTT_MS : MAX_LISTEN_MS);
 
     setState("listening", S.mode === "ai" && S.aiOk ? "Слушаю… (вопрос ИИ)" : "Слушаю…");
-    foot.textContent = "Говорите. Пауза — и я " + (S.mode === "ai" && S.aiOk ? "спрошу ИИ" : "начну искать") + (S.hotkey ? " (или " + S.hotkey + ")" : "");
+    foot.textContent = ptt ? "Говорите, пока держите " + (S.hotkey || "клавишу") + ". Отпустите — и я " + (S.mode === "ai" && S.aiOk ? "спрошу ИИ" : "начну искать")
+      : "Говорите. Пауза — и я " + (S.mode === "ai" && S.aiOk ? "спрошу ИИ" : "начну искать") + (S.hotkey ? " (или " + S.hotkey + ")" : "");
   }
 
   function stopListening() {
@@ -271,10 +252,13 @@
     clearRes();
     setState("answer", "Ответ ИИ", bold("Вы сказали: ", "«" + text + "»"));
     res.appendChild(el("div", "aians", ans));
-    var refs = (r.sources || []).map(function (s) { return String(s.ref || "").split(" — ")[0]; }).filter(Boolean).slice(0, 5);
+    var refs = (r.sources || []).map(function (s) {
+      var t = s.go ? String(s.go).replace("|", ":") : s.lw ? "law:" + String(s.lw).replace("|", ":") : "";
+      return { ref: String(s.ref || "").split(" — ")[0], t: t };
+    }).filter(function (x) { return x.ref; }).slice(0, 5);
     if (refs.length) {
       var box = el("div", "srcs", "Статьи:");
-      refs.forEach(function (x) { box.appendChild(el("span", "chip", x)); });
+      refs.forEach(function (x) { var c = el("span", "chip" + (x.t ? " go" : ""), x.ref); if (x.t) { c.setAttribute("data-target", x.t); c.title = "Открыть в памятке"; } box.appendChild(c); });
       res.appendChild(box);
     }
     hint();
@@ -285,6 +269,10 @@
 
   async function answer(text) {
     var cand = SenkoNum.candidates(text);
+    // 2.3: голосовые команды («добавь в калькулятор 12.8», «запусти таймер», «открой УК 12.8») — до поиска и ИИ
+    var c = null;
+    try { c = await api.cmd({ text: text, query: cand.query }); } catch (e) { c = null; }
+    if (c && c.handled) return showMessage(c.ok ? "answer" : "error", c.text || "Готово", "«" + text + "»", { ms: 5000 });
     if (S.mode === "ai" && S.aiOk) return askAi(text, cand);
     clearRes();
     setState("thinking", "Ищу в памятке…", bold("Вы сказали: ", "«" + text + "»"));
@@ -299,8 +287,9 @@
     setState("answer", "Найдено: " + r.total, bold("Запрос: ", "«" + (r.query || text) + "»" + (r.query && r.query !== cand.query ? " (упрощённый)" : "")));
     if (r.ref) res.appendChild(el("div", "ref", r.ref));
     r.items.forEach(function (it) {
-      var card = el("div", "card");
-      var h = el("h4"); h.appendChild(el("span", "k", it.kind)); h.appendChild(document.createTextNode("ст. " + it.code + " · " + it.title));
+      var card = el("div", "card" + (it.target ? " go" : ""));
+      if (it.target) { card.setAttribute("data-target", it.target); card.title = "Открыть в памятке"; }
+      var h = el("h4"); if (it.target) h.appendChild(el("span", "open", "открыть ↗")); h.appendChild(el("span", "k", it.kind)); h.appendChild(document.createTextNode("ст. " + it.code + " · " + it.title));
       card.appendChild(h);
       it.parts.forEach(function (p) {
         var row = el("div", "part");
@@ -318,16 +307,76 @@
   }
 
   api.onOpts(function (o) {
-    if (typeof o.opacity === "number" && !S.sliding) op.value = String(applyAlpha(o.opacity));
+    if (typeof o.opacity === "number") applyAlpha(o.opacity);
     if (typeof o.hotkey === "string") S.hotkey = o.hotkey;
-    if (typeof o.enabled === "boolean") { S.enabled = o.enabled; renderPower(); }
+    if (typeof o.enabled === "boolean") {
+      S.enabled = o.enabled;
+      if (!S.enabled) { S.token++; if (S.sess) { S.sess.done = true; cleanup(S.sess); } } // выключили в настройках — запись останавливается
+    }
+    if (typeof o.hide === "number") HIDE_AFTER_MS = Math.min(60, Math.max(3, o.hide)) * 1000;
+    if (typeof o.mic === "string") S.mic = o.mic;
+    if (typeof o.ptt === "boolean") S.ptt = o.ptt;
     if (typeof o.aiOk === "boolean") S.aiOk = o.aiOk;
     if (typeof o.mode === "string") S.mode = o.mode === "ai" ? "ai" : "search";
     renderMode();
   });
   api.onCmd(function (c) {
-    if (c === "start") startListening();
+    if (c === "start") startListening(false);
+    else if (c === "start-ptt") startListening(true);
+    else if (c === "ptt-off") { if (S.sess && S.sess.ptt) { S.sess.ptt = false; if (S.sess.text && !S.sess.done) finish(S.sess); } } // клавишу не держат: обычный режим
     else if (c === "stop") stopListening();
+  });
+
+  /* ───── 2.3: микрофон: выбранный в настройках, список и проверка уровня ───── */
+  async function openMic() {
+    var base = { channelCount: 1, echoCancellation: true, noiseSuppression: true };
+    if (S.mic) {
+      try { return await navigator.mediaDevices.getUserMedia({ audio: Object.assign({ deviceId: { exact: S.mic } }, base) }); }
+      catch (e) { /* микрофон отключили — берём системный */ }
+    }
+    return navigator.mediaDevices.getUserMedia({ audio: base });
+  }
+  api.onMicsReq(async function (id) {
+    try {
+      var st = null;
+      try { st = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) {} // без разрешения названия микрофонов пустые
+      var list = (await navigator.mediaDevices.enumerateDevices()).filter(function (d) { return d.kind === "audioinput" && d.deviceId && d.deviceId !== "default" && d.deviceId !== "communications"; })
+        .map(function (d, i) { return { id: d.deviceId, label: d.label || ("Микрофон " + (i + 1)) }; });
+      if (st) st.getTracks().forEach(function (t) { t.stop(); });
+      api.micsRes(id, { ok: true, list: list });
+    } catch (e) {
+      api.micsRes(id, { ok: false, error: "Нет доступа к микрофону. Проверьте Параметры Windows → Конфиденциальность → Микрофон." });
+    }
+  });
+  function stopTest(silent) {
+    var t = S.test; if (!t) return;
+    S.test = null;
+    clearInterval(t.iv); clearTimeout(t.to);
+    try { t.src.disconnect(); } catch (e) {}
+    try { t.stream.getTracks().forEach(function (x) { x.stop(); }); } catch (e) {}
+    try { t.ctx.close(); } catch (e) {}
+    if (!silent) api.level({ level: 0, end: true });
+  }
+  api.onTest(async function (o) {
+    stopTest(true);
+    if (!o.on) { api.level({ level: 0, end: true }); return; }
+    if (typeof o.mic === "string") S.mic = o.mic;
+    if (S.state === "listening") { api.level({ error: "Сейчас идёт запись голосом. Попробуйте после ответа." }); return; }
+    try {
+      var stream = await openMic(), actx = new AudioContext(), src = actx.createMediaStreamSource(stream), an = actx.createAnalyser();
+      an.fftSize = 1024; src.connect(an);
+      var buf = new Float32Array(an.fftSize);
+      var t = { stream: stream, ctx: actx, src: src, iv: null, to: null };
+      S.test = t;
+      t.iv = setInterval(function () {
+        an.getFloatTimeDomainData(buf);
+        var sum = 0; for (var i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+        api.level({ level: Math.min(1, Math.sqrt(sum / buf.length) * 6) });
+      }, 90);
+      t.to = setTimeout(function () { stopTest(false); }, 15000);
+    } catch (e) {
+      api.level({ error: "Нет доступа к микрофону. Проверьте Параметры Windows → Конфиденциальность → Микрофон." });
+    }
   });
   api.ready();
 })();

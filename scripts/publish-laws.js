@@ -10,9 +10,10 @@ const path = require("path");
 const crypto = require("crypto");
 const core = require("./law-core.js");
 const { encrypt, decrypt } = require("./laws-crypt.js");
+const SRV = require("./servers.js");
 
-const DIR = path.join(__dirname, "..", "update");
-const F = { plain: path.join(DIR, "laws.json"), prev: path.join(DIR, ".prev.json"), enc: path.join(DIR, "laws.enc"), status: path.join(DIR, "laws-status.json") };
+const SERVER = SRV.current();            // SERVER=12|7|16; у Boston файлы называются как раньше
+const F = SRV.files(SERVER);
 const KEEP_MS = 14 * 864e5; // сколько дней показывать метки «Изменено»/«Новый закон»
 const MIN_KEEP_RATIO = 0.6; // если законов стало меньше 60% от прошлых — парсер сломан, не публикуем
 
@@ -46,7 +47,9 @@ function main() {
   const prevById = {}; if (prev && Array.isArray(prev.laws)) prev.laws.forEach((l) => { prevById[l.id] = l; });
   const havePrev = !!(prev && prev.laws && prev.laws.length);
 
-  if (havePrev && cur.laws.length < prev.laws.length * MIN_KEEP_RATIO) fail("Законов стало " + cur.laws.length + " вместо " + prev.laws.length + " — похоже на сбой парсера, файл не обновлён.");
+  // если изменился список игнорируемых разделов (servers.js → ignore), падение числа законов ожидаемо
+  const ignoreChanged = havePrev && (prev.ignoreKey || "") !== (cur.ignoreKey || "");
+  if (havePrev && !ignoreChanged && cur.laws.length < prev.laws.length * MIN_KEEP_RATIO) fail("Законов стало " + cur.laws.length + " вместо " + prev.laws.length + " — похоже на сбой парсера, файл не обновлён.");
 
   const changes = Array.isArray(cur.changes) ? cur.changes.slice() : [];
   const notify = []; // что изменилось в этот запуск — уходит владельцу и руководству в Telegram
@@ -83,6 +86,7 @@ function main() {
 
   // updatedAt — время последнего реального изменения содержимого (не времени проверки)
   const sigOf = (laws) => sha(JSON.stringify(laws.map((l) => [l.id, l.hash || sha(l.text || ""), l.title, l.section || ""])));
+  cur.server = SERVER;
   cur.sig = sigOf(cur.laws);
   cur.updatedAt = havePrev && sigOf(prev.laws) === cur.sig && prev.updatedAt ? prev.updatedAt : now;
   cur.checkedAt = cur.updatedAt;                // настоящее время проверки — в laws-status.json
@@ -95,12 +99,12 @@ function main() {
 
   const st = cur.status || {};
   fs.writeFileSync(F.status, JSON.stringify({
-    checkedAt: now, updatedAt: cur.updatedAt, sig: cur.sig, count: cur.laws.length,
+    server: SERVER, checkedAt: now, updatedAt: cur.updatedAt, sig: cur.sig, count: cur.laws.length,
     ok: st.ok !== false, failed: st.failed || 0, error: st.ok === false ? String(st.error || "").slice(0, 300) : ""
   }, null, 1) + "\n");
 
   [F.plain, F.prev].forEach((f) => { try { fs.unlinkSync(f); } catch (e) {} });
-  console.log(`Законов: ${cur.laws.length}; новых: ${nNew}; изменённых статей: ${nChanged}; ${wrote ? "laws.enc обновлён" : "laws.enc без изменений"}.`);
+  console.log(`Сервер ${SRV.nameOf(SERVER)} (${SERVER}). Законов: ${cur.laws.length}; новых: ${nNew}; изменённых статей: ${nChanged}; ${wrote ? "laws.enc обновлён" : "laws.enc без изменений"}.`);
   notify.count = cur.laws.length;
   return notify;
 }
@@ -113,7 +117,7 @@ async function notifyBot(items) {
   if ((!items.length && !manual) || !secret) { if (items.length || manual) console.log("CRON_SECRET не задан — оповещение в Telegram пропущено."); return; }
   const url = process.env.SENKO_API_URL || "https://wcjspwailippjmyffkei.supabase.co/functions/v1/senko";
   try {
-    const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", "x-senko-cron": secret }, body: JSON.stringify({ action: "laws_changed", items, manual, count: items.count }), signal: AbortSignal.timeout(20000) });
+    const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", "x-senko-cron": secret }, body: JSON.stringify({ action: "laws_changed", server: SERVER, items, manual, count: items.count }), signal: AbortSignal.timeout(20000) });
     console.log("Оповещение о законах:", r.status, await r.text());
   } catch (e) {
     console.warn("Оповещение о законах не отправлено:", e.message);

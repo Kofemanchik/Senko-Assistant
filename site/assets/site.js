@@ -71,6 +71,37 @@
     rv.forEach(function (el) { io.observe(el); });
   } else rv.forEach(function (el) { el.classList.add("in"); });
 
+  /* реклама: список баннеров приходит с сервера (владелец правит его в панели); без ответа остаются баннеры из страницы */
+  function safeUrl(u) { u = String(u || ""); return /^https:\/\/[^\s"'<>]+$/i.test(u) ? u : ""; }
+  function safeImg(u) { u = String(u || ""); if (/^data:image\/(png|jpe?g|webp|gif);base64,[a-z0-9+\/=]+$/i.test(u) || /^\/img\/[\w.-]+$/.test(u)) return u; return safeUrl(u); }
+  function adHtml(a) {
+    var sq = a.style === "square", img = safeImg(a.image), k = sq ? "ad2" : "ad";
+    var links = (a.links || []).map(function (l) {
+      var u = safeUrl(l && l.url); if (!u) return "";
+      var dc = /discord\.(gg|com)/i.test(u), tg = /t\.me\//i.test(u);
+      return '<a class="btn ' + (dc ? "btn-ad" : tg ? "btn-tg" : "btn-s") + (sq ? " btn-sm" : "") + '" href="' + esc(u) + '" target="_blank" rel="noopener sponsored">' +
+        (dc || tg ? '<svg class="ico"' + (sq ? ' style="width:18px;height:18px"' : "") + '><use href="#i-' + (dc ? "dc" : "tg") + '"/></svg>' : "") + esc((l && l.label) || "Открыть") + "</a>";
+    }).join("");
+    if (a.promo) links = '<button class="promo" type="button" data-copy="' + esc(a.promo) + '" title="Скопировать промокод"><span>Промокод</span><b>' + esc(a.promo) + '</b><svg class="ico"><use href="#i-copy"/></svg></button>' + links;
+    return '<div class="' + k + ' rv in">' + (img ? '<div class="' + k + '-img"><img src="' + esc(img) + '" alt="" loading="lazy"></div>' : "") +
+      '<div class="' + k + '-body"><span class="ad-tag' + (sq ? " ad2-tag" : "") + '">' + esc(a.tag || "Реклама") + "</span>" +
+      (a.srv ? '<span class="' + k + '-srv">' + esc(a.srv) + "</span>" : "") + "<h3>" + esc(a.title || "") + "</h3>" + (a.text ? "<p>" + esc(a.text) + "</p>" : "") +
+      (links ? '<div class="ad2-row">' + links + "</div>" : "") + "</div></div>";
+  }
+  var adSec = $("#ad"), CFG = window.SENKO_WEB || {};
+  if (adSec && CFG.api && window.fetch) {
+    fetch(CFG.api, { method: "POST", body: JSON.stringify({ action: "ads", place: "site" }) })
+      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r || !r.ok || !Array.isArray(r.ads)) return;
+        var L = r.ads.filter(function (a) { return a && a.title; });
+        if (!L.length) { adSec.hidden = true; $$('a[href="#ad"]').forEach(function (a) { a.hidden = true; }); return; }
+        $(".wrap", adSec).innerHTML = L.slice(0, 6).map(adHtml).join("");
+        $$("img", adSec).forEach(function (im) { im.addEventListener("error", function () { im.parentNode.remove(); }); });
+      })
+      .catch(function () {});
+  }
+
   /* актуальная версия: GitHub отдаёт последний релиз, кнопка сразу качает .exe */
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   function inline(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>"); }

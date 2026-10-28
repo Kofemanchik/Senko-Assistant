@@ -314,3 +314,26 @@ section{scroll-margin-top:80px}
 .rv.in{opacity:1;transform:none}
 @media (prefers-reduced-motion: reduce){.rv{opacity:1;transform:none}}
 @media (max-width:640px){.wrap{padding:0 16px}}
+
+/* веб-версия: ссылка в блоке «Скачать» и кнопка в шапке */
+.dl-web{display:flex;align-items:center;gap:14px;margin:4px 0 18px;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--soft);color:var(--ink);text-decoration:none;transition:border-color .15s,transform .15s}
+.dl-web:hover{border-color:var(--accent);transform:translateY(-1px)}
+.dl-web .ico{width:26px;height:26px;flex:0 0 auto;color:var(--accent)}
+.dl-web .go{width:20px;height:20px;color:var(--muted)}
+.dl-web span{font-size:14px;line-height:1.45;color:var(--muted)}
+.dl-web b{color:var(--ink);display:block;margin-bottom:2px}
+@media (max-width:560px){.top-web{display:none}}
+
+/* состояние сервисов */
+.st{padding:24px 0 88px;max-width:820px}
+.st-sum{display:flex;align-items:center;gap:12px;padding:18px 22px;border-radius:var(--r-lg);background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);font-size:18px}
+.st-sum i{width:14px;height:14px;border-radius:50%;background:var(--muted);flex:none}
+.st-sum.ok i,.st-row.ok i{background:#2e9e5b}.st-sum.bad i,.st-row.bad i{background:#d64545}.st-sum.warn i{background:#e0a100}
+.st-list{margin-top:14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
+.st-row{display:flex;align-items:center;gap:12px;padding:14px 22px;border-top:1px solid var(--line)}
+.st-row:first-child{border-top:0}
+.st-row i{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:none}
+.st-row b{flex:1;font-weight:500}
+.st-row span{color:var(--muted);font:500 13px var(--f-mono)}
+.st-laws{margin-top:14px;color:var(--muted);font-size:15px}
+.st-mt{margin-top:14px;padding:16px 18px;border-radius:12px;background:var(--soft);color:var(--ink)}

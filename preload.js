@@ -101,6 +101,11 @@ ipcRenderer.on("senko:cfg", (_e, state) => {
 
 const openListeners = new Set();
 ipcRenderer.on("senko:open", (_e, target) => { openListeners.forEach((f) => { try { f(String(target || "")); } catch (e) {} }); });
+// 2.8: галочка блокнота, нажатая в мини-окне (-1 — открыть блокнот)
+const padListeners = new Set();
+ipcRenderer.on("senko:pad-check", (_e, i) => { padListeners.forEach((f) => { try { f(Number.isInteger(i) ? i : -1); } catch (e) {} }); });
+const levelListeners = new Set();
+ipcRenderer.on("senko:voice-level", (_e, v) => { levelListeners.forEach((f) => { try { f(v || {}); } catch (e) {} }); });
 const lawsListeners = new Set();
 ipcRenderer.on("laws:event", (_e, ev) => {
   lawsListeners.forEach((f) => {
@@ -150,15 +155,24 @@ contextBridge.exposeInMainWorld("senkoApp", {
   syncRebase: () => ipcRenderer.invoke("senko:sync-rebase"), // перед загрузкой данных из файла: заново слить с аккаунтом
   api: (action, data) => ipcRenderer.invoke("senko:api", String(action || ""), data || {}), // прогресс, рейтинг, смены, контрольные тесты
   updateProfile: (d) => ipcRenderer.invoke("senko:profile-update", d || {}), // сохранить данные кабинета в аккаунт
-  bug: (text, log) => ipcRenderer.invoke("senko:bug", String(text || "").slice(0, 2000), typeof log === "string" ? log.slice(0, 60000) : ""), // сообщение об ошибке (+ журнал)
+  bug: (text, log, shot) => ipcRenderer.invoke("senko:bug", String(text || "").slice(0, 2000), typeof log === "string" ? log.slice(0, 60000) : "", typeof shot === "string" ? shot : ""), // сообщение об ошибке (+ журнал, + снимок окна с 2.4)
+  shot: () => ipcRenderer.invoke("senko:shot"), // 2.4: снимок окна программы (data:image/jpeg)
+  miniState: (d) => ipcRenderer.send("senko:mini-state", d && typeof d === "object" ? d : {}), // 2.4: данные для мини-окна задержания
+  radioState: (d) => ipcRenderer.send("senko:radio-state", d && typeof d === "object" ? d : {}), // 2.6: задержания для экрана рации
+  radioSay: (r) => ipcRenderer.send("senko:radio-say", r && typeof r === "object" ? r : {}), // 2.6: ответ диспетчера голосом рации
   // 2.2: журнал и экран «Состояние», откат данных, ярлыки на вкладку или статью
   diag: () => ipcRenderer.invoke("senko:diag"),
   diagLog: () => ipcRenderer.invoke("senko:diag-log"),
   dataVersions: () => ipcRenderer.invoke("senko:data-versions"),
   dataRollback: (kind, id) => ipcRenderer.invoke("senko:data-rollback", { kind: String(kind || ""), id: String(id || "") }),
   dataResume: (kind) => ipcRenderer.invoke("senko:data-resume", { kind: String(kind || "") }),
+  // 2.3: голосовой ввод — микрофоны и проверка уровня звука (через окно оверлея)
+  voiceMics: () => ipcRenderer.invoke("senko:voice-mics"),
+  voiceTest: (on) => ipcRenderer.invoke("senko:voice-test", !!on),
+  onVoiceLevel: (f) => { if (typeof f === "function") levelListeners.add(f); },
   openArg: () => ipcRenderer.sendSync("senko:open-arg"),
   onOpen: (f) => { if (typeof f === "function") openListeners.add(f); },
+  onPadCheck: (f) => { if (typeof f === "function") padListeners.add(f); }, // 2.8
   shortcut: (target, name) => ipcRenderer.invoke("senko:shortcut", { target: String(target || ""), name: String(name || "") }),
   // 2.2: размер данных и «Сохранить сейчас», профили окна «в игре» / «за столом»
   saveInfo: () => ipcRenderer.invoke("senko:save-info"),
