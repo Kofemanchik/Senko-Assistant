@@ -278,7 +278,7 @@
     ["Люди", [["users", "i-users", "Пользователи", "Поиск и действия"], ["staff", "i-key", "Роли и доступ", "Модераторы и руководство"], ["queue", "i-inbox", "Заявки и сбросы", "Новички и пароли", "queue"]]],
     ["Работа", [["reports", "i-file", "Рапорты", "Рапорты сотрудников", "reports"], ["rating", "i-trophy", "Рейтинг", "Неделя и контрольные"], ["news", "i-mega", "Рассылки", "Сообщения в программе", null, 1], ["bugs", "i-bug", "Ошибки", "Сообщения пользователей", "bugs", 1], ["ideas", "i-mega", "Идеи", "Предложения пользователей"], ["ai", "i-ai", "ИИ-помощник", "Словарь, плохие ответы, самопроверка", null, 1]]],
     ["Тестирование", [["beta", "i-shield", "Тестеры", "Роль, задания, функции"]]],
-    ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1], ["discord", "i-menu", "Discord-бот", "Каналы, роли, публикации", null, 1]]],
+    ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1], ["pranks", "i-menu", "Пранки", "Техническое обслуживание пользователей", null, 1]]],
     ["Сервис", [["console", "i-term", "Консоль бота", "Любая команда"]]],
   ];
   function buildNav() {
@@ -1615,6 +1615,112 @@
       return fetch(API, { method: "POST", body: JSON.stringify(body), cache: "no-store" })
         .then(function (r) { return r.json().catch(function () { return { ok: false, error: "Сервер вернул ошибку " + r.status + "." }; }); })
         .catch(function () { return { ok: false, error: "Нет связи с сервером." }; });
+    }
+
+    load();
+    return feed;
+  };
+
+  // ───── Пранки: техническое обслуживание пользователей (только владелец) ─────
+  PAGES.pranks = function (el) {
+    if (!ME.owner) return ownerOnly(el);
+    head(el, "Пранки", "Техническое обслуживание пользователей — розыгрыши и симуляции модерации");
+
+    var feed = feedBox();
+    el.appendChild(feed);
+
+    // ───── Применение пранка ─────
+    var applyCard = h("div", { class: "card" });
+    applyCard.appendChild(h("h2", { text: "Применить пранк" }));
+    applyCard.appendChild(h("p", { class: "sub", text: "Выберите пользователя и номер пранка (1–150). Пранки №121–150 требуют подтверждения." }));
+
+    var loginInp = h("input", { placeholder: "Логин пользователя", maxlength: 24, spellcheck: "false", style: "width:auto" });
+    var prankNum = h("input", { type: "number", min: 1, max: 150, placeholder: "Номер пранка", style: "width:auto" });
+
+    applyCard.appendChild(h("div", { class: "row", style: "gap:10px;align-items:center;margin-bottom:10px" },
+      h("span", { style: "min-width:160px", text: "Логин:" }), loginInp,
+      h("span", { style: "min-width:120px", text: "Пранк:" }), prankNum,
+      btn("Применить", function () { applyPrank(); }, "btn-p")));
+
+    var prankResult = h("div", { style: "margin-top:10px" });
+    applyCard.appendChild(prankResult);
+    el.appendChild(applyCard);
+
+    // ───── Список применённых пранков ─────
+    var listCard = h("div", { class: "card", style: "margin-top:20px" });
+    listCard.appendChild(h("h2", { text: "Применённые пранки" }));
+    var plist = h("div");
+    listCard.appendChild(plist);
+    el.appendChild(listCard);
+
+    // ───── функции ─────
+    function apiPranks(op, payload) {
+      var body = Object.assign({ action: "pranks", op: op }, payload || {});
+      return fetch(API, { method: "POST", body: JSON.stringify(body), cache: "no-store" })
+        .then(function (r) { return r.json().catch(function () { return { ok: false, error: "Сервер вернул ошибку " + r.status + "." }; }); })
+        .catch(function () { return { ok: false, error: "Нет связи с сервером." }; });
+    }
+
+    function load() {
+      return apiPranks("list", {}).then(function (r) {
+        plist.textContent = "";
+        if (!r.ok) return plist.appendChild(errMsg(r));
+        var pranks = r.pranks || [];
+        if (!pranks.length) return plist.appendChild(h("p", { class: "muted", text: "Применённых пранков нет." }));
+        pranks.forEach(function (p) {
+          var row = h("div", { class: "msg", style: "margin-bottom:10px" },
+            h("div", { class: "row", style: "justify-content:space-between" },
+              h("div", null, h("b", { text: "Пранк №" + p.prank_id }), h("div", { class: "muted small", text: p.user_login + " · " + (p.user_nick || "") })),
+              h("div", null,
+                p.confirmed ? h("span", { class: "pill on", text: "Подтверждён" }) : h("span", { class: "pill off", text: "Ждёт подтверждения" }),
+                btn("Удалить", function () { removePrank(p.id); }, "btn-sm btn-d"))));
+          plist.appendChild(row);
+        });
+      });
+    }
+
+    function applyPrank() {
+      var login = loginInp.value.trim();
+      var pid = parseInt(prankNum.value, 10) || 0;
+      if (!login || pid < 1 || pid > 150) return toast("Укажите логин и номер пранка (1–150).", true);
+
+      apiPranks("apply", { login: login, prank_id: pid }).then(function (r) {
+        if (!r.ok) return toast(r.error || "Ошибка.", true);
+        prankResult.innerHTML = '<div class="msg ok">' +
+          '✅ Пранк №' + r.prank_id + ' применён к пользователю <b>' + r.user + '</b>.' +
+          (r.hard ? '<br><b>⚠️ Жёсткий пранк!</b> Код подтверждения: <code>' + (r.confirm_code || "") + '</code> (действителен 5 минут). Передайте его пользователю для подтверждения.' : '') +
+          '</div>';
+        loginInp.value = ""; prankNum.value = "";
+        load();
+      });
+    }
+
+    function removePrank(id) {
+      confirmDlg("Удалить пранк", "Удалить применённый пранк №" + id + "?", "Удалить", function () {
+        apiPranks("remove", { id: id }).then(function (r) {
+          if (r.ok) { toast("Пранк удалён."); load(); }
+          else toast(r.error || "Ошибка.", true);
+        });
+      });
+    }
+
+    // ───── подтверждение жёсткого пранка (пользователь вводит код) ─────
+    var confCard = h("div", { class: "card", style: "margin-top:20px" });
+    confCard.appendChild(h("h2", { text: "Подтверждение жёсткого пранка" }));
+    confCard.appendChild(h("p", { class: "sub", text: "Если вы получили код подтверждения от владельца, введите его здесь:" }));
+    var confCode = h("input", { placeholder: "Код подтверждения", maxlength: 20, spellcheck: "false", style: "width:auto" });
+    confCard.appendChild(h("div", { class: "row", style: "gap:10px;align-items:center;margin-top:10px" },
+      confCode,
+      btn("Подтвердить", function () { confirmPrank(); }, "btn-p")));
+    el.appendChild(confCard);
+
+    function confirmPrank() {
+      var code = confCode.value.trim();
+      if (!code) return toast("Введите код.", true);
+      apiPranks("confirm", { code: code }).then(function (r) {
+        if (r.ok) { toast("Пранк подтверждён."); confCode.value = ""; load(); }
+        else toast(r.error || "Ошибка подтверждения.", true);
+      });
     }
 
     load();

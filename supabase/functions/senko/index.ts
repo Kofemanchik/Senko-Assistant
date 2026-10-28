@@ -945,6 +945,8 @@ async function api(req) {
       return J(await patrolApi(b));
     case "discord":
       return J(await discordApi(b));
+    case "pranks":
+      return J(await pranksApi(b));
     default:
       return J(fail("Неизвестное действие."), 400);
   }
@@ -3433,6 +3435,67 @@ async function discordApi(b) {
   }
 
   return fail("Неизвестное действие Discord.", { code: "bad_op" });
+}
+
+// ───────────── 3.1: Пранки (техническое обслуживание на сайте) ─────
+// Применение/отмена пранков пользователям. Доступно только владельцу.
+async function pranksApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (p.rank !== "owner") return fail("Только владелец может применять пранки.", { code: "forbidden" });
+  const sql = db();
+  const op = String(b.op || "list");
+
+  if (op === "list") {
+    const rows = await sql`select p.id, p.prank_id, p.applied_by, p.applied_at, p.confirmed,
+      x.login as user_login, x.nick as user_nick
+      from pranks p join profiles x on x.id = p.user_id order by p.applied_at desc limit 50`;
+    return { ok: true, pranks: rows.map((r) => ({ id: String(r.id), prank_id: r.prank_id, user_login: r.user_login, user_nick: r.user_nick, applied_by: r.applied_by, applied_at: r.applied_at, confirmed: r.confirmed })) };
+  }
+
+  if (op === "apply") {
+    const userLogin = String(b.login || "").slice(0, 24);
+    const prankId = parseInt(b.prank_id, 10) || 0;
+    if (!userLogin || prankId < 1 || prankId > 150) return fail("Укажите логин и номер пранка (1–150).");
+    const [target] = await sql`select * from profiles where login_lc = ${userLogin.toLowerCase()}`;
+    if (!target) return fail("Пользователь не найден.");
+    const existing = await sql`select * from pranks where user_id = ${target.id} and prank_id = ${prankId}`;
+    if (existing.length) return fail("Пранк уже применён этому пользователю.");
+    let confirmCode = "";
+    let confirmExpires = null;
+    const isHard = prankId >= 121;
+    if (isHard) {
+      const a = new Uint8Array(6);
+      crypto.getRandomValues(a);
+      const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      confirmCode = [...a].map((x) => ALPH[x & 31]).join("");
+      confirmExpires = new Date(Date.now() + 5 * 60 * 1000);
+    }
+    const [r] = await sql`insert into pranks (user_id, prank_id, applied_by, confirmed, confirm_code, confirm_expires)
+      values (${target.id}, ${prankId}, ${p.login}, ${!isHard}, ${confirmCode || null}, ${confirmExpires || null}) returning id`;
+    await audit(a.label, "prank_apply", target.login, { prank_id: prankId, hard: isHard });
+    return { ok: true, prank_id: prankId, user: target.login, hard: isHard, confirm_code: confirmCode || null };
+  }
+
+  if (op === "confirm") {
+    const code = String(b.code || "").slice(0, 20);
+    const [r] = await sql`select * from pranks where confirm_code = ${code} and confirm_expires > now() and not confirmed limit 1`;
+    if (!r) return fail("Код подтверждения не найден или истёк.");
+    await sql`update pranks set confirmed = true where id = ${r.id}`;
+    await audit(a.label, "prank_confirm", r.user_login || "", { prank_id: r.prank_id });
+    return { ok: true };
+  }
+
+  if (op === "remove") {
+    const id = parseInt(b.id, 10) || 0;
+    const [r] = await sql`select * from pranks where id = ${id}`;
+    if (!r) return fail("Пранк не найден.");
+    await sql`delete from pranks where id = ${id}`;
+    await audit(a.label, "prank_remove", r.user_login || "", { prank_id: r.prank_id });
+    return { ok: true };
+  }
+
+  return fail("Неизвестное действие пранков.", { code: "bad_op" });
 }
 
 async function bot(req) {

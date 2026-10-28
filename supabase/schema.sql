@@ -513,24 +513,20 @@ create table if not exists public.handoffs (
 alter table public.handoffs enable row level security;
 revoke all on table public.handoffs from anon, authenticated;
 
--- 3.0: Discord-бот Senko Assistant
--- Тикеты поддержки: создаются пользователем, принимаются/закрываются модераторами с ролью Support
-create table if not exists public.discord_tickets (
+-- 3.0: Пранки (техническое обслуживание)
+-- Пранки применяются к пользователям через панель владельца на сайте.
+create table if not exists public.pranks (
   id           bigserial primary key,
   user_id      uuid references public.profiles(id) on delete cascade,
-  discord_id   text not null,          -- Discord ID пользователя
-  discord_name text not null,          -- имя пользователя в Discord
-  channel_id   text not null,          -- ID канала в Discord
-  channel_name text not null,          -- discord_name-номер
-  message_id   text not null default '',-- ID приветственного сообщения
-  status       text not null default 'open' check (status in ('open','accepted','closed')),
-  accepted_by  text not null default '',-- кто взял в работу
-  created_at   timestamptz not null default now(),
-  closed_at    timestamptz
+  prank_id     integer not null,        -- номер пранка 1-150
+  applied_by   text not null,           -- кто применил (логин владельца)
+  applied_at   timestamptz not null default now(),
+  confirmed    boolean not null default false, -- подтверждён для жёстких пранков
+  confirm_code text not null default '', -- код подтверждения
+  confirm_expires timestamptz            -- время истечения кода
 );
-create index if not exists discord_tickets_user_idx on public.discord_tickets (user_id);
-create index if not exists discord_tickets_status_idx on public.discord_tickets (status);
-create index if not exists discord_tickets_channel_idx on public.discord_tickets (channel_id);
+create index if not exists pranks_user_idx on public.pranks (user_id);
+create index if not exists pranks_prank_id_idx on public.pranks (prank_id);
 
 -- Мониторинг ресурсов: результат каждой проверки (хранится 7 дней)
 create table if not exists public.discord_monitor (
