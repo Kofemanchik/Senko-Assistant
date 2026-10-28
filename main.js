@@ -360,6 +360,35 @@ let manualCheck = false;
 let manualTimer = null;
 const upd = { state: "idle", version: "", percent: 0 };
 
+// 2.9: экран загрузки обновления. Появляется, когда найдена новая версия, и не исчезает, пока она не скачается; показывает шкалу и проценты
+let updWin = null;
+function showUpdScreen() {
+  if (updWin && !updWin.isDestroyed()) { updWin.show(); return; }
+  updWin = new BrowserWindow({
+    width: 440, height: 330, resizable: false, minimizable: false, maximizable: false, fullscreenable: false,
+    alwaysOnTop: true, center: true, frame: false, show: false, title: "Обновление Senko Assistant", autoHideMenuBar: true,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#0A0A0B" : "#F6F3EE", icon: iconPath(),
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
+  });
+  const w = updWin;
+  w.setMenu(null);
+  w.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  w.webContents.on("will-navigate", (e) => e.preventDefault());
+  w.once("ready-to-show", () => { if (!w.isDestroyed()) { w.show(); setUpdScreen(); } });
+  w.on("close", (e) => { if (!quitting && updWin === w) e.preventDefault(); }); // пока идёт загрузка, окно не закрывается (кроме выхода из программы)
+  w.on("closed", () => { if (updWin === w) updWin = null; });
+  w.loadFile(path.join(__dirname, "app", "update.html")).catch(() => {});
+}
+function setUpdScreen() {
+  if (!updWin || updWin.isDestroyed()) return;
+  updWin.webContents.executeJavaScript(`setV(${JSON.stringify(String(upd.version || ""))});setP(${+upd.percent || 0})`).catch(() => {});
+}
+function hideUpdScreen() {
+  if (!updWin || updWin.isDestroyed()) { updWin = null; return; }
+  const w = updWin; updWin = null;
+  w.destroy();
+}
+
 function info(message, detail) {
   return box({ type: "info", title: "Senko Assistant", message, detail, buttons: ["OK"], noLink: true });
 }
@@ -440,12 +469,12 @@ function initUpdater() {
     autoUpdater.on("checking-for-update", () => { if (upd.state !== "ready" && upd.state !== "downloading") upd.state = "checking"; });
     autoUpdater.on("update-available", (i) => {
       upd.state = "downloading"; upd.version = i.version; upd.percent = 0;
+      showUpdScreen();
       if (manualCheck) {
         endManual();
-        info(`Найдена версия ${i.version}`, "Она скачивается в фоне. Когда загрузка закончится, программа предложит перезапуск.");
       }
     });
-    autoUpdater.on("download-progress", (p) => { upd.percent = Math.round(p.percent || 0); });
+    autoUpdater.on("download-progress", (p) => { upd.percent = Math.round(p.percent || 0); setUpdScreen(); });
     autoUpdater.on("update-not-available", () => {
       if (upd.state === "checking") upd.state = "idle";
       if (manualCheck) {
@@ -457,6 +486,7 @@ function initUpdater() {
       updLog("error", "updater:", err);
       upd.lastError = { at: Date.now(), message: "Фоновая проверка", why: updReason(err).why, raw: updReason(err).raw };
       if (upd.state !== "ready") upd.state = "idle";
+      hideUpdScreen();
       if (manualCheck) {
         endManual();
         updFail("Не удалось проверить или скачать обновление.", err);
@@ -465,7 +495,8 @@ function initUpdater() {
     autoUpdater.on("update-downloaded", (i) => {
       endManual();
       upd.state = "ready"; upd.version = i.version; upd.percent = 100;
-      askRestart();
+      setUpdScreen();
+      setTimeout(() => { hideUpdScreen(); askRestart(); }, 900);
     });
     updater = autoUpdater;
     updLog("info", `start ${app.getVersion()}`);
@@ -484,7 +515,7 @@ function checkForAppUpdate(manual) {
     // обновление уже скачано или качается: сразу говорим, что с ним
     if (upd.state === "ready") { askRestart(); return; }
     if (upd.state === "downloading") {
-      info(`Скачивается версия ${upd.version}: ${upd.percent}%`, "Когда загрузка закончится, программа предложит перезапуск.");
+      showUpdScreen();
       return;
     }
     manualCheck = true;
