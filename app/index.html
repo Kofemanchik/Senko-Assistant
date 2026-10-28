@@ -6419,7 +6419,7 @@ html.hc .df-ins{outline:1px dashed currentColor}
 <script>
 (function(){
 var A=window.senkoApp;
-var APP_VER="2.9.0-beta.5";
+var APP_VER="2.9.0";
 function st(){try{return A&&A.state?A.state():null}catch(e){return null}}
 function ver(){var s=st();return (s&&s.version)||APP_VER}
 function vcmp(a,b){a=String(a||"0").split(".");b=String(b||"0").split(".");for(var i=0;i<3;i++){var d=(parseInt(a[i],10)||0)-(parseInt(b[i],10)||0);if(d)return d}return 0}
@@ -6508,6 +6508,14 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"2.9.0",d:"28.10.2026",items:[
+  ["⬇️","Экран загрузки обновления","Когда программа находит новую версию, появляется окно со шкалой и процентами загрузки. Оно закрывается само, когда обновление скачано."],
+  ["🌍","Мультисерверность","Подготовлена работа с серверами Boston, Los Angeles и Denver: законы, подсказки и ИИ-помощник для вашего сервера. Для всех игроков эти возможности откроются позже, по решению владельца."],
+ ]},
+ {v:"2.9.0-beta.6",d:"28.10.2026",items:[
+  ["🧪","Только для бета-тестеров","Шестая бета."],
+  ["⬇️","Экран загрузки обновления","Когда программа находит новую версию, появляется окно со шкалой и процентами загрузки. Оно закрывается само, когда обновление скачано, и программа предлагает перезапуск."],
+ ]},
  {v:"2.9.0-beta.5",d:"28.10.2026",items:[
   ["🧪","Только для бета-тестеров","Пятая бета мультисерверности."],
   ["📋","Номера статей под ваш сервер","Программа сама сопоставляет статьи Процессуального кодекса Boston и вашего сервера и подставляет верные номера в чек-листе задержания. Текст Миранды берётся из законов вашего сервера."],
@@ -8366,7 +8374,7 @@ html.noanim .s9-spot{transition:none}
 (function(){
 var A=window.senkoApp, P=window.SA_P, X=window.SA_X;
 if(!P||!X) return;
-var APP_VER="2.9.0-beta.5";
+var APP_VER="2.9.0";
 function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){}return null}
 function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
