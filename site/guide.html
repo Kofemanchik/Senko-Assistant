@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Как пользоваться · Senko Assistant</title>
+<meta name="description" content="Короткое руководство по программе Senko Assistant: законы, калькулятор, таймеры, экипаж, рапорты и горячие клавиши.">
+<meta name="theme-color" content="#F6F3EE" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0A0A0B" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/fonts/ibm-plex-sans-400-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/fonts.css">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var t=localStorage.getItem("site-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body>
+<!--SPRITE-->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+ <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7.5"/><path d="m20.5 20.5-4.2-4.2"/></symbol>
+ <symbol id="i-timer" viewBox="0 0 24 24"><path d="M10 2h4M12 14l3-3"/><circle cx="12" cy="14" r="8"/></symbol>
+ <symbol id="i-calc" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2.5"/><path d="M8 6h8M8 10.5h.01M12 10.5h.01M16 10.5h.01M8 14.5h.01M12 14.5h.01M8 18.5h.01M12 18.5h.01M16 14.5v4"/></symbol>
+ <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></symbol>
+ <symbol id="i-file" viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5Z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></symbol>
+ <symbol id="i-cap" viewBox="0 0 24 24"><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c3 3 9 3 12 0v-5M22 10v6"/></symbol>
+ <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8Z"/></symbol>
+ <symbol id="i-layers" viewBox="0 0 24 24"><rect x="3" y="3" width="13" height="13" rx="2.5"/><path d="M8 21h10.5a2.5 2.5 0 0 0 2.5-2.5V8"/></symbol>
+ <symbol id="i-sync" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"/><path d="M3 12a9 9 0 0 1 15.4-6.4L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/></symbol>
+ <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></symbol>
+ <symbol id="i-offline" viewBox="0 0 24 24"><path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3Z"/><path d="M4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+ <symbol id="i-gift" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/></symbol>
+ <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7Z"/></symbol>
+ <symbol id="i-down" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+ <symbol id="i-win" viewBox="0 0 24 24"><path d="M3 5.5 10.5 4.5v7H3ZM12 4.3 21 3v8.5h-9ZM3 12.5h7.5v7L3 18.5ZM12 12.5h9V21l-9-1.3Z" fill="currentColor" stroke="none"/></symbol>
+ <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+ <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></symbol>
+ <symbol id="i-auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor"/></symbol>
+ <symbol id="i-web" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3Z"/></symbol>
+ <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></symbol>
+ <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+ <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
+ <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
+ <symbol id="i-tg" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M21.9 3.6 2.8 10.9c-1.3.5-1.3 1.3-.2 1.6l4.9 1.5 1.9 5.8c.2.6.4.8.9.8s.7-.2 1-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.1-14.8c.3-1.3-.5-1.9-1.3-1.5zM9 13.6l9.5-6c.4-.3.8-.1.5.2l-7.9 7.1-.3 3.3L9 13.6z"/></symbol>
+ <symbol id="i-dc" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.5a18 18 0 0 1 4.3 2 14.7 14.7 0 0 0-15 0 18 18 0 0 1 4.3-2L8.6 3a19.8 19.8 0 0 0-4.9 1.4C.6 9 0 13.5.3 18a19.9 19.9 0 0 0 6 3l.8-1.3a13 13 0 0 1-2-1l.5-.4a14.2 14.2 0 0 0 12.8 0l.5.4a13 13 0 0 1-2 1l.8 1.3a19.9 19.9 0 0 0 6-3c.4-5.2-.7-9.6-3.4-13.6zM8.3 15.3c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4zm7.4 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4z"/></symbol>
+</svg>
+<!--/SPRITE-->
+<a class="skip" href="#main">К содержимому</a>
+<!--HEADER-->
+<header class="top" id="top">
+ <div class="wrap">
+  <a class="brand" href="/" aria-label="Senko Assistant, на главную"><img src="/img/logo.svg" alt="" width="36" height="36"><span>Senko Assistant<small>Majestic RP · Boston</small></span></a>
+  <nav class="nav" id="nav" aria-label="Разделы сайта">
+   <a href="/#features">Возможности</a>
+   <a href="/#screens">Скриншоты</a>
+   <a href="/#download">Скачать</a>
+   <a href="/app/">Веб-версия</a>
+   <a href="/#team">Команда</a>
+   <a href="/#faq">Вопросы</a>
+  </nav>
+  <div class="top-act">
+   <button class="icon-btn" id="themeBtn" type="button" aria-label="Тема: как в системе" title="Тема: как в системе"><svg class="ico"><use href="#i-auto"/></svg></button>
+   <a class="btn btn-s btn-sm top-web" href="/app/"><svg class="ico" style="width:18px;height:18px"><use href="#i-web"/></svg>Открыть</a>
+   <a class="btn btn-p btn-sm" href="/#download"><svg class="ico" style="width:18px;height:18px"><use href="#i-down"/></svg>Скачать</a>
+   <button class="icon-btn burger" id="burger" type="button" aria-label="Меню" aria-expanded="false" aria-controls="nav"><svg class="ico"><use href="#i-menu"/></svg></button>
+  </div>
+ </div>
+</header>
+<!--/HEADER-->
+<main id="main">
+<div class="wrap">
+<div class="doc-hero">
+ <div class="crumbs"><a href="/">Senko Assistant</a> / Руководство</div>
+ <h1>Как пользоваться</h1>
+ <div class="upd"><span>для версии 2.7.1</span></div>
+</div>
+<div class="doc">
+ <nav class="toc" aria-label="Разделы руководства">
+   <div class="sw"><a class="btn btn-s btn-sm" href="/status.html">Состояние сервисов</a></div>
+   <a href="#g1">Установка и вход</a>
+   <a href="#g2">Главная и меню</a>
+   <a href="#g3">Законы и поиск</a>
+   <a href="#g4">Калькулятор и таймеры задержаний</a>
+   <a href="#g5">Экипаж и тактическая доска</a>
+   <a href="#g6">Рапорты, кабинет и карточка сотрудника</a>
+   <a href="#g7">Идеи и мероприятия</a>
+   <a href="#g8">Панель тестера</a>
+   <a href="#g9">Горячие клавиши</a>
+   <a href="#g10">Статьи в Telegram</a>
+   <a href="#g11">Веб-версия и телефон</a>
+   <a href="#g12">Если что-то не работает</a>
+ </nav>
+ <article class="doc-body">
+<h2 id="g1">Установка и вход</h2>
+<p>Скачайте установщик на главной странице сайта и запустите его. Программа сама обновляется: когда выходит новая версия, она скачивается в фоне и ставится при следующем запуске.</p>
+<p>При первом запуске зарегистрируйтесь: логин, пароль, ник, статик и ведомство. Если включено подтверждение новичков, аккаунт начнёт работать после того, как его примет модератор. Тот же логин подходит для веб-версии на сайте.</p>
+<h2 id="g2">Главная и меню</h2>
+<p>Слева меню, сгруппированное по разделам. Главная показывает быстрый поиск, последние изменения законов, ближайшие мероприятия вашего ведомства и прогресс за неделю.</p>
+<p>Профиль, кабинет и настройки открываются внизу меню. Настройки также открываются клавишами Alt+O.</p>
+<h2 id="g3">Законы и поиск</h2>
+<p>Кодексы и законы штата обновляются с форума автоматически. Ищите по номеру статьи или по словам; программа понимает опечатки и сокращения.</p>
+<p>Статьи можно добавлять в избранное, писать к ним заметки и раскладывать по папкам. Если статья изменилась, рядом появится отметка, а кнопка «было / стало» покажет разницу.</p>
+<p>Кнопка 🔊 у статьи зачитывает её вслух. Голос и скорость выбираются в настройках.</p>
+<h2 id="g4">Калькулятор и таймеры задержаний</h2>
+<p>В калькуляторе отметьте статьи: программа посчитает розыск, срок и штраф. Наборы статей можно сохранять.</p>
+<p>Таймер задержания отсчитывает час. В программе для Windows есть мини-окно поверх игры: Ctrl+Alt+M показывает таймеры и итог калькулятора, не отнимая фокус у игры.</p>
+<h2 id="g5">Экипаж и тактическая доска</h2>
+<p>Экипаж: на вкладке таймеров создайте экипаж и передайте напарнику короткий код. Таймеры задержаний всего экипажа видны каждому участнику.</p>
+<p>Тактическая доска на карте зон: стрелки, маршруты, точки с подписями и текст. Схему можно отправить ссылкой, получатель откроет её у себя на доске.</p>
+<h2 id="g6">Рапорты, кабинет и карточка сотрудника</h2>
+<p>Рапорты пишутся по шаблону и попадают к руководству вашего ведомства. В кабинете видна статистика смен, частые статьи и карта активности за 12 недель.</p>
+<p>Кнопка «Карточка сотрудника» в кабинете собирает картинку с ником, ведомством и итогами недели, её можно сохранить или скопировать.</p>
+<h2 id="g7">Идеи и мероприятия</h2>
+<p>В разделе «Идеи» можно предложить улучшение и проголосовать за чужие. Когда владелец меняет статус идеи, автор получает уведомление в программе.</p>
+<p>Руководство ведомства создаёт мероприятия в панели руководства. Они появляются на главной, а за час до начала программа напоминает о них.</p>
+<h2 id="g8">Панель тестера</h2>
+<p>Пункт «Панель тестера» виден только тем, у кого есть роль «Бета-тестер». Роль выдаёт владелец или модератор.</p>
+<p>В панели — задания на проверку с отметкой «работает» или «есть проблема», экспериментальные функции, бета-версии программы и быстрый отчёт об ошибке со снимком окна.</p>
+<h2 id="g9">Горячие клавиши</h2>
+<p>Ctrl+Alt+S показать или спрятать программу; Ctrl+Alt+M мини-окно задержания; Ctrl+Alt+V голосовой ввод; Alt+O настройки; Alt+R выбор роли; Alt+Shift+R смена персонажа; Alt+Shift+S режим стрима.</p>
+<p>Все сочетания можно поменять в настройках.</p>
+<h2 id="g10">Статьи в Telegram</h2>
+<p>Бот Senko Assistant работает в любом чате Telegram: наберите в строке сообщения имя бота через @ и номер статьи или слова, например «12.8», «ак 2.1» или «оружие». Выберите статью из списка, и она уйдёт в чат с частями, сроком и штрафом.</p>
+<h2 id="g11">Веб-версия и телефон</h2>
+<p>Веб-версия открывается по кнопке «Открыть в браузере» на главной странице сайта. Аккаунт, избранное, заметки и история задержаний общие с программой.</p>
+<p>Окно поверх игры, мини-окно, горячие клавиши Windows и голосовой ввод есть только в программе.</p>
+<h2 id="g12">Если что-то не работает</h2>
+<p>Посмотрите страницу «Состояние сервисов»: там видно, работают ли сервер, база и ИИ-помощник.</p>
+<p>Отправьте отчёт: меню → «Сообщить об ошибке». К отчёту можно приложить снимок окна, он поможет быстрее найти причину.</p>
+<p class="doc-note">Не нашли ответ? Спросите ИИ-помощника в программе или напишите в Telegram-канал <a href="https://t.me/majestic_judiciary">@majestic_judiciary</a>.</p>
+ </article>
+</div>
+</div>
+</main>
+
+<!--FOOTER-->
+<footer class="foot">
+ <div class="wrap">
+  <div class="foot-top">
+   <div>
+    <a class="brand" href="/"><img src="/img/logo.svg" alt="" width="36" height="36"><span>Senko Assistant<small>Senko Corporation</small></span></a>
+    <p class="foot-about">Памятка по законодательству Majestic RP Boston для сотрудников ведомств: кодексы, задержания, наказания, рапорты и обучение в одном окне.</p>
+    <div class="soc">
+     <a href="https://t.me/majestic_judiciary" target="_blank" rel="noopener" aria-label="Telegram-канал"><svg class="ico"><use href="#i-tg"/></svg></a>
+     <a href="#" data-copy="hanamis1" aria-label="Скопировать Discord владельца"><svg class="ico"><use href="#i-dc"/></svg></a>
+    </div>
+   </div>
+   <div>
+    <h4>Программа</h4>
+    <ul>
+     <li><a href="/#features">Возможности</a></li>
+     <li><a href="/#screens">Скриншоты</a></li>
+     <li><a href="/#download">Скачать</a></li>
+     <li><a href="/app/">Веб-версия</a></li>
+     <li><a href="/#faq">Вопросы</a></li>
+     <li><a href="/guide.html">Как пользоваться</a></li>
+     <li><a href="/status.html">Состояние сервисов</a></li>
+     <li><a href="/panel/" rel="nofollow">Панель модератора</a></li>
+    </ul>
+   </div>
+   <div>
+    <h4>Документы</h4>
+    <ul>
+     <li><a href="/privacy.html">Политика конфиденциальности</a></li>
+     <li><a href="/terms.html">Условия пользования</a></li>
+    </ul>
+   </div>
+   <div>
+    <h4>Связь</h4>
+    <ul>
+     <li><a href="https://t.me/hanamochka" target="_blank" rel="noopener">Telegram: @hanamochka</a></li>
+     <li><a href="https://t.me/majestic_judiciary" target="_blank" rel="noopener">Канал: @majestic_judiciary</a></li>
+     <li><a href="#" data-copy="hanamis1">Discord: hanamis1</a></li>
+     <li><a href="#" data-copy="noxi_riversons">Модератор: noxi_riversons</a></li>
+    </ul>
+   </div>
+  </div>
+  <div class="foot-legal">
+   <p><b>© 2026 Senko Corporation.</b> Все права на программу Senko Assistant, её код, дизайн, логотип и материалы памятки принадлежат Senko Corporation. Копирование, перепродажа, изменение и иное распространение без письменного разрешения автора запрещены.</p>
+   <p><b>Проект неофициальный.</b> Senko Assistant не связан с Rockstar Games, Take-Two Interactive и Majestic RP и не претендует на их права. Grand Theft Auto, Majestic RP, их названия, торговые марки и материалы принадлежат их правообладателям.</p>
+  </div>
+  <div class="foot-bottom">
+   <span class="made">Сделано с <span class="heart">♥</span> Hanami Senko | Senko Corporation</span>
+   <span><a href="/privacy.html">Конфиденциальность</a> · <a href="/terms.html">Условия</a></span>
+  </div>
+ </div>
+</footer>
+<!--/FOOTER-->
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>

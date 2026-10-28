@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Рация</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; overflow: hidden; user-select: none; -webkit-user-select: none;
+    font: 12px/1.3 "Segoe UI", system-ui, sans-serif; }
+  :root { --lcd: #a9c18a; --lcd2: #93ad74; --ink: #17240f; --dim: rgba(23,36,15,.55); --body1: #2b2e33; --body2: #15171a; --edge: #3d4148; }
+  html.lcd-amber { --lcd: #e9b25a; --lcd2: #d49a3f; --ink: #2a1600; --dim: rgba(42,22,0,.55); }
+  html.lcd-night { --lcd: #0f2a1a; --lcd2: #0a1f13; --ink: #7dffa8; --dim: rgba(125,255,168,.5); }
+  #wrap { position: relative; width: 236px; height: 540px; margin: 0 auto; }
+  /* антенна и ручки */
+  .ant { position: absolute; left: 38px; top: 0; width: 22px; height: 130px; border-radius: 11px 11px 6px 6px;
+    background: linear-gradient(90deg, #0d0e10, #34373d 45%, #121316); box-shadow: inset 0 -12px 0 rgba(255,255,255,.04); }
+  .ant::after { content: ""; position: absolute; left: 3px; right: 3px; top: 10px; height: 60px; border-radius: 8px;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,.06) 0 2px, transparent 2px 6px); }
+  .knob { position: absolute; top: 92px; width: 38px; height: 42px; border-radius: 8px 8px 4px 4px; cursor: pointer;
+    background: repeating-linear-gradient(90deg, #1a1c20 0 3px, #2f3238 3px 5px); box-shadow: inset 0 2px 0 rgba(255,255,255,.12), 0 2px 4px rgba(0,0,0,.5); }
+  .knob.k1 { left: 116px; } .knob.k2 { left: 160px; width: 30px; height: 36px; top: 98px; }
+  .knob span { position: absolute; left: 50%; top: -14px; transform: translateX(-50%); font: 700 9px/1 "Segoe UI", sans-serif; color: rgba(255,255,255,.65); white-space: nowrap; text-shadow: 0 1px 2px #000; }
+  .emg { position: absolute; left: 72px; top: 112px; width: 34px; height: 22px; border-radius: 6px; background: linear-gradient(#ff8a1f, #d4580a);
+    box-shadow: inset 0 2px 0 rgba(255,255,255,.35), 0 2px 3px rgba(0,0,0,.5); cursor: pointer; border: 0; }
+  .emg:active { transform: translateY(1px); }
+  /* корпус */
+  .body { position: absolute; left: 22px; top: 130px; width: 196px; height: 404px; border-radius: 22px 22px 30px 30px;
+    background: radial-gradient(120% 60% at 30% 0%, #44484f 0%, var(--body1) 35%, var(--body2) 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.18), inset 0 -3px 0 rgba(0,0,0,.6), 0 10px 26px rgba(0,0,0,.55), 0 0 0 1px #0a0b0d; cursor: grab; }
+  .body.drag { cursor: grabbing; }
+  .ptt { position: absolute; left: -12px; top: 214px; width: 14px; height: 120px; border-radius: 8px 4px 4px 8px; border: 0; cursor: pointer;
+    background: repeating-linear-gradient(0deg, #1a1b1e 0 4px, #2c2f34 4px 7px); box-shadow: inset 2px 0 0 rgba(255,255,255,.12), -1px 2px 4px rgba(0,0,0,.6); }
+  .ptt::after { content: "PTT"; position: absolute; left: 13px; top: 50%; transform: translateY(-50%) rotate(-90deg); font: 800 8px/1 sans-serif; letter-spacing: 1px; color: rgba(255,255,255,.35); }
+  .ptt.on { background: repeating-linear-gradient(0deg, #4a1515 0 4px, #6b1d1d 4px 7px); }
+  .led { position: absolute; left: 50%; top: 12px; margin-left: -5px; width: 10px; height: 10px; border-radius: 50%; background: #3a3c40; box-shadow: inset 0 1px 2px rgba(0,0,0,.7); }
+  .led.tx { background: #ff3b30; box-shadow: 0 0 10px #ff3b30, inset 0 -1px 2px rgba(0,0,0,.4); }
+  .led.rx { background: #34d058; box-shadow: 0 0 10px #34d058, inset 0 -1px 2px rgba(0,0,0,.4); }
+  .led.busy { background: #ffb020; box-shadow: 0 0 8px #ffb020; }
+  .brand { position: absolute; left: 0; right: 0; top: 28px; text-align: center; font: 800 10px/1 "Segoe UI", sans-serif; letter-spacing: 3px; color: rgba(255,255,255,.45); }
+  .brand b { color: #ff8a1f; }
+  /* экран */
+  .lcdw { position: absolute; left: 16px; right: 16px; top: 46px; height: 190px; border-radius: 10px; padding: 6px;
+    background: #0b0c0e; box-shadow: inset 0 2px 6px rgba(0,0,0,.9), 0 1px 0 rgba(255,255,255,.08); }
+  .lcd { position: relative; height: 100%; border-radius: 5px; overflow: hidden; color: var(--ink);
+    background: linear-gradient(170deg, var(--lcd), var(--lcd2)); font: 600 11px/1.25 Consolas, "Cascadia Mono", "Lucida Console", monospace; padding: 4px 6px 17px;
+    display: flex; flex-direction: column; }
+  .lcd::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,.05) 0 1px, transparent 1px 3px); }
+  .sb { display: flex; align-items: center; gap: 5px; font-size: 10px; }
+  .sb .sig { display: inline-flex; align-items: flex-end; gap: 1px; height: 9px; }
+  .sb .sig i { width: 2px; background: var(--ink); }
+  .sb .ch { font-weight: 800; }
+  .sb .clk { margin-left: auto; font-weight: 800; font-size: 12px; }
+  .sb .bat { width: 16px; height: 8px; border: 1px solid var(--ink); border-radius: 1px; position: relative; padding: 1px; }
+  .sb .bat::after { content: ""; position: absolute; right: -3px; top: 2px; width: 2px; height: 3px; background: var(--ink); }
+  .sb .bat i { display: block; height: 100%; width: 80%; background: var(--ink); }
+  .dt { font-size: 10px; color: var(--dim); border-bottom: 1px solid var(--dim); padding-bottom: 2px; margin-bottom: 3px; display: flex; justify-content: space-between; }
+  .dets { flex: 1 1 auto; min-height: 0; overflow: hidden; display: grid; gap: 2px; align-content: start; }
+  .det { display: grid; grid-template-columns: 1fr auto; column-gap: 4px; padding: 1px 2px; border-radius: 2px; }
+  .det.sel { background: rgba(0,0,0,.12); }
+  .det .n { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
+  .det .t { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .det .s { grid-column: 1 / -1; font-size: 9.5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .det.pz .t { animation: blink 1s steps(2) infinite; }
+  .det.low .t { text-decoration: underline; }
+  .none { color: var(--dim); text-align: center; padding-top: 18px; }
+  @keyframes blink { 50% { opacity: .25; } }
+  /* 2.6.3: сообщение — две строки под списком (раньше «висело» поверх последнего задержания) */
+  .msg { flex: none; height: calc(2.5em + 3px); margin-top: 2px; border-top: 1px solid var(--dim); padding-top: 2px; font-size: 10.5px; line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+  .msg .who { font-weight: 800; }
+  .soft { position: absolute; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); text-align: center; font-size: 9px; line-height: 12px; height: 15px; font-weight: 800;
+    background: var(--ink); color: var(--lcd); padding: 2px 0 1px; white-space: nowrap; }
+  .soft span { overflow: hidden; }
+  .soft span { cursor: pointer; } .soft span:active { opacity: .6; }
+  .lv { display: inline-flex; gap: 1px; align-items: flex-end; height: 9px; margin-left: 4px; vertical-align: -1px; }
+  .lv i { width: 3px; background: currentColor; height: 2px; }
+  /* кнопки */
+  .keys { position: absolute; left: 14px; right: 14px; top: 246px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px 8px; }
+  .k { height: 22px; min-width: 0; padding: 0 2px; overflow: hidden; white-space: nowrap; text-overflow: clip; border-radius: 6px; border: 0; cursor: pointer; color: #cfd3da; font: 700 8.5px/1 "Segoe UI", sans-serif; letter-spacing: 0;
+    background: linear-gradient(#3a3e45, #24272c); box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 2px 2px rgba(0,0,0,.55); }
+  .k:active { transform: translateY(1px); box-shadow: inset 0 1px 0 rgba(255,255,255,.1); }
+  .k.g { color: #7ee08f; } .k.r { color: #ff7b72; }
+  .nav { display: contents; }
+  .grill { position: absolute; left: 40px; right: 40px; bottom: 20px; height: 78px; border-radius: 12px;
+    background: radial-gradient(circle, #0b0c0e 1.6px, transparent 2px) 0 0 / 8px 8px, #1d1f23; box-shadow: inset 0 2px 4px rgba(0,0,0,.8); opacity: .95; }
+  .grill.talk { animation: pulse .35s ease-in-out infinite alternate; }
+  @keyframes pulse { to { filter: brightness(1.5); } }
+  .clip { position: absolute; right: 6px; top: 160px; width: 6px; height: 140px; border-radius: 3px; background: linear-gradient(90deg, #121316, #2a2d33); }
+  .tip { position: absolute; left: 0; right: 0; bottom: 4px; text-align: center; font: 600 8.5px/1 sans-serif; color: rgba(255,255,255,.35); }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="ant"></div>
+  <div class="knob k1" data-act="vol" title="Громкость диспетчера"><span id="volT">ГРОМК</span></div>
+  <div class="knob k2" data-act="lcd" title="Подсветка экрана"><span>ЭКРАН</span></div>
+  <button class="emg" data-act="hide" title="Спрятать рацию"></button>
+  <div class="body" id="body">
+    <div class="led" id="led"></div>
+    <div class="brand">SENKO <b>●</b> DISPATCH</div>
+    <button class="ptt" id="ptt" title="Зажмите и говорите"></button>
+    <div class="clip"></div>
+    <div class="lcdw"><div class="lcd" id="lcd">
+      <div class="sb"><span class="sig"><i style="height:3px"></i><i style="height:5px"></i><i style="height:7px"></i><i style="height:9px"></i></span><span class="ch" id="ch">ДИСП-1</span><span id="st"></span><span class="clk" id="clk">--:--</span><span class="bat"><i></i></span></div>
+      <div class="dt"><span id="date">--</span><span>МСК</span></div>
+      <div class="dets" id="dets"></div>
+      <div class="msg" id="msg"><span class="who">ДИСП:</span> <span class="tx" id="msgT">На связи.</span></div>
+      <div class="soft"><span data-act="det" title="Открыть задержания">ЗАДЕРЖ</span><span id="softMid" data-act="ptt-toggle" title="Говорить">ПРД</span><span data-act="menu" title="Раздел «Рация»">МЕНЮ</span></div>
+    </div></div>
+    <div class="keys">
+      <button class="k g" data-act="det">ЗАДЕРЖ</button>
+      <button class="k" data-act="ptt-toggle" id="pttK">ГОВОРИТЬ</button>
+      <button class="k" data-act="menu">МЕНЮ</button>
+      <div class="nav"><button class="k" data-act="up" title="Предыдущее задержание">▲</button><button class="k" data-act="down" title="Следующее задержание">▼</button><button class="k r" data-act="hide" title="Спрятать">ОТБОЙ</button></div>
+    </div>
+    <div class="grill" id="grill"></div>
+    <div class="tip" id="tip">Зажмите PTT или клавишу</div>
+  </div>
+</div>
+<script src="vosk.js"></script>
+<script src="radio.js"></script>
+</body>
+</html>

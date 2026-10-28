@@ -1,0 +1,23 @@
+{
+  "name": "Senko Assistant",
+  "short_name": "Senko",
+  "description": "Помощник по законам Majestic RP Boston: кодексы, задержание, калькулятор, обучение.",
+  "lang": "ru",
+  "id": "/app/",
+  "start_url": "/app/",
+  "scope": "/app/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F6F3EE",
+  "theme_color": "#C2530E",
+  "categories": ["utilities", "reference"],
+  "icons": [
+    { "src": "/app/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/app/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/app/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Задержание", "url": "/app/?open=tab:timer", "icons": [{ "src": "/app/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Калькулятор", "url": "/app/?open=tab:calc", "icons": [{ "src": "/app/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

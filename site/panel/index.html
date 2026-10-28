@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Панель · Senko Assistant</title>
+<meta name="theme-color" content="#F6F3EE" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0A0A0B" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/fonts.css">
+<link rel="stylesheet" href="/panel/panel.css">
+<script src="/panel/theme.js"></script>
+<script src="/app/config.js" defer></script>
+<script src="/panel/panel.js" defer></script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+ <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1Z"/></symbol>
+ <symbol id="i-ai" viewBox="0 0 24 24"><path d="M12 3l1.8 4.7 4.7 1.8-4.7 1.8L12 16l-1.8-4.7-4.7-1.8 4.7-1.8Z"/><path d="M18.5 15l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8Z"/></symbol>
+ <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+ <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c2 .7 3.2 2.4 3.5 5.2"/></symbol>
+ <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4.5"/><path d="m11.2 11.8 8.3-8.3M16.5 6.5l2.5 2.5M14 9l2 2"/></symbol>
+ <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5.5 5h13L21 13v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6Z"/></symbol>
+ <symbol id="i-file" viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5Z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></symbol>
+ <symbol id="i-mega" viewBox="0 0 24 24"><path d="M3 10v4a1 1 0 0 0 1 1h2l5 4V5L6 9H4a1 1 0 0 0-1 1Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></symbol>
+ <symbol id="i-bug" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="13" rx="5"/><path d="M12 11v9M9 4l1.5 2.5M15 4l-1.5 2.5M3 13h4M17 13h4M4 7l3 2M20 7l-3 2M4 19l3-2M20 19l-3-2"/></symbol>
+ <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 0 1-10 0Z"/><path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v4M8 21h8M9.5 18h5"/></symbol>
+ <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+ <symbol id="i-ad" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m6.5 15 2-6 2 6M7.2 13h2.6M13.5 9v6h1.6a3 3 0 0 0 0-6Z"/></symbol>
+ <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+ <symbol id="i-save" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
+ <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+ <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="m7 9 3 3-3 3M12.5 15H17"/></symbol>
+ <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7.5"/><path d="m20.5 20.5-4.2-4.2"/></symbol>
+ <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+ <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z"/></symbol>
+ <symbol id="i-auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17Z" fill="currentColor" stroke="none"/></symbol>
+ <symbol id="i-out" viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/></symbol>
+ <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+ <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+ <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+ <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4"/></symbol>
+ <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2.5 4 5.5v6c0 5 3.4 8.7 8 10 4.6-1.3 8-5 8-10v-6Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></symbol>
+ <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+</svg>
+
+<!-- Вход -->
+<div class="auth" id="auth" hidden>
+ <form class="auth-card" id="auth-form" autocomplete="on" novalidate>
+  <div class="auth-brand">
+   <img src="/img/logo.svg" alt="" width="48" height="48">
+   <div><b>Senko Assistant</b><small>Панель владельца и модераторов</small></div>
+  </div>
+  <h1>Вход в панель</h1>
+  <p class="muted">Логин и пароль вашего аккаунта, а также отдельный пароль панели. Его выдаёт бот командой <code>/panel</code>.</p>
+  <label class="fld"><span>Логин</span><input id="a-login" name="username" autocomplete="username" maxlength="24" required spellcheck="false" autocapitalize="off"></label>
+  <label class="fld"><span>Пароль аккаунта</span><input id="a-pass" name="password" type="password" autocomplete="current-password" maxlength="128" required></label>
+  <label class="fld"><span>Пароль панели <em>32 знака</em></span>
+   <span class="pw"><input id="a-key" name="panel-key" type="password" autocomplete="off" maxlength="48" required spellcheck="false" autocapitalize="characters"><button type="button" class="icon-btn sm" id="a-eye" aria-label="Показать пароль панели"><svg class="ico"><use href="#i-eye"/></svg></button></span>
+  </label>
+  <div class="auth-err" id="a-err" role="alert"></div>
+  <button class="btn btn-p btn-block" id="a-go" type="submit">Войти</button>
+  <p class="auth-note">Каждый вход приходит владельцу в Telegram. Панель закрывается после 2 часов без действий и через 12 часов в любом случае.</p>
+  <a class="auth-back" href="/">← На главную сайта</a>
+ </form>
+</div>
+
+<!-- Панель -->
+<div class="shell" id="shell" hidden>
+ <aside class="side" id="side">
+  <a class="brand" href="#dash"><img src="/img/logo.svg" alt="" width="40" height="40"><span><b>Senko Assistant</b><small>Панель управления</small></span></a>
+  <nav class="nav" id="nav" aria-label="Разделы панели"></nav>
+  <div class="me">
+   <div class="ava" id="me-ava"></div>
+   <div class="me-t"><b id="me-name"></b><small id="me-rank"></small></div>
+   <button class="icon-btn" id="theme" type="button" aria-label="Тема"><svg class="ico"><use href="#i-auto"/></svg></button>
+   <button class="icon-btn" id="logout" type="button" aria-label="Выйти из панели" title="Выйти"><svg class="ico"><use href="#i-out"/></svg></button>
+  </div>
+ </aside>
+ <div class="scrim" id="scrim"></div>
+ <div class="main">
+  <header class="bar"><button class="icon-btn" id="burger" type="button" aria-label="Меню"><svg class="ico"><use href="#i-menu"/></svg></button><b id="bar-title">Панель</b></header>
+  <main class="page" id="page" tabindex="-1"></main>
+ </div>
+</div>
+
+<div class="dlg-wrap" id="dlg" hidden><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-t"><div class="dlg-h"><h2 id="dlg-t"></h2><button class="icon-btn sm" id="dlg-x" type="button" aria-label="Закрыть"><svg class="ico"><use href="#i-x"/></svg></button></div><div class="dlg-b" id="dlg-b"></div></div></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<noscript><p style="padding:24px">Для панели нужен JavaScript.</p></noscript>
+</body>
+</html>

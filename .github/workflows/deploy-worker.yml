@@ -1,0 +1,68 @@
+name: Deploy AI worker
+
+# Заливает ИИ-прокси worker/ai-proxy.js в Cloudflare (запуск вручную: Actions → Deploy AI worker → Run workflow).
+# Нужен секрет CLOUDFLARE_API_TOKEN: dash.cloudflare.com → My Profile → API Tokens → Create Token → шаблон «Edit Cloudflare Workers».
+# Если у аккаунта Cloudflare несколько учётных записей, добавьте и CLOUDFLARE_ACCOUNT_ID (Workers & Pages → справа Account ID).
+# Секреты самого прокси (APP_KEY, ключи ИИ) остаются в Cloudflare, workflow их не трогает.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Залить worker senko-ai
+        working-directory: worker
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "::error::Не задан секрет CLOUDFLARE_API_TOKEN"; exit 1; fi
+          API=https://api.cloudflare.com/client/v4
+          H="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          # Ищем аккаунт, где уже работает senko-ai (если CLOUDFLARE_ACCOUNT_ID не задан, проверяем все аккаунты токена)
+          ACCS="$CLOUDFLARE_ACCOUNT_ID"
+          [ -n "$ACCS" ] || ACCS=$(curl -sS -H "$H" "$API/accounts?per_page=50" | jq -r '.result[]?.id')
+          [ -n "$ACCS" ] || { echo "::error::Токен не видит ни одного аккаунта Cloudflare: проверьте Account Resources у токена"; exit 1; }
+          FOUND=""
+          for A in $ACCS; do
+            curl -sS -H "$H" "$API/accounts/$A/workers/scripts/senko-ai/settings" > /tmp/ws.json
+            if [ "$(jq -r '.success' /tmp/ws.json)" = "true" ]; then FOUND=$A; break; fi
+          done
+          if [ -z "$FOUND" ]; then
+            echo "::error::Worker senko-ai не найден в аккаунтах, которые видит токен. Ниже список аккаунтов и их workers."
+            echo "Проверка токена: $(curl -sS -H "$H" "$API/user/tokens/verify" | jq -c '{success, status: .result.status, errors}')"
+            for A in $ACCS; do
+              N=$(curl -sS -H "$H" "$API/accounts/$A" | jq -r '.result.name // "?"')
+              curl -sS -H "$H" "$API/accounts/$A/workers/scripts" > /tmp/wl.json
+              W=$(jq -r '[.result[]?.id] | join(", ")' /tmp/wl.json)
+              echo "Аккаунт «$N» ($A): workers: ${W:-нет}; ответ Cloudflare: success=$(jq -r '.success' /tmp/wl.json) $(jq -c '.errors' /tmp/wl.json)"
+            done
+            exit 1
+          fi
+          export CLOUDFLARE_ACCOUNT_ID=$FOUND
+          echo "senko-ai найден в аккаунте $FOUND"
+          KV=$(jq -r '[.result.bindings[]? | select(.name=="LIMITS") | .namespace_id][0] // empty' /tmp/ws.json)
+          if [ -z "$KV" ]; then
+            KV=$(curl -sS -H "$H" "$API/accounts/$CLOUDFLARE_ACCOUNT_ID/storage/kv/namespaces?per_page=100" | jq -r '[.result[]? | select(.title|test("LIMITS";"i")) | .id][0] // empty')
+          fi
+          if [ -z "$KV" ]; then
+            KV=$(curl -sS -X POST -H "$H" -H "Content-Type: application/json" "$API/accounts/$CLOUDFLARE_ACCOUNT_ID/storage/kv/namespaces" --data '{"title":"senko-ai-LIMITS"}' | jq -r '.result.id // empty')
+            echo "Создан KV senko-ai-LIMITS"
+          fi
+          [ -n "$KV" ] || { echo "::error::Не удалось найти или создать KV для счётчиков"; exit 1; }
+          echo "KV для счётчиков: $KV"
+          sed -i -E "s/^id = \"[0-9a-f]{32}\"/id = \"$KV\"/" wrangler.toml
+          npx -y wrangler@4 deploy

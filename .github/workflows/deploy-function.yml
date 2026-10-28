@@ -1,0 +1,48 @@
+name: Deploy function
+
+# Заливает supabase/functions/senko/index.ts из репозитория в Supabase (запуск вручную: Actions → Deploy function → Run workflow).
+# Нужен секрет SUPABASE_ACCESS_TOKEN: supabase.com → аватар → Account preferences → Access Tokens → Generate new token.
+# С 2.3 workflow заодно обновляет базу: выполняет supabase/schema.sql (он безопасен для повторного запуска) через Management API.
+on:
+  workflow_dispatch:
+    inputs:
+      db:
+        description: "Обновить базу (выполнить supabase/schema.sql)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-function
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      # CLI ставится из npm: так не упираемся в лимит запросов GitHub API (setup-cli c version: latest падал на нём)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Обновить базу (schema.sql)
+        if: ${{ inputs.db }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then echo "::error::Не задан секрет SUPABASE_ACCESS_TOKEN"; exit 1; fi
+          jq -Rs '{query: .}' supabase/schema.sql > /tmp/q.json
+          code=$(curl -sS -o /tmp/r.json -w '%{http_code}' -X POST "https://api.supabase.com/v1/projects/wcjspwailippjmyffkei/database/query" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" --data @/tmp/q.json)
+          # у токена без прав на базу (database_read/write) пропускаем шаг: функция сама создаёт новые таблицы (рекламу) при первом обращении
+          if [ "$code" = "401" ] || [ "$code" = "403" ]; then echo "::warning::Токену не хватает прав на базу, schema.sql пропущен: $(head -c 300 /tmp/r.json)"; exit 0; fi
+          if [ "$code" -ge 300 ]; then echo "::error::База не обновилась (код $code): $(head -c 600 /tmp/r.json)"; exit 1; fi
+          echo "База обновлена: schema.sql выполнен"
+      - name: Залить функцию senko
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then echo "::error::Не задан секрет SUPABASE_ACCESS_TOKEN"; exit 1; fi
+          # без проверки JWT: Telegram и расписание вызывают функцию без ключа Supabase
+          npx -y supabase@latest functions deploy senko --project-ref wcjspwailippjmyffkei --no-verify-jwt
