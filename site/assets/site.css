@@ -222,7 +222,7 @@ section{scroll-margin-top:80px}
 .promo:hover{background:rgba(0,0,0,.26)}
 .btn-tg{background:#2AABEE;color:#fff;box-shadow:0 10px 30px -12px #2AABEE}
 @media (max-width:640px){.ad2{grid-template-columns:minmax(0,1fr);background:linear-gradient(180deg,#788979 0%,#788979 40%,#56675A 100%)}.ad2-img{height:210px;overflow:hidden}.ad2-img img{width:auto;height:210px;margin:0 auto}.ad2-body{padding:4px 22px 26px}.ad2-body h3{font-size:24px}}
-@media (max-width:860px){.ad{grid-template-columns:1fr}.ad-img{min-height:0;aspect-ratio:1642/958}.ad-img::after{background:linear-gradient(180deg,transparent 60%,#0E0709)}.ad-body{padding:4px 26px 30px}.ad-body h3{font-size:30px}}
+@media (max-width:860px){.ad{grid-template-columns:1fr}.ad-img{min-height:0;aspect-ratio:1642/924}.ad-img::after{background:linear-gradient(180deg,transparent 60%,#0E0709)}.ad-body{padding:4px 26px 30px}.ad-body h3{font-size:30px}}
 
 /* команда */
 .team{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}

@@ -5134,11 +5134,10 @@ const FLAG_DEFS = {
   pad28: ["Блокнот: окно, чек-листы, напоминания", "beta", "2.8"],
   pad28mini: ["Блокнот в мини-окне задержания", "beta", "2.8"],
   pad28tpl: ["Шаблоны заметок", "beta", "2.8"],
-  srv29: ["Серверы Los Angeles и Denver (пилот: выбор сервера, законы и настройки)", "beta", "2.9"],
   svc32: ["Быстрая доставка служебных сообщений", "beta", "3.2"],
 };
 // функции выпущенных версий включены у всех и флагов больше не имеют; бета 2.7.0 ещё спрашивает общий флаг ai27
-const FLAG_RELEASED = { ai27: "all" };
+const FLAG_RELEASED = { ai27: "all", srv29: "all" }; // srv29 (выбор сервера) выпущен для всех
 const FLAG_MODES = ["all", "beta", "off"];
 async function flagsNow() {
   const s = (await getSetting("flags", {})) || {};

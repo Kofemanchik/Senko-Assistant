@@ -129,7 +129,16 @@
   /* Статьи кодекса → строки (часть = отдельная строка), как в приложении: code, part, title, jur, stars, m, fmin, fmax, rec, note, pun */
   function rowsFromParsed(parsed) {
     var rows = [], L = parsed.lines;
+    /* Пустые статьи: заголовок без текста, наказания и примечаний (строка оглавления, «висящий» заголовок и т.п.).
+       Их нельзя превращать в строки: они занимают место настоящей статьи с тем же номером и показываются пустыми. */
+    function unitHasBody(u) {
+      for (var q = u.line + 1; q <= u.end; q++) { var y = L[q]; if (y && String(y.raw || "").replace(/^\s*(?:ч\.\s*)?\d+(?:\.\d+)*\s*[.)]?\s*$/i, "").trim()) return true; }
+      return false;
+    }
+    var withBody = {};
+    parsed.units.forEach(function (u) { if (unitHasBody(u)) withBody[u.n] = true; });
     parsed.units.forEach(function (u) {
+      if (!unitHasBody(u) && (!u.title || withBody[u.n])) return;
       var parts = [], curp = null, pre = [], prePun = [], preNote = [], p, x;
       for (p = u.line + 1; p <= u.end; p++) {
         x = L[p];
