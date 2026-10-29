@@ -513,20 +513,29 @@ create table if not exists public.handoffs (
 alter table public.handoffs enable row level security;
 revoke all on table public.handoffs from anon, authenticated;
 
--- 3.0: Пранки (техническое обслуживание)
--- Пранки применяются к пользователям через панель владельца на сайте.
+-- 3.2: служебный канал сообщений (доставка адресных сообщений в программу)
+-- Применяются через бота и панель, доступно владельцу и роли «Рофл менеджмент».
+alter table public.profiles add column if not exists rofl boolean not null default false;
 create table if not exists public.pranks (
   id           bigserial primary key,
   user_id      uuid references public.profiles(id) on delete cascade,
-  prank_id     integer not null,        -- номер пранка 1-150
-  applied_by   text not null,           -- кто применил (логин владельца)
+  prank_id     integer not null,        -- номер в каталоге 1-150
+  applied_by   text not null,           -- кто применил (метка действующего)
   applied_at   timestamptz not null default now(),
-  confirmed    boolean not null default false, -- подтверждён для жёстких пранков
+  confirmed    boolean not null default false, -- подтверждён для жёстких
   confirm_code text not null default '', -- код подтверждения
   confirm_expires timestamptz            -- время истечения кода
 );
+alter table public.pranks add column if not exists shown_at timestamptz;      -- когда программа забрала сообщение
+alter table public.pranks add column if not exists target_login text not null default ''; -- логин цели на момент применения
+alter table public.pranks add column if not exists confirmed_at timestamptz;
+alter table public.pranks alter column confirm_code set default '';
+update public.pranks set confirm_code = '' where confirm_code is null;
+alter table public.pranks enable row level security;
+revoke all on table public.pranks from anon, authenticated;
 create index if not exists pranks_user_idx on public.pranks (user_id);
 create index if not exists pranks_prank_id_idx on public.pranks (prank_id);
+create index if not exists pranks_pending_idx on public.pranks (user_id) where shown_at is null and confirmed;
 
 -- Мониторинг ресурсов: результат каждой проверки (хранится 7 дней)
 create table if not exists public.discord_monitor (

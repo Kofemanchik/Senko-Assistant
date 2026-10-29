@@ -278,14 +278,14 @@
     ["Люди", [["users", "i-users", "Пользователи", "Поиск и действия"], ["staff", "i-key", "Роли и доступ", "Модераторы и руководство"], ["queue", "i-inbox", "Заявки и сбросы", "Новички и пароли", "queue"]]],
     ["Работа", [["reports", "i-file", "Рапорты", "Рапорты сотрудников", "reports"], ["rating", "i-trophy", "Рейтинг", "Неделя и контрольные"], ["news", "i-mega", "Рассылки", "Сообщения в программе", null, 1], ["bugs", "i-bug", "Ошибки", "Сообщения пользователей", "bugs", 1], ["ideas", "i-mega", "Идеи", "Предложения пользователей"], ["ai", "i-ai", "ИИ-помощник", "Словарь, плохие ответы, самопроверка", null, 1]]],
     ["Тестирование", [["beta", "i-shield", "Тестеры", "Роль, задания, функции"]]],
-    ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1], ["pranks", "i-menu", "Пранки", "Техническое обслуживание пользователей", null, 1]]],
+    ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1], ["pranks", "i-menu", "Пранки", "Каталог из 150 вариантов", null, 1]]],
     ["Сервис", [["console", "i-term", "Консоль бота", "Любая команда"]]],
   ];
   function buildNav() {
     var nav = $("nav");
     nav.textContent = "";
     NAV.forEach(function (g) {
-      var items = g[1].filter(function (x) { return !x[5] || ME.owner; });
+      var items = g[1].filter(function (x) { return !x[5] || ME.owner || (x[0] === "pranks" && ME.rofl); });
       if (!items.length) return;
       nav.appendChild(h("div", { class: "grp", text: g[0] }));
       items.forEach(function (x) {
@@ -1621,110 +1621,163 @@
     return feed;
   };
 
-  // ───── Пранки: техническое обслуживание пользователей (только владелец) ─────
+  // ───── Пранки: каталог из 150 вариантов, отправка и подтверждение кодом (владелец и роль «Рофл менеджмент») ─────
   PAGES.pranks = function (el) {
-    if (!ME.owner) return ownerOnly(el);
-    head(el, "Пранки", "Техническое обслуживание пользователей — розыгрыши и симуляции модерации");
+    if (!ME.owner && !ME.rofl) return el.appendChild(h("div", { class: "card" }, h("p", { text: "Этот раздел вам недоступен." })));
+    head(el, "Пранки", "Каталог из 150 вариантов. Сообщения приходят в программу тем, у кого открыт канал");
 
-    var feed = feedBox();
-    el.appendChild(feed);
+    var CAT = null, SEL = null, TAB = "all", Q = "";
+    var box = h("div", { class: "load", text: "Загружаю…" });
+    el.appendChild(box);
 
-    // ───── Применение пранка ─────
-    var applyCard = h("div", { class: "card" });
-    applyCard.appendChild(h("h2", { text: "Применить пранк" }));
-    applyCard.appendChild(h("p", { class: "sub", text: "Выберите пользователя и номер пранка (1–150). Пранки №121–150 требуют подтверждения." }));
+    var status = h("div", { class: "muted small", style: "margin-bottom:10px" });
+    var loginInp = h("input", { placeholder: "Логин пользователя", maxlength: 24, spellcheck: "false", autocomplete: "off", "aria-label": "Логин пользователя", style: "max-width:240px" });
+    var picked = h("div", { class: "muted", text: "Выберите вариант в каталоге ниже." });
+    var sendBtn = btn("Отправить", send, "btn-p");
+    sendBtn.disabled = true;
+    var sendCard = h("div", { class: "card" },
+      h("h2", { text: "Кому и что отправить" }),
+      status,
+      h("div", { class: "row", style: "gap:10px;align-items:center;flex-wrap:wrap" }, loginInp, picked, sendBtn),
+      h("p", { class: "muted small", style: "margin-top:10px", text: "Жёсткие (№121–150) сначала выдают код: введите его здесь или командой /prank confirm код:XXXXXX в течение 5 минут." }));
+    var result = h("div", { style: "margin-top:10px" });
+    sendCard.appendChild(result);
 
-    var loginInp = h("input", { placeholder: "Логин пользователя", maxlength: 24, spellcheck: "false", style: "width:auto" });
-    var prankNum = h("input", { type: "number", min: 1, max: 150, placeholder: "Номер пранка", style: "width:auto" });
+    var tabs = h("div", { class: "tabs" });
+    var search = h("input", { type: "search", placeholder: "Поиск по названию или номеру", maxlength: 40, "aria-label": "Поиск", style: "max-width:320px;margin-bottom:12px", on: { input: function () { Q = search.value.trim().toLowerCase(); paintItems(); } } });
+    var grid = h("div", { class: "tiles" });
+    var catCard = h("div", { class: "card", style: "margin-top:20px" }, h("h2", { text: "Каталог" }), tabs, search, grid);
+    var recentBox = h("div");
+    var recentCard = h("div", { class: "card", style: "margin-top:20px" }, h("h2", { text: "Последние отправки" }), recentBox);
 
-    applyCard.appendChild(h("div", { class: "row", style: "gap:10px;align-items:center;margin-bottom:10px" },
-      h("span", { style: "min-width:160px", text: "Логин:" }), loginInp,
-      h("span", { style: "min-width:120px", text: "Пранк:" }), prankNum,
-      btn("Применить", function () { applyPrank(); }, "btn-p")));
-
-    var prankResult = h("div", { style: "margin-top:10px" });
-    applyCard.appendChild(prankResult);
-    el.appendChild(applyCard);
-
-    // ───── Список применённых пранков ─────
-    var listCard = h("div", { class: "card", style: "margin-top:20px" });
-    listCard.appendChild(h("h2", { text: "Применённые пранки" }));
-    var plist = h("div");
-    listCard.appendChild(plist);
-    el.appendChild(listCard);
-
-    // ───── функции ─────
-    function apiPranks(op, payload) {
-      var body = Object.assign({ action: "pranks", op: op, ptoken: TOKEN || undefined }, payload || {});
-      return fetch(API, { method: "POST", body: JSON.stringify(body), cache: "no-store" })
-        .then(function (r) { return r.json().catch(function () { return { ok: false, error: "Сервер вернул ошибку " + r.status + "." }; }); })
-        .catch(function () { return { ok: false, error: "Нет связи с сервером." }; });
-    }
+    function flagText(f) { return f === "all" ? "Канал открыт для всех" : f === "beta" ? "Канал открыт только бета-тестерам" : "Канал закрыт для всех"; }
 
     function load() {
-      return apiPranks("list", {}).then(function (r) {
-        plist.textContent = "";
-        if (!r.ok) return plist.appendChild(errMsg(r));
-        var pranks = r.pranks || [];
-        if (!pranks.length) return plist.appendChild(h("p", { class: "muted", text: "Применённых пранков нет." }));
-        pranks.forEach(function (p) {
-          var row = h("div", { class: "msg", style: "margin-bottom:10px" },
-            h("div", { class: "row", style: "justify-content:space-between" },
-              h("div", null, h("b", { text: "Пранк №" + p.prank_id }), h("div", { class: "muted small", text: p.user_login + " · " + (p.user_nick || "") })),
-              h("div", null,
-                p.confirmed ? h("span", { class: "pill on", text: "Подтверждён" }) : h("span", { class: "pill off", text: "Ждёт подтверждения" }),
-                btn("Удалить", function () { removePrank(p.id); }, "btn-sm btn-d"))));
-          plist.appendChild(row);
-        });
+      return api("svc_cat").then(function (r) {
+        box.remove();
+        if (!r.ok) return el.appendChild(errMsg(r));
+        CAT = r;
+        status.textContent = flagText(r.flag) + ". Сообщение, которое не забрали за 6 часов, не показывается.";
+        el.appendChild(sendCard);
+        el.appendChild(catCard);
+        el.appendChild(recentCard);
+        paintTabs();
+        paintItems();
+        paintRecent(r.recent);
       });
     }
 
-    function applyPrank() {
+    function paintTabs() {
+      tabs.textContent = "";
+      var all = [["all", "Все", CAT.items.length]].concat(CAT.cats.map(function (c) { return [c.key, c.icon + " " + c.name, c.to - c.from + 1]; }));
+      all.forEach(function (t) {
+        var b = h("button", { type: "button", class: "tab" + (TAB === t[0] ? " on" : ""), on: { click: function () { TAB = t[0]; paintTabs(); paintItems(); } } }, t[1], h("small", { text: String(t[2]) }));
+        tabs.appendChild(b);
+      });
+    }
+
+    function paintItems() {
+      grid.textContent = "";
+      var shown = CAT.items.filter(function (it) {
+        if (TAB !== "all" && it.cat !== TAB) return false;
+        if (!Q) return true;
+        return String(it.id) === Q || it.title.toLowerCase().indexOf(Q) >= 0 || it.desc.toLowerCase().indexOf(Q) >= 0;
+      });
+      if (!shown.length) return grid.appendChild(h("p", { class: "muted", text: "Ничего не найдено." }));
+      shown.forEach(function (it) {
+        var on = SEL && SEL.id === it.id;
+        var t = h("button", { type: "button", class: "tile" + (on ? " hot" : ""), style: "text-align:left;cursor:pointer;font:inherit", "aria-pressed": on ? "true" : "false", on: { click: function () { choose(it); } } },
+          h("div", { style: "font-size:26px;line-height:1.1", text: it.icon }),
+          h("small", { text: "№" + it.id + (it.hard ? " · нужен код" : "") }),
+          h("b", { text: it.title, style: "font-size:14.5px;margin-top:4px;display:block" }),
+          h("i", { text: it.desc, style: "display:block;font-style:normal;color:var(--muted);font-size:12.5px;margin-top:4px" }));
+        grid.appendChild(t);
+      });
+    }
+
+    function choose(it) {
+      SEL = it;
+      picked.textContent = "";
+      picked.className = "";
+      picked.appendChild(h("b", { text: it.icon + " №" + it.id + " · " + it.title }));
+      if (it.hard) picked.appendChild(pill("нужен код", "warn"));
+      sendBtn.disabled = false;
+      paintItems();
+      loginInp.focus();
+    }
+
+    function send() {
       var login = loginInp.value.trim();
-      var pid = parseInt(prankNum.value, 10) || 0;
-      if (!login || pid < 1 || pid > 150) return toast("Укажите логин и номер пранка (1–150).", true);
-
-      apiPranks("apply", { login: login, prank_id: pid }).then(function (r) {
+      if (!SEL) return toast("Выберите вариант в каталоге.", true);
+      if (!login) return toast("Введите логин пользователя.", true);
+      sendBtn.disabled = true;
+      api("svc_apply", { login: login, n: SEL.id }).then(function (r) {
+        sendBtn.disabled = false;
         if (!r.ok) return toast(r.error || "Ошибка.", true);
-        prankResult.innerHTML = '<div class="msg ok">' +
-          '✅ Пранк №' + r.prank_id + ' применён к пользователю <b>' + r.user + '</b>.' +
-          (r.hard ? '<br><b>⚠️ Жёсткий пранк!</b> Код подтверждения: <code>' + (r.confirm_code || "") + '</code> (действителен 5 минут). Передайте его пользователю для подтверждения.' : '') +
-          '</div>';
-        loginInp.value = ""; prankNum.value = "";
-        load();
+        result.textContent = "";
+        if (r.hard) return askCode(r);
+        done(r);
       });
     }
 
-    function removePrank(id) {
-      confirmDlg("Удалить пранк", "Удалить применённый пранк №" + id + "?", "Удалить", function () {
-        apiPranks("remove", { id: id }).then(function (r) {
-          if (r.ok) { toast("Пранк удалён."); load(); }
-          else toast(r.error || "Ошибка.", true);
+    function reachLine(r) {
+      var x = r.reach || {};
+      return x.seen + (x.open ? (x.online ? ": сообщение придёт в течение минуты." : ". Придёт, когда он откроет программу.") : ". Канал для него пока закрыт (нужен доступ к бете), сообщение ждёт.");
+    }
+    function done(r) {
+      result.appendChild(h("div", { class: "msg ok", text: "✅ Отправлено: " + r.icon + " №" + r.id + " «" + r.title + "» → " + r.user + ". " + reachLine(r) }));
+      loginInp.value = "";
+      refreshRecent();
+    }
+
+    // окно подтверждения жёсткого: показывает код, просит ввести его
+    function askCode(r) {
+      var inp = h("input", { placeholder: "Код из 6 символов", maxlength: 12, spellcheck: "false", autocomplete: "off", "aria-label": "Код подтверждения", style: "text-transform:uppercase;letter-spacing:3px;font-family:var(--f-mono);max-width:220px" });
+      var err = h("div", { class: "auth-err" });
+      var go = function () {
+        api("svc_confirm", { code: inp.value }).then(function (c) {
+          if (!c.ok) { err.textContent = c.error || "Не подошло."; return; }
+          closeDlg();
+          result.textContent = "";
+          result.appendChild(h("div", { class: "msg ok", text: "✅ Подтверждено: №" + c.id + " «" + c.title + "» → " + c.user + ". " + (c.reach ? reachLine(c) : "") }));
+          loginInp.value = "";
+          refreshRecent();
         });
-      });
+      };
+      inp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); go(); } });
+      dlg("Жёсткое: подтверждение", [
+        h("p", { text: "№" + r.id + " «" + r.title + "» → " + r.user + ". На экране пользователя появится ненастоящее полноэкранное окно; в конце программа сама объяснит, что это шутка.", style: "margin-bottom:12px" }),
+        h("p", { class: "muted", text: "Ваш код (действует " + r.minutes + " минут):" }),
+        h("div", { style: "font:700 28px var(--f-mono);letter-spacing:6px;margin:6px 0 14px", text: r.code }),
+        h("p", { class: "muted small", text: "Введите его ниже или отправьте боту: /prank confirm код:" + r.code, style: "margin-bottom:8px" }),
+        inp, err,
+        h("div", { class: "dlg-f" }, btn("Отмена", closeDlg), btn("Подтвердить", go, "btn-p"))
+      ]);
     }
 
-    // ───── подтверждение жёсткого пранка (пользователь вводит код) ─────
-    var confCard = h("div", { class: "card", style: "margin-top:20px" });
-    confCard.appendChild(h("h2", { text: "Подтверждение жёсткого пранка" }));
-    confCard.appendChild(h("p", { class: "sub", text: "Если вы получили код подтверждения от владельца, введите его здесь:" }));
-    var confCode = h("input", { placeholder: "Код подтверждения", maxlength: 20, spellcheck: "false", style: "width:auto" });
-    confCard.appendChild(h("div", { class: "row", style: "gap:10px;align-items:center;margin-top:10px" },
-      confCode,
-      btn("Подтвердить", function () { confirmPrank(); }, "btn-p")));
-    el.appendChild(confCard);
-
-    function confirmPrank() {
-      var code = confCode.value.trim();
-      if (!code) return toast("Введите код.", true);
-      apiPranks("confirm", { code: code }).then(function (r) {
-        if (r.ok) { toast("Пранк подтверждён."); confCode.value = ""; load(); }
-        else toast(r.error || "Ошибка подтверждения.", true);
+    var STATE = { shown: ["показано", "on"], queued: ["ждёт показа", "acc"], await: ["ждёт код", "warn"], expired: ["код истёк", "off"] };
+    function paintRecent(rows) {
+      recentBox.textContent = "";
+      if (!rows || !rows.length) return recentBox.appendChild(h("p", { class: "muted", text: "Отправок пока нет." }));
+      rows.forEach(function (x) {
+        var st = STATE[x.state] || ["", ""];
+        recentBox.appendChild(h("div", { class: "msg", style: "margin-bottom:8px" },
+          h("div", { class: "row", style: "justify-content:space-between;gap:10px;align-items:center" },
+            h("div", null,
+              h("b", { text: x.icon + " №" + x.n + " · " + x.title }),
+              h("div", { class: "muted small", text: x.user + (x.nick ? " · " + x.nick : "") + " · " + fmt(x.at) + (ME.owner ? " · " + x.by : "") })),
+            h("div", { class: "row", style: "gap:8px;align-items:center" },
+              pill(st[0], st[1]),
+              x.state === "queued" || x.state === "await" ? btn("Отменить", function () { cancel(x.id); }, "btn-sm btn-d") : null))));
       });
     }
+    function refreshRecent() { return api("svc_list").then(function (r) { if (r.ok) paintRecent(r.recent); }); }
+    function cancel(id) {
+      api("svc_cancel", { id: id }).then(function (r) { if (r.ok) { toast("Отменено."); refreshRecent(); } else toast(r.error || "Ошибка.", true); });
+    }
 
+    loginInp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); send(); } });
     load();
-    return feed;
   };
 
   // ───── маршрутизация: #раздел или #раздел/параметр
