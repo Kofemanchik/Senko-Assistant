@@ -454,7 +454,7 @@ async function askRestart() {
   });
   if (r.response === 0 && updater) {
     quitting = true;
-    updater.quitAndInstall(false, true);
+    updater.quitAndInstall(true, true); // тихо: у установщика теперь мастер, при обновлении его показывать не нужно
   } // «Позже» — обновление установится при следующем выходе из программы
 }
 

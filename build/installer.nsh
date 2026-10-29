@@ -11,3 +11,11 @@
     StrCpy $INSTDIR "$R9\${APP_FILENAME}"
   ${endif}
 !macroend
+
+; Тексты мастера установки (приветствие и завершение)
+!macro customHeader
+  !define MUI_WELCOMEPAGE_TITLE "Установка Senko Assistant"
+  !define MUI_WELCOMEPAGE_TEXT "Программа-памятка по законам Majestic RP: кодексы, калькулятор наказаний, рация и ИИ-помощник.$\r$\n$\r$\nНажмите «Далее», чтобы продолжить."
+  !define MUI_FINISHPAGE_TITLE "Senko Assistant установлен"
+  !define MUI_FINISHPAGE_TEXT "Установка завершена. Хорошей смены!"
+!macroend
