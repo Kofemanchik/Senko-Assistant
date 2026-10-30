@@ -6525,6 +6525,9 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.3.1",d:"30.10.2026",items:[
+  ["🔔","Служебные сообщения","Новые виды оформления и уведомлений, обновлённые тексты. Для всех игроков эти возможности откроются позже, по решению владельца."],
+ ]},
  {v:"3.3.0",d:"29.10.2026",items:[
   ["📜","Часть 1 в законах","У статей из одной части теперь везде подписано «ч.1», как и у многочастных."],
   ["🧹","Без пустых статей","В законах Los Angeles и Denver больше не появляются пустые статьи из оглавления форума."],
@@ -14749,7 +14752,7 @@ html.sa-anim .sa-toast{transition:opacity .2s ease,transform .28s cubic-bezier(.
 var A=window.senkoApp;
 if(!A||!A.api)return;
 var D=document, H=D.documentElement;
-var POLL_MS=60000, MIN_GAP=15000, SESSION_MAX=90000;
+var POLL_MS=60000, MIN_GAP=15000, SESSION_MAX=200000;
 var layer=null, tbox=null, cur=null, queue=[], polling=false, lastPoll=0, styled=false;
 
 function st(){try{return A.state?A.state():null}catch(x){return null}}
@@ -14845,7 +14848,7 @@ var FX={
   root();var t=mk("div","svc-toast"),i=mk("b",null,txt(f[1],8)),s=mk("span",null,sub(f[2],c));
   t.appendChild(i);t.appendChild(s);t.addEventListener("click",function(){if(t.parentNode)t.parentNode.removeChild(t)});
   tbox.appendChild(t);c.undo.push(function(){if(t.parentNode)t.parentNode.removeChild(t)});
-  var d=ms(f[3],5000);extend(c,d);later(c,function(){if(t.parentNode)t.parentNode.removeChild(t)},d);return true},
+  var d=ms(f[3],5000);extend(c,d);setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t)},d);return true},
  banner:function(f,c){
   root();var tone=f[4]==="warn"||f[4]==="gold"?f[4]:"info",b=mk("div","svc-ban "+tone);
   b.textContent=txt(f[1],8)+" "+sub(f[2],c);b.addEventListener("click",function(){if(b.parentNode)b.parentNode.removeChild(b)});
@@ -14902,6 +14905,67 @@ var FX={
   root();var b=mk("div","svc-chip"),i=mk("span",null,txt(f[1],8)),s=mk("span",null,sub(f[2],c));b.appendChild(i);b.appendChild(s);
   add(c,b,H);var d=ms(f[3],20000);extend(c,d);later(c,function(){if(b.parentNode)b.parentNode.removeChild(b)},d);return true}
 };
+
+/* ---------- правки интерфейса на экране цели: только отображение, всё возвращается само и по Esc ---------- */
+var CHROME="button,a,nav,summary,label,th,h1,h2,h3,h4,[role=tab],[role=menuitem],[role=button],.tab,.sub";
+function ours(n){var e=n.parentElement;return !!(e&&e.closest&&e.closest(".svc-l,.svc-t,.svc-full,.svc-dim,.svc-ban,.svc-chip,.svc-toast,.svc-card"))}
+function skipNode(n){var e=n.parentElement;if(!e)return true;var t=e.tagName;return t==="SCRIPT"||t==="STYLE"||t==="TEXTAREA"||t==="INPUT"||t==="NOSCRIPT"||ours(n)}
+function inChrome(n){var e=n.parentElement;return !!(e&&e.closest&&e.closest(CHROME))}
+function esc(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}
+/* fn(текст, узел) возвращает новый текст или null; следим за перерисовкой, в конце возвращаем исходные тексты */
+function mutate(c,fn,d,bye){
+ var saved=new Map(),mine=new Map(),obs=null,busy=false,pend=false,done=false;
+ function apply(n){
+  if(skipNode(n))return;var v=n.nodeValue;if(mine.has(n)&&mine.get(n)===v)return;
+  var r;try{r=fn(v,n)}catch(x){r=null}
+  if(r!=null&&r!==v){saved.set(n,v);mine.set(n,r);busy=true;n.nodeValue=r;busy=false}}
+ function scan(){var w=D.createTreeWalker(D.body,NodeFilter.SHOW_TEXT,null),n;while((n=w.nextNode()))apply(n)}
+ scan();
+ try{obs=new MutationObserver(function(){if(busy||pend||done)return;pend=true;setTimeout(function(){pend=false;if(!done)scan()},250)});obs.observe(D.body,{childList:true,subtree:true,characterData:true})}catch(x){}
+ function back(){
+  if(done)return;done=true;if(obs)obs.disconnect();busy=true;
+  saved.forEach(function(orig,n){if(n.isConnected&&n.nodeValue===mine.get(n)){try{n.nodeValue=orig}catch(x){}}});
+  busy=false;saved.clear();mine.clear();
+  if(bye&&!c.bye){c.bye=1;FX.toast(["toast","😄","Всё вернулось на место. Это была шутка.",5000],c)}}
+ c.undo.push(back);extend(c,d);later(c,back,d);return true}
+FX.nick=function(f,c){
+ var u=(st()&&st().user)||{},reals=[];
+ [c.nick,u.nick,u.login].forEach(function(x){x=txt(x,40);if(x&&x.length>=3&&reals.indexOf(x)<0)reals.push(x)});
+ if(!reals.length)return false;
+ var fake=txt(f[1],60).replace(/\{nick\}/g,c.nick||"сотрудник");
+ var src="(?<![\\p{L}\\p{N}_])("+reals.map(esc).join("|")+")(?![\\p{L}\\p{N}_])",chk=new RegExp(src,"u"),re=new RegExp(src,"gu");
+ return mutate(c,function(v){return chk.test(v)?v.replace(re,function(){return fake}):null},Math.min(Math.max(+f[2]||45000,800),120000),true)};
+FX.retext=function(f,c){
+ var map={};(Array.isArray(f[1])?f[1].slice(0,40):[]).forEach(function(p){if(Array.isArray(p)&&typeof p[0]==="string"&&typeof p[1]==="string")map[p[0].trim()]=txt(p[1],60)});
+ return mutate(c,function(v,n){if(!inChrome(n))return null;var t=v.trim();if(t.length>40||!Object.prototype.hasOwnProperty.call(map,t))return null;return v.replace(t,map[t])},Math.min(Math.max(+f[2]||30000,800),90000),true)};
+FX.mask=function(f,c){
+ return mutate(c,function(v,n){if(!inChrome(n))return null;var t=v.trim();if(t.length<2||t.length>30)return null;return v.replace(t,new Array(t.length+1).join("█"))},ms(f[1],12000),false)};
+FX.dodge=function(f,c){
+ if(noanim())return false;var d=ms(f[1],15000),moved=[];
+ function mv(ev){
+  var t=ev.target&&ev.target.closest&&ev.target.closest("button,.btn,[role=button]");
+  if(!t||t.closest(".svc-l,.svc-t,.svc-full,.svc-dim,.svc-ban,.svc-chip,.svc-toast,.svc-card"))return;
+  var r=t.getBoundingClientRect(),dx=ev.clientX-(r.left+r.width/2),dy=ev.clientY-(r.top+r.height/2),rec=null,i;
+  for(i=0;i<moved.length;i++)if(moved[i].el===t)rec=moved[i];
+  if(!rec){rec={el:t,tr:t.style.transition,tf:t.style.transform,x:0,y:0};moved.push(rec)}
+  rec.x=Math.max(-170,Math.min(170,rec.x-(dx>=0?1:-1)*rnd(40,80)));rec.y=Math.max(-90,Math.min(90,rec.y-(dy>=0?1:-1)*rnd(10,40)));
+  t.style.transition="transform .16s";t.style.transform="translate("+rec.x.toFixed(0)+"px,"+rec.y.toFixed(0)+"px)"}
+ D.addEventListener("pointerover",mv,true);
+ function back(){D.removeEventListener("pointerover",mv,true);moved.forEach(function(r){r.el.style.transition=r.tr;r.el.style.transform=r.tf});moved=[]}
+ c.undo.push(back);extend(c,d);later(c,back,d);return true};
+FX.cursor=function(f,c){
+ var k=["wait","not-allowed","progress","help","crosshair"].indexOf(f[1])>=0?f[1]:"wait",d=ms(f[2],15000),el=mk("style");
+ el.textContent="*{cursor:"+k+"!important}";D.head.appendChild(el);
+ function back(){if(el.parentNode)el.parentNode.removeChild(el)}
+ c.undo.push(back);extend(c,d);later(c,back,d);return true};
+FX.after=function(f,c){
+ var dl=Math.min(Math.max(+f[1]||0,0),40000),sub=f.slice(2,8);extend(c,dl+800);
+ later(c,function(){sub.forEach(function(g){if(Array.isArray(g)&&g[0]!=="after"&&FX[g[0]]){try{FX[g[0]](g,c)}catch(x){}}})},dl);return true};
+FX.accent=function(f,c){
+ if(!/^#[0-9a-f]{6}$/i.test(String(f[1])))return false;var d=ms(f[2],20000),old=H.style.getPropertyValue("--accent");
+ H.style.setProperty("--accent",f[1]);
+ function back(){if(old)H.style.setProperty("--accent",old);else H.style.removeProperty("--accent")}
+ c.undo.push(back);extend(c,d);later(c,back,d);return true};
 
 /* ---------- карточки и окна ---------- */
 function closeBox(c,el){c.holds++;var done=false;function close(){if(done)return;done=true;c.holds--;if(el.parentNode)el.parentNode.removeChild(el)}c.closers.push(close);return close}

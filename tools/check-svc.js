@@ -33,8 +33,8 @@ const OPS = {
   banner: (f) => typeof f[2] === "string" && f[3] <= 20000 && TONES.includes(f[4]),
   rain: (f) => f[2] >= 1 && f[2] <= 60 && f[3] <= 20000,
   float: (f) => f[2] <= 20000 && f[3] >= 24 && f[3] <= 140,
-  follow: (f) => f[2] <= 20000,
-  css: (f) => CSS.includes(f[1]) && f[2] <= 20000,
+  follow: (f) => f[2] <= 60000,
+  css: (f) => CSS.includes(f[1]) && f[2] <= 60000,
   sound: (f) => SOUNDS.includes(f[1]),
   confetti: (f) => f[1] <= 12000,
   plaque: (f) => typeof f[2] === "string" && typeof f[3] === "string" && f[4] <= 20000,
@@ -43,6 +43,13 @@ const OPS = {
   term: (f) => typeof f[1] === "string" && Array.isArray(f[2]) && f[2].length >= 3 && f[2].length <= 12 && f[3] <= 25000,
   clicks: (f) => SOUNDS.includes(f[1]) && f[2] <= 30000,
   badge: (f) => typeof f[2] === "string" && f[3] <= 60000,
+  nick: (f) => typeof f[1] === "string" && f[1].length >= 2 && f[1].length <= 60 && f[2] >= 5000 && f[2] <= 120000,
+  retext: (f) => Array.isArray(f[1]) && f[1].length >= 1 && f[1].length <= 40 && f[1].every((p) => Array.isArray(p) && typeof p[0] === "string" && typeof p[1] === "string" && p[0].length <= 40 && p[1].length <= 60) && f[2] >= 5000 && f[2] <= 90000,
+  mask: (f) => f[1] >= 1000 && f[1] <= 20000,
+  dodge: (f) => f[1] >= 3000 && f[1] <= 30000,
+  cursor: (f) => ["wait", "not-allowed", "progress", "help", "crosshair"].includes(f[1]) && f[2] <= 30000,
+  accent: (f) => /^#[0-9a-f]{6}$/i.test(f[1]) && f[2] <= 40000,
+  after: (f) => f[1] >= 1000 && f[1] <= 40000 && f.length >= 3 && f.length <= 8 && f.slice(2).every((g) => Array.isArray(g) && g[0] !== "after" && OPS[g[0]] && OPS[g[0]](g)),
 };
 const titles = new Set();
 SVC_LIST.forEach((it, i) => {
