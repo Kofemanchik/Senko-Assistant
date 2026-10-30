@@ -76,12 +76,31 @@ jobs:
         env:
           FORUM_LOGIN: ${{ secrets.FORUM_LOGIN }}
           FORUM_PASSWORD: ${{ secrets.FORUM_PASSWORD }}
-        run: node scripts/sync-laws.js
+        shell: bash
+        run: |
+          # вывод парсера сохраняем и при сбое отдаём в аннотацию запуска: сообщение видно в сводке, не только в логе
+          set +e
+          node scripts/sync-laws.js 2>&1 | tee "$RUNNER_TEMP/parse.log"
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            msg=$(tail -n 14 "$RUNNER_TEMP/parse.log" | cut -c1-400 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
+            echo "::error title=Parse forum (сервер $SERVER)::$msg"
+          fi
+          exit $code
 
       - name: Разметить изменения и зашифровать
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}   # оповещение в Telegram о новых законах
-        run: node scripts/publish-laws.js
+        shell: bash
+        run: |
+          set +e
+          node scripts/publish-laws.js 2>&1 | tee "$RUNNER_TEMP/publish.log"
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            msg=$(tail -n 10 "$RUNNER_TEMP/publish.log" | cut -c1-400 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
+            echo "::error title=Publish laws (сервер $SERVER)::$msg"
+          fi
+          exit $code
 
       - name: Отчёт по серверу (звёзды, штрафы, части)
         continue-on-error: true
