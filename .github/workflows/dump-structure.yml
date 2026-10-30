@@ -24,15 +24,55 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Структура
+      - name: Структура (uk)
         shell: bash
         run: |
-          node scripts/dump-structure.js > "$RUNNER_TEMP/dump.txt" 2>&1 || { tail -n 20 "$RUNNER_TEMP/dump.txt"; exit 1; }
-          wc -c "$RUNNER_TEMP/dump.txt"
-          split -b 28000 -d "$RUNNER_TEMP/dump.txt" "$RUNNER_TEMP/part."
+          # лимиты GitHub: до 10 аннотаций на шаг и ~4 КБ в каждой, поэтому один кодекс на шаг
+          KIND=uk node scripts/dump-structure.js > "$RUNNER_TEMP/d.txt" 2>&1 || { tail -n 20 "$RUNNER_TEMP/d.txt"; exit 1; }
+          split -C 3400 -d "$RUNNER_TEMP/d.txt" "$RUNNER_TEMP/p."
           n=0
-          for f in "$RUNNER_TEMP"/part.*; do
-            n=$((n+1))
+          for f in "$RUNNER_TEMP"/p.*; do
+            n=$((n+1)); [ $n -gt 10 ] && break
             msg=$(sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' "$f")
-            echo "::notice title=structure server $SERVER part $n::$msg"
+            echo "::notice title=uk сервер $SERVER часть $n::$msg"
           done
+          rm -f "$RUNNER_TEMP"/p.*
+      - name: Структура (ak)
+        shell: bash
+        run: |
+          # лимиты GitHub: до 10 аннотаций на шаг и ~4 КБ в каждой, поэтому один кодекс на шаг
+          KIND=ak node scripts/dump-structure.js > "$RUNNER_TEMP/d.txt" 2>&1 || { tail -n 20 "$RUNNER_TEMP/d.txt"; exit 1; }
+          split -C 3400 -d "$RUNNER_TEMP/d.txt" "$RUNNER_TEMP/p."
+          n=0
+          for f in "$RUNNER_TEMP"/p.*; do
+            n=$((n+1)); [ $n -gt 10 ] && break
+            msg=$(sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' "$f")
+            echo "::notice title=ak сервер $SERVER часть $n::$msg"
+          done
+          rm -f "$RUNNER_TEMP"/p.*
+      - name: Структура (dk)
+        shell: bash
+        run: |
+          # лимиты GitHub: до 10 аннотаций на шаг и ~4 КБ в каждой, поэтому один кодекс на шаг
+          KIND=dk node scripts/dump-structure.js > "$RUNNER_TEMP/d.txt" 2>&1 || { tail -n 20 "$RUNNER_TEMP/d.txt"; exit 1; }
+          split -C 3400 -d "$RUNNER_TEMP/d.txt" "$RUNNER_TEMP/p."
+          n=0
+          for f in "$RUNNER_TEMP"/p.*; do
+            n=$((n+1)); [ $n -gt 10 ] && break
+            msg=$(sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' "$f")
+            echo "::notice title=dk сервер $SERVER часть $n::$msg"
+          done
+          rm -f "$RUNNER_TEMP"/p.*
+      - name: Структура (pk)
+        shell: bash
+        run: |
+          # лимиты GitHub: до 10 аннотаций на шаг и ~4 КБ в каждой, поэтому один кодекс на шаг
+          KIND=pk node scripts/dump-structure.js > "$RUNNER_TEMP/d.txt" 2>&1 || { tail -n 20 "$RUNNER_TEMP/d.txt"; exit 1; }
+          split -C 3400 -d "$RUNNER_TEMP/d.txt" "$RUNNER_TEMP/p."
+          n=0
+          for f in "$RUNNER_TEMP"/p.*; do
+            n=$((n+1)); [ $n -gt 10 ] && break
+            msg=$(sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' "$f")
+            echo "::notice title=pk сервер $SERVER часть $n::$msg"
+          done
+          rm -f "$RUNNER_TEMP"/p.*
