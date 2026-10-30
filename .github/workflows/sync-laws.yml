@@ -61,6 +61,11 @@ jobs:
         run: |
           if [ -z "$LAWS_KEY" ]; then echo "::error::Не задан секрет LAWS_KEY (Settings → Secrets and variables → Actions)"; exit 1; fi
 
+      # scripts/servers.js правят из разных мест: если в нём пропала функция, парсер падал бы без внятной причины
+      - name: Проверка scripts/servers.js
+        run: |
+          node -e "const S=require('./scripts/servers.js');const need=['current','files','startUrl','nameOf','forumIdOf','ignoredOf'];const bad=need.filter(function(f){return typeof S[f]!=='function'});if(bad.length){console.error('::error::В scripts/servers.js нет функций: '+bad.join(', ')+' (парсер ими пользуется)');process.exit(1)}"
+
       - name: Расшифровать прошлую версию (для сравнения)
         env:
           LAWS_RESET: ${{ inputs.reset && '1' || '' }}
