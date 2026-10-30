@@ -5493,7 +5493,6 @@ render();
       '<button type="button" class="btn' + (needLogin ? "" : " primary") + '" data-lw="sync"' + (LW.busy ? " disabled" : "") + ">Проверить сейчас</button>" +
       '<button type="button" class="btn" data-mylaw="add">+ Свой закон</button>' +
       '<span class="lw-meta" id="lwProg" aria-live="polite">' + (LW.busy ? esc(progText()) : "") + "</span>" +
-      (d && d.auth && !needLogin ? '<button type="button" class="btn" data-lw="logout"' + (LW.busy ? " disabled" : "") + ">Выйти с форума</button>" : "") +
       (d && d.status && d.status.ok === false ? '<button type="button" class="btn" data-lw="diag"' + (LW.diagBusy ? " disabled" : "") + ">" + (LW.diagBusy ? "Собираю данные…" : "Диагностика") + "</button>" : "") + "</div>" +
       (LW.diag ? '<div class="lw-diagbox"><p class="lw-meta">Скопируйте этот текст и отправьте разработчику.</p><textarea id="lwDiag" readonly rows="12" spellcheck="false">' + esc(LW.diag) + '</textarea>' +
         '<div class="lw-row"><button type="button" class="btn" data-lw="copy">Копировать</button><button type="button" class="btn" data-lw="diagclose">Скрыть</button><span class="lw-meta" id="lwCopied" aria-live="polite"></span></div></div>' : "") + "</div>";
@@ -5720,9 +5719,6 @@ render();
         if (r && r.ok) { LW.busy = true; LW.prog = { phase: "start" }; } else { LW.loginErr = (r && r.error) || ""; }
         draw(); load();
       }, function (e) { LW.loginBusy = false; LW.loginErr = "Ошибка входа: " + e; draw(); });
-    } else if (k === "logout") {
-      if (!API || !API.logout) return;
-      API.logout().then(function () { LW.loginErr = ""; load(); }, function () { load(); });
     } else if (k === "diagclose") { LW.diag = ""; draw(); }
     else if (k === "copy") {
       var ta = document.getElementById("lwDiag"), msg = document.getElementById("lwCopied");
@@ -6525,6 +6521,10 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.3.2",d:"30.10.2026",items:[
+  ["⚖️","Законы снова обновляются","Починено ежедневное чтение форума: законы всех трёх серверов опять подтягиваются сами, ошибка «Последняя проверка форума прошла с ошибкой» уйдёт после ближайшего обновления."],
+  ["🧹","Убрана кнопка «Выйти с форума»","В разделе «Законы» она больше не нужна: входить на форум в программе не требуется."]
+ ]},
  {v:"3.3.1",d:"30.10.2026",items:[
   ["🔔","Служебные сообщения","Новые виды оформления и уведомлений, обновлённые тексты. Для всех игроков эти возможности откроются позже, по решению владельца."],
  ]},
