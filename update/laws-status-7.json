@@ -1,10 +1,10 @@
 {
  "server": 7,
- "checkedAt": 1793354464543,
+ "checkedAt": 1793355063769,
  "updatedAt": 1793012975196,
  "sig": "15d6aa9149aeb2858987fcf33a0addabe2be6d59",
  "count": 25,
- "ok": false,
- "failed": 0,
- "error": "сервер 7: парсер или публикация завершились с ошибкой (запуск 41037521136)"
+ "ok": true,
+ "failed": 4,
+ "error": ""
 }
