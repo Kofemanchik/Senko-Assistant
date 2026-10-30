@@ -1,0 +1,38 @@
+name: Dump law structure
+
+# Диагностика парсера: печатает в аннотации запуска структуру (типы строк, начала заголовков) текстов законов сервера.
+# Сами тексты законов не публикуются: они хранятся в репозитории только в зашифрованном виде.
+on:
+  workflow_dispatch:
+    inputs:
+      server:
+        description: "Номер сервера: 12, 7 или 16"
+        default: "7"
+
+permissions:
+  contents: read
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      LAWS_KEY: ${{ secrets.LAWS_KEY }}
+      SERVER: ${{ inputs.server }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Структура
+        shell: bash
+        run: |
+          node scripts/dump-structure.js > "$RUNNER_TEMP/dump.txt" 2>&1 || { tail -n 20 "$RUNNER_TEMP/dump.txt"; exit 1; }
+          wc -c "$RUNNER_TEMP/dump.txt"
+          split -b 28000 -d "$RUNNER_TEMP/dump.txt" "$RUNNER_TEMP/part."
+          n=0
+          for f in "$RUNNER_TEMP"/part.*; do
+            n=$((n+1))
+            msg=$(sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' "$f")
+            echo "::notice title=structure server $SERVER part $n::$msg"
+          done
