@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Свой установщик Senko Assistant: окно на WPF (.NET Framework 4.8 есть в Windows 10/11, ничего ставить не нужно).
+       Внутри exe лежит обычный установщик (electron-builder, NSIS); окно запускает его тихо и показывает свой прогресс. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>9.0</LangVersion>
+    <AssemblyName>SenkoSetup</AssemblyName>
+    <RootNamespace>SenkoSetup</RootNamespace>
+    <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
+    <Version>3.3.2</Version>
+    <Product>Senko Assistant</Product>
+    <Company>Senko Corporation</Company>
+    <Description>Установка Senko Assistant</Description>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <DebugType>none</DebugType>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Ui.layout" LogicalName="SenkoSetup.Ui.layout" />
+    <EmbeddedResource Include="Assets\fox.png" LogicalName="SenkoSetup.Assets.fox.png" />
+  </ItemGroup>
+</Project>
