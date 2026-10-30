@@ -1,10 +1,10 @@
 {
  "server": 16,
- "checkedAt": 1793354463878,
- "updatedAt": 1793147859472,
- "sig": "eb0fb08547ae8968f2cebe89fd6d92cb35013663",
+ "checkedAt": 1793355237851,
+ "updatedAt": 1793355237851,
+ "sig": "95bda3a2d1a1ad6a7cdf7eb7891d058aa4ec99c1",
  "count": 22,
- "ok": false,
+ "ok": true,
  "failed": 6,
- "error": "сервер 16: парсер или публикация завершились с ошибкой (запуск 41037521136)"
+ "error": ""
 }
