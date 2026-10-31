@@ -119,7 +119,7 @@
   }
   function mb(n) { return (n / 1048576).toFixed(n > 104857600 ? 0 : 1).replace(".", ",") + " МБ"; }
   function show(r) {
-    var exe = (r.assets || []).filter(function (a) { return /\.exe$/i.test(a.name); })[0];
+    var exes = (r.assets || []).filter(function (a) { return /\.exe$/i.test(a.name); }), exe = exes.filter(function (a) { return /Installer/i.test(a.name); })[0] || exes[0]; // со своим установщиком качаем его
     var ver = String(r.tag_name || "").replace(/^v/i, "");
     if (ver) $$("[data-ver]").forEach(function (e) { e.textContent = ver; });
     if (exe) {

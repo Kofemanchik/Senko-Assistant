@@ -14,6 +14,7 @@ const SRV = require("./servers.js");
 
 const SERVER = SRV.current();            // SERVER=12|7|16; у Boston файлы называются как раньше
 const F = SRV.files(SERVER);
+core.configure({ v2: SERVER !== SRV.DEFAULT }); // тот же разбор, что в программе: у серверов кроме Boston он новый
 const KEEP_MS = 14 * 864e5; // сколько дней показывать метки «Изменено»/«Новый закон»
 const MIN_KEEP_RATIO = 0.6; // если законов стало меньше 60% от прошлых — парсер сломан, не публикуем
 

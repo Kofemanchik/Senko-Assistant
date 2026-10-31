@@ -159,7 +159,8 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;backgroun
 .part:first-of-type{border-top:0;padding-top:2px}
 .pn{font:500 12px var(--f-mono);color:var(--muted);flex:0 0 3.4em;padding-top:2px}
 .pb{flex:1;min-width:0}
-.note{margin:0 0 6px;font-size:13.5px;color:var(--muted)}
+.note{margin:0 0 6px;font-size:13.5px;color:var(--muted);white-space:pre-line;overflow-wrap:anywhere}
+.note.nodesc{font-style:italic;opacity:.8}
 .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .stars{font:600 15px var(--f-body);letter-spacing:.06em}
 .stars i{font-style:normal;color:var(--line)}
@@ -1043,6 +1044,9 @@ var DKG = [[1,2,"Документы и действия сотрудника"],[
 (function (root) {
   "use strict";
 
+  var cfg = { v2: false };
+  function configure(o) { if (o && o.v2 != null) cfg.v2 = !!o.v2; return { v2: cfg.v2 }; }
+
   var ROMAN = "[IVXLCМІХ]+";
   var NB = "(?![A-Za-z\\u0400-\\u04FF0-9])"; // «граница слова» для кириллицы (\\b в JS работает только с латиницей) // латиница, кириллица М/І/Х — на форуме встречается «І» кириллицей
 
@@ -1071,8 +1075,10 @@ var DKG = [[1,2,"Документы и действия сотрудника"],[
     return { t: "text" };
   }
 
-  /* Разбор: строки с типами, список «единиц» (статьи) и оглавление */
-  function parse(text) {
+  /* Разбор: строки с типами, список «единиц» (статьи) и оглавление.
+     Для Boston (сервер 12) остаётся прежний разбор. Для остальных серверов включается v2 (configure({v2:true})):
+     там статьи могут называться «15.6 Халатность.» без слова «Статья», юрисдикция стоит в частях, а нумерация в ПК идёт заново в каждой главе. */
+  function parseV1(text) {
     var raw = String(text || "").split("\n"), lines = [], i, c, l, first = true;
     for (i = 0; i < raw.length; i++) {
       l = clean(raw[i]);
@@ -1108,6 +1114,226 @@ var DKG = [[1,2,"Документы и действия сотрудника"],[
       u.text = lines.slice(u.line, last + 1).map(function (x) { return x.raw; }).join("\n");
     });
     return { lines: lines, units: units, toc: toc, mode: hasArt ? "art" : (hasArtSec ? "sec" : "pt") };
+  }
+
+
+  /* ───── v2: законы серверов кроме Boston ───── */
+  var IMG_RE = /[A-Za-z][A-Za-z0-9_-]{3,}\.(?:png|jpe?g|gif|webp|bmp)\b/g; // подписи картинок с форума («eADEZkd.png»), в т.ч. приклеенные к тексту
+  var JUR_ANY = "R\\/F|F\\/R|R|F|M|E";
+  var STAR_RE = /Приоритет\s+розыска\s*:?\s*(★+)(?:\s*[–—-]\s*(★+))?/i;
+  var ROM = { I: 1, V: 5, X: 10, L: 50, C: 100 };
+
+  function chapNum(line) {
+    var m = /^Глава\s+(\d+|[IVXLCМІХ]+)/i.exec(line); if (!m) return null;
+    if (/^\d+$/.test(m[1])) return parseInt(m[1], 10);
+    var s = m[1].replace(/М/g, "M").replace(/І/g, "I").replace(/Х/g, "X").toUpperCase(), n = 0, i, v, w;
+    for (i = 0; i < s.length; i++) { v = ROM[s.charAt(i)] || 0; w = ROM[s.charAt(i + 1)] || 0; n += v < w ? -v : v; }
+    return n || null;
+  }
+  function chapName(line) { return line.replace(/^Глава\s+(?:\d+|[IVXLCМІХ]+)\s*[.:·-]?\s*/i, "").replace(/[.\s]+$/, "").trim(); }
+  function normJ(j) { return j === "R/F" ? "F/R" : j; }
+
+  /* Короткое название статьи из первой фразы («Мелкое хулиганство, то есть нарушение…» → «Мелкое хулиганство») */
+  function shortTitle(s) {
+    s = String(s || "").replace(/\s+/g, " ").trim().replace(/[.:\s]+$/, "");
+    var cuts = [/,\s+(?:то есть|а также|а равно)(?![А-Яа-яЁё])/i, /\s[-–—]\s/, /:\s/, /\.\s+[А-ЯЁA-Z]/], best = s.length, k, m, t, w, sp;
+    for (k = 0; k < cuts.length; k++) { m = cuts[k].exec(s); if (m && m.index >= 8 && m.index < best) best = m.index; }
+    t = s.slice(0, best).trim();
+    if (t.length > 90) {
+      /* длинная фраза: режем по запятой или по слову, чтобы заголовок не обрывался на предлоге */
+      w = t.slice(0, 88); sp = w.lastIndexOf(",");
+      if (sp < 45) sp = w.lastIndexOf(" ");
+      w = (sp > 40 ? w.slice(0, sp) : w).replace(/[,;:\s]+$/, "");
+      w = w.replace(/(?:^|\s)(?:за|на|в|во|и|или|а|по|с|со|от|до|из|к|о|об|что|если|как|при|для|не|же|то)$/i, "").replace(/[,;:\s]+$/, "");
+      t = w + "…";
+    }
+    return t;
+  }
+
+  /* Заголовок статьи без слова «Статья»: «17.11 (R/F) Побег.» или «15.7 Название. (F) Текст…» */
+  function splitHeader(body) {
+    var m = new RegExp("^\\(\\s*(" + JUR_ANY + ")\\s*\\)\\s*(.*)$").exec(body);
+    if (m) return { jur: normJ(m[1]), title: m[2], head: "" };
+    m = new RegExp("^(.{3,200}?)[.:]?\\s*\\(\\s*(" + JUR_ANY + ")\\s*\\)\\s*(.*)$").exec(body);
+    if (m) return { jur: normJ(m[2]), title: m[1], head: m[3] };
+    return { jur: "", title: body, head: "" };
+  }
+
+  function parseV2(text) {
+    var raw = String(text == null ? "" : text).split("\n"), lines = [], i, l, c, first = true, chapNo = null, m, sh, inNumNote = false;
+    for (i = 0; i < raw.length; i++) {
+      l = clean(String(raw[i]).replace(IMG_RE, "")); // подпись картинки убираем до разбора
+      if (!l) continue;
+      c = classify(l);
+      if (first) { c = { t: "title" }; first = false; }
+      else if (c.t === "chap") chapNo = chapNum(l);
+      else if (c.t === "text") {
+        m = /^Пункт\s+(\d+(?:\.\d+)*)\s*[.:)]?\s*(.*)$/i.exec(l);
+        if (m && !inNumNote) c = { t: "cpart", n: m[1], body: m[2] };
+      } else if (c.t === "pt" && /\./.test(c.n) && (chapNo == null || c.n.split(".")[0] === String(chapNo) || new RegExp("^\\(\\s*(?:" + JUR_ANY + ")\\s*\\)").test(c.body))) {
+        sh = splitHeader(c.body);
+        c = { t: "art", n: c.n, jur: sh.jur, title: sh.title, head: sh.head, bare: true };
+      }
+      /* «Часть 1. Текст» внутри статьи (УК, глава 1: «Статья 1.3. …» → «Часть 1. …») — это часть статьи, а не раздел кодекса */
+      if (c.t === "part" && (m = /^Часть\s+(\d+(?:\.\d+)?)\s*[.:)]?\s*(.*)$/i.exec(l))) c = { t: "cpart", n: m[1], body: m[2] };
+      /* «Примечание №4: … Пункт 1. … Пункт 2. …» — такие пункты принадлежат примечанию, а не становятся частями статьи */
+      if (c.t === "note") { if (/^Примечани[ея]/i.test(l)) inNumNote = /^Примечани[ея]\s*№\s*\d+/i.test(l); }
+      else if (c.t === "art" || c.t === "chap" || c.t === "sec" || c.t === "part" || c.t === "artsec") inNumNote = false;
+      c.raw = l;
+      c.chapNo = chapNo;
+      lines.push(c);
+    }
+    var hasArt = lines.some(function (x) { return x.t === "art"; });
+    var hasArtSec = !hasArt && lines.some(function (x) { return x.t === "artsec"; });
+    var units = [], toc = [], chaps = [], cur = null, chap = "", sec = "", chapN = null;
+    lines.forEach(function (x, idx) {
+      var isUnit = hasArt ? x.t === "art" : (hasArtSec ? x.t === "artsec" : (x.t === "pt" && /\./.test(x.n)));
+      if (x.t === "sec" || x.t === "chap" || x.t === "part") {
+        if (x.t === "chap") { chap = x.raw; chapN = x.chapNo; chaps.push({ no: chapN, name: chapName(x.raw), line: idx }); }
+        if (x.t === "sec") sec = x.raw;
+        toc.push({ t: x.t, text: x.raw, line: idx });
+        cur = null;
+      }
+      if (isUnit) {
+        var title = String(x.title || "").replace(/^[-–—:\s]+/, ""), head = x.head || ""; // «Статья 2.6 - Название» → «Название»
+        if (x.t === "pt") title = x.body.slice(0, 80);
+        var st = shortTitle(title);
+        if (st !== title.replace(/[.\s]+$/, "")) { head = (head ? title + " " + head : title); title = st; } // длинная фраза: коротко в заголовок, полностью в текст
+        else if (!head && x.bare && title.length > 40) head = title; // «18.2 (F) Умышленные уничтожение…»: сама фраза и есть текст статьи
+        cur = { n: x.n, on: x.n, full: String(x.title || "").replace(/^[-–—:\s]+/, "").trim(), title: title.replace(/[.\s]+$/, ""), head: head.trim(), jur: x.jur || "", line: idx, chap: chap, chapNo: chapN, sec: sec, parts: [] };
+        units.push(cur);
+        x.unitRef = cur;
+      }
+      if (!isUnit && !cur && (x.t === "text" || x.t === "pt" || x.t === "cpart" || x.t === "sub" || x.t === "pun" || x.t === "note")) {
+        /* текст до первой статьи (вводные положения кодекса, определения в начале главы, глава «Терминология») тоже показываем отдельной записью */
+        var nm = chapN != null ? (chaps.length ? chaps[chaps.length - 1].name : "") : "Вводные положения";
+        cur = { n: "~", on: "~", implicit: true, full: "", title: nm || "Вводные положения", head: "", jur: "", line: idx - 1, chap: chap, chapNo: chapN == null ? 0 : chapN, sec: sec, parts: [] };
+        units.push(cur);
+        x.unitRef = cur;
+      }
+      if (cur) cur.parts.push(idx);
+    });
+    /* В ПК нумерация статей идёт заново в каждой главе: делаем номера уникальными по схеме «глава.статья» (глава III, ст. 4 → 3.4) */
+    var byN = {}, restart = false;
+    units.forEach(function (u) { if (u.implicit) return; var a = byN[u.on] || (byN[u.on] = []); if (a.length && a[0].chapNo !== u.chapNo) restart = true; a.push(u); });
+    if (restart) units.forEach(function (u) { if (!u.implicit && u.chapNo != null) u.n = u.chapNo + "." + u.on; });
+    var introN = 0, lastN = 0;
+    units.forEach(function (u) {
+      if (!u.implicit) { var iv = parseInt(u.n, 10); if (isFinite(iv)) lastN = iv; return; }
+      if (u.chapNo === 0) { u.n = "0." + (++introN); return; }
+      if (restart) { u.n = u.chapNo + ".0"; return; }
+      var f = null; units.forEach(function (v) { if (!f && !v.implicit && v.chapNo === u.chapNo) f = v; });
+      u.n = (f ? parseInt(f.on, 10) : lastN + 1) + ".0";
+    });
+    var seen = {};
+    units.forEach(function (u) {
+      var key = u.n, k = 2; while (seen[key]) key = u.n + "#" + (k++);
+      seen[key] = 1; u.key = key;
+      var last = u.parts.length ? u.parts[u.parts.length - 1] : u.line;
+      u.end = last;
+      u.text = lines.slice(u.line, last + 1).map(function (x) { return x.raw; }).join("\n");
+    });
+    lines.forEach(function (x) { if (x.unitRef) { x.unit = x.unitRef.key; delete x.unitRef; } });
+    return { lines: lines, units: units, toc: toc, chaps: chaps, restart: restart, mode: hasArt ? "art" : (hasArtSec ? "sec" : "pt"), v2: true };
+  }
+
+  function parse(text, o) {
+    var v2 = o && o.v2 != null ? !!o.v2 : cfg.v2;
+    return v2 ? parseV2(text) : parseV1(text);
+  }
+
+  /* Строки таблицы из разбора v2: часть = строка. Текст статьи сохраняется целиком (с примечаниями), а звёзды, юрисдикция и наказание выносятся в отдельные поля */
+  function rowsV2(parsed) {
+    var rows = [], L = parsed.lines;
+    function unitHasBody(u) {
+      if (u.head) return true;
+      for (var q = u.line + 1; q <= u.end; q++) { var y = L[q]; if (y && String(y.raw || "").replace(/^\s*(?:ч\.\s*)?\d+(?:\.\d+)*\s*[.)]?\s*$/i, "").trim()) return true; }
+      return false;
+    }
+    var withBody = {};
+    parsed.units.forEach(function (u) { if (unitHasBody(u)) withBody[u.n] = true; });
+    function withBodyOnly() { return false; }
+
+    function assemble(items, puns, artJur, canJur) {
+      var stars = 0, jur = "", texts = [], pts = [], firstDone = false;
+      items.forEach(function (it) {
+        var s = String(it.s || ""), mm;
+        mm = STAR_RE.exec(s);
+        if (mm) { stars = Math.max(stars, (mm[2] || mm[1]).length); s = s.replace(STAR_RE, " ").replace(/\s{2,}/g, " ").trim(); }
+        s = s.trim();
+        if (!s) return;
+        if (!firstDone) {
+          firstDone = true;
+          mm = new RegExp("^\\(\\s*(" + JUR_ANY + ")\\s*\\)\\s*").exec(s);
+          if (mm) { jur = normJ(mm[1]); s = s.slice(mm[0].length).trim(); }
+        }
+        mm = /^([а-яёa-z]|\d{1,2})\)\s+(.*)$/i.exec(s);
+        if (mm && it.k === "b") pts.push([mm[1].toLowerCase(), mm[2]]);
+        if (s) texts.push(s);
+      });
+      return { stars: stars, jur: jur || artJur || "", texts: texts, pts: pts, puns: puns };
+    }
+
+    parsed.units.forEach(function (u) {
+      if (!unitHasBody(u) && (!u.title || withBody[u.n])) return;
+      var parts = [], cur = null, pre = { items: [], puns: [] }, p, x;
+      if (u.head) pre.items.push({ k: "b", s: u.head });
+      for (p = u.line + 1; p <= u.end; p++) {
+        x = L[p];
+        if (x.t === "pt" && cur && cur.isC) { cur.items.push({ k: "b", s: x.raw }); } // «1. … 2. …» после «ч. 3»: пояснения к статье, а не новые части
+        else if (x.t === "pt" || x.t === "cpart") { cur = { isC: x.t === "cpart",  n: x.n, lead: x.raw, items: [], puns: [], hadBody: !!x.body }; if (x.body) cur.items.push({ k: "b", s: x.body }); parts.push(cur); }
+        else {
+          var tg = cur || pre;
+          if (x.t === "pun") tg.puns.push(x.raw);
+          else if (x.t === "note") tg.items.push({ k: "n", s: x.raw });
+          else tg.items.push({ k: "b", s: x.raw });
+        }
+      }
+      var list = [];
+      if (parts.length && pre.puns.length && !parts.some(function (q) { return q.puns.length; })) {
+        /* «Наказание» стоит до списка частей: оно общее на всю статью, части только перечисляют признаки (АК 2.1) */
+        var all = { n: "", items: pre.items.slice(), puns: pre.puns };
+        parts.forEach(function (q) { all.items.push({ k: "b", s: q.lead }); q.items.forEach(function (it, ix) { if (ix === 0 && q.hadBody) return; all.items.push(it); }); }); // «ч. 1 Текст» уже в lead, второй раз тот же текст не нужен
+        list = [all];
+      } else if (!parts.length) {
+        list = [{ n: "", items: pre.items, puns: pre.puns }];
+      } else {
+        var hasPre = pre.items.some(function (it) { return String(it.s || "").trim(); });
+        if (hasPre || pre.puns.length) list.push({ n: "0", items: pre.items, puns: pre.puns }); // вводная часть статьи до первого пункта
+        parts.forEach(function (q) { list.push(q); });
+      }
+      var single = list.length === 1;
+      list.forEach(function (pt, i) {
+        var a = assemble(pt.items, pt.puns, u.jur);
+        var puns = a.puns.map(function (z) { return z.replace(/\s+/g, " ").trim(); });
+        if (!a.texts.length && u.full && u.full.length >= 25 && !withBodyOnly(u)) a.texts.push(u.full); // у статьи нет текста кроме заголовка: сама фраза и есть текст
+        var body = a.texts.join("\n");
+        var pun1 = puns[0] || "";
+        var pp = parsePun(pun1 || (/штраф/i.test(u.title) ? u.title : ""));
+        if (!pun1 && /штраф\s*(?:до|от|в размере)?\s*\$?\s*\d/i.test(body)) pp = parsePun(body);
+        var punText = puns.join(" ");
+        rows.push({
+          code: u.n, key: u.key, part: single ? "" : (pt.n === "0" ? "0" : (pt.n || String(i + 1))), title: u.title, jur: a.jur,
+          stars: a.stars, m: pp.m, fmin: pp.fmin, fmax: pp.fmax, rec: pp.rec, hasFine: pp.hasFine,
+          text: body, pun: punText, note: "", pts: a.pts, chap: u.chap, chapNo: u.chapNo
+        });
+      });
+    });
+    return rows;
+  }
+
+  /* Названия глав для таблиц: {номерГлавы: название} и диапазоны номеров статей для ДК/ПК: [[от, до, название], …] */
+  function chapterInfo(parsed) {
+    var names = {}, ranges = [], by = {};
+    names[0] = "Вводные положения";
+    (parsed.chaps || []).forEach(function (c) { if (c.no != null) names[c.no] = c.name; });
+    parsed.units.forEach(function (u) {
+      var n = parseInt(u.n, 10); if (!isFinite(n) || u.chapNo == null) return;
+      var r = by[u.chapNo]; if (!r) { r = by[u.chapNo] = [n, n]; }
+      if (n < r[0]) r[0] = n; if (n > r[1]) r[1] = n;
+    });
+    Object.keys(by).map(Number).sort(function (a, b) { return a - b; }).forEach(function (k) { ranges.push([by[k][0], by[k][1], names[k] || ("Глава " + k)]); });
+    return { names: names, ranges: ranges };
   }
 
   function hash(str) { // быстрый стабильный хэш (FNV-1a 32 бит, два прохода → 53 бита), без зависимостей
@@ -1147,7 +1373,8 @@ var DKG = [[1,2,"Документы и действия сотрудника"],[
       var a = money(m[1]), b = money(m[2]);
       r.hasFine = true; r.fmin = Math.min(a, b); r.fmax = Math.max(a, b);
     } else {
-      var re = /\$\s*(\d[\d.,]*\d|\d)|(\d[\d.,]*\d|\d)\s*\$/g, nums = [];
+      var AMT = "\\d{1,3}(?:[ \\u00a0]\\d{3})+(?:[.,]\\d{3})*|\\d[\\d.,]*\\d|\\d"; // «$35 000», «$25,000», «20.000$»
+      var re = new RegExp("\\$\\s*(" + AMT + ")|(" + AMT + ")\\s*\\$", "g"), nums = [];
       while ((m = re.exec(fp))) nums.push(money(m[1] || m[2]));
       if (nums.length) {
         r.hasFine = true;
@@ -1157,7 +1384,11 @@ var DKG = [[1,2,"Документы и действия сотрудника"],[
         else { r.fmin = nums[0]; r.fmax = nums[0]; }
       }
     }
-    var mm = /(\d+)\s*мес/i.exec(s); if (mm) { var all = s.match(/\d+(?=\s*мес)/g) || []; r.m = Math.max.apply(null, all.map(Number)); }
+    var all = s.match(/\d+(?=(?:-\s*[а-яё]{1,3})?\s*мес)/gi) || [];
+    var months = all.map(Number);
+    var yr = /(\d+)\s*(?:лет|года|год|годам)(?![а-яё])(?:\s*(?:и\s*)?(\d+)\s*мес)?/gi, ym;
+    while (cfg.v2 && (ym = yr.exec(s))) months.push(parseInt(ym[1], 10) * 12 + (ym[2] ? parseInt(ym[2], 10) : 0)); // 07 и др.: сроки в годах, в таблицах считаем месяцами
+    if (months.length) r.m = Math.max.apply(null, months);
     r.rec = /судимост/i.test(s);
     return r;
   }
@@ -1168,6 +1399,7 @@ var DKG = [[1,2,"Документы и действия сотрудника"],[
 
   /* Статьи кодекса → строки (часть = отдельная строка), как в приложении: code, part, title, jur, stars, m, fmin, fmax, rec, note, pun */
   function rowsFromParsed(parsed) {
+    if (parsed && parsed.v2) return rowsV2(parsed);
     var rows = [], L = parsed.lines;
     /* Пустые статьи: заголовок без текста, наказания и примечаний (строка оглавления, «висящий» заголовок и т.п.).
        Их нельзя превращать в строки: они занимают место настоящей статьи с тем же номером и показываются пустыми. */
@@ -1216,7 +1448,7 @@ var DKG = [[1,2,"Документы и действия сотрудника"],[
     return rows;
   }
 
-  var api = { clean: clean, classify: classify, parse: parse, hash: hash, normText: normText, unitHashes: unitHashes, parsePun: parsePun, rowsFromParsed: rowsFromParsed };
+  var api = { configure: configure, chapterInfo: chapterInfo, clean: clean, classify: classify, parse: parse, hash: hash, normText: normText, unitHashes: unitHashes, parsePun: parsePun, rowsFromParsed: rowsFromParsed };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.LawCore = api;
 })(typeof window !== "undefined" ? window : this);
 
@@ -1254,9 +1486,9 @@ function SRNOTE(){
 }
 var BADGE_MS = 14 * 864e5; // сколько дней висят метки «Изменено» и «Новый закон»
 function lawKindOf(t){
-  t = String(t||"");
+  t = String(t||"").replace(/\s+/g," ").trim();
   if(/^Уголовный кодекс/i.test(t)) return "uk";
-  if(/^Кодекс об Административных правонарушениях/i.test(t)) return "ak";
+  if(/^(?:Кодекс об Административных правонарушениях|Административный кодекс)/i.test(t)) return "ak"; // на сервере 07 он называется «Административный Кодекс штата Сан-Андреас»
   if(/^Дорожный кодекс/i.test(t)) return "dk";
   if(/^Процессуальный кодекс/i.test(t)) return "pk";
   return "";
@@ -1283,6 +1515,8 @@ function lawNat(a,b){
   var MYSRV = 12;
   try{ var _s = A && A.state && A.state(); if(_s && _s.user && parseInt(_s.user.server,10) > 0) MYSRV = parseInt(_s.user.server,10); }catch(e){}
   LAWSYNC.server = MYSRV;
+  // сервера кроме Boston: новый разбор (статьи без слова «Статья», юрисдикция в частях, нумерация ПК по главам); Boston остаётся на прежнем
+  try{ if(window.LawCore && LawCore.configure) LawCore.configure({v2: MYSRV !== 12}); }catch(e){}
   try{ raw = A && A.laws && A.laws.getSync ? A.laws.getSync() : null; }catch(e){ raw = null; }
   if(!raw || !Array.isArray(raw.laws) || !raw.laws.length || !window.LawCore){
     // законов этого сервера пока нет: остаются встроенные таблицы Boston, об этом предупреждаем в разделе «Законы» и в справке
@@ -1291,6 +1525,7 @@ function lawNat(a,b){
   }
   if(MYSRV !== 12 && raw.server && parseInt(raw.server,10) !== MYSRV){ LAWSYNC.fallback = true; LAWSYNC.raw = null; return; } // законы другого сервера не применяем
   var REBUILD = MYSRV !== 12;
+  var V2 = REBUILD; // таблицы этого сервера собираются новым разбором: заголовок, текст и пункты уже готовые
   if(REBUILD){
     // текст Миранды берём из законов сервера, если он там есть (владелец может задать свой в панели)
     try{
@@ -1328,7 +1563,8 @@ function lawNat(a,b){
   }
   function newRow(kind, f, chapOf){
     var title = String(f.title || "").replace(/[.\s]+$/, ""), text = f.text || "";
-    if(kind === "dk" || !title){ title = (kind === "dk" ? (text || title || "Статья " + f.code) : (text || "Статья " + f.code)).replace(/\s+/g, " ").slice(0, 80); }
+    if(V2){ if(!title) title = "Статья " + f.code; }
+    else if(kind === "dk" || !title){ title = (kind === "dk" ? (text || title || "Статья " + f.code) : (text || "Статья " + f.code)).replace(/\s+/g, " ").slice(0, 80); }
     var r;
     if(kind === "pk"){
       r = {k:"pk", code:f.code, part:f.part, title:title, note:((text) + (f.note ? " " + f.note : "")).trim(), pun:(f.pun||"").replace(/^Наказание[^:]*:?\s*/i,""),
@@ -1337,7 +1573,9 @@ function lawNat(a,b){
       r = {k:kind, code:f.code, part:f.part, title:title, stars:kind==="uk"?f.stars:0, m:kind==="uk"?f.m:0,
            fmin:f.hasFine?f.fmin:0, fmax:f.hasFine?f.fmax:0, rec:kind==="uk"?f.rec:false, note:text, id:kind+f.code+"-"+f.part};
       if(kind === "uk") r.j = f.jur && JOK[f.jur] ? f.jur : "";
+      if(V2 && kind === "ak" && f.m > 0) r.x = "арест до " + f.m + " мес.";
     }
+    if(V2 && kind === "uk" && f.pts && f.pts.length){ (LAWSYNC.points || (LAWSYNC.points = {}))[f.code + "|" + pn(f.part)] = f.pts; } // буквенные пункты части из текста закона сервера
     r.nw = true;
     return r;
   }
@@ -1358,6 +1596,16 @@ function lawNat(a,b){
       arr.length = 0; baseCodes = {}; minSeg = 0;
       if((kind === "uk" || kind === "ak") && CH[kind]) Object.keys(CH[kind]).forEach(function(k){ delete CH[kind][k]; });
       LAWSYNC.rebuilt[kind] = true;
+      try{
+        var CI = LawCore.chapterInfo ? LawCore.chapterInfo(P) : null;
+        if(CI){
+          // названия глав и группы статей берём из законов этого сервера (у Boston они свои)
+          if((kind === "uk" || kind === "ak") && CH[kind]) Object.keys(CI.names).forEach(function(k){ if(k !== "0") CH[kind][String(k)] = CI.names[k]; });
+          if(kind === "dk"){ DKG.length = 0; CI.ranges.forEach(function(g){ DKG.push(g); }); }
+          if(kind === "pk"){ PKG.length = 0; CI.ranges.forEach(function(g){ PKG.push(g); }); }
+        }
+        if(kind === "uk") LAWSYNC.points = {};
+      }catch(e){}
     } else if(P.units.length < 5 || hit < codes.length * 0.85){
       LAWSYNC.skipped[kind] = "структура текста на форуме не совпала со справочником (" + hit + " из " + codes.length + " статей)";
       return;
@@ -1577,7 +1825,7 @@ function gref(ref){
   return '<button type="button" class="xref" data-go="'+kind+"|"+m[2]+'">'+esc(ref)+'</button>';
 }
 function noteHtml(r){
-  if(r.k!=="pk") return r.note?'<p class="note">'+linkify(esc(r.note),r.k)+'</p>':'';
+  if(r.k!=="pk") return r.note?'<p class="note">'+linkify(esc(r.note),r.k)+'</p>':(r.nw&&LAWSYNC.server!==12&&!r.pun?'<p class="note nodesc">В законе у этой статьи нет описания, только название.</p>':'');
   var t = esc(r.note).replace(/([:;.])\s+((?:[а-яё]|[а-яё]\.\d|\d+)\))\s/gi,"$1\n$2 ");
   t = linkify(t,"pk");
   var long = r.note.length>420, open = !!expanded[r.id];
@@ -1632,6 +1880,7 @@ var POINTS = {
 "15.4|2":[["а","группой лиц по предварительному сговору или организованной группой"],["б","с вымогательством взятки"],["в","в крупном размере"]],
 "15.5|2":[["а","группой лиц по предварительному сговору или организованной группой"],["б","в крупном размере"]]
 };
+if(LAWSYNC.points) POINTS = LAWSYNC.points; // другой сервер: пункты по его закону, а не по Boston
 var LETTER_ANY = {};
 Object.keys(POINTS).forEach(function(k){ var c=k.split("|")[0]; POINTS[k].forEach(function(p){ LETTER_ANY[c+"|"+p[0]]=1; }); });
 function pkey(r){ return r.code+"|"+(r.part||"1"); }
@@ -1874,7 +2123,7 @@ function listHtml(kind,data,Q){
       lastCode=r.code;
       h+='<article class="art" id="a-'+kind+'-'+r.code.replace(/\./g,"_")+'" data-k="'+kind+'" data-c="'+r.code+'"><div class="art-h"><span class="num">'+r.code+'</span><h3>'+r.title+chgBadge(r)+'</h3>'+jurChip(r)+(window.senkoApp&&window.senkoApp.bug?'<button type="button" class="ic art-bug" data-art-bug="'+kind+'|'+r.code+'" aria-label="Сообщить об ошибке в статье" title="Сообщить об ошибке в статье">⚑</button>':'')+'</div>'+jurLine(r);
     }
-    h+='<div class="part lv'+r.stars+'"><span class="pn">'+"ч."+(r.part||"1")+'</span><div class="pb">'+noteHtml(r)+ptsHtml(r,Q)+'<div class="meta">'+(kind==="uk"?starsHtml(r.stars):"")+chips(r)+'</div>'+userNoteHtml(r.id)+'</div>'+
+    h+='<div class="part lv'+r.stars+'"><span class="pn">'+(r.part==="0"?"":"ч."+(r.part||"1"))+'</span><div class="pb">'+noteHtml(r)+ptsHtml(r,Q)+'<div class="meta">'+(kind==="uk"?starsHtml(r.stars):"")+chips(r)+'</div>'+userNoteHtml(r.id)+'</div>'+
       '<div class="acts"><button class="ic'+(favs[r.id]?" on":"")+'" data-fav-id="'+r.id+'" aria-label="В избранное" title="В избранное">'+(favs[r.id]?"★":"☆")+'</button>'+
       '<button class="ic'+(notes[r.id]||noteOpen[r.id]?" on":"")+'" data-note-btn="'+r.id+'" aria-label="Заметка" title="Заметка">✎</button>'+
       (r.k==="pk"?'':'<button class="ic'+(basket[r.id]?" added":"")+'" data-add-id="'+r.id+'" aria-label="В калькулятор" title="В калькулятор">'+(basket[r.id]?"✓":"+")+'</button>')+'</div></div>';
@@ -1951,7 +2200,9 @@ function renderGen(){
   var h = deptBar();
   h+='<div class="cards">'+items.map(function(g){return '<section class="card"><h3>'+g.t+'</h3><span class="ref">'+gref(g.r)+'</span>'+g.h+'</section>'}).join("")+'</div>';
   if(!items.length) h+='<div class="empty">В общей части ничего не нашлось.</div>';
-  h+='<p class="foot">Данные собраны из неофициальных справочников majesticrules.fun и majestic-rp.wiki по серверу Boston на '+SYNC+'. Дорожный и Процессуальный кодексы внесены из присланных текстов. ДК полный, 72 пункта. Названия глав и групп статей условные.'+syncNote()+' Перед оформлением спорных случаев сверяйтесь с текстом законов на форуме проекта. Заметки и избранное личные, их видите только вы.</p>';
+  h+=(LAWSYNC.server!==12 && Object.keys(LAWSYNC.rebuilt).length
+    ? '<p class="foot">Таблицы собраны из законов сервера '+esc(SRVNAME())+' на форуме проекта'+(LAWSYNC.at?' (данные от '+SYNC+')':'')+'. Главы и их названия взяты из самих законов. В ПК статьи нумеруются внутри главы: 3.4 — это глава III, статья 4.'+syncNote()+' Перед оформлением спорных случаев сверяйтесь с текстом законов на форуме проекта. Заметки и избранное личные, их видите только вы.</p>'
+    : '<p class="foot">Данные собраны из неофициальных справочников majesticrules.fun и majestic-rp.wiki по серверу Boston на '+SYNC+'. Дорожный и Процессуальный кодексы внесены из присланных текстов. ДК полный, 72 пункта. Названия глав и групп статей условные.'+syncNote()+' Перед оформлением спорных случаев сверяйтесь с текстом законов на форуме проекта. Заметки и избранное личные, их видите только вы.</p>');
   view.innerHTML=h;
 }
 /* Наборы статей. Это типовые сочетания, а не готовая квалификация: лишнее убирайте в калькуляторе. */
@@ -6521,6 +6772,11 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.4.0-beta.1",d:"31.10.2026",items:[
+  ["⚖️","Тексты статей УК на серверах кроме Boston","Строки «Часть 1.» внутри статей больше не принимаются за раздел кодекса: у статей 1.3–1.12 и других появился текст и части."],
+  ["🔧","Статьи и части не путаются","«15.6 Халатность.», «15.7 …» без слова «Статья» теперь отдельные статьи, пояснения «1. 2. 3.» после «ч. 3» остаются в статье, а штраф «$35 000» читается верно."],
+  ["💾","Свой установщик","Новое окно установки в стиле программы, с анимацией и выбором папки. Автообновление работает как раньше."]
+ ]},
  {v:"3.3.2",d:"30.10.2026",items:[
   ["⚖️","Законы снова обновляются","Починено ежедневное чтение форума: законы всех трёх серверов опять подтягиваются сами, ошибка «Последняя проверка форума прошла с ошибкой» уйдёт после ближайшего обновления."],
   ["🧹","Убрана кнопка «Выйти с форума»","В разделе «Законы» она больше не нужна: входить на форум в программе не требуется."]

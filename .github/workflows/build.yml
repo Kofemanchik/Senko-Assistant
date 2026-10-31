@@ -75,6 +75,21 @@ jobs:
 
       - run: npm run dist
 
+      # Свой установщик (WPF): окно рисуем сами, внутри лежит обычный установщик electron-builder и ставит файлы тихо.
+      # Автообновление по-прежнему идёт через Senko-Assistant-Setup-*.exe и latest.yml, их установщик не трогает.
+      - name: Свой установщик
+        continue-on-error: true   # пока не проверен на Windows: при сбое релиз выйдет без него, обычный установщик останется
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist -Filter "Senko-Assistant-Setup-*.exe" | Select-Object -First 1
+          if (-not $setup) { throw "нет dist/Senko-Assistant-Setup-*.exe" }
+          $size = (Get-ChildItem dist/win-unpacked -Recurse -File | Measure-Object Length -Sum).Sum
+          Set-Content -Path installer/expected.txt -Value $size -NoNewline
+          dotnet build installer/SenkoSetup -c Release "-p:Payload=$($setup.FullName)" "-p:ExpectedFile=$PWD/installer/expected.txt" -o installer/out
+          if ($LASTEXITCODE -ne 0) { throw "сборка установщика не удалась" }
+          Copy-Item installer/out/SenkoSetup.exe "dist/Senko-Assistant-Installer-${{ steps.ver.outputs.v }}.exe"
+          Get-Item dist/*.exe | ForEach-Object { "$($_.Name): $([math]::Round($_.Length/1MB)) МБ" }
+
       - name: Модель голоса попала в сборку
         shell: bash
         run: |

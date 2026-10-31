@@ -9,3 +9,6 @@ update/.prev*.json
 laws-key.json
 ai-key.json
 .env
+installer/out/
+installer/**/bin/
+installer/**/obj/

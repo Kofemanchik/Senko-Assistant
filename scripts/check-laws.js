@@ -23,6 +23,7 @@ function report(id) {
   if (!fs.existsSync(f)) return head + "\nЗаконы этого сервера ещё не собирались.\n";
   let d;
   try { d = JSON.parse(decrypt(fs.readFileSync(f), process.env.LAWS_KEY)); } catch (e) { return head + "\nНе удалось расшифровать файл: " + e.message + "\n"; }
+  LawCore.configure({ v2: id !== SRV.DEFAULT });
   const out = [head, `Законов: ${(d.laws || []).length}, обновлено ${d.updatedAt ? new Date(d.updatedAt).toISOString() : "—"}`, "", "| Кодекс | Статей | Строк (частей) | Без звёзд | Без штрафа/срока | Часть без номера |", "|---|---|---|---|---|---|"];
   const names = { uk: "УК", ak: "АК", dk: "ДК", pk: "ПК" };
   const seen = {};
