@@ -43,24 +43,35 @@ async function apiRequest(action, payload = {}, opts = {}) {
   return data;
 }
 
-// Чтение настроек бота из таблицы bot_settings (кэшируется)
+// Чтение настроек бота из таблицы bot_settings (кэшируется).
+// Сервер отдаёт их через action «discord», op «settings_get» (действия «bot_settings» на сервере нет).
 async function botSettings(keys, ttlMs = config.settingsCacheTtl) {
   const out = {};
+  const need = [];
   for (const key of keys) {
     const cached = ttl(`bs:${key}`);
-    if (cached != null) {
-      out[key] = cached;
-      continue;
+    if (cached !== null) out[key] = cached;
+    else need.push(key);
+  }
+  if (need.length) {
+    const data = await apiRequest("discord", { op: "settings_get", keys: need });
+    const got = (data && data.ok && data.settings) || {};
+    for (const key of need) {
+      const value = got[key] === undefined ? null : got[key];
+      if (value !== null) setCache(`bs:${key}`, value, ttlMs);
+      out[key] = value;
     }
-    const data = await apiRequest("bot_settings", { op: "get", key });
-    let value = null;
-    if (data && data.ok && data.value !== undefined) {
-      value = data.value;
-    }
-    setCache(`bs:${key}`, value, ttlMs);
-    out[key] = value;
   }
   return out;
+}
+
+// Очередь changelog: сервер кладёт туда текст релиза после сборки, бот публикует и подтверждает
+async function changelogPending() {
+  const data = await apiRequest("discord", { op: "changelog_pending" });
+  return data && data.ok ? data.item || null : null;
+}
+async function changelogAck(id) {
+  return apiRequest("discord", { op: "changelog_ack", id });
 }
 
 // Запись одной настройки (вызывается из панели/бота)
@@ -102,6 +113,8 @@ module.exports = {
   setBotSetting,
   delBotSetting,
   discordEvent,
+  changelogPending,
+  changelogAck,
   monitorRecord,
   monitorState,
   cache,

@@ -3326,6 +3326,20 @@ async function discordApi(b) {
     return { ok: true, settings: out };
   }
 
+  // Очередь changelog для Discord-бота: текст релиза публичный, подтверждение снимает только запись с тем же id
+  if (op === "changelog_pending") {
+    const v = await getSetting("discord_changelog_pending", null);
+    return { ok: true, item: v && v.id ? v : null };
+  }
+  if (op === "changelog_ack") {
+    const v = await getSetting("discord_changelog_pending", null);
+    if (v && v.id && v.id === String(b.id || "")) {
+      await sql`delete from bot_settings where key = 'discord_changelog_pending'`;
+      await audit(a.label, "discord_changelog", v.version, { via: "bot" });
+    }
+    return { ok: true };
+  }
+
   // Остальные операции требуют авторизации (токен приложения или панельная сессия)
   let p: any = null;
   if (b.token) {
@@ -4179,6 +4193,7 @@ async function cron(req) {
     b = await req.json();
   } catch (e) {}
   if (b && b.action === "laws_changed") return J(await lawsChanged(b));
+  if (b && b.action === "dc_changelog") return J(await dcChangelogQueue(b));
   if (b && b.action === "laws_failed") {
     const run = /^\d{1,20}$/.test(String(b.run || "")) ? String(b.run) : "";
     if (OWNER_TG)
@@ -4186,6 +4201,37 @@ async function cron(req) {
     return J({ ok: true });
   }
   return J(await tick());
+}
+
+// 3.4.4: changelog из сборки релиза. Бета-версии в публичный канал не идут (их функции видны только тестерам).
+// Если задан вебхук discord_webhook_url — отправляем сразу; иначе кладём в очередь, Discord-бот забирает её раз в минуту.
+function dcChanges(notes) {
+  return String(notes || "").split("\n").map((l) => l.trim()).filter((l) => /^[-*•]\s/.test(l))
+    .map((l) => l.replace(/^[-*•]\s+/, "").replace(/\*\*(.+?)\*\*/g, "$1")).slice(0, 25);
+}
+async function dcChangelogQueue(b) {
+  const version = clean(b.version, 40);
+  if (!/^\d+\.\d+\.\d+/.test(version)) return fail("Нет версии.");
+  if (b.prerelease || version.includes("-")) return { ok: true, skipped: "beta" };
+  const changes = dcChanges(b.notes);
+  const item = { id: crypto.randomUUID(), version, changes, link: `https://github.com/${GH_REPO}/releases/tag/v${version}`, at: new Date().toISOString() };
+  const hookUrl = await getSetting("discord_webhook_url", "");
+  if (hookUrl) {
+    try {
+      const r = await fetch(hookUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "Senko Assistant", embeds: [{ title: `📦 Обновление Senko Assistant ${version}`, description: changes.map((c) => "• " + c).join("\n").slice(0, 4000) || "—", url: item.link, color: 0x2ecc71, timestamp: item.at, footer: { text: "Senko Assistant · Changelog" } }] }),
+      });
+      if (r.ok) {
+        await audit("release", "discord_changelog", version, { via: "webhook" });
+        return { ok: true, sent: "webhook" };
+      }
+    } catch (e) {}
+  }
+  await setSetting("discord_changelog_pending", item);
+  await audit("release", "discord_changelog", version, { via: "queue" });
+  return { ok: true, sent: "queue" };
 }
 
 // Подключение бота: открыть в браузере  <адрес функции>?setup=<TG_WEBHOOK_SECRET>

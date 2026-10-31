@@ -159,5 +159,6 @@ jobs:
           V="${{ steps.ver.outputs.v }}"
           PRE=false; case "$V" in *-*) PRE=true;; esac
           jq -n --arg v "$V" --argjson pre "$PRE" --rawfile notes release-notes.md '{action:"dc_changelog",version:$v,prerelease:$pre,notes:$notes}' > dc.json
-          curl -sS -m 30 -X POST "https://wcjspwailippjmyffkei.supabase.co/functions/v1/senko" \
-            -H "content-type: application/json" -H "x-senko-cron: $CRON_SECRET" --data @dc.json
+          R=$(curl -sS -m 30 -X POST "https://wcjspwailippjmyffkei.supabase.co/functions/v1/senko" \
+            -H "content-type: application/json" -H "x-senko-cron: $CRON_SECRET" --data @dc.json)
+          echo "Ответ сервера: $R"

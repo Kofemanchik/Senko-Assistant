@@ -1,0 +1,36 @@
+name: Changelog в Discord
+
+# Отправить changelog версии в Discord вручную (Actions → Changelog в Discord → Run workflow).
+# Текст берётся из «Что нового» (NEWS в app/index.html). Бета-версии сервер в публичный канал не отправляет.
+# Нужен секрет CRON_SECRET, тот же, что у Sync laws.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Версия (например 3.4.3). Пусто — версия из package.json"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Отправить
+        shell: bash
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          VIN: ${{ inputs.version }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then echo "CRON_SECRET не задан"; exit 1; fi
+          V="${VIN:-$(node -p "require('./package.json').version")}"
+          node tools/release-notes.js "$V" > release-notes.md
+          PRE=false; case "$V" in *-*) PRE=true;; esac
+          jq -n --arg v "$V" --argjson pre "$PRE" --rawfile notes release-notes.md '{action:"dc_changelog",version:$v,prerelease:$pre,notes:$notes}' > dc.json
+          R=$(curl -sS -m 30 -X POST "https://wcjspwailippjmyffkei.supabase.co/functions/v1/senko" \
+            -H "content-type: application/json" -H "x-senko-cron: $CRON_SECRET" --data @dc.json)
+          echo "Ответ сервера: $R"
+          echo "$R" | grep -q '"ok":true' || exit 1

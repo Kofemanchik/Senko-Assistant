@@ -12,6 +12,7 @@ const { handleInteraction } = require("./events/interactionCreate");
 const { onReady } = require("./events/ready");
 const { loadSettings } = require("./services/settings");
 const { startMonitor } = require("./services/monitor");
+const { startChangelog } = require("./services/changelog");
 
 // Состояние бота
 const state = {
@@ -65,6 +66,8 @@ async function main() {
 
   // Мониторинг ресурсов (запускаем после входа)
   startMonitor(client, state);
+  // Changelog релизов: сервер ставит в очередь, бот публикует
+  startChangelog(client, state);
 }
 
 main().catch((e) => {
