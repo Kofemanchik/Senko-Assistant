@@ -24,6 +24,30 @@ node deploy-commands.js   # зарегистрировать слэш-коман
 node bot.js               # запустить бота
 ```
 
+## Работа 24/7
+
+Бот должен быть запущен постоянно: без него не публикуется changelog релизов, не работают тикеты, мониторинг и слэш-команды.
+Перед первым запуском в Discord Developer Portal → Bot включите **Server Members Intent** и **Message Content Intent**
+(без них Discord не пустит бота), скопируйте токен (Reset Token) в `DISCORD_BOT_TOKEN`.
+
+**Хостинг с Docker** (Railway, Render, Koyeb, Fly.io и подобные): новый сервис из репозитория, корневая папка `discord`,
+сборка по `Dockerfile`, переменные окружения из `.env.example` (как минимум `DISCORD_BOT_TOKEN`). Если хостинг требует
+веб-порт, задайте `PORT` — бот отвечает на `/health` (200, когда подключён к Discord, иначе 503).
+
+**VPS (Linux):**
+```bash
+git clone https://github.com/Kofemanchik/Senko-Assistant && cd Senko-Assistant/discord
+cp .env.example .env   # вписать DISCORD_BOT_TOKEN
+docker build -t senko-bot . && docker run -d --name senko-bot --restart unless-stopped --env-file .env senko-bot
+```
+или без Docker: `npm ci --omit=dev && npm i -g pm2 && pm2 start ecosystem.config.js && pm2 save && pm2 startup`.
+
+**Свой ПК с Windows** (работает, пока ПК включён): `copy .env.example .env`, вписать токен, затем один раз
+`powershell -ExecutionPolicy Bypass -File install-autostart.ps1`. Бот стартует при входе в Windows, после сбоя
+поднимается сам, лог — `bot.log`.
+
+Обновление бота: `git pull`, затем перезапуск (`docker build … && docker restart`, `pm2 restart senko-bot` или перезагрузка ПК).
+
 ## Переменные окружения
 
 | Переменная | Описание |

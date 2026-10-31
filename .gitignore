@@ -12,3 +12,4 @@ ai-key.json
 installer/out/
 installer/**/bin/
 installer/**/obj/
+bot.log

@@ -7,7 +7,7 @@
 
 const { Client, GatewayIntentBits, Partials, Events } = require("discord.js");
 const config = require("./config");
-const { registerCommands } = require("./commands");
+const { registerCommands } = require("./commands/register");
 const { handleInteraction } = require("./events/interactionCreate");
 const { onReady } = require("./events/ready");
 const { loadSettings } = require("./services/settings");
@@ -70,6 +70,18 @@ async function main() {
   startChangelog(client, state);
 }
 
+// Проверка живости для хостингов (Render, Koyeb, Railway и т.п.): если задан PORT, отвечаем на HTTP.
+// GET / или /health → 200, когда бот подключён к Discord, иначе 503 (хостинг перезапустит контейнер).
+if (process.env.PORT) {
+  require("http")
+    .createServer((req, res) => {
+      const ready = !!(state.client && state.client.isReady());
+      res.writeHead(ready ? 200 : 503, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: ready, bot: ready ? state.client.user.tag : null, uptime: Math.round(process.uptime()) }));
+    })
+    .listen(+process.env.PORT, () => console.log(`Проверка живости: порт ${process.env.PORT}`));
+}
+
 main().catch((e) => {
   console.error("Фатальная ошибка при запуске:", e);
   process.exit(1);
@@ -77,6 +89,11 @@ main().catch((e) => {
 
 process.on("unhandledRejection", (e) => {
   console.error("Необработанное отклонение:", e);
+});
+// Неизвестная ошибка — выходим, менеджер процессов (Docker, pm2, автозапуск Windows) поднимет бота заново
+process.on("uncaughtException", (e) => {
+  console.error("Необработанная ошибка, перезапуск:", e);
+  process.exit(1);
 });
 
 module.exports = { state };
