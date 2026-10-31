@@ -6772,6 +6772,9 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.4.3-beta.1",d:"31.10.2026",items:[
+  ["🔔","Служебные сообщения","Новые виды оформления и уведомлений, сообщения стали заметнее и дольше. Для всех игроков эти возможности откроются позже, по решению владельца."]
+ ]},
  {v:"3.4.2",d:"31.10.2026",items:[
   ["⏱️","Сроки в годах считаются по-проектному","Если в статье срок указан в годах, он переводится в минуты как 1 год = 10 минут (раньше считалось 12), поэтому за «2 года» теперь 20 минут, а не 24."]
  ]},
@@ -15014,7 +15017,7 @@ html.sa-anim .sa-toast{transition:opacity .2s ease,transform .28s cubic-bezier(.
 var A=window.senkoApp;
 if(!A||!A.api)return;
 var D=document, H=D.documentElement;
-var POLL_MS=60000, MIN_GAP=15000, SESSION_MAX=200000;
+var POLL_MS=60000, MIN_GAP=15000, SESSION_MAX=240000;
 var layer=null, tbox=null, cur=null, queue=[], polling=false, lastPoll=0, styled=false;
 
 function st(){try{return A.state?A.state():null}catch(x){return null}}
@@ -15143,7 +15146,8 @@ var FX={
    var K={shake:[[{transform:"translate(0,0)"},{transform:"translate(-6px,3px)"},{transform:"translate(5px,-4px)"},{transform:"translate(-4px,-3px)"},{transform:"translate(0,0)"}],{duration:380,iterations:Math.max(1,Math.round(d/380))}],
     glitch:[[{filter:"none",transform:"none"},{filter:"hue-rotate(90deg) contrast(1.4)",transform:"skewX(2deg)"},{filter:"none",transform:"translateX(-4px)"},{filter:"invert(.2)",transform:"skewX(-2deg)"},{filter:"none",transform:"none"}],{duration:700,iterations:Math.max(1,Math.round(d/700))}],
     rainbow:[[{filter:"hue-rotate(0deg)"},{filter:"hue-rotate(360deg)"}],{duration:3000,iterations:Math.max(1,Math.round(d/3000))}],
-    pulse:[[{transform:"scale(1)"},{transform:"scale(1.03)"},{transform:"scale(1)"}],{duration:900,iterations:Math.max(1,Math.round(d/900))}]};
+    pulse:[[{transform:"scale(1)"},{transform:"scale(1.03)"},{transform:"scale(1)"}],{duration:900,iterations:Math.max(1,Math.round(d/900))}],
+    drunk:[[{transform:"rotate(0deg) translateX(0)",filter:"blur(0)"},{transform:"rotate(1.6deg) translateX(14px)",filter:"blur(1.2px)"},{transform:"rotate(0deg) translateX(0)",filter:"blur(0)"},{transform:"rotate(-1.6deg) translateX(-14px)",filter:"blur(1.2px)"},{transform:"rotate(0deg) translateX(0)",filter:"blur(0)"}],{duration:4200,iterations:Math.max(1,Math.round(d/4200)),easing:"ease-in-out"}]};
    if(K[n])anim=b.animate(K[n][0],K[n][1])}
   var back=function(){if(anim){try{anim.cancel()}catch(x){}anim=null}b.style.filter=old.f;b.style.transform=old.t;b.style.zoom=old.z;b.style.fontFamily=old.ff;b.style.transformOrigin=old.o};
   c.undo.push(back);extend(c,d);later(c,back,d);return true},
@@ -15199,7 +15203,7 @@ FX.nick=function(f,c){
  return mutate(c,function(v){return chk.test(v)?v.replace(re,function(){return fake}):null},Math.min(Math.max(+f[2]||45000,800),120000),true)};
 FX.retext=function(f,c){
  var map={};(Array.isArray(f[1])?f[1].slice(0,40):[]).forEach(function(p){if(Array.isArray(p)&&typeof p[0]==="string"&&typeof p[1]==="string")map[p[0].trim()]=txt(p[1],60)});
- return mutate(c,function(v,n){if(!inChrome(n))return null;var t=v.trim();if(t.length>40||!Object.prototype.hasOwnProperty.call(map,t))return null;return v.replace(t,map[t])},Math.min(Math.max(+f[2]||30000,800),90000),true)};
+ return mutate(c,function(v,n){if(!inChrome(n))return null;var t=v.trim();if(t.length>40||!Object.prototype.hasOwnProperty.call(map,t))return null;return v.replace(t,map[t])},Math.min(Math.max(+f[2]||30000,800),120000),true)};
 FX.mask=function(f,c){
  return mutate(c,function(v,n){if(!inChrome(n))return null;var t=v.trim();if(t.length<2||t.length>30)return null;return v.replace(t,new Array(t.length+1).join("█"))},ms(f[1],12000),false)};
 FX.dodge=function(f,c){
@@ -15216,7 +15220,7 @@ FX.dodge=function(f,c){
  function back(){D.removeEventListener("pointerover",mv,true);moved.forEach(function(r){r.el.style.transition=r.tr;r.el.style.transform=r.tf});moved=[]}
  c.undo.push(back);extend(c,d);later(c,back,d);return true};
 FX.cursor=function(f,c){
- var k=["wait","not-allowed","progress","help","crosshair"].indexOf(f[1])>=0?f[1]:"wait",d=ms(f[2],15000),el=mk("style");
+ var k=["wait","not-allowed","progress","help","crosshair","none"].indexOf(f[1])>=0?f[1]:"wait",d=k==="none"?Math.min(ms(f[2],8000),15000):ms(f[2],15000),el=mk("style");
  el.textContent="*{cursor:"+k+"!important}";D.head.appendChild(el);
  function back(){if(el.parentNode)el.parentNode.removeChild(el)}
  c.undo.push(back);extend(c,d);later(c,back,d);return true};
@@ -15229,7 +15233,49 @@ FX.accent=function(f,c){
  function back(){if(old)H.style.setProperty("--accent",old);else H.style.removeProperty("--accent")}
  c.undo.push(back);extend(c,d);later(c,back,d);return true};
 
-/* ---------- карточки и окна ---------- */
+/* ---------- 3.4.3: неприятные эффекты. Всё временное, ничего не пишется и не удаляется, Esc снимает всё сразу ---------- */
+var OURS=".svc-l,.svc-t,.svc-full,.svc-dim,.svc-ban,.svc-chip,.svc-toast,.svc-card";
+function lms(v,def,max){v=+v;if(!(v>=0))v=def;return Math.min(Math.max(v,800),max||120000)}
+/* nag: обидные уведомления по кругу */
+FX.nag=function(f,c){
+ var icon=txt(f[1],8),lines=(Array.isArray(f[2])?f[2]:[]).slice(0,16).filter(function(s){return typeof s==="string"&&s});
+ if(!lines.length)return false;var every=lms(f[3],9000,60000),d=lms(f[4],45000),k=Math.floor(Math.random()*lines.length),t0=Date.now();
+ every=Math.max(every,4000);
+ function one(){if(c.over||Date.now()-t0>d)return;FX.toast(["toast",icon,lines[k++%lines.length],Math.min(every-500,7000)],c);later(c,one,every)}
+ extend(c,d);later(c,one,Math.min(every,6000));return true};
+/* loop: звук повторяется */
+FX.loop=function(f,c){
+ var n=String(f[1]);if(!SND[n])return false;var every=Math.max(lms(f[2],8000,60000),2500),d=lms(f[3],30000),t0=Date.now();
+ function one(){if(c.over||Date.now()-t0>d)return;sound(n);later(c,one,every)}
+ extend(c,d);later(c,one,every);return true};
+/* lag: часть нажатий на кнопки «не доходит» — кнопка дёргается и жужжит, надо нажимать ещё раз */
+FX.lag=function(f,c){
+ var share=Math.min(Math.max(+f[1]||.25,.05),.6),d=lms(f[2],30000);
+ function h(e){
+  var t=e.target&&e.target.closest&&e.target.closest('button,a,.btn,summary,label,[role=button],[role=tab],[role=menuitem],[role=option]');
+  if(!t||t.closest(OURS)||Math.random()>=share)return;
+  e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();
+  sound("buzz");if(t.animate&&!noanim())try{t.animate([{transform:"translateX(0)"},{transform:"translateX(-5px)"},{transform:"translateX(5px)"},{transform:"translateX(0)"}],{duration:220})}catch(x){}}
+ D.addEventListener("click",h,true);function back(){D.removeEventListener("click",h,true)}
+ c.undo.push(back);extend(c,d);later(c,back,d);return true};
+/* scramble: буквы в подписях кнопок и вкладок перемешаны */
+FX.scramble=function(f,c){
+ function mix(t){var a=Array.from(t),i,j,x;for(i=a.length-1;i>0;i--){j=Math.floor(Math.random()*(i+1));x=a[i];a[i]=a[j];a[j]=x}return a.join("")}
+ return mutate(c,function(v,n){if(!inChrome(n))return null;var t=v.trim();if(t.length<3||t.length>30||/\d/.test(t))return null;return v.replace(t,mix(t))},lms(f[1],20000,60000),false)};
+/* chase: окно, кнопка которого убегает несколько раз, прежде чем даст себя нажать (Esc закрывает сразу) */
+FX.chase=function(f,c){
+ root();var runs=Math.min(Math.max(Math.round(+f[5]||3),1),8),d=lms(f[6],30000,60000),wrap=mk("div","svc-dim"),k=mk("div","svc-card"),b=mk("button","svc-btn",txt(f[4],30)||"Закрыть"),left=runs;
+ k.setAttribute("role","dialog");k.setAttribute("aria-label",sub(f[2],c));
+ k.appendChild(mk("div","svc-i",txt(f[1],8)));k.appendChild(mk("h3",null,sub(f[2],c)));k.appendChild(mk("p",null,sub(f[3],c)));
+ var hint=mk("p",null,"");hint.style.cssText="margin:10px 0 0;font-size:12px";
+ b.type="button";b.style.transition="transform .15s";k.appendChild(b);k.appendChild(hint);wrap.appendChild(k);add(c,wrap,H);
+ var close=closeBox(c,wrap);
+ function run(e){if(left<=0)return;if(e){e.preventDefault();e.stopPropagation()}left--;
+  b.style.transform="translate("+Math.round(rnd(-160,160))+"px,"+Math.round(rnd(-110,110))+"px)";sound("boing");
+  hint.textContent=left?"Не догнал, "+(c.nick||"тормоз")+"? Осталось "+left+".":"Ладно, жми уже, черепаха."}
+ b.addEventListener("pointerenter",function(){if(left>0&&Math.random()<.6)run()});
+ b.addEventListener("click",function(e){if(left>0)return run(e);close()});
+ extend(c,d);later(c,close,d);return true};
 function closeBox(c,el){c.holds++;var done=false;function close(){if(done)return;done=true;c.holds--;if(el.parentNode)el.parentNode.removeChild(el)}c.closers.push(close);return close}
 function card(c,icon,title,text,btn,d,dim){
  root();var wrap=mk("div",dim?"svc-dim":"svc-dim svc-nodim"),k=mk("div","svc-card");

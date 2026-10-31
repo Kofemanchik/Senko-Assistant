@@ -26,7 +26,7 @@ for (const [k, c] of Object.entries(SVC_CATS)) {
 for (let i = 1; i <= SVC_COUNT; i++) if (seen[i] !== 1) bad(`номер ${i} входит в ${seen[i]} категорий`);
 
 const SOUNDS = ["quack", "meow", "pop", "tada", "trombone", "siren", "bell", "drum", "cuckoo", "phone", "donkey", "alarm", "laugh", "type", "sad", "boing", "roar", "buzz", "ding", "whistle"];
-const CSS = ["flip", "mirror", "rainbow", "invert", "blur", "gray", "sepia", "big", "small", "shake", "glitch", "comic", "dark", "tilt", "pulse"];
+const CSS = ["flip", "mirror", "rainbow", "invert", "blur", "gray", "sepia", "big", "small", "shake", "glitch", "comic", "dark", "tilt", "pulse", "drunk"];
 const TONES = ["info", "warn", "gold"];
 const OPS = {
   toast: (f) => typeof f[1] === "string" && typeof f[2] === "string" && f[3] <= 20000,
@@ -44,10 +44,15 @@ const OPS = {
   clicks: (f) => SOUNDS.includes(f[1]) && f[2] <= 30000,
   badge: (f) => typeof f[2] === "string" && f[3] <= 60000,
   nick: (f) => typeof f[1] === "string" && f[1].length >= 2 && f[1].length <= 60 && f[2] >= 5000 && f[2] <= 120000,
-  retext: (f) => Array.isArray(f[1]) && f[1].length >= 1 && f[1].length <= 40 && f[1].every((p) => Array.isArray(p) && typeof p[0] === "string" && typeof p[1] === "string" && p[0].length <= 40 && p[1].length <= 60) && f[2] >= 5000 && f[2] <= 90000,
+  retext: (f) => Array.isArray(f[1]) && f[1].length >= 1 && f[1].length <= 40 && f[1].every((p) => Array.isArray(p) && typeof p[0] === "string" && typeof p[1] === "string" && p[0].length <= 40 && p[1].length <= 60) && f[2] >= 5000 && f[2] <= 120000,
   mask: (f) => f[1] >= 1000 && f[1] <= 20000,
   dodge: (f) => f[1] >= 3000 && f[1] <= 30000,
-  cursor: (f) => ["wait", "not-allowed", "progress", "help", "crosshair"].includes(f[1]) && f[2] <= 30000,
+  cursor: (f) => ["wait", "not-allowed", "progress", "help", "crosshair", "none"].includes(f[1]) && f[2] <= (f[1] === "none" ? 15000 : 30000),
+  nag: (f) => typeof f[1] === "string" && Array.isArray(f[2]) && f[2].length >= 2 && f[2].length <= 16 && f[2].every((x) => typeof x === "string" && x.length <= 200) && f[3] >= 4000 && f[3] <= 60000 && f[4] <= 120000,
+  loop: (f) => SOUNDS.includes(f[1]) && f[2] >= 2500 && f[2] <= 60000 && f[3] <= 120000,
+  lag: (f) => f[1] >= 0.05 && f[1] <= 0.6 && f[2] <= 120000,
+  scramble: (f) => f[1] >= 1000 && f[1] <= 60000,
+  chase: (f) => typeof f[2] === "string" && typeof f[3] === "string" && typeof f[4] === "string" && f[5] >= 1 && f[5] <= 8 && f[6] <= 60000,
   accent: (f) => /^#[0-9a-f]{6}$/i.test(f[1]) && f[2] <= 40000,
   after: (f) => f[1] >= 1000 && f[1] <= 40000 && f.length >= 3 && f.length <= 8 && f.slice(2).every((g) => Array.isArray(g) && g[0] !== "after" && OPS[g[0]] && OPS[g[0]](g)),
 };
@@ -59,6 +64,11 @@ SVC_LIST.forEach((it, i) => {
   if (titles.has(it.title)) bad(`${where}: название повторяется`);
   titles.add(it.title);
   if (!it.fx.length) bad(`${where}: нет эффектов`);
+  if (it.fx.length > 12) bad(`${where}: эффектов ${it.fx.length}, движок выполняет не больше 12`);
+  // 3.4.3: каждый вариант, даже слабый, должен быть неприятным: мешать работе (lag/dodge/mask/scramble) и обзываться (nag)
+  if (!it.fx.some((f) => f[0] === "nag")) bad(`${where}: нет обидных уведомлений (nag)`);
+  const ops = JSON.stringify(it.fx);
+  if (!/"(lag|dodge|mask|scramble)"/.test(ops)) bad(`${where}: ничем не мешает работать`);
   for (const f of it.fx) {
     if (!OPS[f[0]]) { bad(`${where}: неизвестный эффект ${f[0]}`); continue; }
     if (!OPS[f[0]](f)) bad(`${where}: неверные параметры ${JSON.stringify(f).slice(0, 80)}`);
