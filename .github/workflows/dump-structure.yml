@@ -27,7 +27,7 @@ jobs:
       - name: Штрафы
         shell: bash
         run: |
-          { node scripts/compare-fines.js; node scripts/dump-fines.js; } > "$RUNNER_TEMP/f.txt" 2>&1 || { tail -n 20 "$RUNNER_TEMP/f.txt"; exit 1; }
+          node scripts/dump-fines.js > "$RUNNER_TEMP/f.txt" 2>&1 || { tail -n 20 "$RUNNER_TEMP/f.txt"; exit 1; }
           cat "$RUNNER_TEMP/f.txt"
           split -C 3400 -d "$RUNNER_TEMP/f.txt" "$RUNNER_TEMP/q."
           n=0
