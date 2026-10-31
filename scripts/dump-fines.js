@@ -51,3 +51,10 @@ for (const law of d.laws || []) {
   console.log(`## uk: строк ${rows.length}, с категорией штрафа ${withCat.length}`);
   withCat.slice(0, 6).forEach((r) => console.log(`${r.code}${r.part ? " ч." + r.part : ""}: ${r.fmin}–${r.fmax} m=${r.m} «${(r.pun || "").slice(0, 110)}»`));
 }
+
+// полный текст определения категорий штрафов (это часть общей нормы УК, не статья целиком)
+for (const law of d.laws || []) {
+  const t = String(law.text || "").replace(/\s+/g, " ");
+  const i = t.search(/категори[ия] штрафов/i);
+  if (i >= 0) console.log(`## определение категорий [${String(law.title).slice(0, 30)}]: ${t.slice(i, i + 700)}`);
+}
