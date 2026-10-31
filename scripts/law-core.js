@@ -346,7 +346,7 @@
     var all = s.match(/\d+(?=(?:-\s*[а-яё]{1,3})?\s*мес)/gi) || [];
     var months = all.map(Number);
     var yr = /(\d+)\s*(?:лет|года|год|годам)(?![а-яё])(?:\s*(?:и\s*)?(\d+)\s*мес)?/gi, ym;
-    while (cfg.v2 && (ym = yr.exec(s))) months.push(parseInt(ym[1], 10) * 12 + (ym[2] ? parseInt(ym[2], 10) : 0)); // 07 и др.: сроки в годах, в таблицах считаем месяцами
+    while (cfg.v2 && (ym = yr.exec(s))) months.push(parseInt(ym[1], 10) * 10 + (ym[2] ? parseInt(ym[2], 10) : 0)); // сроки в годах: на проекте 1 год = 10 минут (10 месяцев = 10 минут), поэтому ×10, а не ×12
     if (months.length) r.m = Math.max.apply(null, months);
     r.rec = /судимост/i.test(s);
     return r;
