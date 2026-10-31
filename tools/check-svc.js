@@ -64,8 +64,9 @@ SVC_LIST.forEach((it, i) => {
   if (titles.has(it.title)) bad(`${where}: название повторяется`);
   titles.add(it.title);
   if (!it.fx.length) bad(`${where}: нет эффектов`);
-  if (it.fx.length > 12) bad(`${where}: эффектов ${it.fx.length}, движок выполняет не больше 12`);
-  // 3.4.3: каждый вариант, даже слабый, должен быть неприятным: мешать работе (lag/dodge/mask/scramble) и обзываться (nag)
+  if (it.fx.length > 16) bad(`${where}: эффектов ${it.fx.length}, движок выполняет не больше 16`);
+  // 3.4.3-beta.2: лёгких нет — каждый вариант обзывается (nag), мешает работать и не извиняется
+  if (/шутк|ШУТК|вымышлен|ВЫМЫШЛЕН/.test(JSON.stringify(it.fx))) bad(`${where}: в тексте извинение «это шутка»`);
   if (!it.fx.some((f) => f[0] === "nag")) bad(`${where}: нет обидных уведомлений (nag)`);
   const ops = JSON.stringify(it.fx);
   if (!/"(lag|dodge|mask|scramble)"/.test(ops)) bad(`${where}: ничем не мешает работать`);

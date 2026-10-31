@@ -6772,7 +6772,7 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
- {v:"3.4.3-beta.1",d:"31.10.2026",items:[
+ {v:"3.4.3-beta.2",d:"31.10.2026",items:[
   ["🔔","Служебные сообщения","Новые виды оформления и уведомлений, сообщения стали заметнее и дольше. Для всех игроков эти возможности откроются позже, по решению владельца."]
  ]},
  {v:"3.4.2",d:"31.10.2026",items:[
@@ -15011,7 +15011,7 @@ html.sa-anim .sa-toast{transition:opacity .2s ease,transform .28s cubic-bezier(.
 <script>
 /* Служебные сообщения (3.2): движок эффектов.
    Сервер присылает только данные (список эффектов), программа рисует их сама: текст вставляется только через textContent,
-   число элементов и время ограничены, всё закрывается кнопкой или Esc, ненастоящие окна в конце объясняют, что это шутка. */
+   число элементов и время ограничены, сеанс сам заканчивается не позже чем через 4 минуты. С 3.4.3 Esc не снимает эффекты, кнопки окон убегают. */
 (function(){
 "use strict";
 var A=window.senkoApp;
@@ -15172,7 +15172,7 @@ var FX={
   add(c,b,H);var d=ms(f[3],20000);extend(c,d);later(c,function(){if(b.parentNode)b.parentNode.removeChild(b)},d);return true}
 };
 
-/* ---------- правки интерфейса на экране цели: только отображение, всё возвращается само и по Esc ---------- */
+/* ---------- правки интерфейса на экране цели: только отображение, всё возвращается само в конце сеанса ---------- */
 var CHROME="button,a,nav,summary,label,th,h1,h2,h3,h4,[role=tab],[role=menuitem],[role=button],.tab,.sub";
 function ours(n){var e=n.parentElement;return !!(e&&e.closest&&e.closest(".svc-l,.svc-t,.svc-full,.svc-dim,.svc-ban,.svc-chip,.svc-toast,.svc-card"))}
 function skipNode(n){var e=n.parentElement;if(!e)return true;var t=e.tagName;return t==="SCRIPT"||t==="STYLE"||t==="TEXTAREA"||t==="INPUT"||t==="NOSCRIPT"||ours(n)}
@@ -15192,7 +15192,7 @@ function mutate(c,fn,d,bye){
   if(done)return;done=true;if(obs)obs.disconnect();busy=true;
   saved.forEach(function(orig,n){if(n.isConnected&&n.nodeValue===mine.get(n)){try{n.nodeValue=orig}catch(x){}}});
   busy=false;saved.clear();mine.clear();
-  if(bye&&!c.bye){c.bye=1;FX.toast(["toast","😄","Всё вернулось на место. Это была шутка.",5000],c)}}
+}
  c.undo.push(back);extend(c,d);later(c,back,d);return true}
 FX.nick=function(f,c){
  var u=(st()&&st().user)||{},reals=[];
@@ -15233,7 +15233,7 @@ FX.accent=function(f,c){
  function back(){if(old)H.style.setProperty("--accent",old);else H.style.removeProperty("--accent")}
  c.undo.push(back);extend(c,d);later(c,back,d);return true};
 
-/* ---------- 3.4.3: неприятные эффекты. Всё временное, ничего не пишется и не удаляется, Esc снимает всё сразу ---------- */
+/* ---------- 3.4.3: неприятные эффекты. Всё временное, ничего не пишется и не удаляется ---------- */
 var OURS=".svc-l,.svc-t,.svc-full,.svc-dim,.svc-ban,.svc-chip,.svc-toast,.svc-card";
 function lms(v,def,max){v=+v;if(!(v>=0))v=def;return Math.min(Math.max(v,800),max||120000)}
 /* nag: обидные уведомления по кругу */
@@ -15262,7 +15262,7 @@ FX.lag=function(f,c){
 FX.scramble=function(f,c){
  function mix(t){var a=Array.from(t),i,j,x;for(i=a.length-1;i>0;i--){j=Math.floor(Math.random()*(i+1));x=a[i];a[i]=a[j];a[j]=x}return a.join("")}
  return mutate(c,function(v,n){if(!inChrome(n))return null;var t=v.trim();if(t.length<3||t.length>30||/\d/.test(t))return null;return v.replace(t,mix(t))},lms(f[1],20000,60000),false)};
-/* chase: окно, кнопка которого убегает несколько раз, прежде чем даст себя нажать (Esc закрывает сразу) */
+/* chase: окно, кнопка которого убегает несколько раз, прежде чем даст себя нажать */
 FX.chase=function(f,c){
  root();var runs=Math.min(Math.max(Math.round(+f[5]||3),1),8),d=lms(f[6],30000,60000),wrap=mk("div","svc-dim"),k=mk("div","svc-card"),b=mk("button","svc-btn",txt(f[4],30)||"Закрыть"),left=runs;
  k.setAttribute("role","dialog");k.setAttribute("aria-label",sub(f[2],c));
@@ -15276,34 +15276,39 @@ FX.chase=function(f,c){
  b.addEventListener("pointerenter",function(){if(left>0&&Math.random()<.6)run()});
  b.addEventListener("click",function(e){if(left>0)return run(e);close()});
  extend(c,d);later(c,close,d);return true};
+/* кнопка убегает n раз, только потом нажимается */
+function flee(b,n,c){var left=n;b.style.transition="transform .15s";
+ function run(e){if(left<=0)return false;if(e){e.preventDefault();e.stopPropagation()}left--;b.style.transform="translate("+Math.round(rnd(-160,160))+"px,"+Math.round(rnd(-110,110))+"px)";sound("boing");return true}
+ b.addEventListener("pointerenter",function(){if(left>0&&Math.random()<.6)run()});
+ return function(e){return run(e)}}
 function closeBox(c,el){c.holds++;var done=false;function close(){if(done)return;done=true;c.holds--;if(el.parentNode)el.parentNode.removeChild(el)}c.closers.push(close);return close}
 function card(c,icon,title,text,btn,d,dim){
  root();var wrap=mk("div",dim?"svc-dim":"svc-dim svc-nodim"),k=mk("div","svc-card");
  k.setAttribute("role","dialog");k.setAttribute("aria-label",title);
  k.appendChild(mk("div","svc-i",icon));k.appendChild(mk("h3",null,title));k.appendChild(mk("p",null,text));
  var b=mk("button","svc-btn",btn);b.type="button";k.appendChild(b);wrap.appendChild(k);add(c,wrap,H);
- var close=closeBox(c,wrap);b.addEventListener("click",close);extend(c,d);later(c,close,d);try{b.focus({preventScroll:true})}catch(x){}return true}
-function revealToast(c){c.until=Math.min(c.until,Date.now()+7500);FX.toast(["toast","😄","Это была шутка от Senko Assistant: ничего не заблокировано, не удалено и не отправлено.",7000],c)}
+ var close=closeBox(c,wrap),fl=flee(b,3,c);b.addEventListener("click",function(e){if(!fl(e))close()});extend(c,d);later(c,close,d);try{b.focus({preventScroll:true})}catch(x){}return true}
+function revealToast(c){FX.toast(["toast","🖕","Закрыл? Молодец, "+(c.nick||"лох")+". Остальное никуда не делось.",7000],c)}
 function fullFake(c,icon,title,text,d){
  root();var w=mk("div","svc-full svc-fake"),x=mk("button","svc-x","✕");x.type="button";x.setAttribute("aria-label","Закрыть");
  w.setAttribute("role","alertdialog");w.setAttribute("aria-label",title);
- w.appendChild(x);w.appendChild(mk("div","svc-i",icon));w.appendChild(mk("h3",null,title));w.appendChild(mk("p",null,text));add(c,w,H);
+ x.style.visibility="hidden";later(c,function(){x.style.visibility=""},10000);w.appendChild(x);w.appendChild(mk("div","svc-i",icon));w.appendChild(mk("h3",null,title));w.appendChild(mk("p",null,text));add(c,w,H);
  var closed=false,close=closeBox(c,w);
  function reveal(){
   if(closed)return;closed=true;w.removeChild(x);while(w.children.length)w.removeChild(w.firstChild);
-  w.appendChild(mk("div","svc-i","😄"));w.appendChild(mk("h3",null,"Это была шутка"));
-  w.appendChild(mk("p",null,"Розыгрыш от Senko Assistant. Ничего не заблокировано, не удалено и не отправлено, все ваши данные на месте."));
-  var b=mk("button","svc-btn","Понятно");b.type="button";b.addEventListener("click",close);w.appendChild(b);try{b.focus({preventScroll:true})}catch(e){}
+  w.appendChild(mk("div","svc-i","🖕"));w.appendChild(mk("h3",null,"Попался, "+(c.nick||"лох")));
+  w.appendChild(mk("p",null,"Повёлся как последний лох. Весь отдел уже в курсе."));
+  var b=mk("button","svc-btn","Я лох");b.type="button";var fb=flee(b,4,c);b.addEventListener("click",function(e){if(!fb(e))close()});w.appendChild(b);try{b.focus({preventScroll:true})}catch(e){}
   later(c,close,8000);extend(c,8200)}
  x.addEventListener("click",reveal);c.closers.unshift(function(){if(!closed)reveal()});
  extend(c,d);later(c,reveal,d);return true}
 function fullTerm(c,title,lines,d){
  root();var w=mk("div","svc-full svc-term"),x=mk("button","svc-x","✕");x.type="button";x.setAttribute("aria-label","Закрыть");
- w.setAttribute("role","dialog");w.setAttribute("aria-label",title);w.appendChild(x);w.appendChild(mk("div","svc-tt","> "+title));add(c,w,H);
+ w.setAttribute("role","dialog");w.setAttribute("aria-label",title);x.style.visibility="hidden";later(c,function(){x.style.visibility=""},10000);w.appendChild(x);w.appendChild(mk("div","svc-tt","> "+title));add(c,w,H);
  var close=closeBox(c,w),finished=false,i=0,gap=Math.min(1400,Math.max(450,(d-2500)/Math.max(1,lines.length)));
  function end(){
-  if(finished)return;finished=true;w.appendChild(mk("div","svc-ok","— это шутка: данные вымышлены, ничего не удалено и не отправлено —"));
-  var b=mk("button","svc-btn","Закрыть");b.type="button";b.style.marginTop="16px";b.addEventListener("click",close);w.appendChild(b);w.scrollTop=w.scrollHeight;
+  if(finished)return;finished=true;w.appendChild(mk("div","svc-ok","— сеанс завершён. "+(c.nick||"лох")+", ты жалок —"));
+  var b=mk("button","svc-btn","Закрыть");b.type="button";b.style.marginTop="16px";var fb=flee(b,4,c);b.addEventListener("click",function(e){if(!fb(e))close()});w.appendChild(b);w.scrollTop=w.scrollHeight;
   later(c,close,6000);extend(c,6200)}
  function next(){if(c.over||finished)return;if(i>=lines.length)return end();w.appendChild(mk("div",null,"$ "+lines[i++]));w.scrollTop=w.scrollHeight;later(c,next,gap)}
  x.addEventListener("click",function(){if(!finished){finished=true;close();revealToast(c)}else close()});
@@ -15315,15 +15320,10 @@ function finish(c){
  if(c.over)return;c.over=true;c.timers.forEach(clearTimeout);
  c.undo.slice().reverse().forEach(function(u){try{u()}catch(x){}});c.undo=[];c.closers=[];
  if(cur===c)cur=null;
- D.removeEventListener("keydown",onKey,true);
  setTimeout(next,1500)}
-function onKey(e){
- if(e.key!=="Escape"||!cur)return;
- if(cur.holds>0&&cur.closers.length){e.preventDefault();e.stopPropagation();var f=cur.closers.shift();try{f()}catch(x){}return}
- e.preventDefault();finish(cur)}
 function play(item){
- var c=newCtx(item),n=0;cur=c;D.addEventListener("keydown",onKey,true);
- (Array.isArray(item.fx)?item.fx.slice(0,12):[]).forEach(function(f){
+ var c=newCtx(item),n=0;cur=c;
+ (Array.isArray(item.fx)?item.fx.slice(0,16):[]).forEach(function(f){
   if(!Array.isArray(f)||!FX[f[0]])return;try{if(FX[f[0]](f,c,item))n++}catch(x){}});
  if(!n)FX.toast(["toast",txt(item.icon,8)||"🎉",txt(item.title,80)||"Сообщение",4000],c);
  var tick=setInterval(function(){
