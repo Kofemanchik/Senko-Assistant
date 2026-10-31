@@ -24,6 +24,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Штрафы
+        shell: bash
+        run: |
+          node scripts/dump-fines.js > "$RUNNER_TEMP/f.txt" 2>&1 || { tail -n 20 "$RUNNER_TEMP/f.txt"; exit 1; }
+          cat "$RUNNER_TEMP/f.txt"
+          split -C 3400 -d "$RUNNER_TEMP/f.txt" "$RUNNER_TEMP/q."
+          n=0
+          for f in "$RUNNER_TEMP"/q.*; do
+            n=$((n+1)); [ $n -gt 10 ] && break
+            msg=$(sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' "$f")
+            echo "::notice title=штрафы сервер $SERVER часть $n::$msg"
+          done
       - name: Структура (uk)
         shell: bash
         run: |
