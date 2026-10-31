@@ -6,6 +6,7 @@ const fs = require("fs");
 const SRV = require("./servers.js");
 const { decrypt } = require("./laws-crypt.js");
 const LC = require("./law-core.js");
+LC.configure({ v2: SRV.current() !== 12 }); // тот же разбор, что в программе
 const kindOf = (t) => { t = String(t || "").toLowerCase(); if (!/кодекс/.test(t)) return ""; return /уголовн/.test(t) ? "uk" : /административн/.test(t) ? "ak" : /дорожн/.test(t) ? "dk" : /процессуальн/.test(t) ? "pk" : ""; };
 const d = JSON.parse(decrypt(fs.readFileSync(SRV.files(SRV.current()).enc), process.env.LAWS_KEY));
 const odd = (s) => [...s].filter((c) => !/[0-9A-Za-zА-Яа-яЁё$.,: ]/.test(c)).map((c) => "U+" + c.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")).join(" ");
@@ -57,4 +58,11 @@ for (const law of d.laws || []) {
   const t = String(law.text || "").replace(/\s+/g, " ");
   const i = t.search(/категори[ия] штрафов/i);
   if (i >= 0) console.log(`## определение категорий [${String(law.title).slice(0, 30)}]: ${t.slice(i, i + 700)}`);
+}
+
+// пункт о том, в чём указаны штрафы (у LA: «4.7.2 Штрафы, предусмотренные статьями…»)
+for (const law of d.laws || []) {
+  const t = String(law.text || "").replace(/\s+/g, " ");
+  const re = /Штрафы,? предусмотренные статьями/gi; let m;
+  while ((m = re.exec(t))) console.log(`## о штрафах [${String(law.title).slice(0, 30)}]: ${t.slice(m.index, m.index + 300)}`);
 }
