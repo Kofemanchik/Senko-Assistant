@@ -9,7 +9,7 @@
     <AssemblyName>SenkoSetup</AssemblyName>
     <RootNamespace>SenkoSetup</RootNamespace>
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
-    <Version>3.4.1</Version>
+    <Version>3.4.2</Version>
     <Product>Senko Assistant</Product>
     <Company>Senko Corporation</Company>
     <Description>Установка Senko Assistant</Description>
