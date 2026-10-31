@@ -312,6 +312,21 @@
   }
 
   /* ───── Наказания (УК, АК, ДК) ───── */
+  /* Категории штрафов (Denver: «ч. 5 Устанавливаются следующие категории штрафов: 1) первая категория — от 10.000 до 20.000$; …»),
+     в статьях тогда «либо штраф третьей категории». Ищем определение в тексте кодекса и подставляем суммы. */
+  var ORD = [["перв", 1], ["втор", 2], ["трет", 3], ["четв", 4], ["пят", 5], ["шест", 6], ["седьм", 7], ["восьм", 8], ["девят", 9], ["десят", 10]];
+  var ORD_RE = "(перв|втор|трет|четв[её]рт|пят|шест|седьм|восьм|девят|десят)[а-яё]*";
+  function ordNo(w) { w = String(w).toLowerCase(); for (var i = 0; i < ORD.length; i++) if (w.indexOf(ORD[i][0]) === 0) return ORD[i][1]; return 0; }
+  var fineCats = null; // {номер: [от, до]} для разбираемого кодекса
+  function findFineCats(text) {
+    var t = String(text || "").replace(/\s+/g, " "), out = {}, n = 0, m;
+    var re = new RegExp(ORD_RE + "\\s+(?:категори[яи]|групп[аы])\\s*[—–-]\\s*(?:от\\s*)?\\$?\\s*(\\d[\\d.,\\s]*\\d|\\d)\\s*\\$?\\s*(?:до\\s*\\$?\\s*(\\d[\\d.,\\s]*\\d|\\d))?", "gi");
+    while ((m = re.exec(t))) {
+      var k = ordNo(m[1]), a = money(m[2]), b = m[3] ? money(m[3]) : a;
+      if (k && a >= 100 && !out[k]) { out[k] = [Math.min(a, b), Math.max(a, b)]; n++; }
+    }
+    return n >= 2 ? out : null;
+  }
   function money(tok) {
     var t = String(tok).replace(/\s/g, "");
     if (/^\d{1,3}([.,]\d{3})+$/.test(t)) return parseInt(t.replace(/[.,]/g, ""), 10);
@@ -326,9 +341,9 @@
     var cut = seg.search(/\s(?:либо|или)\s+(?:до\s+|от\s+)?\d+\s*мес|\s(?:либо|или)\s+лишени/i);
     var fp = cut > -1 ? seg.slice(0, cut) : seg;
     var NUM = "(\\d[\\d.,\\s]*\\d|\\d)";
-    var rr = new RegExp("(?:^|[^А-Яа-яЁё])от\\s*\\$?\\s*" + NUM + "\\s*\\$?\\s*до\\s*\\$?\\s*" + NUM + "\\s*\\$?(?!\\s*мес)", "i");
+    var rr = new RegExp("(?:^|[^А-Яа-яЁё])от\\s*\\$?\\s*" + NUM + "\\s*\\$?\\s*до\\s*\\$?\\s*" + NUM + "\\s*\\$?(?!\\d|[.,]\\d|\\s*(?:\\d|мес|лет|год))", "i");
     var m = rr.exec(fp);
-    if (m && /\$|штраф/i.test(fp) && !/^\s*мес/i.test(fp.slice(m.index + m[0].length))) {
+    if (m && /\$|штраф/i.test(fp) && !/^\s*(?:мес|лет|год)/i.test(fp.slice(m.index + m[0].length))) {
       var a = money(m[1]), b = money(m[2]);
       r.hasFine = true; r.fmin = Math.min(a, b); r.fmax = Math.max(a, b);
     } else {
@@ -342,6 +357,11 @@
         else if (hasWord(fp, "от") && nums.length === 1) { r.fmin = nums[0]; r.fmax = nums[0]; }
         else { r.fmin = nums[0]; r.fmax = nums[0]; }
       }
+    }
+    if (!r.hasFine && fineCats) {
+      var cm = new RegExp(ORD_RE + "\\s+(?:категори|групп)", "i").exec(fp);
+      var ck = cm ? ordNo(cm[1]) : 0;
+      if (ck && fineCats[ck]) { r.hasFine = true; r.fmin = fineCats[ck][0]; r.fmax = fineCats[ck][1]; }
     }
     var all = s.match(/\d+(?=(?:-\s*[а-яё]{1,3})?\s*мес)/gi) || [];
     var months = all.map(Number);
@@ -358,6 +378,10 @@
 
   /* Статьи кодекса → строки (часть = отдельная строка), как в приложении: code, part, title, jur, stars, m, fmin, fmax, rec, note, pun */
   function rowsFromParsed(parsed) {
+    fineCats = parsed && parsed.lines ? findFineCats(parsed.lines.map(function (x) { return x.raw; }).join(" ")) : null;
+    try { return rowsAny(parsed); } finally { fineCats = null; }
+  }
+  function rowsAny(parsed) {
     if (parsed && parsed.v2) return rowsV2(parsed);
     var rows = [], L = parsed.lines;
     /* Пустые статьи: заголовок без текста, наказания и примечаний (строка оглавления, «висящий» заголовок и т.п.).
