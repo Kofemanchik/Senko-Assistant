@@ -76,9 +76,11 @@ jobs:
       - run: npm run dist
 
       # Свой установщик (WPF): окно рисуем сами, внутри лежит обычный установщик electron-builder и ставит файлы тихо.
-      # Автообновление по-прежнему идёт через Senko-Assistant-Setup-*.exe и latest.yml, их установщик не трогает.
+      # Он занимает место Senko-Assistant-Setup-*.exe: с сайта скачивается он, и автообновление запускает тоже его
+      # (--updated, /S, --force-run). В latest.yml пересчитываются sha512 и size, blockmap удаляется.
+      # Если сборка не удалась, остаётся обычный установщик электрона.
       - name: Свой установщик
-        continue-on-error: true   # пока не проверен на Windows: при сбое релиз выйдет без него, обычный установщик останется
+        continue-on-error: true
         shell: pwsh
         run: |
           $setup = Get-ChildItem dist -Filter "Senko-Assistant-Setup-*.exe" | Select-Object -First 1
@@ -87,7 +89,10 @@ jobs:
           Set-Content -Path installer/expected.txt -Value $size -NoNewline
           dotnet build installer/SenkoSetup -c Release "-p:Payload=$($setup.FullName)" "-p:ExpectedFile=$PWD/installer/expected.txt" -o installer/out
           if ($LASTEXITCODE -ne 0) { throw "сборка установщика не удалась" }
-          Copy-Item installer/out/SenkoSetup.exe "dist/Senko-Assistant-Installer-${{ steps.ver.outputs.v }}.exe"
+          $out = "installer/out/SenkoSetup.exe"
+          if (-not (Test-Path $out) -or (Get-Item $out).Length -lt ($setup.Length + 100000)) { throw "в собранном установщике нет упакованных файлов" }
+          node tools/swap-installer.js $out dist
+          if ($LASTEXITCODE -ne 0) { throw "не удалось подменить установщик" }
           Get-Item dist/*.exe | ForEach-Object { "$($_.Name): $([math]::Round($_.Length/1MB)) МБ" }
 
       - name: Модель голоса попала в сборку

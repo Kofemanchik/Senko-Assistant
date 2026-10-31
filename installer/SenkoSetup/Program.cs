@@ -21,9 +21,17 @@ namespace SenkoSetup
         [STAThread]
         public static int Main(string[] args)
         {
+            // Автообновление программы запускает этот же файл с ключами --updated, /S, --force-run (так же, как обычный установщик)
+            if (Has(args, "--updated") && Has(args, "/S")) return SetupWindow.Headless(args);
             var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
             var win = new SetupWindow(args);
             return app.Run(win.Window);
+        }
+
+        public static bool Has(string[] a, string k)
+        {
+            foreach (var x in a) if (string.Equals(x, k, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
         }
     }
 
@@ -41,11 +49,44 @@ namespace SenkoSetup
         DateTime _t0;
         bool _busy;
 
+        bool _upd, _force;
+        string _givenDir;
+        static string DirArg(string[] a)
+        {
+            foreach (var x in a) if (x.StartsWith("/D=", StringComparison.OrdinalIgnoreCase)) return x.Substring(3).Trim('"');
+            return null;
+        }
+
+        // Тихое обновление при выходе из программы: окна нет, просто запускаем упакованный установщик и ждём
+        public static int Headless(string[] args)
+        {
+            string payload = null;
+            try
+            {
+                payload = Path.Combine(Path.GetTempPath(), "senko-payload-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".exe");
+                using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("SenkoSetup.payload.exe"))
+                {
+                    if (s == null) return 2;
+                    using (var f = File.Create(payload)) s.CopyTo(f);
+                }
+                var d = DirArg(args);
+                var a = "/S --updated /currentuser" + (Program.Has(args, "--force-run") ? " --force-run" : "") + (d != null ? " /D=" + d : "");
+                using (var p = Process.Start(new ProcessStartInfo(payload, a) { UseShellExecute = false, CreateNoWindow = true }))
+                {
+                    p.WaitForExit();
+                    return p.ExitCode;
+                }
+            }
+            catch { return 1; }
+            finally { try { if (payload != null) File.Delete(payload); } catch { } }
+        }
         static readonly string AppExe = "Senko Assistant.exe";
 
         public SetupWindow(string[] args)
         {
             _args = args;
+            _upd = Program.Has(args, "--updated");
+            _force = Program.Has(args, "--force-run");
             var asm = Assembly.GetExecutingAssembly();
             using (var s = asm.GetManifestResourceStream("SenkoSetup.Ui.layout"))
                 Window = (Window)XamlReader.Load(s);
@@ -62,6 +103,8 @@ namespace SenkoSetup
                 _expected = v > 0 ? v : 420L * 1024 * 1024;
             }
             _dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Senko Assistant");
+            _givenDir = DirArg(args);
+            if (_givenDir != null) _dir = _givenDir;
             F<TextBlock>("DirText").Text = _dir;
             using (var s = asm.GetManifestResourceStream("SenkoSetup.Assets.banner.png"))
             {
@@ -79,7 +122,7 @@ namespace SenkoSetup
             F<Button>("BtnInstall").Click += (s, e) => Start();
             F<Button>("BtnBrowse").Click += (s, e) => Browse();
             Window.Opacity = 0;
-            Window.Loaded += (s, e) => Intro();
+            Window.Loaded += (s, e) => { Intro(); if (_upd) { F<TextBlock>("ProgressTitle").Text = "Обновляем Senko Assistant"; Start(); } };
         }
 
         // --- оформление ---
@@ -90,7 +133,7 @@ namespace SenkoSetup
             var zoom = new DoubleAnimation(1.06, 1, TimeSpan.FromMilliseconds(1400)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
             sc.BeginAnimation(ScaleTransform.ScaleXProperty, zoom);
             sc.BeginAnimation(ScaleTransform.ScaleYProperty, zoom);
-            Slide(F<FrameworkElement>("PageWelcome"));
+            if (!_upd) Slide(F<FrameworkElement>("PageWelcome"));
         }
 
         void Slide(FrameworkElement page)
@@ -134,9 +177,17 @@ namespace SenkoSetup
                     if (s == null) { Fail("В установщике нет файлов программы (сборка без пакета).", null); return; }
                     using (var f = File.Create(_payload)) s.CopyTo(f);
                 }
-                Directory.CreateDirectory(Path.GetDirectoryName(_dir));
-                // /D= должен быть последним и без кавычек (правило NSIS)
-                _proc = Process.Start(new ProcessStartInfo(_payload, "/S /currentuser /D=" + _dir) { UseShellExecute = false, CreateNoWindow = true });
+                string a;
+                if (_upd)
+                    // при обновлении папку установщик берёт из реестра сам; /D= только если её передала программа
+                    a = "/S --updated /currentuser" + (_force ? " --force-run" : "") + (_givenDir != null ? " /D=" + _givenDir : "");
+                else
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(_dir));
+                    // /D= должен быть последним и без кавычек (правило NSIS)
+                    a = "/S /currentuser /D=" + _dir;
+                }
+                _proc = Process.Start(new ProcessStartInfo(_payload, a) { UseShellExecute = false, CreateNoWindow = true });
             }
             catch (Exception ex) { Fail("Не получилось запустить установку.", ex.Message); return; }
             _busy = true; _shown = 0; _target = 0; _t0 = DateTime.Now;
@@ -167,14 +218,14 @@ namespace SenkoSetup
         void Tick()
         {
             if (_proc == null) return;
-            if (++_poll % 8 == 1 && Directory.Exists(_dir))
+            if (!_upd && ++_poll % 8 == 1 && Directory.Exists(_dir))
                 _target = Math.Min(96, DirSize(_dir) * 100.0 / _expected);
             var secs = (DateTime.Now - _t0).TotalSeconds;
-            _target = Math.Max(_target, Math.Min(12, secs * 1.5)); // сразу видно движение, даже пока файлы не пошли
+            _target = Math.Max(_target, Math.Min(_upd ? 92 : 12, secs * (_upd ? 9 : 1.5))); // сразу видно движение, даже пока файлы не пошли
             if (_proc.HasExited)
             {
                 if (_proc.ExitCode != 0) { _tick.Stop(); Fail("Установка завершилась с кодом " + _proc.ExitCode + ".", null); return; }
-                if (!File.Exists(Path.Combine(_dir, AppExe))) { _tick.Stop(); Fail("Установка закончилась, но файл программы не найден.", _dir); return; }
+                if (!_upd && !File.Exists(Path.Combine(_dir, AppExe))) { _tick.Stop(); Fail("Установка закончилась, но файл программы не найден.", _dir); return; }
                 _target = 100;
             }
             _shown += (_target - _shown) * 0.12 + (_target > _shown ? 0.04 : 0);
@@ -189,6 +240,14 @@ namespace SenkoSetup
         void Done()
         {
             _busy = false;
+            if (_upd)
+            {
+                try { File.Delete(_payload); } catch { }
+                var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
+                t.Tick += (s, e) => { t.Stop(); Window.Close(); };
+                t.Start();
+                return;
+            }
             try
             {
                 if (F<CheckBox>("ChkDesktop").IsChecked != true)
