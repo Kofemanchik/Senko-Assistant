@@ -26,3 +26,28 @@ for (const law of d.laws || []) {
   }
 }
 console.log(out.join("\n"));
+
+// где в законах сервера описаны категории штрафов (короткие куски вокруг слова «категори» рядом с суммой)
+const seen = new Set();
+const cat = [];
+for (const law of d.laws || []) {
+  const t = String(law.text || "").replace(/\s+/g, " ");
+  const re = /категори/gi;
+  let m;
+  while ((m = re.exec(t)) && cat.length < 60) {
+    const frag = t.slice(Math.max(0, m.index - 50), m.index + 90);
+    if (!/\d/.test(frag) || seen.has(frag.slice(30, 90))) continue;
+    seen.add(frag.slice(30, 90));
+    cat.push(`[${String(law.title).slice(0, 30)}] …${frag}…`);
+  }
+}
+console.log(`## категории штрафов: найдено ${cat.length}`);
+console.log(cat.join("\n"));
+// строки УК с категорией вместо суммы
+for (const law of d.laws || []) {
+  if (kindOf(law.title) !== "uk") continue;
+  const rows = LC.rowsFromParsed(LC.parse(law.text));
+  const withCat = rows.filter((r) => /категори|групп/i.test(r.pun || ""));
+  console.log(`## uk: строк ${rows.length}, с категорией штрафа ${withCat.length}`);
+  withCat.slice(0, 6).forEach((r) => console.log(`${r.code}${r.part ? " ч." + r.part : ""}: ${r.fmin}–${r.fmax} m=${r.m} «${(r.pun || "").slice(0, 110)}»`));
+}
