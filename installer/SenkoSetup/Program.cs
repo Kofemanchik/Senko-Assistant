@@ -63,8 +63,12 @@ namespace SenkoSetup
             }
             _dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Senko Assistant");
             F<TextBlock>("DirText").Text = _dir;
-            Letters("WordSenko", "SENKO", 30, "#FFFFFF", true);
-            Letters("WordAssistant", "ASSISTANT", 15, "#8FA3CF", false);
+            using (var s = asm.GetManifestResourceStream("SenkoSetup.Assets.banner.png"))
+            {
+                var bb = new BitmapImage();
+                bb.BeginInit(); bb.StreamSource = s; bb.CacheOption = BitmapCacheOption.OnLoad; bb.EndInit(); bb.Freeze();
+                F<Border>("Hero").Background = new ImageBrush(bb) { Stretch = Stretch.UniformToFill };
+            }
 
             F<Grid>("TitleBar").MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) Window.DragMove(); };
             F<Button>("BtnMin").Click += (s, e) => Window.WindowState = WindowState.Minimized;
@@ -79,33 +83,13 @@ namespace SenkoSetup
         }
 
         // --- оформление ---
-        void Letters(string panel, string text, double size, string color, bool bold)
-        {
-            var p = F<StackPanel>(panel);
-            var brush = (Brush)new BrushConverter().ConvertFromString(color);
-            for (int i = 0; i < text.Length; i++)
-            {
-                var tb = new TextBlock
-                {
-                    Text = text[i].ToString(), FontSize = size, Foreground = brush,
-                    FontWeight = bold ? FontWeights.Bold : FontWeights.Normal,
-                    Margin = new Thickness(bold ? 2 : 3, 0, bold ? 2 : 3, 0), Opacity = 0,
-                    RenderTransform = new TranslateTransform(0, 10)
-                };
-                p.Children.Add(tb);
-                var d = TimeSpan.FromMilliseconds(250 + i * 55);
-                tb.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(380)) { BeginTime = d });
-                ((TranslateTransform)tb.RenderTransform).BeginAnimation(TranslateTransform.YProperty,
-                    new DoubleAnimation(10, 0, TimeSpan.FromMilliseconds(420)) { BeginTime = d, EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
-            }
-        }
-
         void Intro()
         {
             Window.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(320)));
-            var glow = F<FrameworkElement>("FoxGlow");
-            var pulse = new DoubleAnimation(0.35, 0.75, TimeSpan.FromSeconds(2.4)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase() };
-            glow.BeginAnimation(UIElement.OpacityProperty, pulse);
+            var sc = (ScaleTransform)F<Border>("Hero").RenderTransform;
+            var zoom = new DoubleAnimation(1.06, 1, TimeSpan.FromMilliseconds(1400)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+            sc.BeginAnimation(ScaleTransform.ScaleXProperty, zoom);
+            sc.BeginAnimation(ScaleTransform.ScaleYProperty, zoom);
             Slide(F<FrameworkElement>("PageWelcome"));
         }
 

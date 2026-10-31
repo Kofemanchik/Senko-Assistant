@@ -1,6 +1,6 @@
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Установка Senko Assistant" Width="860" Height="560"
+        Title="Установка Senko Assistant" Width="860" Height="650"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="CanMinimize" WindowStartupLocation="CenterScreen"
         FontFamily="Segoe UI" UseLayoutRounding="True" SnapsToDevicePixels="True">
@@ -114,86 +114,40 @@
   </Window.Resources>
 
   <Grid x:Name="Root" Margin="28">
-    <Border x:Name="Card" CornerRadius="18" BorderThickness="1" BorderBrush="#2AFFFFFF">
+    <Border x:Name="Card" CornerRadius="18" BorderThickness="1" BorderBrush="#2AFFFFFF" Background="#0A1020">
       <Border.Effect>
         <DropShadowEffect BlurRadius="30" ShadowDepth="0" Opacity="0.65" Color="#000000"/>
       </Border.Effect>
-      <Border.Background>
-        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-          <GradientStop Color="#070B13" Offset="0"/>
-          <GradientStop Color="#0B1427" Offset="0.55"/>
-          <GradientStop Color="#112248" Offset="1"/>
-        </LinearGradientBrush>
-      </Border.Background>
-
       <Grid x:Name="Inner">
-        <!-- фон: дуги и свечение, как на баннере -->
-        <Canvas x:Name="Decor" IsHitTestVisible="False">
-          <Ellipse Canvas.Left="-170" Canvas.Top="-210" Width="440" Height="440" Stroke="#2A3F72" StrokeThickness="1.2" Opacity="0.7"/>
-          <Ellipse Canvas.Left="-120" Canvas.Top="-170" Width="340" Height="340" Stroke="#22365F" StrokeThickness="1" Opacity="0.5"/>
-          <Ellipse Canvas.Left="540" Canvas.Top="250" Width="560" Height="560" Stroke="#2A3F72" StrokeThickness="1.2" Opacity="0.7"/>
-          <Ellipse Canvas.Left="590" Canvas.Top="300" Width="460" Height="460" Stroke="#22365F" StrokeThickness="1" Opacity="0.5"/>
-          <Ellipse Canvas.Left="520" Canvas.Top="300" Width="420" Height="420" Opacity="0.55">
-            <Ellipse.Fill>
-              <RadialGradientBrush>
-                <GradientStop Color="#661E3F7A" Offset="0"/>
-                <GradientStop Color="#00112248" Offset="1"/>
-              </RadialGradientBrush>
-            </Ellipse.Fill>
-          </Ellipse>
-        </Canvas>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="250"/>
+          <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-        <Grid>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="300"/>
-            <ColumnDefinition Width="*"/>
-          </Grid.ColumnDefinitions>
+        <!-- баннер -->
+        <Border x:Name="Hero" Grid.Row="0" CornerRadius="17,17,0,0">
+          <Border.RenderTransform><ScaleTransform x:Name="HeroScale" ScaleX="1" ScaleY="1"/></Border.RenderTransform>
+          <Border.RenderTransformOrigin><Point X="0.5" Y="0.5"/></Border.RenderTransformOrigin>
+        </Border>
+        <Rectangle Grid.Row="0" VerticalAlignment="Bottom" Height="90" IsHitTestVisible="False">
+          <Rectangle.Fill>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+              <GradientStop Color="#000A1020" Offset="0"/>
+              <GradientStop Color="#0A1020" Offset="1"/>
+            </LinearGradientBrush>
+          </Rectangle.Fill>
+        </Rectangle>
 
-          <!-- левая колонка: знак и название -->
-          <Grid Grid.Column="0">
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,10,0,0">
-              <Grid Width="190" Height="190" HorizontalAlignment="Center">
-                <Ellipse x:Name="FoxGlow" Width="190" Height="190" Opacity="0.55">
-                  <Ellipse.Fill>
-                    <RadialGradientBrush>
-                      <GradientStop Color="#884A78D8" Offset="0"/>
-                      <GradientStop Color="#003A5BB0" Offset="1"/>
-                    </RadialGradientBrush>
-                  </Ellipse.Fill>
-                </Ellipse>
-                <Image x:Name="Fox" Width="132" Height="132" RenderOptions.BitmapScalingMode="HighQuality">
-                  <Image.Effect>
-                    <DropShadowEffect Color="#000000" BlurRadius="22" ShadowDepth="4" Opacity="0.5"/>
-                  </Image.Effect>
-                </Image>
-              </Grid>
-              <StackPanel x:Name="WordSenko" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0"/>
-              <StackPanel x:Name="WordAssistant" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,0"/>
-            </StackPanel>
-            <TextBlock x:Name="LeftFoot" Text="Majestic RP" Foreground="#6C7A99" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,26"/>
-          </Grid>
-
-          <Rectangle Grid.Column="0" Width="1" HorizontalAlignment="Right" Margin="0,70,0,70">
-            <Rectangle.Fill>
-              <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                <GradientStop Color="#00FFFFFF" Offset="0"/>
-                <GradientStop Color="#2AFFFFFF" Offset="0.5"/>
-                <GradientStop Color="#00FFFFFF" Offset="1"/>
-              </LinearGradientBrush>
-            </Rectangle.Fill>
-          </Rectangle>
-
-          <!-- правая колонка: страницы -->
-          <Grid Grid.Column="1" Margin="46,0,46,0">
-
+        <!-- страницы -->
+        <Grid Grid.Row="1" Margin="70,0,70,10">
             <!-- 1. приветствие -->
             <StackPanel x:Name="PageWelcome" VerticalAlignment="Center">
               <StackPanel.RenderTransform><TranslateTransform/></StackPanel.RenderTransform>
               <TextBlock x:Name="WelcomeKicker" Text="УСТАНОВКА" Foreground="#FF9A3C" FontSize="12" FontWeight="SemiBold"/>
-              <TextBlock x:Name="WelcomeTitle" Text="Добро пожаловать" Foreground="White" FontSize="32" FontWeight="SemiBold" Margin="0,6,0,0"/>
+              <TextBlock x:Name="WelcomeTitle" Text="Добро пожаловать" Foreground="White" FontSize="28" FontWeight="SemiBold" Margin="0,4,0,0"/>
               <TextBlock Text="Памятка по законам Majestic RP: кодексы, калькулятор наказаний, рация и ИИ-помощник для вашего сервера."
                          Foreground="#9AA7BF" FontSize="14.5" TextWrapping="Wrap" LineHeight="21" Margin="0,12,0,0"/>
-              <TextBlock Text="ПАПКА УСТАНОВКИ" Foreground="#6C7A99" FontSize="11" FontWeight="SemiBold" Margin="0,28,0,8"/>
+              <TextBlock Text="ПАПКА УСТАНОВКИ" Foreground="#6C7A99" FontSize="11" FontWeight="SemiBold" Margin="0,20,0,8"/>
               <Grid>
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="*"/>
@@ -204,8 +158,8 @@
                 </Border>
                 <Button x:Name="BtnBrowse" Grid.Column="1" Content="Изменить" Style="{StaticResource BtnGhost}"/>
               </Grid>
-              <CheckBox x:Name="ChkDesktop" Content="Ярлык на рабочем столе" IsChecked="True" Style="{StaticResource Chk}" Margin="0,18,0,0"/>
-              <StackPanel Orientation="Horizontal" Margin="0,30,0,0">
+              <CheckBox x:Name="ChkDesktop" Content="Ярлык на рабочем столе" IsChecked="True" Style="{StaticResource Chk}" Margin="0,16,0,0"/>
+              <StackPanel Orientation="Horizontal" Margin="0,22,0,0">
                 <Button x:Name="BtnInstall" Content="Установить" Style="{StaticResource BtnPrimary}"/>
                 <TextBlock x:Name="InstallHint" Text="около минуты" Foreground="#6C7A99" FontSize="13" VerticalAlignment="Center" Margin="18,0,0,0"/>
               </StackPanel>
@@ -216,7 +170,7 @@
               <StackPanel.RenderTransform><TranslateTransform/></StackPanel.RenderTransform>
               <TextBlock x:Name="ProgressKicker" Text="УСТАНОВКА" Foreground="#FF9A3C" FontSize="12" FontWeight="SemiBold"/>
               <TextBlock x:Name="ProgressTitle" Text="Устанавливаем Senko Assistant" Foreground="White" FontSize="26" FontWeight="SemiBold" Margin="0,6,0,0" TextWrapping="Wrap"/>
-              <TextBlock x:Name="Pct" Text="0%" Foreground="White" FontSize="76" FontWeight="Light" Margin="-3,16,0,0"/>
+              <TextBlock x:Name="Pct" Text="0%" Foreground="White" FontSize="60" FontWeight="Light" Margin="-2,8,0,0"/>
               <Grid Margin="0,6,0,0" Height="10">
                 <Border x:Name="BarTrack" CornerRadius="5" Background="#1AFFFFFF"/>
                 <Border x:Name="BarFill" CornerRadius="5" HorizontalAlignment="Left" Width="0">
@@ -261,12 +215,14 @@
                 <Button x:Name="BtnErrClose" Content="Закрыть" Style="{StaticResource BtnGhost}" Margin="12,0,0,0" Padding="22,12"/>
               </StackPanel>
             </StackPanel>
-          </Grid>
         </Grid>
 
         <!-- заголовок окна -->
-        <Grid x:Name="TitleBar" VerticalAlignment="Top" Height="46" Background="Transparent">
-          <TextBlock Text="Установка Senko Assistant" Foreground="#6C7A99" FontSize="12" VerticalAlignment="Center" Margin="22,0,0,0"/>
+        <Grid x:Name="TitleBar" Grid.Row="0" VerticalAlignment="Top" Height="46" Background="Transparent">
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
+            <Image x:Name="Fox" Width="20" Height="20" RenderOptions.BitmapScalingMode="HighQuality"/>
+            <TextBlock Text="Установка Senko Assistant" Foreground="#8C9AB8" FontSize="12" VerticalAlignment="Center" Margin="9,0,0,0"/>
+          </StackPanel>
           <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0">
             <Button x:Name="BtnMin" Style="{StaticResource BtnTitle}">
               <Path Data="M0,0 L11,0" Stroke="#B8C4DB" StrokeThickness="1.4" Margin="0,8,0,0"/>

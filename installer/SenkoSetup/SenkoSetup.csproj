@@ -24,6 +24,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Ui.layout" LogicalName="SenkoSetup.Ui.layout" />
     <EmbeddedResource Include="Assets\fox.png" LogicalName="SenkoSetup.Assets.fox.png" />
+    <EmbeddedResource Include="Assets\banner.png" LogicalName="SenkoSetup.Assets.banner.png" />
     <!-- пакет установщика электрона кладёт сборка: dotnet build -p:Payload=путь\Senko-Assistant-Setup-X.exe -->
     <EmbeddedResource Include="$(Payload)" LogicalName="SenkoSetup.payload.exe" Condition="'$(Payload)' != '' And Exists('$(Payload)')" />
     <EmbeddedResource Include="$(ExpectedFile)" LogicalName="SenkoSetup.expected.txt" Condition="'$(ExpectedFile)' != '' And Exists('$(ExpectedFile)')" />
