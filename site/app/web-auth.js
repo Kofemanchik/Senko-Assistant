@@ -6,6 +6,7 @@
   var ROLES = { off: "Сотрудник", pros: "Прокурор", adv: "Адвокат" };
   var DEPTS = ["Government", "LSPD", "LSCSD", "FIB", "SANG"];
   var SERVERS = [{ id: 12, name: "Boston" }, { id: 7, name: "Los Angeles" }, { id: 16, name: "Denver" }]; // как SERVERS в серверной функции
+  var dcRun = 0; // 3.5.3: номер текущей попытки входа через Discord
   var pending = null; // свежая регистрация или новые документы: вход после подтверждения
 
   function next() {
@@ -37,6 +38,38 @@
         return { ok: true, user: r.user };
       });
     },
+    /* 3.5.3: вход через Discord. Окно Discord открывается сразу по нажатию (иначе браузер заблокирует его),
+       адрес подставляется, когда сервер его выдал; результат ждём у сервера, опрашивая раз в 2 секунды. */
+    discord: function (d) {
+      d = d || {};
+      var run = ++dcRun, win = null;
+      try { win = window.open("about:blank", "senko-discord", "width=520,height=760"); } catch (e) {}
+      return W.call({ action: "dc_auth_start", purpose: "login" }).then(function (st) {
+        if (!st.ok) { try { win && win.close(); } catch (e) {} return { ok: false, error: st.error || "Не удалось начать вход через Discord.", code: st.code }; }
+        if (win && !win.closed) win.location.href = st.url;
+        else return { ok: false, error: "Браузер заблокировал окно Discord. Разрешите всплывающие окна для этого сайта и нажмите ещё раз." };
+        var until = Date.now() + Math.min(600, +st.ttl || 600) * 1000;
+        return new Promise(function (done) {
+          (function tick() {
+            if (run !== dcRun) return done({ ok: false, cancelled: true, error: "Вход через Discord отменён." });
+            if (Date.now() > until) return done({ ok: false, error: "Время на вход вышло. Нажмите «Войти через Discord» ещё раз." });
+            W.call(Object.assign({ action: "dc_auth_poll", state: st.state, pk: st.pk, remember: !!d.remember }, W.client())).then(function (r) {
+              if (run !== dcRun) return done({ ok: false, cancelled: true, error: "Вход через Discord отменён." });
+              if ((r.ok && r.pending) || (!r.ok && (r.code === "network" || r.offline))) return setTimeout(tick, 2000);
+              try { if (win && !win.closed) win.close(); } catch (e) {}
+              if (!r.ok) return done({ ok: false, error: r.error || "Не удалось войти через Discord.", code: r.code });
+              W.ls("sa-web-last", r.user.login);
+              if (r.user.needLegal) { pending = { login: r.user.login, token: r.token, remember: !!d.remember, user: r.user }; return done({ ok: true, needLegal: true, user: r.user }); }
+              W.saveSession(r.user.login, r.token, !!d.remember);
+              W.cacheUser(r.user, { sys: r.sys });
+              setTimeout(enter, 0);
+              done({ ok: true, user: r.user });
+            }, function () { setTimeout(tick, 2000); });
+          })();
+        });
+      });
+    },
+    discordCancel: function () { dcRun++; },
     register: function (d) {
       d = d || {};
       return W.call(Object.assign({

@@ -578,3 +578,13 @@ alter table public.law_changes enable row level security;
 revoke all on table public.law_changes from anon, authenticated;
 -- Согласие на публичный рейтинг недели на сайте (по умолчанию выключено)
 alter table public.profiles add column if not exists pub_board boolean not null default false;
+-- 3.5.3: вход через Discord (OAuth2). Discord привязывается к существующему аккаунту в кабинете.
+alter table public.profiles add column if not exists discord_uid text;
+alter table public.profiles add column if not exists discord_uname text not null default '';
+create unique index if not exists profiles_discord_uid_idx on public.profiles (discord_uid) where discord_uid is not null;
+create table if not exists public.dc_auth (
+  state text primary key, pk_hash text not null, purpose text not null, user_id uuid references public.profiles(id) on delete cascade,
+  done boolean not null default false, error text, discord_id text, discord_name text,
+  created_at timestamptz not null default now(), expires_at timestamptz not null);
+alter table public.dc_auth enable row level security;
+revoke all on table public.dc_auth from anon, authenticated;

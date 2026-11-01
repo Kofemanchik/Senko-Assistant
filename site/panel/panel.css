@@ -274,3 +274,9 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px}
 .adp-b p{color:var(--muted);margin:0}
 .ad-card.off .adp{opacity:.55}
 @media (max-width:560px){.adp{grid-template-columns:1fr}.adp.sq{grid-template-columns:80px 1fr}}
+
+/* 3.5.3: вход через Discord */
+.dc-or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12.5px;margin:12px 0 10px}.dc-or::before,.dc-or::after{content:"";flex:1;height:1px;background:var(--line)}
+.dc-btn{display:flex;align-items:center;justify-content:center;gap:10px;background:#5865F2;border-color:#5865F2;color:#fff}.dc-btn:hover{filter:brightness(1.08)}.dc-btn:disabled{opacity:.6}
+.dc-btn svg{width:20px;height:20px;fill:currentColor}
+.dc-hint{margin-top:8px}

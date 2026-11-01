@@ -103,6 +103,7 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
       return build >= 22000 ? "Windows 11" : "Windows 10";
     } catch (e) { return ""; }
   }
+  let dcRun = 0; // номер текущей попытки входа через Discord: отмена увеличивает его
   const client = () => ({ ver: String(version || ""), device: deviceId(), os: osName() });
   function rememberLogin(login) {
     try {
@@ -262,6 +263,37 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
       }
       return { ok: false, error: r.error || "Не удалось войти.", code: r.code };
     },
+
+    // 3.5.3: вход через Discord. openUrl открывает ссылку Discord в браузере; результат ждём у сервера (опрос раз в 2 с, до 10 минут)
+    async discordLogin(d, openUrl) {
+      d = d || {};
+      const id = ++dcRun;
+      const st = await call({ action: "dc_auth_start", purpose: "login", ...client() });
+      if (!st.ok) return { ok: false, error: st.error || "Не удалось начать вход через Discord.", code: st.code };
+      try { openUrl(st.url); } catch (e) { return { ok: false, error: "Не удалось открыть браузер." }; }
+      const until = Date.now() + Math.min(600, +st.ttl || 600) * 1000;
+      while (Date.now() < until) {
+        await new Promise((ok) => setTimeout(ok, 2000));
+        if (id !== dcRun) return { ok: false, cancelled: true, error: "Вход через Discord отменён." };
+        const r = await call({ action: "dc_auth_poll", state: st.state, pk: st.pk, remember: !!d.remember, ...client() });
+        if (r.ok && r.pending) continue;
+        if (!r.ok && isOffline(r)) continue; // связь мигнула — пробуем ещё
+        takeSys(r);
+        if (!r.ok) return { ok: false, error: r.error || "Не удалось войти через Discord.", code: r.code };
+        remember = !!d.remember;
+        setCurrent(r.user, r.token);
+        rememberLogin(r.user.login);
+        writeProfileDoc(current);
+        if (r.user.needLegal) {
+          pending = { login: r.user.login, token: r.token };
+          return { ok: true, needLegal: true, user: pub() };
+        }
+        if (remember) { saveSession(r.user.login, r.token); saveCache(r.user); } else clearSession();
+        return { ok: true, user: pub() };
+      }
+      return { ok: false, error: "Время на вход вышло. Нажмите «Войти через Discord» ещё раз." };
+    },
+    discordCancel() { dcRun++; },
 
     async register(d) {
       d = d || {};

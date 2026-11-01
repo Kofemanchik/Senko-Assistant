@@ -125,6 +125,13 @@ module.exports = function buildCodes(ctx) {
     '<button class="btn btn-p" type="submit">Отправить</button> <span class="cx-st" data-bugst role="status"></span>\n</form>\n' +
     '<p class="doc-note">Сообщение получит владелец программы. Если вы вошли в программу, удобнее писать из неё: меню → «Сообщить об ошибке», туда же придёт ответ.</p>');
 
+  /* ───── 3.5.3: возврат из Discord после входа (программа, веб-версия, панель ждут результат у сервера) ───── */
+  out["auth/discord/index.html"] = page("Вход через Discord · Senko Assistant", "Подтверждение входа через Discord.",
+    '<div class="wrap cx">\n<div class="doc-hero">\n ' + crumbs([["Вход через Discord"]]) + '\n <h1>Вход через Discord</h1>\n</div>\n' +
+    '<div class="cx-part cx-dc" data-dcauth aria-live="polite"><p>Проверяю вход…</p></div>\n' +
+    '<p class="doc-note">Эту вкладку можно закрыть: программа, веб-версия или панель продолжат вход сами.</p>\n</div>',
+    ["/app/config.js", "/assets/dcauth.js"], '<meta name="robots" content="noindex">\n<meta name="referrer" content="no-referrer">\n');
+
   /* ───── частые вопросы и страница для руководства ───── */
   const FAQ = [
     ["Как установить программу?", "Нажмите «Скачать» на главной странице и запустите установщик. Если Windows показывает «Система Windows защитила ваш компьютер», нажмите «Подробнее» → «Выполнить в любом случае»: у установщика нет платной подписи. Дальше программа обновляется сама."],

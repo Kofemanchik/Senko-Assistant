@@ -4397,13 +4397,49 @@ function testHtml(){
   h+='<div class="sbtns"><button type="button" class="btn" data-cab="tlexp" data-v="txt">Экспорт .txt</button><button type="button" class="btn" data-cab="tlexp" data-v="csv">Экспорт .csv</button><button type="button" class="btn" data-cab="tlclr">Очистить результаты</button></div>';
   return h;
 }
-/* 2.9: привязка аккаунта к Discord-серверу Senko (роли владельца, модераторов и бета-тестеров, обращения в поддержку) */
+/* 3.5.3: вход через Discord. Discord привязывается к аккаунту здесь, после этого на экране входа работает «Войти через Discord». */
+var DCL=null, DCRUN=0, DCMSG="", DCBAD=false;
+function dcState(){
+  if(DCL) return DCL;
+  try{var u=window.senkoApp.state().user||{};return {linked:!!u.dcLinked,name:u.dcName||""}}catch(e){return {linked:false,name:""}}
+}
 function dcCabHtml(){
   if(!(window.senkoApp&&window.senkoApp.api)) return "";
-  return '<div class="cab-h">Discord Senko<small>роли и поддержка на нашем сервере</small></div>'+
-    '<div class="cab-empty" style="text-align:left">Привяжите аккаунт, чтобы бот выдал роли (владелец, модератор, бета-тестер). Нажмите «Получить код» и отправьте боту на сервере команду <b>/привязать</b> с этим кодом.'+
-    '<div class="sbtns" style="margin-top:10px"><button type="button" class="btn" data-cab="dclink">Получить код</button><button type="button" class="btn" data-cab="dcunlink">Отвязать</button></div>'+
-    '<div id="dcMsg" role="status" aria-live="polite" style="margin-top:8px;font-size:13px"></div></div>';
+  var d=dcState(), busy=DCRUN>0&&DCMSG.indexOf("Подтвердите")===0;
+  return '<div class="cab-h">Вход через Discord<small>'+(d.linked?'привязан'+(d.name?': '+esc(d.name):''):'не привязан')+'</small></div>'+
+    '<div class="cab-empty" style="text-align:left">'+(d.linked
+      ?'Можно входить в программу, веб-версию и панель (с паролем панели) кнопкой «Войти через Discord». Вход по логину и паролю тоже работает.'
+      :'Привяжите Discord, чтобы входить в программу и веб-версию одной кнопкой «Войти через Discord», без пароля. Вход по логину и паролю останется.')+
+    '<div class="sbtns" style="margin-top:10px">'+(d.linked
+      ?'<button type="button" class="btn" data-cab="dclink">Привязать другой Discord</button><button type="button" class="btn" data-cab="dcunlink">Отвязать</button>'
+      :'<button type="button" class="btn" data-cab="dclink" style="background:#5865F2;border-color:#5865F2;color:#fff;font-weight:600"'+(busy?' disabled':'')+'>Привязать Discord</button>')+
+    (busy?'<button type="button" class="btn" data-cab="dccancel">Отменить</button>':'')+'</div>'+
+    '<div id="dcMsg" role="status" aria-live="polite" style="margin-top:8px;font-size:13px;color:'+(DCBAD?'#c0392b':'var(--muted)')+'">'+esc(DCMSG)+'</div></div>';
+}
+function dcLink(){
+  var A=window.senkoApp, run=++DCRUN, isWeb=!!A.web, win=null;
+  if(isWeb){ try{ win=window.open("about:blank","senko-discord","width=520,height=760") }catch(e){} }
+  var say=function(t,bad){ DCMSG=t; DCBAD=!!bad; if(window.SA_cabRepaint) SA_cabRepaint() };
+  say("Подождите…");
+  A.api("dc_auth_start",{purpose:"link"}).then(function(st){
+    if(!st||!st.ok){ try{win&&win.close()}catch(e){} DCRUN=0; return say((st&&st.error)||"Не удалось начать привязку.",true) }
+    if(isWeb){ if(win&&!win.closed) win.location.href=st.url; else { DCRUN=0; return say("Браузер заблокировал окно Discord. Разрешите всплывающие окна для сайта и нажмите ещё раз.",true) } }
+    else window.open(st.url);
+    say("Подтвердите вход в окне Discord в браузере. Программа подождёт.");
+    var until=Date.now()+600000;
+    (function tick(){
+      if(run!==DCRUN) return;
+      if(Date.now()>until){ DCRUN=0; return say("Время вышло. Нажмите «Привязать Discord» ещё раз.",true) }
+      A.api("dc_auth_poll",{state:st.state,pk:st.pk}).then(function(r){
+        if(run!==DCRUN) return;
+        if(r&&r.ok&&r.pending) return setTimeout(tick,2000);
+        DCRUN=0; try{ if(win&&!win.closed) win.close() }catch(e){}
+        if(!r||!r.ok){ if(r&&(r.code==="network"||r.code==="server")){ DCRUN=run; return setTimeout(tick,3000) } return say((r&&r.error)||"Не получилось привязать Discord.",true) }
+        var u=r.user||{}; DCL={linked:!!u.dcLinked,name:u.dcName||""};
+        say(DCL.linked?"Discord «"+DCL.name+"» привязан. Теперь можно входить через Discord.":"Не получилось привязать Discord.",!DCL.linked);
+      },function(){ setTimeout(tick,3000) });
+    })();
+  },function(){ DCRUN=0; say("Нет связи с сервером.",true) });
 }
 /* 3.5.1: блок кабинета, который упал, не должен ронять весь кабинет */
 function cabPart(f){try{return f()||""}catch(e){try{console.error("cabinet block",e)}catch(x){}return ""}}
@@ -4536,14 +4572,16 @@ ov.addEventListener("click",function(e){
   var c=b.dataset.cab;
   if(c){
     if(c==="avpick"){var f=$("#saFile"); if(f) f.click(); return}
-    if(c==="dclink"||c==="dcunlink"){
-      var dm=$("#dcMsg"), say=function(t,bad){ if(dm){ dm.textContent=t; dm.style.color=bad?"#c0392b":"var(--muted)"; } };
-      say("Подождите…");
-      window.senkoApp.api("discord_link",{op:c==="dclink"?"code":"unlink"}).then(function(r){
-        if(!r||!r.ok) return say((r&&r.error)||"Не получилось. Попробуйте позже.",true);
-        if(c==="dcunlink") return say("Аккаунт отвязан от Discord.");
-        say("Код: "+r.code+" (действует "+r.minutes+" мин.). В Discord на сервере Senko введите: /привязать код:"+r.code+(r.linked?". Сейчас аккаунт уже привязан, новый код заменит привязку.":""));
-      }).catch(function(){ say("Нет связи с сервером.",true); });
+    if(c==="dclink"){ dcLink(); return }
+    if(c==="dccancel"){ DCRUN=0; DCMSG="Привязка отменена."; DCBAD=false; paintSheet(); return }
+    if(c==="dcunlink"){
+      if(!confirm("Отвязать Discord? Входить можно будет только по логину и паролю.")) return;
+      DCMSG="Подождите…"; DCBAD=false; paintSheet();
+      window.senkoApp.api("dc_unlink",{}).then(function(r){
+        if(!r||!r.ok){ DCMSG=(r&&r.error)||"Не получилось. Попробуйте позже."; DCBAD=true }
+        else { DCL={linked:false,name:""}; DCMSG="Discord отвязан. Вход — по логину и паролю."; DCBAD=false }
+        paintSheet();
+      },function(){ DCMSG="Нет связи с сервером."; DCBAD=true; paintSheet() });
       return;
     }
     if(c==="accsave"){
@@ -6872,6 +6910,10 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.5.3",d:"01.11.2026",items:[
+  ["🔑","Вход через Discord","Привяжите Discord в личном кабинете (раздел «Безопасность»), и на экране входа работает кнопка «Войти через Discord»: подтверждаете вход в браузере, программа входит сама. Вход по логину и паролю остаётся. В панели владельца тоже можно войти через Discord, пароль панели по-прежнему нужен."],
+  ["🛠️","Журнал руководства, отчёт за неделю и рейтинг на сайте","В 3.5.0 эти функции не могли связаться с сервером. Исправлено."]
+ ]},
  {v:"3.5.2",d:"01.11.2026",items:[
   ["🗂️","Личный кабинет по разделам","Кабинет устроен как настройки: слева разделы «Профиль», «Прогресс», «Смена», «Рапорты», «Обучение», «Коллеги и связь», «Безопасность» и поиск «Найти в кабинете», справа только выбранный раздел. Кабинет открывается на последнем разделе, где вы были."]
  ]},
@@ -13424,8 +13466,8 @@ var TABS=[
  ["shift","Смена","shift","Итоги смены, журнал задержаний за день и статьи, которые вы применяете чаще всего.",["Итоги за смену","Журнал смены","Мои частые статьи","Последние задержания"]],
  ["rep","Рапорты","rep","Ваши рапорты и их статус у руководства.",["Мои рапорты"]],
  ["learn","Обучение","learn","Результаты тренажёра, ошибки, которые стоит повторить, и контрольные тесты ведомства.",["Пройденные тесты","Стоит повторить","Контрольные тесты"]],
- ["people","Коллеги и связь","people","Что видят коллеги, спецсвязи, рейтинг на сайте и привязка к Discord Senko.",["Спецсвязи","Профиль для коллег","Рейтинг недели на сайте","Discord Senko"]],
- ["sec","Безопасность","lock","Пароль и входы в аккаунт.",["Безопасность"]]
+ ["people","Коллеги и связь","people","Что видят коллеги, спецсвязи и рейтинг на сайте.",["Спецсвязи","Профиль для коллег","Рейтинг недели на сайте"]],
+ ["sec","Безопасность","lock","Пароль, входы в аккаунт и вход через Discord.",["Безопасность","Вход через Discord"]]
 ];
 var cur=null, q="";
 try{cur=localStorage.getItem("bos-cabtab")}catch(x){}

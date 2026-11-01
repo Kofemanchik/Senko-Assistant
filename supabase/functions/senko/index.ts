@@ -226,6 +226,8 @@ function pub(p) {
     post: p.post || "",
     bio: p.bio || "",
     hideDiscord: !!p.hide_discord,
+    dcLinked: !!p.discord_uid,
+    dcName: p.discord_uname || "",
   };
 }
 
@@ -871,6 +873,15 @@ async function api(req) {
       return J(await pubStats(ip));
     case "pub_bug":
       return J(await pubBug(b, ip));
+    // 3.5.3: вход через Discord (OAuth2): программа, веб-версия, панель; привязка Discord к аккаунту в кабинете
+    case "dc_auth_start":
+      return J(await dcAuthStart(b, ip));
+    case "dc_auth_cb":
+      return J(await dcAuthCallback(b, ip));
+    case "dc_auth_poll":
+      return J(await dcAuthPoll(b, ip, req.headers.get("user-agent") || ""));
+    case "dc_unlink":
+      return J(await dcUnlink(b));
     case "pub_board":
       return J(await pubBoard(b, ip));
     case "pub_board_opt":
@@ -5118,7 +5129,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 35;
+const SCHEMA_V = 36;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -5267,6 +5278,15 @@ create index if not exists law_changes_server_idx on public.law_changes (server,
 alter table public.law_changes enable row level security;
 revoke all on table public.law_changes from anon, authenticated;
 alter table public.profiles add column if not exists pub_board boolean not null default false;
+alter table public.profiles add column if not exists discord_uid text;
+alter table public.profiles add column if not exists discord_uname text not null default '';
+create unique index if not exists profiles_discord_uid_idx on public.profiles (discord_uid) where discord_uid is not null;
+create table if not exists public.dc_auth (
+  state text primary key, pk_hash text not null, purpose text not null, user_id uuid references public.profiles(id) on delete cascade,
+  done boolean not null default false, error text, discord_id text, discord_name text,
+  created_at timestamptz not null default now(), expires_at timestamptz not null);
+alter table public.dc_auth enable row level security;
+revoke all on table public.dc_auth from anon, authenticated;
 `;
 let schemaReady = null;
 function ensureSchema() {
@@ -5277,7 +5297,7 @@ function ensureSchema() {
         if (+v >= SCHEMA_V) return;
         // база уже на 2.4: повторно 2.4 не выполняем (иначе вернулись бы удалённые баннеры по умолчанию)
         // 3.5: SCHEMA_30 и SCHEMA_35 повторяемы (create/alter … if not exists), их добавляем всем, кто ниже 35
-        await db().unsafe(+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35);
+        await db().unsafe(+v >= 35 ? SCHEMA_35 : +v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35);
         adsReady = true;
         await setSetting("schema_v", SCHEMA_V);
       } catch (e) {
@@ -5945,6 +5965,136 @@ async function pubStats(ip) {
   await setSetting("pub_stats", out);
   return { ok: true, ...out };
 }
+// ───────────── 3.5.3: вход через Discord ─────────────
+// Discord только подтверждает личность: войти можно в аккаунт, к которому этот Discord привязан в кабинете (регистрации через Discord нет).
+// Поток один для программы, веб-версии и панели: dc_auth_start → браузер → Discord → сайт /auth/discord/ (dc_auth_cb) → клиент опрашивает dc_auth_poll.
+// В панель по-прежнему нужен пароль панели: Discord заменяет только логин и пароль аккаунта.
+// Нужны секрет DISCORD_CLIENT_SECRET и адрес возврата https://senko-assistant.site/auth/discord/ в Discord Developer Portal → OAuth2 → Redirects.
+const DC_CLIENT_ID = Deno.env.get("DISCORD_CLIENT_ID") || "1564239530981204018";
+const DC_CLIENT_SECRET = Deno.env.get("DISCORD_CLIENT_SECRET") || "";
+const DC_REDIRECT = Deno.env.get("DISCORD_REDIRECT_URI") || SITE_URL + "/auth/discord/";
+const DC_PURPOSES = ["login", "panel", "link"];
+async function dcAuthStart(b, ip) {
+  if (!DC_CLIENT_SECRET) return fail("Вход через Discord пока не настроен. Войдите по логину и паролю.", { code: "dc_off" });
+  const purpose = DC_PURPOSES.includes(b.purpose) ? b.purpose : "login";
+  if (!(await hit(`dcs:${ip}`, 20, 600))) return fail(RATE_MSG, { code: "rate" });
+  let uid = null;
+  if (purpose === "link") {
+    const { p, err } = await who(b);
+    if (err) return err;
+    uid = p.id;
+  }
+  const state = rand(24), pk = rand(24);
+  const sql = db();
+  await sql`delete from dc_auth where expires_at < now() - interval '1 hour'`;
+  await sql`insert into dc_auth (state, pk_hash, purpose, user_id, expires_at) values (${state}, ${await sha256(pk)}, ${purpose}, ${uid}, now() + interval '10 minutes')`;
+  const url = "https://discord.com/oauth2/authorize?" + new URLSearchParams({ client_id: DC_CLIENT_ID, response_type: "code", scope: "identify", redirect_uri: DC_REDIRECT, state }).toString();
+  return { ok: true, url, state, pk, ttl: 600 };
+}
+// Страница сайта /auth/discord/ передаёт сюда код и state, которые вернул Discord
+async function dcAuthCallback(b, ip) {
+  if (!DC_CLIENT_SECRET) return fail("Вход через Discord пока не настроен.");
+  if (!(await hit(`dcc:${ip}`, 30, 600))) return fail(RATE_MSG, { code: "rate" });
+  const state = String(b.state || ""), code = String(b.code || "");
+  if (!/^[0-9a-f]{48}$/.test(state)) return fail("Ссылка входа устарела. Начните вход заново.");
+  const sql = db();
+  const [row] = await sql`select * from dc_auth where state = ${state} and expires_at > now()`;
+  if (!row) return fail("Ссылка входа устарела. Начните вход заново.");
+  if (row.done) return { ok: true, purpose: row.purpose, msg: "Готово. Вернитесь в программу." };
+  if (b.error || !code) {
+    await sql`update dc_auth set done = true, error = ${"Вход через Discord отменён."} where state = ${state}`;
+    return fail("Вход отменён. Можно закрыть эту вкладку.");
+  }
+  let me = null;
+  try {
+    const tr = await fetch("https://discord.com/api/oauth2/token", {
+      method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ client_id: DC_CLIENT_ID, client_secret: DC_CLIENT_SECRET, grant_type: "authorization_code", code, redirect_uri: DC_REDIRECT }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const tj = await tr.json().catch(() => ({}));
+    if (!tr.ok || !tj.access_token) throw new Error("token " + tr.status + " " + (tj.error || ""));
+    const ur = await fetch("https://discord.com/api/users/@me", { headers: { authorization: "Bearer " + tj.access_token }, signal: AbortSignal.timeout(15000) });
+    me = await ur.json().catch(() => null);
+    if (!ur.ok || !me || !/^\d{5,25}$/.test(String(me.id || ""))) throw new Error("me " + ur.status);
+  } catch (e) {
+    console.error("dc_auth", e);
+    await sql`update dc_auth set done = true, error = ${"Discord не подтвердил вход. Попробуйте ещё раз."} where state = ${state}`;
+    return fail("Discord не подтвердил вход. Попробуйте ещё раз.");
+  }
+  const did = String(me.id), dname = clean(me.global_name || me.username || "", 40);
+  if (row.purpose === "link") {
+    const [other] = await sql`select login from profiles where discord_uid = ${did} and id <> ${row.user_id}`;
+    if (other) {
+      await sql`update dc_auth set done = true, error = ${"Этот Discord уже привязан к другому аккаунту Senko. Сначала отвяжите его там."} where state = ${state}`;
+      return fail("Этот Discord уже привязан к другому аккаунту Senko. Сначала отвяжите его там.");
+    }
+    const [p] = await sql`update profiles set discord_uid = ${did}, discord_uname = ${dname} where id = ${row.user_id} returning login`;
+    await sql`update dc_auth set done = true, discord_id = ${did}, discord_name = ${dname} where state = ${state}`;
+    if (p) await audit(p.login, "dc_link", p.login, { discord: dname });
+    return { ok: true, purpose: "link", msg: `Discord «${dname}» привязан. Теперь можно входить через Discord. Вернитесь в программу.` };
+  }
+  await sql`update dc_auth set done = true, discord_id = ${did}, discord_name = ${dname} where state = ${state}`;
+  return { ok: true, purpose: row.purpose, msg: "Вход подтверждён. Вернитесь в " + (row.purpose === "panel" ? "панель" : "программу") + "." };
+}
+// Клиент, начавший вход, ждёт результат (pk знает только он: по одной ссылке из браузера сессию не получить)
+async function dcAuthPoll(b, ip, ua) {
+  const state = String(b.state || ""), pk = String(b.pk || "");
+  if (!/^[0-9a-f]{48}$/.test(state) || !/^[0-9a-f]{48}$/.test(pk)) return fail("Неверный запрос.");
+  if (!(await hit(`dcp:${state}`, 400, 900))) return fail(RATE_MSG, { code: "rate" });
+  const sql = db();
+  const [row] = await sql`select * from dc_auth where state = ${state}`;
+  if (!row || !safeEq(await sha256(pk), row.pk_hash)) return fail("Вход не найден. Начните заново.", { code: "dc_gone" });
+  if (!row.done) return new Date(row.expires_at).getTime() < Date.now() ? fail("Время на вход вышло. Начните заново.", { code: "dc_gone" }) : { ok: true, pending: true };
+  await sql`delete from dc_auth where state = ${state}`;
+  if (row.error) return fail(row.error, { code: "dc_err" });
+  if (row.purpose === "link") {
+    const p = await profileById(row.user_id);
+    return { ok: true, linked: true, user: p ? pub(p) : null };
+  }
+  const p0 = (await sql`select * from profiles where discord_uid = ${row.discord_id}`)[0] || null;
+  const p = await liftExpiredBan(p0);
+  if (!p) return fail(`Discord «${row.discord_name || row.discord_id}» не привязан ни к одному аккаунту. Войдите по логину и паролю и привяжите Discord в личном кабинете (раздел «Безопасность»).`, { code: "dc_unknown" });
+  if (row.purpose === "panel") {
+    const key = normCode(b.key);
+    const [k] = await sql`select key_hash from panel_keys where user_id = ${p.id}`;
+    if (!PANEL_RANKS.includes(p.rank) || !key || !k || !safeEq(await sha256(key), k.key_hash)) {
+      await logIn(p.id, "fail", { ver: "панель · Discord", os: browserName(ua) }, ip);
+      return fail("Неверный пароль панели или нет доступа к панели.");
+    }
+    if (p.banned) return fail(banMsg(p), { code: "banned" });
+    await sql`delete from panel_sessions where expires_at < now() or last_at < now() - make_interval(mins => ${PANEL_IDLE_MIN})`;
+    const token = rand(32);
+    await sql`insert into panel_sessions (token_hash, user_id, expires_at, ip, ua)
+              values (${await sha256(token)}, ${p.id}, now() + make_interval(hours => ${PANEL_HOURS}), ${ipShort(ip)}, ${clean(browserName(ua), 60)})`;
+    await sql`update panel_keys set last_used_at = now() where user_id = ${p.id}`;
+    const a = panelActor(p);
+    await audit(a.label, "panel_login", p.login, { ip: ipShort(ip), ua: browserName(ua), via: "discord" });
+    await logIn(p.id, "login", { ver: "панель · Discord", os: browserName(ua) }, ip);
+    const where = `IP ${ipShort(ip) || "неизвестен"}, ${browserName(ua)}`;
+    const msg = `🛡 <b>Вход в панель через Discord</b>: ${esc(p.login)} (${RANKS[p.rank]})\n${esc(where)}, ${fmtDate(new Date())}`;
+    if (OWNER_TG) await send(OWNER_TG, msg + `\nЕсли это были не вы: /panel off ${esc(p.login)}`);
+    if (p.rank === "moderator" && p.tg_id != null) await send(String(p.tg_id), msg + "\nЕсли это были не вы, напишите владельцу и смените пароль: /panel");
+    return { ok: true, ptoken: token, me: panelMe(p, a) };
+  }
+  if (p.banned) return fail(banMsg(p), { code: "banned" });
+  if (p.approval && p.approval !== "ok") return fail(approvalMsg(p), { code: p.approval });
+  const token = await newSession(p.id, !!b.remember);
+  await sql`update profiles set last_seen = now() where id = ${p.id}`;
+  await noteClient(p, b);
+  await logIn(p.id, "login", { ...b, ver: String(b.ver || "") + " · Discord" }, ip);
+  maybeCleanup();
+  return { ok: true, token, user: pub(p), sys: await sysFor(p) };
+}
+async function dcUnlink(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!p.discord_uid) return { ok: true, user: pub(p) };
+  const [np] = await db()`update profiles set discord_uid = null, discord_uname = '' where id = ${p.id} returning *`;
+  await audit(p.login, "dc_unlink", p.login, {});
+  return { ok: true, user: pub(np) };
+}
+
 // Рейтинг недели на сайте: только те, кто сам включил галочку в кабинете (profiles.pub_board)
 async function pubBoardOpt(b) {
   const { p, err } = await who(b);

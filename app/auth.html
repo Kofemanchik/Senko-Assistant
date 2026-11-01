@@ -68,6 +68,9 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .row{display:flex;gap:8px}
 .row .btn{flex:1}
 .link{all:unset;color:var(--accent);cursor:pointer;font-size:13px;font-weight:600;text-align:center}
+.dc-or{display:flex;align-items:center;gap:10px;color:var(--muted,#888);font-size:12.5px}.dc-or::before,.dc-or::after{content:"";flex:1;height:1px;background:var(--line,#ddd)}
+.dc-btn{display:flex;align-items:center;justify-content:center;gap:10px;background:#5865F2;border-color:#5865F2;color:#fff}.dc-btn svg{width:20px;height:20px;fill:currentColor}
+.dc-btn:disabled{opacity:.6;cursor:default}
 .link:hover{text-decoration:underline}
 .link:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .quit{display:block;margin:12px auto 0;background:none;border:0;color:var(--muted);font:13px var(--f-body);cursor:pointer}
@@ -106,6 +109,10 @@ body:not(.framed) .tbar{display:none}
       <div class="err" id="lErr" role="alert" hidden></div>
       <button class="btn" id="lBtn" type="submit">Войти</button>
       <button class="link" id="forgot" type="button">Забыли пароль?</button>
+      <div class="dc-or" id="dcOr" hidden><span>или</span></div>
+      <button class="btn dc-btn" id="lDc" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.3 4.4A19.6 19.6 0 0 0 15.4 3l-.6 1.3a18 18 0 0 0-5.6 0L8.6 3a19.6 19.6 0 0 0-4.9 1.5C.6 9.1-.3 13.7.1 18.2a19.8 19.8 0 0 0 6 3l1.3-2a12.7 12.7 0 0 1-2-1l.5-.4a14.1 14.1 0 0 0 12.2 0l.5.4c-.7.4-1.3.7-2 1l1.3 2a19.7 19.7 0 0 0 6-3c.5-5.2-.8-9.7-3.6-13.8zM8.3 15.4c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4zm7.4 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4z"/></svg>Войти через Discord</button>
+      <div class="ok" id="lDcSt" role="status" hidden></div>
+      <button class="link" id="lDcX" type="button" hidden>Отменить вход через Discord</button>
     </form>
 
     <!-- Регистрация -->
@@ -542,6 +549,23 @@ body:not(.framed) .tbar{display:none}
         showErr("lErr",r.error); $("lPass").select();
       },function(){showErr("lErr","Ошибка связи с программой."); $("lBtn").disabled=false});
     });
+    // 3.5.3: вход через Discord (если Discord привязан к аккаунту в личном кабинете)
+    if(A.discord){
+      $("dcOr").hidden=false; $("lDc").hidden=false;
+      var dcEnd=function(){ $("lDc").disabled=false; $("lDcX").hidden=true; $("lBtn").disabled=false };
+      $("lDc").onclick=function(){
+        showErr("lErr",""); $("lOk").hidden=true; notice("");
+        $("lDc").disabled=true; $("lBtn").disabled=true; $("lDcX").hidden=false;
+        $("lDcSt").textContent="Подтвердите вход в окне Discord в браузере. Программа войдёт сама."; $("lDcSt").hidden=false;
+        A.discord({remember:$("lRem").checked}).then(function(r){
+          $("lDcSt").hidden=true;
+          if(r.ok&&r.needLegal){ dcEnd(); showLegalUpdate(); return }
+          if(r.ok) return;
+          dcEnd(); if(!r.cancelled) showErr("lErr",r.error);
+        },function(){ $("lDcSt").hidden=true; dcEnd(); showErr("lErr","Ошибка связи с программой.") });
+      };
+      $("lDcX").onclick=function(){ if(A.discordCancel) A.discordCancel(); $("lDcSt").hidden=true; dcEnd() };
+    }
     $("forgot").onclick=function(){
       stopPoll(); showErr("sErr",""); notice("");
       $("sLogin").value=$("lLogin").value.trim(); $("sNick").value=""; $("sSt").value=""; $("sCode").value="";

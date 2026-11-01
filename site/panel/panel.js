@@ -257,6 +257,42 @@
       start(r.me);
     });
   });
+  // 3.5.3: вход через Discord — вместо логина и пароля аккаунта; пароль панели всё равно нужен
+  var dcRun = 0;
+  function raw(body) {
+    return fetch(API, { method: "POST", body: JSON.stringify(body), cache: "no-store" })
+      .then(function (r) { return r.json(); }).catch(function () { return { ok: false, code: "network", error: "Нет связи с сервером. Проверьте интернет." }; });
+  }
+  $("a-dc").addEventListener("click", function () {
+    var key = $("a-key").value.trim(), dc = $("a-dc"), err = $("a-err");
+    if (key.replace(/[^a-z0-9]/gi, "").length !== 32) { err.textContent = "Для входа через Discord введите пароль панели (32 знака)."; $("a-key").focus(); return; }
+    if (!API) { err.textContent = "Не найден адрес сервера."; return; }
+    var run = ++dcRun, win = null;
+    try { win = window.open("about:blank", "senko-discord", "width=520,height=760"); } catch (x) {}
+    dc.disabled = true; err.textContent = "";
+    var done = function (msg) { if (run !== dcRun) return; dc.disabled = false; dc.lastChild.textContent = "Войти через Discord"; if (msg) err.textContent = msg; try { if (win && !win.closed) win.close(); } catch (x) {} };
+    raw({ action: "dc_auth_start", purpose: "panel" }).then(function (st) {
+      if (!st.ok) return done(st.error || "Не удалось начать вход через Discord.");
+      if (!win || win.closed) return done("Браузер заблокировал окно Discord. Разрешите всплывающие окна для сайта и нажмите ещё раз.");
+      win.location.href = st.url;
+      dc.lastChild.textContent = "Подтвердите вход в окне Discord…";
+      var until = Date.now() + 600000;
+      (function tick() {
+        if (run !== dcRun) return;
+        if (Date.now() > until) return done("Время на вход вышло. Нажмите ещё раз.");
+        raw({ action: "dc_auth_poll", state: st.state, pk: st.pk, key: key }).then(function (r) {
+          if (run !== dcRun) return;
+          if ((r.ok && r.pending) || (!r.ok && r.code === "network")) return setTimeout(tick, 2000);
+          if (!r.ok) return done(r.error || "Не удалось войти через Discord.");
+          done("");
+          $("a-key").value = "";
+          TOKEN = r.ptoken; ss(SKEY, TOKEN);
+          start(r.me);
+        });
+      })();
+    });
+  });
+
   $("logout").addEventListener("click", function () { api("logout").then(function () { leave("Вы вышли из панели."); }); });
 
   // ───── тема
