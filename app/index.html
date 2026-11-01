@@ -4454,6 +4454,7 @@ function paintSheet(){
   var ps=sBody.querySelector(".s25-pane"), pst=ps?ps.scrollTop:0;
   sBody.innerHTML=sheetKind==="cab"?cabHtml():settingsHtml();
   if(sheetKind==="set"&&window.SA_setTabs) window.SA_setTabs(sBody,sheet); else if(window.SA_setTabsOff) window.SA_setTabsOff(sheet);
+  if(sheetKind==="cab"&&window.SA_cabTabs) window.SA_cabTabs(sBody,sheet); else if(window.SA_cabTabsOff) window.SA_cabTabsOff(sheet);
   sBody.scrollTop=st; ps=sBody.querySelector(".s25-pane"); if(ps) ps.scrollTop=pst;
   if(sel){var n=sBody.querySelector(sel); if(n&&!n.disabled) n.focus();}
 }
@@ -6871,6 +6872,9 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.5.2",d:"01.11.2026",items:[
+  ["🗂️","Личный кабинет по разделам","Кабинет устроен как настройки: слева разделы «Профиль», «Прогресс», «Смена», «Рапорты», «Обучение», «Коллеги и связь», «Безопасность» и поиск «Найти в кабинете», справа только выбранный раздел. Кабинет открывается на последнем разделе, где вы были."]
+ ]},
  {v:"3.5.1",d:"01.11.2026",items:[
   ["🩹","Личный кабинет снова открывается","В 3.5.0 кабинет не открывался из-за ошибки в новом блоке «Рейтинг недели на сайте». Исправлено; теперь ошибка в одном блоке кабинета не мешает открыть остальные."]
  ]},
@@ -13396,6 +13400,131 @@ document.addEventListener("keydown",function(e){
 });
 })();
 </script>
+<script>
+/* 3.5.2: личный кабинет разложен по разделам, как настройки. cabHtml() собирает блоки как раньше (их добавляют многие модули),
+   а SA_cabTabs раскладывает готовые блоки по разделам по заголовку блока (.cab-h). Неизвестные заголовки уходят в «Другое». */
+(function(){
+"use strict";
+var IC={
+ me:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6"/>',
+ prog:'<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
+ shift:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/>',
+ rep:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+ learn:'<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c2 2 10 2 12 0v-5"/>',
+ people:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.4 3.4-5 6.5-5s5.7 1.6 6.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M17.5 14.5c2.2.3 3.6 1.8 4 4.5"/>',
+ lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+ more:'<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
+ find:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'
+};
+function ic(k){return '<svg viewBox="0 0 24 24" aria-hidden="true">'+(IC[k]||"")+'</svg>'}
+/* [id, название, иконка, описание, начала заголовков блоков] */
+var TABS=[
+ ["me","Профиль","me","Ник, статик, сервер, ведомство и контакты. После изменений нажмите «Сохранить».",["@top","Компетенция"]],
+ ["prog","Прогресс","prog","Уровень, опыт, достижения, рейтинг недели и активность.",["Мой прогресс","Достижения","Топ недели","Активность"]],
+ ["shift","Смена","shift","Итоги смены, журнал задержаний за день и статьи, которые вы применяете чаще всего.",["Итоги за смену","Журнал смены","Мои частые статьи","Последние задержания"]],
+ ["rep","Рапорты","rep","Ваши рапорты и их статус у руководства.",["Мои рапорты"]],
+ ["learn","Обучение","learn","Результаты тренажёра, ошибки, которые стоит повторить, и контрольные тесты ведомства.",["Пройденные тесты","Стоит повторить","Контрольные тесты"]],
+ ["people","Коллеги и связь","people","Что видят коллеги, спецсвязи, рейтинг на сайте и привязка к Discord Senko.",["Спецсвязи","Профиль для коллег","Рейтинг недели на сайте","Discord Senko"]],
+ ["sec","Безопасность","lock","Пароль и входы в аккаунт.",["Безопасность"]]
+];
+var cur=null, q="";
+try{cur=localStorage.getItem("bos-cabtab")}catch(x){}
+function head(el){
+ if(el.classList.contains("cab-top")) return "@top";
+ if(el.classList.contains("deptbar")) return "Компетенция";
+ var h=el.classList.contains("cab-h")?el:el.querySelector&&el.querySelector(".cab-h,h2,h3");
+ if(!h) return "";
+ var t=h.firstChild&&h.firstChild.nodeType===3?h.firstChild.textContent:h.textContent;
+ return String(t||"").trim();
+}
+function tabOf(t){
+ if(!t) return null;
+ for(var i=0;i<TABS.length;i++) for(var j=0;j<TABS[i][4].length;j++) if(t.indexOf(TABS[i][4][j])===0) return TABS[i][0];
+ return "more";
+}
+function build(body,sheet){
+ sheet.classList.add("s25-set","cab36");
+ var kids=[].slice.call(body.children), B={}, foot=[], curTab="me";
+ TABS.forEach(function(t){B[t[0]]=[]}); B.more=[];
+ kids.forEach(function(el){
+  if(el.classList.contains("cab-foot")){foot.push(el);return}
+  var standalone=el.classList.contains("cab-h"), nested=!standalone&&(el.classList.contains("cab-top")||el.classList.contains("deptbar")||(el.querySelector&&el.querySelector(".cab-h,h2,h3")));
+  if(standalone||nested){var t=tabOf(head(el)); if(t) curTab=t;}
+  B[curTab].push(el);
+ });
+ var tabs=TABS.filter(function(t){return B[t[0]].length});
+ if(B.more.length) tabs.push(["more","Другое","more","Остальное.",[]]);
+ if(!tabs.some(function(t){return t[0]===cur})) cur=tabs[0]?tabs[0][0]:"me";
+ body.textContent="";
+ var nav=document.createElement("nav"); nav.className="s25-nav"; nav.setAttribute("role","tablist"); nav.setAttribute("aria-orientation","vertical"); nav.setAttribute("aria-label","Разделы кабинета");
+ nav.innerHTML='<label class="s25-q">'+ic("find")+'<input type="search" data-cabq placeholder="Найти в кабинете" aria-label="Найти в кабинете" autocomplete="off"></label>'+
+  tabs.map(function(t){return '<button type="button" class="s25-t" role="tab" data-cabt="'+t[0]+'" aria-selected="'+(t[0]===cur&&!q)+'">'+ic(t[2])+'<span>'+t[1]+'</span></button>'}).join("");
+ var pane=document.createElement("div"); pane.className="s25-pane"; pane.setAttribute("role","tabpanel");
+ body.appendChild(nav); body.appendChild(pane);
+ nav.querySelector("[data-cabq]").value=q;
+ tabs.forEach(function(t){
+  var sec=document.createElement("section"); sec.dataset.cabp=t[0]; sec.hidden=t[0]!==cur;
+  sec.innerHTML='<h3>'+t[1]+'</h3><p class="s25-d">'+t[3]+'</p>';
+  B[t[0]].forEach(function(el){sec.appendChild(el)});
+  if(t[0]==="me") foot.forEach(function(el){sec.appendChild(el)});
+  pane.appendChild(sec);
+ });
+ if(q) filter(body);
+}
+function show(body,id){
+ cur=id; try{localStorage.setItem("bos-cabtab",id)}catch(x){} q="";
+ var qi=body.querySelector("[data-cabq]"); if(qi) qi.value="";
+ unfilter(body);
+ body.querySelectorAll("[data-cabt]").forEach(function(b){b.setAttribute("aria-selected",String(b.dataset.cabt===id))});
+ body.querySelectorAll("[data-cabp]").forEach(function(s){s.hidden=s.dataset.cabp!==id});
+ var p=body.querySelector(".s25-pane"); if(p) p.scrollTop=0;
+}
+function unfilter(body){
+ body.querySelectorAll(".s25-res,.s25-none").forEach(function(x){x.remove()});
+ body.querySelectorAll("[data-cabp] > *").forEach(function(x){x.hidden=false});
+ body.querySelectorAll("[data-cabp]").forEach(function(s){s.hidden=s.dataset.cabp!==cur});
+}
+function norm(s){return String(s||"").toLowerCase().replace(/ё/g,"е")}
+function filter(body){
+ unfilter(body);
+ var w=norm(q).split(/\s+/).filter(Boolean); if(!w.length) return;
+ body.querySelectorAll("[data-cabt]").forEach(function(b){b.setAttribute("aria-selected","false")});
+ var n=0;
+ body.querySelectorAll("[data-cabp]").forEach(function(sec){
+  var t=norm(sec.textContent), hit=w.every(function(x){return t.indexOf(x)>=0});
+  // раздел целиком: блоки кабинета связаны (заголовок + содержимое), поэтому показываем весь подходящий раздел
+  sec.hidden=!hit; if(!hit) return; n++;
+  var r=document.createElement("div"); r.className="s25-res"; r.textContent=(TABS.filter(function(x){return x[0]===sec.dataset.cabp})[0]||[0,"Другое"])[1]; sec.insertBefore(r,sec.firstChild);
+  [].slice.call(sec.children).forEach(function(el){if(el.tagName==="H3"||el.classList.contains("s25-d"))el.hidden=true});
+ });
+ if(!n){var e=document.createElement("p"); e.className="s25-none"; e.textContent="Ничего не нашлось. Попробуйте другое слово: пароль, рапорт, тест, Discord, смена."; body.querySelector(".s25-pane").appendChild(e)}
+}
+window.SA_cabTabs=function(body,sheet){ try{ build(body,sheet) }catch(e){ console.error("cabinet tabs",e) } };
+window.SA_cabTabsOff=function(sheet){ sheet.classList.remove("cab36"); if(!sheet.classList.contains("s25-set")) return; if(!document.querySelector(".sa-body [data-s25t]")) sheet.classList.remove("s25-set") };
+/* открыть кабинет сразу на нужном разделе: SA_openCab("rep") */
+window.SA_openCab=function(id){ if(id){cur=id;q="";try{localStorage.setItem("bos-cabtab",id)}catch(x){}} if(window.SA_openSheet) window.SA_openSheet("cab") };
+document.addEventListener("click",function(e){
+ var b=e.target.closest&&e.target.closest("[data-cabt]"); if(!b) return;
+ show(b.closest(".sa-body"),b.dataset.cabt);
+});
+document.addEventListener("input",function(e){
+ if(!e.target.matches||!e.target.matches("[data-cabq]")) return;
+ q=e.target.value; var body=e.target.closest(".sa-body");
+ if(q.trim()) filter(body); else show(body,cur);
+});
+document.addEventListener("keydown",function(e){
+ var b=e.target.closest&&e.target.closest("[data-cabt]"); if(!b||(e.key!=="ArrowDown"&&e.key!=="ArrowUp")) return;
+ e.preventDefault(); var L=[].slice.call(b.parentNode.querySelectorAll("[data-cabt]")), i=L.indexOf(b)+(e.key==="ArrowDown"?1:-1);
+ var n=L[(i+L.length)%L.length]; n.focus(); n.click();
+});
+})();
+</script>
+<style id="cab36-style">
+/* 3.5.2: кабинет по разделам (сетка и меню — общие с настройками, .s25-*) */
+.cab36 .s25-pane section>.cab-top{margin-top:14px}
+.cab36 .s25-pane section>.cab-h:first-of-type,.cab36 .s25-pane section>h3+.s25-d+*{margin-top:14px}
+.cab36 .s25-pane .cab-foot{margin-top:18px}
+</style>
 <style id="s26-style">
 /* 2.6: раздел «Рация»: голосовой диспетчер */
 .r26-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,380px);gap:16px;align-items:start}
