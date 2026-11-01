@@ -55,6 +55,7 @@ docker build -t senko-bot . && docker run -d --name senko-bot --restart unless-s
 | `DISCORD_BOT_TOKEN` | Токен из Discord Developer Portal |
 | `SUPABASE_API_URL` | Адрес Edge Function «senko» |
 | `SUPABASE_ANON_KEY` | Публичный ключ Supabase |
+| `SENKO_BOT_KEY` | Значение секрета `CRON_SECRET` из Supabase: без него не работают `/settings`, `/rules` и запись мониторинга (каналы можно задать в панели владельца → Discord-бот) |
 | `DISCORD_CHANNEL_INFO` | ID канала «Информация» |
 | `DISCORD_CHANNEL_NEWS` | ID канала «Новости» |
 | `DISCORD_CHANNEL_LAWS` | ID канала «Законы» |
