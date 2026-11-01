@@ -1,7 +1,7 @@
 {
   "name": "Senko Assistant",
   "short_name": "Senko",
-  "description": "Помощник по законам Majestic RP Boston: кодексы, задержание, калькулятор, обучение.",
+  "description": "Помощник по законам Majestic RP: кодексы, задержание, калькулятор, обучение.",
   "lang": "ru",
   "id": "/app/",
   "start_url": "/app/",
