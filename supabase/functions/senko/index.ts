@@ -37,7 +37,7 @@ const parseServer = (v) => {
   return SERVERS[n] ? n : 0;
 };
 const RANKS = { user: "Пользователь", leader: "Руководство", moderator: "Модератор памятки", owner: "Владелец" };
-const LEGAL_VERSION = "2026-10-21.2"; // версия Политики и Условий; должна совпадать с VERSION в app/auth.html и app/index.html
+const LEGAL_VERSION = "2026-11-01"; // версия Политики и Условий; должна совпадать с VERSION в app/auth.html и app/index.html
 const SYNC_KINDS = { thist: 1, dlog: 1, tests: 1, qstat: 1, xp: 1, daily: 1, streak: 1, favs: 1, notes: 1, labels: 1, folders: 1, favorder: 1 }; // что синхронизируется между компьютерами
 const SYNC_MAX_ITEMS = 300; // элементов за один запрос
 const SYNC_ITEM_BYTES = 65536; // размер одного элемента
