@@ -101,7 +101,7 @@ function main() {
   const st = cur.status || {};
   fs.writeFileSync(F.status, JSON.stringify({
     server: SERVER, checkedAt: now, updatedAt: cur.updatedAt, sig: cur.sig, count: cur.laws.length,
-    ok: st.ok !== false, failed: st.failed || 0, error: st.ok === false ? String(st.error || "").slice(0, 300) : ""
+    ok: st.ok !== false, failed: st.failed || 0, skipped: st.skipped || 0, error: st.ok === false ? String(st.error || "").slice(0, 300) : ""
   }, null, 1) + "\n");
 
   [F.plain, F.prev].forEach((f) => { try { fs.unlinkSync(f); } catch (e) {} });
