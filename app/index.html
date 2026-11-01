@@ -6915,6 +6915,9 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.5.6",d:"01.11.2026",items:[
+  ["🎉","Новые функции — всем","Всё, что раньше было только у бета-тестеров, теперь у всех: процессуальные отметки и журнал смены, групповое задержание, изъятое и свидетели, передача задержанного коллеге, раздел «Коллеги», блокнот, совместный патруль, поиск с опечатками, журнал руководства и отчёт за неделю, рейтинг недели на сайте, нижняя панель и голосовой поиск в веб-версии на телефоне. Новые функции дальше выходят сразу для всех."]
+ ]},
  {v:"3.5.5",d:"01.11.2026",items:[
   ["📄","Новая редакция Политики и Условий","Документы больше не привязаны к Boston: программа работает на Boston, Los Angeles и Denver. В Политике описано, что хранится при входе через Discord, при согласии на рейтинг недели на сайте и в сообщениях об ошибке с сайта; в Условиях — правило привязки Discord. При входе программа попросит принять новую редакцию."]
  ]},
@@ -12530,7 +12533,7 @@ if(["","halloween","newyear"].indexOf(C.prev)<0)C.prev="";
 function saveC(){jset("bos-s24",C)}
 
 /* ---------- флаги функций ---------- */
-var FDEF={patrol:"beta",board:"all",mini:"all",tts:"all",mascot:"all",season:"all",card:"all",ideas:"all",events:"all",col28:"beta",det28mk:"beta",det28wait:"beta",det28rp:"beta",det28shift:"beta",det28grp:"beta",det28jur:"beta",det28note:"beta",det28sz:"beta",det28wit:"beta",det28chron:"beta",det28xfer:"beta",det28imm:"beta",pad28:"beta",pad28mini:"beta",pad28tpl:"beta",svc32:"beta",web35:"beta",typo35:"beta",lead35:"beta",rate35:"beta"};
+var FDEF={patrol:"all",board:"all",mini:"all",tts:"all",mascot:"all",season:"all",card:"all",ideas:"all",events:"all",col28:"all",det28mk:"all",det28wait:"all",det28rp:"all",det28shift:"all",det28grp:"all",det28jur:"all",det28note:"all",det28sz:"all",det28wit:"all",det28chron:"all",det28xfer:"all",det28imm:"all",pad28:"all",pad28mini:"all",pad28tpl:"all",svc32:"all",web35:"all",typo35:"all",lead35:"all",rate35:"all"};
 var FN={patrol:["Совместный патруль","Экипаж по коду: общий список задержаний и таймеров с напарниками."],board:["Тактическая доска","Рисование на схеме зон и отправка схемы ссылкой."],mini:["Мини-окно задержания","Маленькое окно поверх игры с таймерами и итогом калькулятора."],
  tts:["Озвучка статей","Кнопка 🔊 у статьи читает её вслух голосом Windows."],mascot:["Лиса Senko","Подсказки и поздравления в углу окна."],season:["Сезонное оформление","Хэллоуин и Новый год."],card:["Карточка сотрудника","Картинка со статистикой для Discord."],
  ideas:["Идеи и голосование","Раздел «Идеи» в меню."],events:["Мероприятия организаций","Учения и собрания на главной и в панели руководителя."],
