@@ -219,6 +219,7 @@
         var s = String(it.s || ""), mm;
         mm = STAR_RE.exec(s);
         if (mm) { stars = Math.max(stars, (mm[2] || mm[1]).length); s = s.replace(STAR_RE, " ").replace(/\s{2,}/g, " ").trim(); }
+        else if ((mm = /^\s*(★+)\s*(?:[–—-]\s*(★+))?\s*/.exec(s))) { stars = Math.max(stars, (mm[2] || mm[1]).length); s = s.slice(mm[0].length).trim(); } // Denver: «ч. 1 ★★★ Текст»
         s = s.trim();
         if (!s) return;
         if (!firstDone) {
