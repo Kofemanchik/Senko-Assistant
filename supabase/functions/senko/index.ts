@@ -5988,7 +5988,7 @@ async function dcAuthStart(b, ip) {
   const sql = db();
   await sql`delete from dc_auth where expires_at < now() - interval '1 hour'`;
   await sql`insert into dc_auth (state, pk_hash, purpose, user_id, expires_at) values (${state}, ${await sha256(pk)}, ${purpose}, ${uid}, now() + interval '10 minutes')`;
-  const url = "https://discord.com/oauth2/authorize?" + new URLSearchParams({ client_id: DC_CLIENT_ID, response_type: "code", scope: "identify", redirect_uri: DC_REDIRECT, state }).toString();
+  const url = "https://discord.com/oauth2/authorize?" + new URLSearchParams({ client_id: DC_CLIENT_ID, response_type: "code", scope: "identify", redirect_uri: DC_REDIRECT, state, prompt: "none" }).toString(); // prompt=none: кто уже разрешал вход, не видит окно подтверждения повторно
   return { ok: true, url, state, pk, ttl: 600 };
 }
 // Страница сайта /auth/discord/ передаёт сюда код и state, которые вернул Discord
