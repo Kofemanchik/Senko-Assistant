@@ -4405,6 +4405,8 @@ function dcCabHtml(){
     '<div class="sbtns" style="margin-top:10px"><button type="button" class="btn" data-cab="dclink">Получить код</button><button type="button" class="btn" data-cab="dcunlink">Отвязать</button></div>'+
     '<div id="dcMsg" role="status" aria-live="polite" style="margin-top:8px;font-size:13px"></div></div>';
 }
+/* 3.5.1: блок кабинета, который упал, не должен ронять весь кабинет */
+function cabPart(f){try{return f()||""}catch(e){try{console.error("cabinet block",e)}catch(x){}return ""}}
 function cabHtml(){
   // В программе данные кабинета — это данные аккаунта: кнопка «Сохранить» отправляет их на сервер
   var acc=null, AL=[], SV=[]; try{var _st=window.senkoApp&&window.senkoApp.updateProfile&&window.senkoApp.state(); if(_st&&_st.user){acc=_st.user; AL=(_st.depts||[]).slice(); SV=(_st.servers||[]).slice()}}catch(e){}
@@ -4423,7 +4425,7 @@ function cabHtml(){
       fld("discord","Discord",acc.discord,40,"ник в Discord")+fld("telegram","Telegram",acc.telegram,33,"@name или пусто")+fld("phone","Номер в игре",acc.phone,12,"только цифры или пусто")+
       '<div class="sbtns" style="margin:0"><button type="button" class="btn" data-cab="accsave" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Сохранить</button></div>'+
       '<div id="accMsg" role="status" aria-live="polite" style="font-size:12.5px;color:var(--muted);min-height:1.2em"></div></div></div>';
-    ah+=deptInfo(acc.org||dept)+(window.SA_PROG?window.SA_PROG.html():"")+(window.SA_CAB11?window.SA_CAB11(true):"")+(window.SA_CAB13?window.SA_CAB13(true):"")+(window.SA_CAB24?window.SA_CAB24():"")+(window.SA_CAB28?window.SA_CAB28():"")+(window.SA_CAB35?window.SA_CAB35():"")+dcCabHtml()+(window.SA_RP?window.SA_RP.cabHtml():"")+detHtml()+testHtml();
+    ah+=cabPart(function(){return deptInfo(acc.org||dept)})+cabPart(function(){return window.SA_PROG?window.SA_PROG.html():""})+cabPart(function(){return window.SA_CAB11?window.SA_CAB11(true):""})+cabPart(function(){return window.SA_CAB13?window.SA_CAB13(true):""})+cabPart(function(){return window.SA_CAB24?window.SA_CAB24():""})+cabPart(function(){return window.SA_CAB28?window.SA_CAB28():""})+cabPart(function(){return window.SA_CAB35?window.SA_CAB35():""})+cabPart(dcCabHtml)+cabPart(function(){return window.SA_RP?window.SA_RP.cabHtml():""})+cabPart(detHtml)+cabPart(testHtml);
     ah+='<p class="cab-foot">Данные кабинета хранятся в вашем аккаунте. После смены ведомства или сервера программу нужно перезапустить: законы и подсказки подстроятся под выбранный сервер.</p>';
     return ah;
   }
@@ -6869,6 +6871,9 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.5.1",d:"01.11.2026",items:[
+  ["🩹","Личный кабинет снова открывается","В 3.5.0 кабинет не открывался из-за ошибки в новом блоке «Рейтинг недели на сайте». Исправлено; теперь ошибка в одном блоке кабинета не мешает открыть остальные."]
+ ]},
  {v:"3.5.0",d:"01.11.2026",items:[
   ["🌐","Справочник кодексов на сайте","УК, АК, ДК и ПК Boston, Los Angeles и Denver открываются на сайте без входа, с поиском по номеру и словам. У каждой статьи своя ссылка вида senko-assistant.site/uk/12.8: в Discord она показывается карточкой с наказанием."],
   ["🧮","Калькулятор и лента изменений на сайте","На сайте можно посчитать наказание по статьям без регистрации (по тем же правилам, что в программе) и посмотреть ленту изменений законов по серверам."],
@@ -14686,7 +14691,8 @@ function loadMine(){if(ME.busy)return;ME.busy=true;
 /* 3.5: согласие на публичный рейтинг недели на сайте (по умолчанию выключено) */
 var PB={on:null,busy:false,msg:""};
 window.SA_CAB35=function(){
- if(!fl("rate35"))return "";
+ var f35=false;try{f35=typeof window.SA_flag==="function"&&!!window.SA_flag("rate35")}catch(x){}
+ if(!f35)return "";
  if(PB.on===null&&!PB.busy){PB.busy=true;api("pub_board_opt",{}).then(function(r){PB.busy=false;PB.on=!!(r&&r.ok&&r.on);if(window.SA_cabRepaint)SA_cabRepaint()})}
  return '<div class="cab-h">Рейтинг недели на сайте<small>senko-assistant.site/rating/</small></div>'+
   '<label class="c28-ck"><input type="checkbox" data-pb35'+(PB.on?' checked':'')+(PB.on===null||PB.busy?' disabled':'')+'> Показывать меня в публичном рейтинге недели (ник, ведомство, опыт и задержания за неделю)</label>'+
