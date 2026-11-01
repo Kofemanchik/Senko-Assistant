@@ -882,6 +882,8 @@ async function api(req) {
       return J(await dcAuthPoll(b, ip, req.headers.get("user-agent") || ""));
     case "dc_unlink":
       return J(await dcUnlink(b));
+    case "srv_cfg":
+      return J(await srvCfgApi(b));
     case "pub_board":
       return J(await pubBoard(b, ip));
     case "pub_board_opt":
@@ -3398,19 +3400,37 @@ async function discordApi(b) {
   const op = String(b.op || "get");
   const a = { kind: "discord", label: "discord-bot", profile: null };
 
-  // settings_get доступен без авторизации (публичные настройки каналов)
+  // 3.5.7: Discord-бот подписывает запросы секретом CRON_SECRET (переменная SENKO_BOT_KEY у бота) — так он может сохранять свои настройки и мониторинг
+  const botOk = !!CRON_SECRET && typeof b.bot_key === "string" && safeEq(b.bot_key, CRON_SECRET);
+  // settings_get без входа: только настройки Discord-бота (discord_*). Раньше читался любой ключ bot_settings, в том числе вебхук и чёрный список слов.
   if (op === "settings_get") {
-    // settings_get: принимает либо один ключ (key), либо массив ключей (keys)
+    const SECRET = ["discord_webhook_url", "discord_changelog_pending"];
     const reqKeys = b.keys || (b.key ? [b.key] : []);
-    const keys = Array.isArray(reqKeys) ? reqKeys : [reqKeys];
+    let keys = (Array.isArray(reqKeys) ? reqKeys : [reqKeys]).map((k) => String(k || "").slice(0, 100)).filter((k) => /^discord_[a-z0-9_]+$/.test(k) && (botOk || !SECRET.includes(k)));
+    if (!keys.length && !b.keys && !b.key) keys = (await sql`select key from bot_settings where key like 'discord\_%'`).map((x) => x.key).filter((k) => botOk || !SECRET.includes(k)); // панель: все настройки бота разом
     const out: Record<string, any> = {};
-    for (const key of keys) {
-      const k = String(key || "").slice(0, 100);
-      if (!k) continue;
+    for (const k of keys.slice(0, 60)) {
       const [r] = await sql`select value from bot_settings where key = ${k}`;
       out[k] = r ? r.value : null;
     }
     return { ok: true, settings: out };
+  }
+  if (botOk && (op === "settings_set" || op === "settings_del")) {
+    const key = String(b.key || "").slice(0, 100);
+    if (!/^discord_[a-z0-9_]+$/.test(key) || key === "discord_changelog_pending") return fail("Бот может менять только свои настройки (discord_*).");
+    if (op === "settings_del") await sql`delete from bot_settings where key = ${key}`;
+    else await setSetting(key, b.value);
+    await audit("discord-bot", "discord_setting", key, { value: op === "settings_del" ? null : JSON.stringify(b.value).slice(0, 300) });
+    return { ok: true };
+  }
+  if (botOk && op === "monitor_record") {
+    await sql`insert into discord_monitor (resource, ok, latency, detail) values (${clean(b.resource, 60)}, ${!!b.ok}, ${Math.max(0, Math.min(600000, parseInt(b.latency, 10) || 0))}, ${clean(b.detail, 200)})`;
+    await sql`delete from discord_monitor where checked_at < now() - interval '14 days'`;
+    return { ok: true };
+  }
+  if (botOk && op === "monitor_state") {
+    const rows = await sql`select distinct on (resource) resource, ok, latency, detail, checked_at from discord_monitor order by resource, checked_at desc`;
+    return { ok: true, state: rows.map((r) => ({ resource: r.resource, ok: r.ok, latency: r.latency, detail: r.detail, at: r.checked_at })) };
   }
 
   // Очередь changelog для Discord-бота: текст релиза публичный, подтверждение снимает только запись с тем же id
@@ -4760,7 +4780,7 @@ async function panelApi(b, ip, ua) {
   if (op === "login") return panelLogin(b, ip, ua);
   const owners = ["audit", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert", "ads_list", "ads_save", "ads_toggle", "ads_delete",
     "prog_get", "prog_xp", "prog_ach", "prog_ach_new", "prog_ai",
-    "ai_dict_list", "ai_dict_save", "ai_dict_delete", "ai_bad", "ai_gold_list", "ai_gold_save", "ai_gold_delete", "ai_gold_pin", "ai_gold_run"];
+    "ai_dict_list", "ai_dict_save", "ai_dict_delete", "ai_bad", "ai_gold_list", "ai_gold_save", "ai_gold_delete", "ai_gold_pin", "ai_gold_run", "srvcfg_get", "srvcfg_set"];
   const { p, a, th, err } = await pwho(b, owners.includes(op));
   if (err) return err;
   const sql = db();
@@ -4857,6 +4877,9 @@ async function panelApi(b, ip, ua) {
       return panelDb(b, a);
     case "db_revert":
       return panelRevert(b, a);
+    case "srvcfg_get":
+    case "srvcfg_set":
+      return panelSrvCfg(b, a);
     case "ads_list":
     case "ads_save":
     case "ads_toggle":
@@ -6079,6 +6102,35 @@ async function dcUnlink(b) {
   const [np] = await db()`update profiles set discord_uid = null, discord_uname = '' where id = ${p.id} returning *`;
   await audit(p.login, "dc_unlink", p.login, {});
   return { ok: true, user: pub(np) };
+}
+
+// ───────────── 3.5.7: подсказки под сервер (программа запрашивала srv_cfg с 2.9, на сервере его не было) ─────────────
+// Текст Миранды и замена номеров статей в подсказках, написанных по законам Boston; «проверено» убирает предупреждение в программе.
+const SRVCFG_REF = /^\d{1,3}(?:\.\d{1,3}){0,3}$/;
+function srvCfgClean(c) {
+  c = c && typeof c === "object" ? c : {};
+  const refs = {};
+  if (c.refs && typeof c.refs === "object") for (const [k, v] of Object.entries(c.refs).slice(0, 300)) if (SRVCFG_REF.test(String(k)) && SRVCFG_REF.test(String(v))) refs[String(k)] = String(v);
+  return { miranda: String(c.miranda || "").replace(/\r/g, "").trim().slice(0, 1500), refs, verified: !!c.verified };
+}
+async function srvCfgApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const server = sv(p);
+  return { ok: true, server, cfg: srvCfgClean(await getSetting("srv_cfg_" + server, {})) };
+}
+async function panelSrvCfg(b, a) {
+  if (b.op === "srvcfg_get") {
+    const out = {};
+    for (const id of Object.keys(SERVERS)) out[id] = { name: SERVERS[id].name, cfg: srvCfgClean(await getSetting("srv_cfg_" + id, {})) };
+    return { ok: true, servers: out };
+  }
+  const server = parseServer(b.server);
+  if (!server) return fail("Неизвестный сервер.");
+  const cfg = srvCfgClean(b.cfg);
+  await setSetting("srv_cfg_" + server, cfg);
+  await audit(a.label, "srv_cfg", srvName(server), { refs: Object.keys(cfg.refs).length, miranda: !!cfg.miranda, verified: cfg.verified });
+  return { ok: true, server, cfg };
 }
 
 // Рейтинг недели на сайте: только те, кто сам включил галочку в кабинете (profiles.pub_board)

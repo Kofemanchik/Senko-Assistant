@@ -18,7 +18,11 @@ const IGNORE_KEY = IGNORE.slice().sort((a, b) => a - b).join(",");
 const LOGIN = process.env.FORUM_LOGIN;
 const PASS = process.env.FORUM_PASSWORD;
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
-const DELAY = 800;          // пауза между запросами, мс
+const DELAY = 2000;         // пауза между запросами, мс (при 800 мс форум закрывал соединения примерно после 20 запросов)
+// Форум после серии запросов на время перестаёт принимать соединения (UND_ERR_CONNECT_TIMEOUT). Тогда ждём минутами, а не секундами.
+const THROTTLE = /UND_ERR_CONNECT_TIMEOUT|UND_ERR_SOCKET|ECONNRESET|ETIMEDOUT|ECONNREFUSED/;
+const T0 = Date.now(), SOFT_DEADLINE = T0 + 45 * 60e3; // после 45 минут длинных пауз больше нет: задача должна уложиться в 60
+const canWait = (ms) => Date.now() + ms < SOFT_DEADLINE;
 const MAX_PAGES = 40;       // страниц списка на раздел
 const MAX_POST_PAGES = 15;  // страниц одной темы
 
@@ -58,8 +62,10 @@ async function http(url, opts = {}, hops = 0) {
       break;
     } catch (e) {
       if (i >= 2 || (opts.method && opts.method !== "GET")) throw e;
-      console.warn("Повтор " + (i + 1) + ":", url, errText(e));
-      await sleep(i ? 10000 : 3000);
+      const slow = THROTTLE.test(errText(e)), wait = slow ? (i ? 120000 : 60000) : (i ? 10000 : 3000);
+      if (slow && !canWait(wait)) throw e;
+      console.warn("Повтор " + (i + 1) + (slow ? " через " + wait / 1000 + " с (форум не принимает соединения)" : "") + ":", url, errText(e));
+      await sleep(wait);
     }
   }
   eatCookies(res);
@@ -217,12 +223,15 @@ async function main() {
   const laws = [], changes = [];
   let failed = 0;
   const later = [];
+  let failRow = 0, longPauses = 0;
   // второй проход: темы, которые не открылись, пробуем ещё раз в конце, после паузы
   const queue = [...list.values()].map((t) => ({ t, last: false }));
   for (let qi = 0; qi < queue.length; qi++) {
     if (qi === list.size && later.length) {
-      console.log("Второй проход по " + later.length + " темам через 30 секунд…");
-      await sleep(30000);
+      const w = canWait(180000) ? 180000 : 30000;
+      console.log("Второй проход по " + later.length + " темам через " + w / 1000 + " секунд…");
+      await sleep(w);
+      failRow = 0;
     }
     const { t, last } = queue[qi];
     const old = prevMap.get(t.id);
@@ -241,7 +250,14 @@ async function main() {
         if (old.diff) law.diff = old.diff;
       }
       laws.push(law);
+      failRow = 0;
     } catch (e) {
+      // две темы подряд не открылись из-за соединения — форум закрылся на время: общая пауза, иначе все оставшиеся темы тоже отвалятся
+      if (THROTTLE.test(errText(e)) && ++failRow >= 2 && longPauses < 3 && canWait(240000)) {
+        longPauses++; failRow = 0;
+        console.warn("Форум не принимает соединения: пауза 4 минуты (" + longPauses + " из 3)…");
+        await sleep(240000);
+      }
       if (!last) { later.push(t); queue.push({ t, last: true }); console.warn("Отложено на второй проход:", t.url, errText(e)); continue; }
       failed++; console.error("Не удалось:", t.url, errText(e));
       if (old) laws.push(old);

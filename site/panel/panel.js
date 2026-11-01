@@ -314,7 +314,7 @@
     ["Люди", [["users", "i-users", "Пользователи", "Поиск и действия"], ["staff", "i-key", "Роли и доступ", "Модераторы и руководство"], ["queue", "i-inbox", "Заявки и сбросы", "Новички и пароли", "queue"]]],
     ["Работа", [["reports", "i-file", "Рапорты", "Рапорты сотрудников", "reports"], ["rating", "i-trophy", "Рейтинг", "Неделя и контрольные"], ["news", "i-mega", "Рассылки", "Сообщения в программе", null, 1], ["bugs", "i-bug", "Ошибки", "Сообщения пользователей", "bugs", 1], ["ideas", "i-mega", "Идеи", "Предложения пользователей"], ["ai", "i-ai", "ИИ-помощник", "Словарь, плохие ответы, самопроверка", null, 1]]],
     ["Тестирование", [["beta", "i-shield", "Тестеры", "Роль, задания, функции"]]],
-    ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1], ["pranks", "i-menu", "Пранки", "Каталог из 150 вариантов", null, 1]]],
+    ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["srvcfg", "i-sliders", "Подсказки серверов", "Миранда и номера статей", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1], ["pranks", "i-menu", "Пранки", "Каталог из 150 вариантов", null, 1]]],
     ["Сервис", [["console", "i-term", "Консоль бота", "Любая команда"]]],
   ];
   function buildNav() {
@@ -834,6 +834,47 @@
       });
     }
     return load();
+  };
+
+  // 3.5.7: подсказки под сервер — текст Миранды и замена номеров статей в подсказках, написанных по законам Boston
+  PAGES.srvcfg = function (el) {
+    if (!ME.owner) return ownerOnly(el);
+    head(el, "Подсказки серверов", "Чек-лист задержания и другие подсказки программы написаны по законам Boston. Для остальных серверов задайте свой текст Миранды и замену номеров статей. Программа подхватит настройку при следующем запуске.");
+    var box = h("div", { class: "load", text: "Загружаю…" });
+    el.appendChild(box);
+    var REF = /^\d{1,3}(?:\.\d{1,3}){0,3}$/;
+    return api("srvcfg_get").then(function (r) {
+      box.remove();
+      if (!r.ok) return el.appendChild(errMsg(r));
+      Object.keys(r.servers).forEach(function (id) {
+        var S = r.servers[id], c = S.cfg;
+        var mir = h("textarea", { rows: 4, maxlength: 1500, placeholder: "Пусто — программа возьмёт текст Миранды из законов сервера, а если его там нет, текст Boston" });
+        mir.value = c.miranda || "";
+        var refs = h("textarea", { rows: 5, placeholder: "По одной замене в строке: номер статьи Boston → номер на этом сервере\n17 → 21\n7.1 → 8.1", spellcheck: "false" });
+        refs.value = Object.keys(c.refs).map(function (k) { return k + " → " + c.refs[k]; }).join("\n");
+        var ver = h("input", { type: "checkbox" }); ver.checked = !!c.verified;
+        var msg = h("span", { class: "muted small" });
+        var C = card(S.name + " (" + id + ")", id === "12" ? "Подсказки написаны по законам Boston: для него замены обычно не нужны." : null);
+        C.style.marginBottom = "14px";
+        C.appendChild(h("label", { class: "fld" }, h("span", { text: "Текст Миранды" }), mir));
+        C.appendChild(h("label", { class: "fld" }, h("span", { text: "Замена номеров статей в подсказках" }), refs));
+        C.appendChild(h("label", { class: "chk", style: "margin:8px 0" }, ver, " Подсказки проверены для этого сервера (убрать предупреждение «составлены по законам Boston»)"));
+        C.appendChild(h("div", { class: "row", style: "gap:10px;align-items:center" }, btn("Сохранить", function () {
+          var map = {}, bad = [];
+          refs.value.split("\n").forEach(function (line) {
+            line = line.trim(); if (!line) return;
+            var m = line.split(/\s*(?:→|->|=>|=|:|\s)\s*/).filter(Boolean);
+            if (m.length === 2 && REF.test(m[0]) && REF.test(m[1])) map[m[0]] = m[1]; else bad.push(line);
+          });
+          if (bad.length) { toast("Не понял строки: " + bad.slice(0, 3).join("; ") + ". Формат: 17 → 21", true); return; }
+          api("srvcfg_set", { server: +id, cfg: { miranda: mir.value, refs: map, verified: ver.checked } }).then(function (y) {
+            toast(y.ok ? "Сохранено. Программа подхватит настройку при следующем запуске." : y.error, !y.ok);
+            if (y.ok) msg.textContent = "Замен: " + Object.keys(y.cfg.refs).length + (y.cfg.verified ? " · проверено" : "");
+          });
+        }, "btn-p btn-sm"), msg));
+        el.appendChild(C);
+      });
+    });
   };
 
   PAGES.modes = function (el) {

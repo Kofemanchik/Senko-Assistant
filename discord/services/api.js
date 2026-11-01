@@ -74,14 +74,19 @@ async function changelogAck(id) {
   return apiRequest("discord", { op: "changelog_ack", id });
 }
 
-// Запись одной настройки (вызывается из панели/бота)
+// Запись одной настройки бота (discord_*). Сервер принимает её только с секретом SENKO_BOT_KEY (= CRON_SECRET в Supabase).
 async function setBotSetting(key, value) {
-  return apiRequest("bot_settings", { op: "set", key, value });
+  if (!config.botKey) return { ok: false, error: "У бота не задан SENKO_BOT_KEY: настройки меняются в панели владельца → Discord-бот." };
+  const r = await apiRequest("discord", { op: "settings_set", key, value, bot_key: config.botKey });
+  if (r && r.ok) setCache(`bs:${key}`, value);
+  return r || { ok: false, error: "Нет ответа сервера." };
 }
 
 // Удаление настройки
 async function delBotSetting(key) {
-  return apiRequest("bot_settings", { op: "del", key });
+  if (!config.botKey) return { ok: false, error: "У бота не задан SENKO_BOT_KEY." };
+  cache.delete(`bs:${key}`);
+  return apiRequest("discord", { op: "settings_del", key, bot_key: config.botKey });
 }
 
 // Публикация события для Discord-каналов (читается панелью/ботом)
@@ -92,18 +97,14 @@ async function discordEvent(event, payload = {}) {
 
 // Мониторинг: сохранить результат проверки ресурса
 async function monitorRecord(resource, ok, latency, detail) {
-  return apiRequest("discord:monitor", {
-    op: "record",
-    resource,
-    ok,
-    latency,
-    detail: detail || null,
-  });
+  if (!config.botKey) return { ok: false };
+  return apiRequest("discord", { op: "monitor_record", resource, ok, latency, detail: detail || "", bot_key: config.botKey });
 }
 
 // Получить текущие записи мониторинга
 async function monitorState() {
-  const data = await apiRequest("discord:monitor", { op: "state" });
+  if (!config.botKey) return [];
+  const data = await apiRequest("discord", { op: "monitor_state", bot_key: config.botKey });
   return data && data.ok ? data.state || [] : [];
 }
 

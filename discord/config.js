@@ -16,6 +16,8 @@ module.exports = {
 
   // Supabase (Edge Function «senko» — тот же адрес, что и у приложения/панели)
   apiUrl: process.env.SUPABASE_API_URL || "https://wcjspwailippjmyffkei.supabase.co/functions/v1/senko",
+  // Секрет для записи настроек и мониторинга на сервере: то же значение, что CRON_SECRET в Supabase
+  botKey: process.env.SENKO_BOT_KEY || "",
   anonKey: process.env.SUPABASE_ANON_KEY || "sb_publishable_hsdKNj25gEIXqIxK7Hhr5A_-VberrUG",
 
   // Серверы Majestic RP (номер → название) — тот же список, что в scripts/servers.js

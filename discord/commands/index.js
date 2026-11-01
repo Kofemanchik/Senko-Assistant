@@ -19,7 +19,7 @@ async function settings(interaction, state) {
   }
 
   const sub = interaction.options.getSubcommand();
-  const value = interaction.options.getString("value", true);
+  let value = interaction.options.getString("value", true);
 
   const { setBotSetting } = require("../services/api");
   const { normalizeChannelId, normalizeRoleId } = require("../services/settings");
@@ -34,8 +34,8 @@ async function settings(interaction, state) {
     value = normalizeRoleId(value);
   }
 
-  await setBotSetting(key, value);
-  await interaction.reply({ content: `✅ Настройка \`${key}\` сохранена: \`${value}\``, ephemeral: true });
+  const r = await setBotSetting(key, value).catch((e) => ({ ok: false, error: e.message }));
+  await interaction.reply({ content: r && r.ok ? `✅ Настройка \`${key}\` сохранена: \`${value}\`` : `❌ ${(r && r.error) || "Не удалось сохранить."}`, ephemeral: true });
 }
 
 // ───── /info — опубликовать embed в канал «Информация» ─────
@@ -144,7 +144,8 @@ async function rules(interaction, state) {
   await interaction.deferReply({ ephemeral: true });
 
   const { setBotSetting } = require("../services/api");
-  await setBotSetting("discord_laws_text", text);
+  const sr = await setBotSetting("discord_laws_text", text).catch((e) => ({ ok: false, error: e.message }));
+  if (!sr || !sr.ok) return interaction.editReply({ content: `❌ ${(sr && sr.error) || "Не удалось сохранить правила."}` });
 
   const settings = await loadSettings();
   const result = await publishLaws(interaction.client, settings);
