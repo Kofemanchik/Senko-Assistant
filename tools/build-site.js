@@ -35,10 +35,10 @@ const headEnd = index.indexOf("<title>");
 const headTop = index.slice(0, headEnd);
 const headLinks = index.slice(index.indexOf('<link rel="icon"'), index.indexOf("</head>"));
 
-function page(title, desc, body, scripts) {
+function page(title, desc, body, scripts, extraHead) {
   return headTop +
     "<title>" + esc(title) + "</title>\n" +
-    '<meta name="description" content="' + esc(desc) + '">\n' +
+    '<meta name="description" content="' + esc(desc) + '">\n' + (extraHead || "") +
     '<meta name="theme-color" content="#F6F3EE" media="(prefers-color-scheme: light)">\n<meta name="theme-color" content="#0A0A0B" media="(prefers-color-scheme: dark)">\n' +
     headLinks + "</head>\n<body>\n" + block("SPRITE") + '\n<a class="skip" href="#main">К содержимому</a>\n' + block("HEADER") +
     '\n<main id="main">\n' + body + "\n</main>\n\n" + block("FOOTER") +
@@ -131,8 +131,16 @@ const GUIDE = [
     ' <article class="doc-body">\n' + GUIDE.map((s, i) => '<h2 id="' + ids[i] + '">' + esc(s[0]) + "</h2>\n" + s[1].map((p) => "<p>" + esc(p) + "</p>").join("\n")).join("\n") +
     '\n<p class="doc-note">Не нашли ответ? Спросите ИИ-помощника в программе или напишите в Telegram-канал <a href="https://t.me/majestic_judiciary">@majestic_judiciary</a>.</p>\n </article>\n</div>\n</div>');
 }
-for (const [f, html] of Object.entries(out)) fs.writeFileSync(path.join(SITE, f), html);
-console.log("site: " + Object.keys(out).join(", ") + " · документы " + version);
+/* 3.5: справочник кодексов, статьи, калькулятор, лента изменений, поиск, форма ошибки, FAQ, страница для руководства.
+   Сбой здесь не должен ломать остальной сайт: страницы выше всё равно запишутся. */
+try {
+  const info = require("./build-codes.js")({ page, esc, ROOT, SITE, out, GUIDE });
+  console.log("site: справочник — статей " + info.articles + ", страниц " + info.pages);
+} catch (e) {
+  console.error("site: справочник не собран: " + (e && e.stack || e));
+}
+for (const [f, html] of Object.entries(out)) { fs.mkdirSync(path.dirname(path.join(SITE, f)), { recursive: true }); fs.writeFileSync(path.join(SITE, f), html); }
+console.log("site: " + Object.keys(out).filter((f) => !/^(uk|ak|dk|pk)\//.test(f)).join(", ") + " · документы " + version);
 
 /* ───── веб-версия помощника: /app/index.html и /app/login.html из программы ─────
    Скрипты страницы получают type="text/x-senko": их запускает site/app/web.js, когда готовы вход, данные и законы. */

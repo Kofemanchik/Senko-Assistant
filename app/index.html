@@ -1260,6 +1260,7 @@ var DKG = [[1,2,"Документы и действия сотрудника"],[
         var s = String(it.s || ""), mm;
         mm = STAR_RE.exec(s);
         if (mm) { stars = Math.max(stars, (mm[2] || mm[1]).length); s = s.replace(STAR_RE, " ").replace(/\s{2,}/g, " ").trim(); }
+        else if ((mm = /^\s*(★+)\s*(?:[–—-]\s*(★+))?\s*/.exec(s))) { stars = Math.max(stars, (mm[2] || mm[1]).length); s = s.slice(mm[0].length).trim(); } // Denver: «ч. 1 ★★★ Текст»
         s = s.trim();
         if (!s) return;
         if (!firstDone) {
@@ -2073,8 +2074,47 @@ function curQ(){
       var Q2=buildQ(sw);
       if(!Q2.empty && anyHit(Q2)){ Q2.fixed=true; Q2.fixedTo=sw; Q=Q2; }
     }
+    // 3.5: опечатка («неприкосновность» → «неприкосновенность»): ближайшее слово из текстов кодексов
+    if(!Q.fixed && typoOn()){ var tf=typoFix(t); if(tf){ var Q3=buildQ(tf); if(!Q3.empty && anyHit(Q3)){ Q3.fixed=true; Q3.fixedTo=tf; Q3.typo=true; Q=Q3; } } }
   }
   _qc={k:raw,Q:Q}; return Q;
+}
+function typoOn(){try{return typeof window.SA_flag==="function"&&!!window.SA_flag("typo35")}catch(e){return false}}
+var TYPO_VOC=null;
+function typoDist(a,b,max){
+  if(Math.abs(a.length-b.length)>max) return max+1;
+  var d=[],i,j;
+  for(i=0;i<=a.length;i++) d[i]=[i];
+  for(j=0;j<=b.length;j++) d[0][j]=j;
+  for(i=1;i<=a.length;i++){
+    var best=max+1;
+    for(j=1;j<=b.length;j++){
+      d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+      if(i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1]) d[i][j]=Math.min(d[i][j],d[i-2][j-2]+1);
+      if(d[i][j]<best) best=d[i][j];
+    }
+    if(best>max) return max+1;
+  }
+  return d[a.length][b.length];
+}
+function typoFix(raw){
+  var ws=norm(String(raw||"")).replace(/[^а-яa-z0-9\s]/g," ").split(/\s+/).filter(Boolean);
+  if(!ws.length||ws.length>6) return "";
+  if(!TYPO_VOC){
+    if(!ALLROWS) ALLROWS=UK.concat(AK,DK,PK);
+    var seen={}; TYPO_VOC=[];
+    ALLROWS.forEach(function(r){ rowHay(r).split(/[^а-яa-z]+/).forEach(function(w){ if(w.length>=5&&!seen[w]){ seen[w]=1; TYPO_VOC.push(w); } }); });
+  }
+  var changed=false;
+  var out=ws.map(function(w){
+    if(w.length<5||!/^[а-я]+$/.test(w)) return w;
+    var q=buildQ(w); if(anyHit(q)) return w;
+    var max=w.length>=9?2:1, best="", bd=max+1;
+    for(var i=0;i<TYPO_VOC.length&&bd>0;i++){ var v=TYPO_VOC[i], dd=typoDist(w,v,Math.min(max,bd)); if(dd<bd||(dd===bd&&best&&Math.abs(v.length-w.length)<Math.abs(best.length-w.length))){ bd=dd; best=v; } }
+    if(best&&bd<=max){ changed=true; return best; }
+    return w;
+  });
+  return changed?out.join(" "):"";
 }
 function textHit(hay){
   var Q=curQ(); if(Q.empty) return true;
@@ -2198,7 +2238,7 @@ function renderList(kind){
   h+='<button class="pill" data-fav="1" aria-pressed="'+state.favOnly+'">Избранное</button>';
   h+='</div>';
   if(kind==="uk" && state.deptOnly && dept) h+='<div class="result">Показаны статьи юрисдикций ведомства '+dept+': '+deptList(dept)+'</div>';
-  if(Q.fixed) h+='<div class="fixbar">Раскладка исправлена: «'+esc(state.q.trim())+'» → «'+esc(Q.fixedTo)+'» <button type="button" class="xref" data-applyfix="1">подставить в строку</button></div>';
+  if(Q.fixed) h+='<div class="fixbar">'+(Q.typo?'Исправлена опечатка':'Раскладка исправлена')+': «'+esc(state.q.trim())+'» → «'+esc(Q.fixedTo)+'» <button type="button" class="xref" data-applyfix="1">подставить в строку</button></div>';
   if(Q.slang.length) h+='<div class="fixbar">Понял по смыслу: '+Q.slang.map(function(x){return '«'+esc(x.w)+'» → '+esc(x.d)}).join('; ')+'</div>';
   h+=refBar(Q,res);
   if(cross){
@@ -4383,7 +4423,7 @@ function cabHtml(){
       fld("discord","Discord",acc.discord,40,"ник в Discord")+fld("telegram","Telegram",acc.telegram,33,"@name или пусто")+fld("phone","Номер в игре",acc.phone,12,"только цифры или пусто")+
       '<div class="sbtns" style="margin:0"><button type="button" class="btn" data-cab="accsave" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Сохранить</button></div>'+
       '<div id="accMsg" role="status" aria-live="polite" style="font-size:12.5px;color:var(--muted);min-height:1.2em"></div></div></div>';
-    ah+=deptInfo(acc.org||dept)+(window.SA_PROG?window.SA_PROG.html():"")+(window.SA_CAB11?window.SA_CAB11(true):"")+(window.SA_CAB13?window.SA_CAB13(true):"")+(window.SA_CAB24?window.SA_CAB24():"")+(window.SA_CAB28?window.SA_CAB28():"")+dcCabHtml()+(window.SA_RP?window.SA_RP.cabHtml():"")+detHtml()+testHtml();
+    ah+=deptInfo(acc.org||dept)+(window.SA_PROG?window.SA_PROG.html():"")+(window.SA_CAB11?window.SA_CAB11(true):"")+(window.SA_CAB13?window.SA_CAB13(true):"")+(window.SA_CAB24?window.SA_CAB24():"")+(window.SA_CAB28?window.SA_CAB28():"")+(window.SA_CAB35?window.SA_CAB35():"")+dcCabHtml()+(window.SA_RP?window.SA_RP.cabHtml():"")+detHtml()+testHtml();
     ah+='<p class="cab-foot">Данные кабинета хранятся в вашем аккаунте. После смены ведомства или сервера программу нужно перезапустить: законы и подсказки подстроятся под выбранный сервер.</p>';
     return ah;
   }
@@ -6344,10 +6384,11 @@ function pOrgs(){
 }
 
 /* Рейтинг недели, смены, контрольные тесты: данные по выбранной организации */
-var E={rate:{},shift:{},ctrl:{}}, CF={title:"",topics:{},n:10,days:3};
+var E={rate:{},shift:{},ctrl:{},log:{}}, CF={title:"",topics:{},n:10,days:3};
+function lead35(){try{return typeof window.SA_flag==="function"&&!!window.SA_flag("lead35")}catch(x){return false}}
 function curOrg(){return B.scope||B.org||""}
 function eload(sub,op,extra,ok){
- var e=E[sub], org=curOrg(), act=sub==="rate"?"week_board":sub;
+ var e=E[sub], org=curOrg(), act=sub==="rate"?"week_board":sub==="log"?"lead_log":sub;
  if(sub!=="rate"&&!org){e.key="";e.data=null;return}
  if(e.loading)return; e.loading=true; e.err=""; e.msg=""; e.key=org+"|"+SRV();
  A.api(act,Object.assign({org:org,server:SRV()},op?{op:op}:{},extra||{})).then(function(r){
@@ -6368,7 +6409,38 @@ function pRate(){
  if(!L.length)return h+'<p class="bp-empty">В организации нет сотрудников.</p>';
  h+='<div class="bp-wrap"><table><thead><tr><th>#</th><th>Ник</th><th>Логин</th>'+(d.org?'':'<th>Организация</th>')+'<th>Звание</th><th>Опыт за неделю</th><th>Опыт всего</th><th>Задерж. за неделю</th><th>Тестов за неделю</th><th>Ср. тест</th><th>Достижений</th></tr></thead><tbody>';
  L.forEach(function(x){h+='<tr><td>'+(x.wxp>0?x.n:"—")+'</td><td><b>'+esc(x.nick)+'</b></td><td>'+esc(x.login)+'</td>'+(d.org?'':'<td>'+esc(x.org)+'</td>')+'<td>'+esc(x.lvl)+'</td><td>'+x.wxp+'</td><td>'+x.xp+'</td><td>'+x.det+'</td><td>'+x.tests+'</td><td>'+(x.avg_p==null?"—":x.avg_p+"%")+'</td><td>'+(x.ach||0)+'</td></tr>'});
- return h+'</tbody></table></div><p class="bp-foot">Этот же рейтинг (топ-10) видят сотрудники в личном кабинете. В Telegram: /top.</p>'}
+ return h+'</tbody></table></div><p class="bp-foot">Этот же рейтинг (топ-10) видят сотрудники в личном кабинете. В Telegram: /top.</p>'+weekBtns()}
+/* 3.5: отчёт организации за неделю одной кнопкой: табель, тесты и рапорты в таблицу (CSV открывается в Excel и Google Таблицах) */
+var WK={busy:false,msg:""};
+function weekBtns(){
+ if(!lead35())return "";
+ if(!curOrg())return '<p class="bp-foot">Чтобы скачать отчёт за неделю, выберите организацию в списке сверху.</p>';
+ return '<div class="bp-tools" style="margin-top:10px"><button type="button" class="btn" data-bp="wkcur"'+(WK.busy?' disabled':'')+'>Отчёт за эту неделю (таблица)</button><button type="button" class="btn" data-bp="wkprev"'+(WK.busy?' disabled':'')+'>За прошлую неделю</button>'+(WK.msg?'<span class="bp-ok" role="status">'+esc(WK.msg)+'</span>':'')+'</div>';
+}
+function weekCsv(prev){
+ if(WK.busy||!A.api)return; WK.busy=true; WK.msg=""; draw();
+ A.api("org_week",{org:curOrg(),server:SRV(),prev:!!prev}).then(function(r){
+  WK.busy=false;
+  if(!r||!r.ok){WK.msg=(r&&r.error)||"Не удалось собрать отчёт.";draw();return}
+  var d=function(t){return new Date(t).toLocaleDateString("ru-RU",{timeZone:"Europe/Moscow"})};
+  var q=function(v){v=v==null?"":String(v);return /[";\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  var L=[["Отчёт "+r.org+" · "+r.name+" · неделя "+d(r.from)+"–"+d(r.to-1)],[],["Ник","Логин","Роль","Последний вход","Задержаний","Тестов","Средний тест, %","Опыт за неделю","Рапортов","Принято","Отклонено"]];
+  r.rows.forEach(function(x){L.push([x.nick,x.login,RANKS[x.rank]||x.rank||"",x.last?new Date(x.last).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}):"",x.det,x.tests,x.avg_p==null?"":x.avg_p,x.wxp,x.rep,x.rep_ok,x.rep_no])});
+  var sum=function(k){return r.rows.reduce(function(s,x){return s+(+x[k]||0)},0)};
+  L.push([],["Итого","","","",sum("det"),sum("tests"),"",sum("wxp"),sum("rep"),sum("rep_ok"),sum("rep_no")]);
+  var text="\ufeff"+L.map(function(row){return row.map(q).join(";")}).join("\r\n");
+  try{var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:"text/csv;charset=utf-8"}));a.download="senko-"+r.org+"-"+d(r.from).replace(/\./g,"-")+".csv";document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1500);WK.msg="Отчёт сохранён: "+a.download}catch(x){WK.msg="Не удалось сохранить файл."}
+  draw();
+ },function(){WK.busy=false;WK.msg="Ошибка связи с программой.";draw()});
+}
+/* 3.5: журнал действий руководства */
+function pLog(){
+ var w=need("log"); if(w)return w; var L=E.log.data.items||[];
+ var h='<p class="sub">Кто кого принял или отклонил, перевёл, кто рассмотрел рапорт, начал смену или назначил тест — за последние 60 дней.</p>';
+ if(!L.length)return h+'<p class="bp-empty">Записей пока нет.</p>';
+ return h+'<div class="bp-wrap"><table><thead><tr><th>Когда</th><th>Кто</th><th>Что сделал(а)</th><th>С кем</th><th>Подробности</th></tr></thead><tbody>'+
+  L.map(function(x){return '<tr><td>'+esc(new Date(x.at).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}))+'</td><td>'+esc(x.by)+'</td><td>'+esc(x.what)+'</td><td>'+esc(x.who)+'</td><td>'+esc(x.extra)+'</td></tr>'}).join("")+'</tbody></table></div>';
+}
 function sumHtml(s){
  if(!s)return '';
  return '<div class="bp-tiles">'+tile(s.online.length+" из "+s.total,"Были в сети")+tile(s.det,"Задержаний")+tile(s.tests,"Тестов")+'</div>'+
@@ -6401,7 +6473,7 @@ function pCtrl(){
 
 function draw(){
  var rn=window.SA_RP?window.SA_RP.bossNew():0;
- var subs=[["sum","Обзор"],["staff","Сотрудники"],["rate","Рейтинг"],["shift","Смены"],["ctrl","Контрольные тесты"]]; if(window.SA_RP)subs.push(["rep","Рапорты"+(rn?" · "+rn:"")]); if(window.SA_B24)window.SA_B24.subs(subs); if(!B.scope)subs.push(["orgs","Организации"]);
+ var subs=[["sum","Обзор"],["staff","Сотрудники"],["rate","Рейтинг"],["shift","Смены"],["ctrl","Контрольные тесты"]]; if(lead35())subs.push(["log","Журнал"]); if(window.SA_RP)subs.push(["rep","Рапорты"+(rn?" · "+rn:"")]); if(window.SA_B24)window.SA_B24.subs(subs); if(!B.scope)subs.push(["orgs","Организации"]);
  if(!subs.some(function(s){return s[0]===B.sub}))B.sub="sum";
  var title=B.scope?"Панель руководителя · "+esc(B.scope):"Панель руководителя";
  var h='<div class="subnav noprint">'+subs.map(function(s){return '<button class="pill" data-bpsub="'+s[0]+'" aria-pressed="'+(s[0]===B.sub)+'">'+s[1]+'</button>'}).join("")+'</div>';
@@ -6412,7 +6484,7 @@ function draw(){
  if(B.viewer)h+='<p class="sub">Вы видите данные как: '+(RANKS[B.viewer]||B.viewer)+(B.scope?". Доступна только ваша организация.":".")+'</p>';
  if(B.err)h+='<div class="banner bp-err" role="alert">'+esc(B.err)+'</div>';
  if(!B.data)h+='<p class="bp-empty">'+(B.loading?"Загружаем данные…":"Данные недоступны.")+'</p>';
- else h+=(B.sub==="hooks"||B.sub==="events")?window.SA_B24.html(B.sub,curOrg(),draw):B.sub==="rep"?window.SA_RP.boss(curOrg(),draw):B.sub==="staff"?pStaff():B.sub==="orgs"?pOrgs():B.sub==="rate"?pRate():B.sub==="shift"?pShift():B.sub==="ctrl"?pCtrl():pSum();
+ else h+=(B.sub==="hooks"||B.sub==="events")?window.SA_B24.html(B.sub,curOrg(),draw):B.sub==="rep"?window.SA_RP.boss(curOrg(),draw):B.sub==="staff"?pStaff():B.sub==="orgs"?pOrgs():B.sub==="rate"?pRate():B.sub==="shift"?pShift():B.sub==="ctrl"?pCtrl():B.sub==="log"?pLog():pSum();
  view.innerHTML=h+'</section>';
 }
 
@@ -6429,6 +6501,7 @@ view.addEventListener("click",function(e){
   eload("ctrl","create",{title:CF.title,topics:tps,n:CF.n,days:CF.days},function(e){CF.title="";CF.topics={};e.msg="Тест назначен. Сотрудники увидят его в программе в течение 20 минут или после перезапуска."});
   draw();return}
  if(t.dataset.bpsub){B.sub=t.dataset.bpsub;if(B.sub==="staff"&&B.sort.k==="det7"&&!B.touched)B.sort={k:"nick",dir:1};draw();return}
+ if(t.dataset.bp==="wkcur"||t.dataset.bp==="wkprev"){weekCsv(t.dataset.bp==="wkprev");return}
  if(t.dataset.bp==="reload"){load();if(E[B.sub]){E[B.sub].key=null;E[B.sub].data=null}if(B.sub==="rep")window.SA_RP.bossReload();if((B.sub==="hooks"||B.sub==="events")&&window.SA_B24)window.SA_B24.reload(B.sub);return}
  if(t.dataset.bp==="win"){if(A.staff)A.staff();return}
  if(t.dataset.bps){var k=t.dataset.bps;B.touched=1;B.sort=B.sort.k===k?{k:k,dir:-B.sort.dir}:{k:k,dir:1};draw();return}
@@ -6796,6 +6869,16 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.5.0",d:"01.11.2026",items:[
+  ["🌐","Справочник кодексов на сайте","УК, АК, ДК и ПК Boston, Los Angeles и Denver открываются на сайте без входа, с поиском по номеру и словам. У каждой статьи своя ссылка вида senko-assistant.site/uk/12.8: в Discord она показывается карточкой с наказанием."],
+  ["🧮","Калькулятор и лента изменений на сайте","На сайте можно посчитать наказание по статьям без регистрации (по тем же правилам, что в программе) и посмотреть ленту изменений законов по серверам."],
+  ["⭐","Розыск в УК Denver","Уровень розыска (★) у статей УК Denver теперь виден в «Законах» и учитывается в калькуляторе."],
+  ["🔎","Поиск с опечатками","Если по запросу ничего не нашлось, поиск в «Законах» подбирает ближайшее слово: «неприкосновность» найдёт «неприкосновенность». Сначала у бета-тестеров."],
+  ["📋","Журнал руководства и отчёт за неделю","В панели руководителя раздел «Журнал»: кто кого принял, перевёл, кто рассмотрел рапорт. В «Рейтинге» кнопки «Отчёт за неделю»: табель, тесты и рапорты одной таблицей. Сначала у бета-тестеров."],
+  ["🏆","Рейтинг недели на сайте","В кабинете галочка «Показывать меня в публичном рейтинге недели». Без неё вас на сайте нет. Сначала у бета-тестеров."],
+  ["📱","Веб-версия на телефоне","Главные разделы внизу экрана, поиск статьи голосом и подсказка «Добавить на главный экран». Сначала у бета-тестеров."],
+  ["🐞","Сообщить об ошибке с сайта","Форма на сайте для тех, у кого не запускается программа: сообщение приходит владельцу в Telegram и в панель."]
+ ]},
  {v:"3.4.4",d:"01.11.2026",items:[
   ["💵","Штрафы в УК Denver","Штрафы, заданные категориями («штраф третьей категории»), теперь показываются в долларах по таблице категорий из УК сервера, например $30 000–60 000. Раньше вместо суммы показывались числа из срока, например $3–5."]
  ]},
@@ -12385,7 +12468,7 @@ if(["","halloween","newyear"].indexOf(C.prev)<0)C.prev="";
 function saveC(){jset("bos-s24",C)}
 
 /* ---------- флаги функций ---------- */
-var FDEF={patrol:"beta",board:"all",mini:"all",tts:"all",mascot:"all",season:"all",card:"all",ideas:"all",events:"all",col28:"beta",det28mk:"beta",det28wait:"beta",det28rp:"beta",det28shift:"beta",det28grp:"beta",det28jur:"beta",det28note:"beta",det28sz:"beta",det28wit:"beta",det28chron:"beta",det28xfer:"beta",det28imm:"beta",pad28:"beta",pad28mini:"beta",pad28tpl:"beta",svc32:"beta"};
+var FDEF={patrol:"beta",board:"all",mini:"all",tts:"all",mascot:"all",season:"all",card:"all",ideas:"all",events:"all",col28:"beta",det28mk:"beta",det28wait:"beta",det28rp:"beta",det28shift:"beta",det28grp:"beta",det28jur:"beta",det28note:"beta",det28sz:"beta",det28wit:"beta",det28chron:"beta",det28xfer:"beta",det28imm:"beta",pad28:"beta",pad28mini:"beta",pad28tpl:"beta",svc32:"beta",web35:"beta",typo35:"beta",lead35:"beta",rate35:"beta"};
 var FN={patrol:["Совместный патруль","Экипаж по коду: общий список задержаний и таймеров с напарниками."],board:["Тактическая доска","Рисование на схеме зон и отправка схемы ссылкой."],mini:["Мини-окно задержания","Маленькое окно поверх игры с таймерами и итогом калькулятора."],
  tts:["Озвучка статей","Кнопка 🔊 у статьи читает её вслух голосом Windows."],mascot:["Лиса Senko","Подсказки и поздравления в углу окна."],season:["Сезонное оформление","Хэллоуин и Новый год."],card:["Карточка сотрудника","Картинка со статистикой для Discord."],
  ideas:["Идеи и голосование","Раздел «Идеи» в меню."],events:["Мероприятия организаций","Учения и собрания на главной и в панели руководителя."],
@@ -12405,7 +12488,11 @@ var FN={patrol:["Совместный патруль","Экипаж по код�
  pad28:["Блокнот","Блокнот с главной: чек-листы «[ ] пункт» и напоминания."],
  pad28mini:["Блокнот в мини-окне","Записи и галочки блокнота в мини-окне поверх игры."],
  pad28tpl:["Шаблоны заметок","Заготовки «Вызов», «ДТП», «Обыск авто» и свои шаблоны."],
- svc32:["Служебные сообщения","Быстрая доставка служебных уведомлений и оформления прямо в программу."]};
+ svc32:["Служебные сообщения","Быстрая доставка служебных уведомлений и оформления прямо в программу."],
+ rate35:["Рейтинг недели на сайте","В кабинете галочка «Показывать меня в публичном рейтинге недели»: таблица лучших за неделю на сайте, только с согласия."],
+ lead35:["Журнал руководства и отчёт за неделю","В панели руководителя раздел «Журнал» (кто кого принял, перевёл, кто рассмотрел рапорт) и кнопки «Отчёт за неделю» в «Рейтинге»."],
+ typo35:["Поиск с опечатками","Если по запросу ничего не нашлось, поиск в «Законах» подбирает ближайшее слово: «неприкосновность» найдёт «неприкосновенность»."],
+ web35:["Веб-версия на телефоне","Нижняя панель разделов, голосовой поиск статьи и подсказка «Добавить на главный экран» (только в веб-версии)."]};
 function tester(){var s=sys(),u=user();return !!(s.tester||(u&&(u.rank==="owner"||u.rank==="moderator")))}
 function mode(k){var f=sys().flags;return f&&f[k]?f[k]:FDEF[k]}
 function flag(k){var m=mode(k);if(m==="off")return false;if(m==="beta")return tester()&&C.exp[k]!==false;return true}
@@ -14596,6 +14683,16 @@ document.addEventListener("click",function(ev){
 var ME={d:null,busy:false,msg:"",err:false,draft:null};
 function loadMine(){if(ME.busy)return;ME.busy=true;
  api("colleagues",{op:"mine"}).then(function(r){ME.busy=false;if(r.ok){ME.d=r;if(!ME.draft)ME.draft={post:r.post||"",bio:r.bio||"",hide:!!r.hideDiscord}}if(window.SA_cabRepaint)SA_cabRepaint()})}
+/* 3.5: согласие на публичный рейтинг недели на сайте (по умолчанию выключено) */
+var PB={on:null,busy:false,msg:""};
+window.SA_CAB35=function(){
+ if(!fl("rate35"))return "";
+ if(PB.on===null&&!PB.busy){PB.busy=true;api("pub_board_opt",{}).then(function(r){PB.busy=false;PB.on=!!(r&&r.ok&&r.on);if(window.SA_cabRepaint)SA_cabRepaint()})}
+ return '<div class="cab-h">Рейтинг недели на сайте<small>senko-assistant.site/rating/</small></div>'+
+  '<label class="c28-ck"><input type="checkbox" data-pb35'+(PB.on?' checked':'')+(PB.on===null||PB.busy?' disabled':'')+'> Показывать меня в публичном рейтинге недели (ник, ведомство, опыт и задержания за неделю)</label>'+
+  (PB.msg?'<p class="s24-msg" role="status">'+e(PB.msg)+'</p>':'')};
+document.addEventListener("change",function(ev){var t=ev.target;if(!t||!t.hasAttribute||!t.hasAttribute("data-pb35"))return;ev.stopPropagation();
+ PB.busy=true;t.disabled=true;api("pub_board_opt",{on:!!t.checked}).then(function(r){PB.busy=false;if(r&&r.ok){PB.on=!!r.on;PB.msg=PB.on?"Вы в публичном рейтинге. Снять галочку можно в любой момент.":"Вас нет в публичном рейтинге."}else PB.msg=(r&&r.error)||"Не удалось сохранить.";if(window.SA_cabRepaint)SA_cabRepaint()})},true);
 window.SA_CAB28=function(){
  if(!ok())return "";
  if(!ME.d){setTimeout(loadMine,0);return '<div class="cab-h">Профиль для коллег<small>раздел «Коллеги»</small></div><p class="s24-empty">Загружаем…</p>'}

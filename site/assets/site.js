@@ -144,4 +144,17 @@
       .then(function (r) { var keep = { tag_name: r.tag_name, published_at: r.published_at, body: r.body, assets: (r.assets || []).map(function (a) { return { name: a.name, size: a.size, browser_download_url: a.browser_download_url }; }) }; try { sessionStorage.setItem("sa-rel", JSON.stringify({ at: Date.now(), r: keep })); } catch (e) {} show(keep); })
       .catch(function () { /* без ответа GitHub кнопки ведут на страницу последнего релиза */ $$("a[data-dl]").forEach(function (a) { if (a.getAttribute("href").charAt(0) === "#") return; a.href = "https://github.com/" + REPO + "/releases/latest"; }); });
   }
+
+  /* 3.5: цифры проекта на главной (сервер считает их раз в сутки) */
+  var ps = $("[data-pstats]");
+  if (ps && window.fetch && window.SENKO_WEB && window.SENKO_WEB.api) {
+    var fmtN = function (n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " "); };
+    fetch(window.SENKO_WEB.api, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "pub_stats" }) })
+      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r || !r.ok || !r.users) return;
+        $$("[data-pst]", ps).forEach(function (b) { var v = r[b.dataset.pst]; if (v != null) b.textContent = fmtN(v); });
+        ps.hidden = false;
+      }).catch(function () {});
+  }
 })();

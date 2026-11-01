@@ -862,6 +862,19 @@ async function api(req) {
     }
     case "laws":
       return J(await lawsApi(b));
+    // 3.5: публичный сайт (без входа): справочник кодексов, калькулятор, лента изменений законов, цифры проекта, сообщение об ошибке
+    case "pub_laws":
+      return J(await pubLaws(b, ip));
+    case "pub_changes":
+      return J(await pubChanges(b, ip));
+    case "pub_stats":
+      return J(await pubStats(ip));
+    case "pub_bug":
+      return J(await pubBug(b, ip));
+    case "pub_board":
+      return J(await pubBoard(b, ip));
+    case "pub_board_opt":
+      return J(await pubBoardOpt(b));
     case "ai_ask":
       return J(await aiAsk(b));
     case "stt":
@@ -917,6 +930,11 @@ async function api(req) {
     }
     case "staff_list":
       return J(await staffList(b));
+    // 3.5: журнал действий руководства и отчёт организации за неделю (панель руководителя в программе)
+    case "lead_log":
+      return J(await leadLog(b));
+    case "org_week":
+      return J(await orgWeek(b));
     case "accept_legal":
       return J(await acceptLegal(b));
     case "update_profile":
@@ -1863,6 +1881,63 @@ async function decideApproval(a, id, ok) {
   return { text: `${ok ? "✅ Принят" : "❌ Отклонён"}: <b>${esc(r.login)}</b> (${esc(r.nick)}) в ${esc(r.org)}${ok ? "" : ".\nЕсли передумаете: /approve " + esc(r.login)}` };
 }
 
+// ───────────── 3.5: журнал действий руководства ─────────────
+// Кто кого принял или отклонил, перевёл, кто рассмотрел или удалил рапорт, открыл смену, назначил тест, поменял вебхук.
+// Видно руководству организации (только своей), модераторам и владельцу.
+const LEAD_ACTIONS = { approve: "Принял(а) в организацию", reject: "Отклонил(а) заявку", setorg: "Перевёл(а) в другую организацию", role: "Сменил(а) роль",
+  report_review: "Рассмотрел(а) рапорт", report_delete: "Удалил(а) рапорт", shift_start: "Начал(а) смену", shift_end: "Закончил(а) смену",
+  ctrl_create: "Назначил(а) контрольный тест", hook: "Изменил(а) вебхук Discord" };
+async function leadLog(b) {
+  const { p, err } = await who(b, ["leader", "moderator", "owner"]);
+  if (err) return err;
+  const org = staffOrg(p, b);
+  if (!org) return fail("Выберите организацию.");
+  const srv = staffSrvOpt(p, b);
+  const sql = db();
+  const acts = Object.keys(LEAD_ACTIONS);
+  const rows = await sql`
+    select a.id, a.at, a.actor, a.action, a.target, a.details from audit_log a
+    where a.action = any(${acts}::text[]) and a.at > now() - interval '60 days'
+      and (a.details->>'org' = ${org} or a.details->>'from' = ${org} or a.details->>'to' = ${org} or a.target = ${org}
+           or exists (select 1 from profiles x where x.login_lc = lower(a.target) and x.org = ${org}))
+      and (${srv}::int is null or a.server is null or a.server = ${srv})
+    order by a.id desc limit 150`;
+  return {
+    ok: true, org,
+    items: rows.map((r) => {
+      const d = r.details || {};
+      let what = LEAD_ACTIONS[r.action] || r.action;
+      if (r.action === "report_review") what = d.status === "ok" ? "Принял(а) рапорт" : d.status === "no" ? "Отклонил(а) рапорт" : what;
+      const extra = r.action === "setorg" ? `${d.from || "?"} → ${d.to || "?"}` : r.action === "role" ? `${d.from || "?"} → ${d.to || "?"}` : r.action === "ctrl_create" ? String(d.title || "") : d.id ? "№" + d.id : "";
+      return { at: r.at, by: String(r.actor || "").replace(/\s*\(.*\)$/, ""), what, who: r.target && r.target !== org ? r.target : "", extra };
+    }),
+  };
+}
+
+// ───────────── 3.5: отчёт организации за неделю (таблица для панели руководителя) ─────────────
+async function orgWeek(b) {
+  const { p, err } = await who(b, ["leader", "moderator", "owner"]);
+  if (err) return err;
+  const org = staffOrg(p, b);
+  if (!org) return fail("Выберите организацию.");
+  const srv = staffSrv(p, b);
+  if (!(await hit(`ow:${p.id}`, 30, 3600))) return fail(RATE_MSG, { code: "rate" });
+  const cur = mskWeek(), w = b.prev ? weekBefore(cur) : cur;
+  const end = b.prev ? cur.start : Date.now();
+  const L = await weekStats(org, w, !!b.prev, srv);
+  const rp = await db()`select lower(login) l, count(*)::int n, count(*) filter (where status = 'ok')::int ok, count(*) filter (where status = 'no')::int no
+                        from reports where org = ${org} and server = ${srv} and created_at >= ${new Date(w.start)} and created_at < ${new Date(end)} group by lower(login)`;
+  const R = {};
+  rp.forEach((x) => (R[x.l] = x));
+  return {
+    ok: true, org, server: srv, name: srvName(srv), from: w.start, to: end,
+    rows: L.sort(byWxp).map((x) => {
+      const q = R[String(x.login).toLowerCase()] || { n: 0, ok: 0, no: 0 };
+      return { nick: x.nick, login: x.login, rank: x.rank, last: x.last_seen, det: x.det, tests: x.tests, avg_p: x.avg_p, wxp: x.wxp, rep: q.n, rep_ok: q.ok, rep_no: q.no };
+    }),
+  };
+}
+
 // ───────────── Еженедельный отчёт руководству ─────────────
 async function orgReport(org, server = DEFAULT_SERVER) {
   const cur = mskWeek(), w = weekBefore(cur);
@@ -2473,6 +2548,7 @@ async function onText(m, text) {
   const sql = db();
   const [bug] = await sql`select * from bug_reports where id = ${pd.payload.bug}`;
   if (!bug) return send(m.chat.id, "Сообщение об ошибке не найдено (аккаунт мог быть удалён).");
+  if (!bug.user_id) return send(m.chat.id, `Это сообщение с сайта, без аккаунта: ответить можно только по контакту${bug.contact ? " «" + esc(bug.contact) + "»" : " (он не указан)"}.`);
   const body = text.slice(0, 1500);
   await sql`insert into broadcasts (user_id, title, author, text, expires_at)
             values (${bug.user_id}, ${"Ответ на ваше сообщение об ошибке №" + bug.id}, ${a.label}, ${body}, now() + interval '30 days')`;
@@ -4173,6 +4249,9 @@ async function lawsChanged(b) {
     if (b.manual && OWNER_TG) await send(OWNER_TG, `⚖️ ${esc(srvName(srv))}: проверка законов завершена, изменений нет.${Number(b.count) ? " Законов: " + Number(b.count) + "." : ""}`);
     return { ok: true, sent: b.manual ? 1 : 0 };
   }
+  try {
+    for (const it of items) await db()`insert into law_changes (server, kind, title, arts) values (${srv}, ${it.type === "new" ? "new" : "changed"}, ${clean(it.title, 150)}, ${clean(it.arts, 200)})`;
+  } catch (e) { console.error("law_changes", e); }
   const lines = items.map((it) =>
     `• ${it.type === "new" ? "🆕 Новый закон" : "✏️ Изменён"}: <b>${esc(clean(it.title, 150))}</b>${it.arts ? " — " + esc(clean(it.arts, 200)) : ""}`);
   const more = Array.isArray(b.items) && b.items.length > items.length ? `\n…и ещё ${b.items.length - items.length}` : "";
@@ -4721,7 +4800,7 @@ async function panelApi(b, ip, ua) {
       return { ok: true, rows: rows.slice(0, 50), more: rows.length > 50, page, actions: AUDIT_ACTIONS, servers: Object.keys(SERVERS).map((k) => ({ id: +k, name: SERVERS[k].name })) };
     }
     case "bugs": {
-      const rows = await sql`select b.id, b.user_id, b.text, b.app_version, b.answered, b.at, length(b.log)::int as log_len, p.login, p.nick, p.org
+      const rows = await sql`select b.id, b.user_id, b.text, b.app_version, b.answered, b.at, length(b.log)::int as log_len, b.source, b.contact, p.login, p.nick, p.org
                              from bug_reports b left join profiles p on p.id = b.user_id
                              where ${b.all ? sql`true` : sql`not b.answered`} order by b.id desc limit 50`;
       return { ok: true, rows };
@@ -4734,6 +4813,7 @@ async function panelApi(b, ip, ua) {
       const body = String(b.text == null ? "" : b.text).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").trim().slice(0, 1500);
       const [bug] = await sql`select * from bug_reports where id = ${parseInt(b.id, 10) || 0}`;
       if (!bug) return fail("Сообщение об ошибке не найдено.");
+      if (!bug.user_id) return fail(`Это сообщение с сайта, без аккаунта: ответить можно только по контакту${bug.contact ? " «" + bug.contact + "»" : " (он не указан)"}.`);
       if (!body) return fail("Напишите ответ.");
       await sql`insert into broadcasts (user_id, title, author, text, expires_at)
                 values (${bug.user_id}, ${"Ответ на ваше сообщение об ошибке №" + bug.id}, ${a.label}, ${body}, now() + interval '30 days')`;
@@ -5038,7 +5118,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 30;
+const SCHEMA_V = 35;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -5175,6 +5255,19 @@ alter table public.discord_tickets enable row level security;
 alter table public.discord_monitor enable row level security;
 revoke all on table public.discord_tickets, public.discord_monitor from anon, authenticated;
 `;
+// 3.5: сообщения об ошибках с сайта (без аккаунта) и лента изменений законов для сайта
+const SCHEMA_35 = `
+alter table public.bug_reports alter column user_id drop not null;
+alter table public.bug_reports add column if not exists source text not null default 'app';
+alter table public.bug_reports add column if not exists contact text not null default '';
+create table if not exists public.law_changes (
+  id bigint generated always as identity primary key, server integer not null, kind text not null default 'changed',
+  title text not null default '', arts text not null default '', at timestamptz not null default now());
+create index if not exists law_changes_server_idx on public.law_changes (server, id desc);
+alter table public.law_changes enable row level security;
+revoke all on table public.law_changes from anon, authenticated;
+alter table public.profiles add column if not exists pub_board boolean not null default false;
+`;
 let schemaReady = null;
 function ensureSchema() {
   if (!schemaReady)
@@ -5183,7 +5276,8 @@ function ensureSchema() {
         const v = await getSetting("schema_v", 0);
         if (+v >= SCHEMA_V) return;
         // база уже на 2.4: повторно 2.4 не выполняем (иначе вернулись бы удалённые баннеры по умолчанию)
-        await db().unsafe(+v >= 30 ? SCHEMA_30 : +v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29);
+        // 3.5: SCHEMA_30 и SCHEMA_35 повторяемы (create/alter … if not exists), их добавляем всем, кто ниже 35
+        await db().unsafe(+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35);
         adsReady = true;
         await setSetting("schema_v", SCHEMA_V);
       } catch (e) {
@@ -5223,6 +5317,11 @@ const FLAG_DEFS = {
   pad28mini: ["Блокнот в мини-окне задержания", "beta", "2.8"],
   pad28tpl: ["Шаблоны заметок", "beta", "2.8"],
   svc32: ["Быстрая доставка служебных сообщений", "beta", "3.2"],
+  pub35: ["Публичный справочник, калькулятор и форма ошибки на сайте", "all", "3.5"],
+  web35: ["Веб-версия: нижняя панель, голосовой поиск, подсказка установки", "beta", "3.5"],
+  typo35: ["Поиск с опечатками в «Законах»", "beta", "3.5"],
+  lead35: ["Журнал руководства и отчёт организации за неделю", "beta", "3.5"],
+  rate35: ["Публичный рейтинг недели на сайте (с согласия)", "beta", "3.5"],
 };
 // функции выпущенных версий включены у всех и флагов больше не имеют; бета 2.7.0 ещё спрашивает общий флаг ai27
 const FLAG_RELEASED = { ai27: "all", srv29: "all" }; // srv29 (выбор сервера) выпущен для всех
@@ -5800,6 +5899,96 @@ async function lawsApi(b) {
     return { ok: true, ...meta, data: JSON.parse(text) };
   }
   return { ok: true, ...meta, gz: b64(L.gz) };
+}
+
+// ───────────── 3.5: публичный сайт ─────────────
+// Законы с форума Majestic публичные; сайт показывает их без входа. Выключается флагом pub35 («off»).
+async function pubOpen() {
+  return (await flagsNow()).pub35 !== "off";
+}
+async function pubLaws(b, ip) {
+  if (!(await pubOpen())) return fail("Справочник на сайте сейчас выключен.", { code: "off" });
+  if (!LAWS_KEY) return fail("Законы на сервере ещё не подключены.", { code: "laws_off" });
+  if (!(await hit(`pl:${ip}`, 60, 3600))) return fail(RATE_MSG, { code: "rate" });
+  const server = parseServer(b.server) || DEFAULT_SERVER;
+  let L;
+  try {
+    L = await lawsLoad(server, "");
+  } catch (e) {
+    if (e && e.none) return fail(`Законы сервера ${srvName(server)} ещё не собраны с форума.`, { code: "laws_none", server });
+    console.error("pub_laws", e);
+    return fail("Не удалось получить законы. Попробуйте позже.", { code: "server" });
+  }
+  const meta = { server, name: srvName(server), sig: L.sig, updatedAt: L.updatedAt, checkedAt: L.checkedAt };
+  if (b.sig && String(b.sig) === L.sig) return { ok: true, same: true, ...meta };
+  return { ok: true, ...meta, gz: b64(L.gz) };
+}
+// Лента изменений законов: пишется в lawsChanged после каждой синхронизации с форумом
+async function pubChanges(b, ip) {
+  if (!(await pubOpen())) return fail("Лента изменений на сайте сейчас выключена.", { code: "off" });
+  if (!(await hit(`pc:${ip}`, 120, 3600))) return fail(RATE_MSG, { code: "rate" });
+  const server = parseServer(b.server) || 0;
+  const sql = db();
+  const rows = await sql`select server, kind, title, arts, at from law_changes
+                         where ${server ? sql`server = ${server}` : sql`true`} order by id desc limit 100`;
+  return { ok: true, items: rows.map((r) => ({ server: r.server, name: srvName(r.server), type: r.kind, title: r.title, arts: r.arts, at: r.at })) };
+}
+// Цифры проекта на главной: считаются не чаще раза в сутки
+async function pubStats(ip) {
+  if (!(await hit(`ps:${ip}`, 60, 3600))) return fail(RATE_MSG, { code: "rate" });
+  const c = await getSetting("pub_stats", null);
+  if (c && c.at && Date.now() - c.at < 24 * 3600e3) return { ok: true, ...c };
+  const sql = db();
+  const [u] = await sql`select count(*)::int n, count(distinct (org, server))::int orgs from profiles where not banned`;
+  const [a] = await sql`select count(*)::int n from ai_log where ok`;
+  const out = { users: u.n, orgs: u.orgs, servers: Object.keys(SERVERS).length, ai: a.n, at: Date.now() };
+  await setSetting("pub_stats", out);
+  return { ok: true, ...out };
+}
+// Рейтинг недели на сайте: только те, кто сам включил галочку в кабинете (profiles.pub_board)
+async function pubBoardOpt(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (b.on == null) return { ok: true, on: !!p.pub_board };
+  if (!(await hit(`pbo:${p.id}`, 20, 3600))) return fail(RATE_MSG, { code: "rate" });
+  const [np] = await db()`update profiles set pub_board = ${!!b.on} where id = ${p.id} returning pub_board`;
+  await audit(p.login, "pub_board", p.login, { on: !!np.pub_board });
+  return { ok: true, on: !!np.pub_board };
+}
+async function pubBoard(b, ip) {
+  if (!(await pubOpen())) return fail("Рейтинг на сайте сейчас выключен.", { code: "off" });
+  if ((await flagsNow()).rate35 === "off") return fail("Рейтинг на сайте сейчас выключен.", { code: "off" });
+  if (!(await hit(`pbd:${ip}`, 60, 3600))) return fail(RATE_MSG, { code: "rate" });
+  const server = parseServer(b.server) || DEFAULT_SERVER;
+  const key = "pub_board_" + server;
+  const c = await getSetting(key, null);
+  if (c && c.at && Date.now() - c.at < 10 * 60e3) return { ok: true, ...c };
+  const w = mskWeek();
+  const all = await weekStats(null, w, false, server);
+  const [{ ids }] = await db()`select coalesce(array_agg(id), '{}') ids from profiles where pub_board and server = ${server}`;
+  const okIds = new Set((ids || []).map(String));
+  const list = all.filter((x) => okIds.has(String(x.id)) && (x.wxp > 0 || x.det > 0)).sort(byWxp).slice(0, 30)
+    .map((x, i) => ({ n: i + 1, nick: x.nick, org: x.org, wxp: x.wxp, det: x.det, tests: x.tests, lvl: x.lvl.name }));
+  const out = { server, name: srvName(server), from: w.start, list, at: Date.now() };
+  await setSetting(key, out);
+  return { ok: true, ...out };
+}
+// Сообщение об ошибке с сайта (без входа): владельцу в Telegram и в панель, как из программы
+async function pubBug(b, ip) {
+  if (!(await pubOpen())) return fail("Форма сейчас выключена. Напишите в программе: меню → «Сообщить об ошибке».", { code: "off" });
+  if (String(b.hp || "")) return { ok: true, id: "0" }; // скрытое поле: заполняют только боты
+  if (!(await hit(`pb:${ip}`, 3, 86400))) return fail("С этого адреса можно отправить не больше 3 сообщений в сутки.", { code: "rate" });
+  if (!(await hit("pb:all", 60, 3600))) return fail(RATE_MSG, { code: "rate" });
+  const text = String(b.text == null ? "" : b.text).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").trim().slice(0, 2000);
+  if (text.length < 10) return fail("Опишите проблему подробнее (хотя бы 10 символов).");
+  const contact = clean(b.contact, 120);
+  const page = clean(b.page, 200);
+  const ua = clean(b.ua, 200);
+  const [r] = await db()`insert into bug_reports (user_id, text, app_version, source, contact) values (null, ${text}, ${"сайт"}, ${"site"}, ${contact}) returning id`;
+  if (OWNER_TG) {
+    await send(OWNER_TG, `🐞 <b>Сообщение об ошибке #${r.id}</b> · с сайта\nКонтакт: ${esc(contact || "не указан")}${page ? "\nСтраница: " + esc(page) : ""}${ua ? "\nБраузер: " + esc(ua) : ""}\n\n${esc(text)}`);
+  }
+  return { ok: true, id: String(r.id) };
 }
 
 // ИИ для программы и сайта: запрос подписывается здесь (ключ AI_KEY), лимит считается по аккаунту

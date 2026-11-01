@@ -1,3 +1,20 @@
 app/index.html
 app/login/
 app/config.js
+# 3.5: собирается tools/build-codes.js
+uk/
+ak/
+dk/
+pk/
+laws/
+calc/
+changes/
+search/
+report/
+faq.html
+orgs.html
+sitemap.xml
+assets/law-core.js
+assets/codes-12.json
+assets/site-index.json
+rating/

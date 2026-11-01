@@ -429,6 +429,99 @@
     if (LAWS && feat.laws) setTimeout(lawsFetch, 4000);
     document.addEventListener("visibilitychange", function () { if (document.hidden) { flushSync(); sync.pushNow(true); } else if (Date.now() - lastOk > 5 * 60 * 1000) verify(); });
     window.addEventListener("pagehide", function () { flushSync(); sync.pushNow(true); });
+    phoneUi();
+  }
+
+  /* ───── 3.5: телефон (флаг web35): нижняя панель разделов, голосовой поиск статьи, подсказка «Добавить на главный экран» ───── */
+  function phoneUi() {
+    var tries = 0;
+    (function wait() {
+      if (typeof window.SA_flag !== "function" || !document.querySelector("nav.tabs")) { if (++tries < 60) setTimeout(wait, 500); return; }
+      var on = false; try { on = !!window.SA_flag("web35"); } catch (e) {}
+      if (!on) return;
+      var css = document.createElement("style");
+      css.textContent =
+        ".wb-bar{display:none}" +
+        "@media (max-width:640px){.wb-bar{position:fixed;left:0;right:0;bottom:0;z-index:2147480000;display:grid;grid-template-columns:repeat(5,1fr);background:var(--surface,#fff);border-top:1px solid var(--line,#ddd);padding:4px 4px calc(4px + env(safe-area-inset-bottom))}" +
+        ".wb-bar button{border:0;background:none;color:var(--muted,#666);font:600 11px/1.2 var(--f-body,system-ui);padding:6px 2px;display:grid;justify-items:center;gap:3px;border-radius:10px}" +
+        ".wb-bar button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}" +
+        ".wb-bar button[aria-current=page]{color:var(--accent,#C2530E);background:color-mix(in srgb,var(--accent,#C2530E) 10%,transparent)}" +
+        "body{padding-bottom:calc(68px + env(safe-area-inset-bottom))}}" +
+        ".wb-mic{position:absolute;right:44px;top:50%;transform:translateY(-50%);width:34px;height:34px;border:0;border-radius:50%;background:none;color:var(--muted,#666);cursor:pointer;display:grid;place-items:center}" +
+        ".wb-mic svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}.wb-mic.on{color:#fff;background:var(--accent,#C2530E)}" +
+        ".wb-inst{position:fixed;left:12px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom));z-index:2147480001;background:var(--surface,#fff);color:var(--ink,#222);border:1px solid var(--line,#ddd);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.25);padding:14px 16px;font:500 14px/1.45 var(--f-body,system-ui)}" +
+        ".wb-inst b{display:block;font-size:15.5px;margin-bottom:6px}.wb-inst ol{margin:0;padding-left:20px;display:grid;gap:6px}.wb-inst li svg{width:18px;height:18px;vertical-align:-4px;stroke:var(--accent,#C2530E);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}" +
+        ".wb-inst .wb-row{display:flex;gap:8px;margin-top:10px;justify-content:flex-end}.wb-inst button{font:600 13.5px var(--f-body,system-ui);border-radius:10px;padding:8px 12px;border:1px solid var(--line,#ddd);background:none;color:inherit}.wb-inst button.p{background:var(--accent,#C2530E);border-color:transparent;color:#fff}";
+      document.head.appendChild(css);
+      var I = {
+        home: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+        uk: '<path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M9 7h6M9 11h6"/>',
+        laws: '<path d="M12 3v18M5 7h14M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z"/>',
+        timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/>',
+        calc: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"/>'
+      };
+      var items = [["home", "Главная"], ["uk", "Кодексы"], ["laws", "Законы"], ["timer", "Задержание"], ["calc", "Калькулятор"]];
+      var bar = document.createElement("nav");
+      bar.className = "wb-bar"; bar.setAttribute("aria-label", "Главные разделы");
+      bar.innerHTML = items.map(function (x) { return '<button type="button" data-wb="' + x[0] + '"><svg viewBox="0 0 24 24" aria-hidden="true">' + I[x[0]] + "</svg>" + x[1] + "</button>"; }).join("");
+      document.body.appendChild(bar);
+      bar.addEventListener("click", function (e) {
+        var b = e.target.closest("[data-wb]"); if (!b) return;
+        var t = document.querySelector('nav.tabs .tab[data-tab="' + b.dataset.wb + '"]'); if (t) t.click();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+      var CODES = { uk: 1, ak: 1, dk: 1, pk: 1, gen: 1 };
+      function mark() {
+        var cur = document.querySelector('nav.tabs .tab[aria-selected="true"]'), k = cur ? cur.dataset.tab : "";
+        if (CODES[k]) k = "uk";
+        Array.prototype.forEach.call(bar.children, function (b) { if (b.dataset.wb === k) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+      }
+      try { new MutationObserver(mark).observe(document.querySelector("nav.tabs"), { attributes: true, subtree: true, attributeFilter: ["aria-selected"] }); } catch (e) {}
+      mark();
+
+      /* голосовой поиск: распознавание речи браузера (Chrome, Edge, Safari) */
+      var SR = window.SpeechRecognition || window.webkitSpeechRecognition, q = document.getElementById("q");
+      if (SR && q && q.parentNode) {
+        var mic = document.createElement("button");
+        mic.type = "button"; mic.className = "wb-mic"; mic.setAttribute("aria-label", "Найти статью голосом"); mic.title = "Найти статью голосом";
+        mic.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+        q.parentNode.style.position = q.parentNode.style.position || "relative";
+        q.parentNode.appendChild(mic);
+        var rec = null;
+        mic.addEventListener("click", function () {
+          if (rec) { try { rec.stop(); } catch (e) {} return; }
+          rec = new SR(); rec.lang = "ru-RU"; rec.interimResults = false; rec.maxAlternatives = 1;
+          rec.onresult = function (ev) {
+            var t = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : "";
+            t = String(t).replace(/\s*(точка|запятая)\s*/gi, ".").replace(/(\d)\s+(\d)/g, "$1.$2").trim();
+            if (t) { q.value = t; q.dispatchEvent(new Event("input", { bubbles: true })); q.focus(); }
+          };
+          rec.onerror = function (ev) { if (ev && (ev.error === "not-allowed" || ev.error === "service-not-allowed")) alert("Разрешите доступ к микрофону для этого сайта в настройках браузера."); };
+          rec.onend = function () { rec = null; mic.classList.remove("on"); };
+          try { rec.start(); mic.classList.add("on"); } catch (e) { rec = null; }
+        });
+      }
+
+      /* подсказка «Добавить на главный экран» на телефоне, если веб-версия ещё не установлена */
+      var ua = navigator.userAgent || "", ios = /iPhone|iPad|iPod/.test(ua), andr = /Android/.test(ua), hideTill = 0;
+      try { hideTill = +localStorage.getItem("wb-inst-hide") || 0; } catch (e) {}
+      if ((ios || andr) && !standalone() && Date.now() > hideTill) {
+        var box = document.createElement("div");
+        box.className = "wb-inst"; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Установка на телефон");
+        var share = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
+        var plus = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>';
+        var dots = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/></svg>';
+        box.innerHTML = "<b>Senko на главном экране</b><ol>" + (ios
+          ? "<li>Нажмите " + share + " «Поделиться» внизу Safari.</li><li>Выберите " + plus + " «На экран „Домой“».</li><li>Нажмите «Добавить» — Senko откроется как приложение.</li>"
+          : "<li>Откройте меню браузера " + dots + ".</li><li>Выберите «Установить приложение» или " + plus + " «Добавить на главный экран».</li><li>Подтвердите — Senko откроется как приложение.</li>") +
+          '</ol><div class="wb-row"><button type="button" data-x>Не сейчас</button>' + (installEvt ? '<button type="button" class="p" data-i>Установить</button>' : "") + "</div>";
+        document.body.appendChild(box);
+        box.addEventListener("click", function (e) {
+          if (e.target.closest("[data-i]") && installEvt) { installEvt.prompt(); installEvt = null; box.remove(); return; }
+          if (e.target.closest("[data-x]")) { try { localStorage.setItem("wb-inst-hide", String(Date.now() + 14 * 864e5)); } catch (x) {} box.remove(); }
+        });
+      }
+    })();
   }
   function start() {
     boot().then(function (go) { if (go) runPage(); }, function (e) {

@@ -762,7 +762,7 @@
     var all = false;
     var list = h("div", { class: "feed" });
     var tg = h("label", { class: "chk" }, h("input", { type: "checkbox", on: { change: function (e) { all = e.target.checked; load(); } } }), "Показывать с ответом");
-    head(el, "Ошибки", "Сообщения об ошибках из программы. Ответ пользователь увидит в программе.", tg);
+    head(el, "Ошибки", "Сообщения об ошибках из программы и с сайта. Ответ пользователь программы увидит в программе; на сообщение с сайта отвечайте по указанному контакту.", tg);
     el.appendChild(list);
     function load() {
       list.textContent = "";
@@ -776,7 +776,9 @@
           var c = h("div", { class: "card" },
             h("div", { class: "row", style: "justify-content:space-between;margin-bottom:8px" }, h("div", { class: "pills" }, pill("№" + b.id), b.answered ? pill("отвечено", "on") : pill("ждёт ответа", "warn"), b.app_version ? pill(b.app_version) : null),
               h("span", { class: "muted small", text: fmt(b.at) })),
-            h("p", { style: "margin-bottom:6px" }, b.login ? h("a", { href: "#user/" + encodeURIComponent(b.login), text: b.login }) : "аккаунт удалён", b.nick ? " · " + b.nick + " · " + b.org : ""),
+            b.source === "site"
+              ? h("p", { style: "margin-bottom:6px" }, pill("с сайта"), " контакт: " + (b.contact || "не указан"))
+              : h("p", { style: "margin-bottom:6px" }, b.login ? h("a", { href: "#user/" + encodeURIComponent(b.login), text: b.login }) : "аккаунт удалён", b.nick ? " · " + b.nick + " · " + b.org : ""),
             h("div", { class: "msg", style: "box-shadow:none;margin-bottom:12px", text: b.text }),
             b.log_len ? h("div", { style: "margin-bottom:12px" }, btn("Журнал программы (" + Math.max(1, Math.round(b.log_len / 1024)) + " КБ)", function () {
               api("bug_log", { id: b.id }).then(function (x) { if (x.ok) download(x.name, x.text, "text/plain;charset=utf-8"); else toast(x.error, true); });

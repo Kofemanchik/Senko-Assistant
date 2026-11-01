@@ -559,3 +559,22 @@ create index if not exists discord_monitor_resource_idx on public.discord_monito
 alter table public.discord_tickets enable row level security;
 alter table public.discord_monitor enable row level security;
 revoke all on table public.discord_tickets, public.discord_monitor from anon, authenticated;
+
+-- 3.5: публичный сайт. Сообщения об ошибках с сайта приходят без аккаунта (user_id пустой), с контактом.
+alter table public.bug_reports alter column user_id drop not null;
+alter table public.bug_reports add column if not exists source text not null default 'app';
+alter table public.bug_reports add column if not exists contact text not null default '';
+-- Лента изменений законов для сайта (пишется после каждой синхронизации с форумом)
+create table if not exists public.law_changes (
+  id      bigint generated always as identity primary key,
+  server  integer not null,
+  kind    text not null default 'changed',
+  title   text not null default '',
+  arts    text not null default '',
+  at      timestamptz not null default now()
+);
+create index if not exists law_changes_server_idx on public.law_changes (server, id desc);
+alter table public.law_changes enable row level security;
+revoke all on table public.law_changes from anon, authenticated;
+-- Согласие на публичный рейтинг недели на сайте (по умолчанию выключено)
+alter table public.profiles add column if not exists pub_board boolean not null default false;
