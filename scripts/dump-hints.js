@@ -22,7 +22,7 @@ for (const law of d.laws || []) {
   const seen = {};
   out.push(`## ${k} ${sq(law.title, 60)}`);
   if (!FULL) rows.forEach((r) => { if (!seen[r.code]) { seen[r.code] = 1; out.push(`${k} ${r.code}: ${sq(r.title, 70)}`); } });
-  if (k === "pk") rows.forEach((r) => { if (KEY.includes(String(r.code))) out.push(`  > ${r.code}${FULL ? " " + sq(r.title, 60) : ""} ч.${r.part || "-"}: ${sq(r.text, FULL ? 1200 : 160)}${FULL && r.note ? " [прим.: " + sq(r.note, 300) + "]" : ""}`); });
+  if (k === "pk") rows.forEach((r) => { if (KEY.includes(String(r.code))) out.push(`  > ${r.code}${FULL ? " " + sq(r.title, 60) : ""} ч.${r.part || "-"}: ${sq(r.text, FULL ? 6000 : 160)}${FULL && r.note ? " [прим.: " + sq(r.note, 300) + "]" : ""}`); });
 }
 const mre = /Вы имеете право хранить молчание[\s\S]{40,900}?(?:Вам\s+ясны\s+(?:ли\s+)?ваши\s+права\s*[?.]?|ясны\s+ли\s+вам\s+(?:ваши\s+)?права\s*[?.]?)/i;
 let mir = "";
