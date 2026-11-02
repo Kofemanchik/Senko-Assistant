@@ -330,7 +330,7 @@
     ["Люди", [["users", "i-users", "Пользователи", "Поиск и действия"], ["staff", "i-key", "Роли и доступ", "Модераторы и руководство"], ["security", "i-shield", "Безопасность", "Входы, устройства, коды", null, 1], ["queue", "i-inbox", "Заявки и сбросы", "Новички и пароли", "queue"]]],
     ["Работа", [["reports", "i-file", "Рапорты", "Рапорты сотрудников", "reports"], ["rating", "i-trophy", "Рейтинг", "Неделя и контрольные"], ["news", "i-mega", "Рассылки", "Сообщения в программе", null, 1], ["bugs", "i-bug", "Ошибки", "Сообщения пользователей", "bugs", 1], ["ideas", "i-mega", "Идеи", "Предложения пользователей"], ["ai", "i-ai", "ИИ-помощник", "Словарь, плохие ответы, самопроверка", null, 1]]],
     ["Тестирование", [["beta", "i-shield", "Тестеры", "Роль, задания, функции"]]],
-    ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["srvcfg", "i-sliders", "Подсказки серверов", "Миранда и номера статей", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1], ["pranks", "i-menu", "Пранки", "Каталог из 150 вариантов", null, 1]]],
+    ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["srvcfg", "i-sliders", "Подсказки серверов", "Миранда и номера статей", null, 1], ["gloss", "i-file", "Глоссарий", "Термины для программы и ИИ", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1], ["pranks", "i-menu", "Пранки", "Каталог из 150 вариантов", null, 1]]],
     ["Сервис", [["console", "i-term", "Консоль бота", "Любая команда"]]],
   ];
   function buildNav() {
@@ -807,6 +807,38 @@
       });
     }
     return loadList();
+  };
+
+  // 3.8: глоссарий терминов — программа и ИИ подхватывают изменения в течение минуты
+  PAGES.gloss = function (el) {
+    if (!ME.owner) return ownerOnly(el);
+    head(el, "Глоссарий", "Термины с коротким объяснением. Пользователи видят их в разделе «Общая часть», ИИ-помощник получает термин, если он встречается в вопросе. Ссылки на статьи пишите как «ПК ст. 17, УК ст. 12.8».");
+    var box = h("div", { class: "load", text: "Загружаю…" });
+    el.appendChild(box);
+    return api("gloss_get").then(function (r) {
+      box.remove();
+      if (!r.ok) return el.appendChild(errMsg(r));
+      var L = r.items.slice();
+      var list = h("div");
+      var msg = h("span", { class: "muted small" });
+      function row(x, i) {
+        var t = h("input", { value: x.t, maxlength: 60, placeholder: "Термин" }), d = h("textarea", { rows: 2, maxlength: 700, placeholder: "Объяснение" }), rf = h("input", { value: x.refs || "", maxlength: 120, placeholder: "Ссылки: ПК ст. 17" });
+        d.value = x.d;
+        [t, d, rf].forEach(function (n, k) { n.addEventListener("input", function () { L[i][["t", "d", "refs"][k]] = n.value; }); });
+        return h("div", { class: "card", style: "margin-bottom:8px" }, h("div", { class: "row", style: "gap:8px;align-items:center" }, t, rf, btn("Удалить", function () { L.splice(i, 1); paint(); }, "btn-sm")), d);
+      }
+      function paint() { list.textContent = ""; L.forEach(function (x, i) { list.appendChild(row(x, i)); }); }
+      paint();
+      el.appendChild(h("div", { class: "row", style: "gap:10px;align-items:center;margin-bottom:10px" },
+        btn("Добавить термин", function () { L.unshift({ t: "", d: "", refs: "" }); paint(); }, ""),
+        btn("Сохранить", function () {
+          var bad = L.filter(function (x) { return (x.t || "").trim() && !(x.d || "").trim(); });
+          if (bad.length) return toast("У термина «" + bad[0].t + "» нет объяснения.", true);
+          api("gloss_save", { items: L.filter(function (x) { return (x.t || "").trim(); }) }).then(function (x) { if (x.ok) { L = x.items.slice(); paint(); msg.textContent = "Сохранено: " + L.length + " терминов. Программа подхватит в течение минуты."; } else toast(x.error, true); });
+        }, "btn-p", "i-save"), msg));
+      if (!r.custom) el.appendChild(h("p", { class: "muted small", text: "Сейчас показан стандартный набор. После первого сохранения программа будет брать ваш список." }));
+      el.appendChild(list);
+    });
   };
 
   // 3.7: журнал безопасности

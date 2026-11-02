@@ -3641,9 +3641,15 @@ function ctrlSend(z){
  z.send={st:"wait"};
  api("ctrl",{op:"submit",id:z.cid,s:z.s,n:z.qs.length}).then(function(r){
   if(r&&r.ok){z.send={st:"ok",p:r.p};ctrlMark(z.cid)}
+  else if(r&&(r.code==="network"||r.code==="server"||r.offline)){ctrlQueue(z);z.send={st:"queued"}}
   else{z.send={st:"err",e:(r&&r.error)||"Не удалось отправить результат."};if(r&&/уже прошли|истёк|не найден/i.test(r.error||""))ctrlMark(z.cid)}
   if(X.quiz===z&&state.tab==="learn")render();
- },function(){z.send={st:"err",e:"Ошибка связи с программой."};if(X.quiz===z&&state.tab==="learn")render()})}
+ },function(){ctrlQueue(z);z.send={st:"queued"};if(X.quiz===z&&state.tab==="learn")render()})}
+// 3.8 (п. 113): очередь результатов контрольных тестов, пройденных без интернета
+function ctrlQueue(z){var Q=lg("bos-ctrlq",[]);if(!Array.isArray(Q))Q=[];Q=Q.filter(function(x){return x.id!==z.cid});Q.push({id:z.cid,s:z.s,n:z.qs.length,at:Date.now()});sg("bos-ctrlq",Q);ctrlMark(z.cid)}
+function ctrlFlush(){var api=window.senkoApp&&window.senkoApp.api,Q=lg("bos-ctrlq",[]);if(!api||!Array.isArray(Q)||!Q.length)return;
+ Q.forEach(function(x){api("ctrl",{op:"submit",id:x.id,s:x.s,n:x.n}).then(function(r){if(r&&(r.ok||(r.error&&!(r.code==="network"||r.code==="server"||r.offline)))){var L=lg("bos-ctrlq",[]).filter(function(y){return y.id!==x.id});sg("bos-ctrlq",L);if(r.ok&&window.SA_toast)window.SA_toast("Результат контрольного теста отправлен руководству: "+r.p+"%")}},function(){})})}
+setTimeout(ctrlFlush,8000);setInterval(ctrlFlush,120000);window.addEventListener("online",function(){setTimeout(ctrlFlush,1500)});
 function pushWrong(q,mine){X.quiz.wrong.push({id:q.id,q:q.q,mine:mine,right:q.o[q.a],e:q.e,ref:q.ref})}
 function fin(z){
  if(z.over)return;z.over=true;z.end=Date.now();
@@ -3719,7 +3725,7 @@ window.SA_TR={lvl:function(){return lvInfo()},exp:doExport,mn:function(m){return
  // тест по разделу (из личного кабинета: «Стоит повторить»)
  sec:function(tp){if(!TOP[tp])return;X.tsel=tp;startQuiz("sec",tp);trGo()},
  // мини-тест дня (с главного экрана); dailyDone — пройден ли сегодня
- daily:function(){startQuiz("daily");trGo()},dailyDone:function(){return DY.d===today()?{s:DY.s,n:DY.n}:null},streak:function(){return SKR.last===today()||SKR.last===yest()?SKR.n:0},
+ daily:function(){startQuiz("daily");trGo()},dailyDone:function(){return DY.d===today()?{s:DY.s,n:DY.n}:null},streak:function(){return streak()},
  // контрольный тест руководства: {id,title,topics,n}
  ctrl:function(c){var z=X.quiz;if(!(z&&z.mode==="ctrl"&&z.cid===String(c.id)&&!z.over)){if(ctrlDone().indexOf(String(c.id))>=0)return;startQuiz("ctrl",c)}trGo()},
  ctrlDone:ctrlDone};
@@ -3808,7 +3814,7 @@ function runHtml(z){
  return h+'</section>'}
 function resHtml(z){
  var n=z.qs.length,p=pct(z.s,n),r=ratingOf(p),h='<section class="panel"><h2>Результат · '+esc(z.title)+'</h2><div class="clock" style="font-size:56px">'+z.s+' / '+n+'</div><p class="clocksub">'+p+'% · '+starsH(r)+' '+RNM[r]+'</p>';
- if(z.mode==="ctrl"){var sd=z.send||{};h+=sd.st==="ok"?ban("done","<b>Результат отправлен руководству:</b> "+sd.p+"%."+(z.timeout?" Время вышло, неотвеченные вопросы засчитаны как ошибки.":"")):sd.st==="err"?ban("over","<b>Результат не отправлен.</b> "+esc(sd.e)):ban("warn","Отправляем результат руководству…")}
+ if(z.mode==="ctrl"){var sd=z.send||{};h+=sd.st==="ok"?ban("done","<b>Результат отправлен руководству:</b> "+sd.p+"%."+(z.timeout?" Время вышло, неотвеченные вопросы засчитаны как ошибки.":"")):sd.st==="err"?ban("over","<b>Результат не отправлен.</b> "+esc(sd.e)):sd.st==="queued"?ban("warn","<b>Нет связи.</b> Результат сохранён и уйдёт руководству сам, когда интернет вернётся."):ban("warn","Отправляем результат руководству…")}
  else if(z.exam)h+=ban(z.pass?"done":"over","<b>"+(z.pass?"Зачёт.":"Не зачёт.")+"</b> Нужно не менее 80%, у вас "+p+"%."+(z.timeout?" Время вышло, неотвеченные вопросы засчитаны как ошибки.":""));
  h+='<p class="hint" style="text-align:center">'+(z.end?'Время: '+mmss(z.end-z.t0)+' · ':'')+'<b>+'+z.gain+' XP</b>'+(z.firstDaily?' (включая бонус дня)':'')+(z.froze?' · вчера пропущен, но серия сохранена: одна заморозка в неделю':'')+(z.lvUp?' · новый уровень: '+lvInfo().n+' «'+lvInfo().name+'»':'')+'</p>'+
  '<div class="rowbtn" style="justify-content:center">'+(z.mode==="ctrl"?(z.send&&z.send.st==="err"&&ctrlDone().indexOf(z.cid)<0?'<button type="button" class="btn primary" data-x="t_csend" data-v="1">Отправить ещё раз</button>':''):'<button type="button" class="btn primary" data-x="t_again" data-v="1">'+(z.mode==="redo"?'Ещё раз':'Новый раунд')+'</button>')+(z.wrong.length&&z.mode!=="redo"?'<button type="button" class="btn" data-x="t_redo" data-v="1">Работа над ошибками</button>':'')+'<button type="button" class="btn" data-x="t_menu">В меню</button></div></section>';
@@ -10091,6 +10097,7 @@ function shareOpen(kind,ids,title,text){
 }
 function shareShow(sh){
  if(sh&&sh.kind==="board"&&window.SA_board){SA_board.open(sh);return} /* 2.4: тактическая доска */
+ if(sh&&/^(myq|ttest|cmp)$/.test(sh.kind)&&window.SA_trShare){SA_trShare(sh);return} /* 3.8: вопросы, тест для стажёра, сравнение */
  var ids=okIds2(sh.ids),R=ids.map(function(i){return BYID[i]});
  if(!R.length){toast("В ссылке нет статей, которые есть в этой версии программы");return}
  window.__s10sh=ids;
@@ -16362,6 +16369,188 @@ window.SA_s13Rows=function(row,sw,seg){var h=rows0?rows0(row,sw,seg):"",q=qh();
  return h};
 document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s42qs]");if(!b)return;var q=qh();q.on=!q.on;js("bos-quiet",q);pushQuiet();b.setAttribute("aria-checked",String(q.on));toast(q.on?"Тихие часы включены: "+q.from+"–"+q.to:"Тихие часы выключены")});
 document.addEventListener("change",function(ev){var t=ev.target;if(!t||(t.id!=="s42qf"&&t.id!=="s42qt"))return;if(!/^\d\d:\d\d$/.test(t.value))return;var q=qh();q[t.id==="s42qf"?"from":"to"]=t.value;js("bos-quiet",q);pushQuiet()});
+})();
+</script>
+<style id="s43-style">
+.s43-q{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px}.s43-q small{color:var(--muted,#888)}
+.s43-f{display:grid;gap:6px}.s43-f .o{display:flex;gap:6px;align-items:center}.s43-f .o input[type=text]{flex:1}
+.s43-tb{width:100%;border-collapse:collapse;font-size:13px}.s43-tb td,.s43-tb th{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left}
+.s43-tb .w{color:#2e9d5b;font-weight:700}
+.s43-code{font:700 22px var(--mono,monospace);letter-spacing:2px;user-select:all}
+.s43-vq{font-size:16px;font-weight:600;margin:6px 0 10px}.s43-vo{display:grid;gap:6px}.s43-vo button{text-align:left}
+.s43-vo button.ok{border-color:#2e9d5b;background:rgba(46,157,91,.12)}.s43-vo button.no{border-color:#c0392b;background:rgba(192,57,43,.1)}
+.s43-gl{list-style:none;margin:0;padding:0;display:grid;gap:8px}.s43-gl li{border:1px solid var(--line);border-radius:10px;padding:8px 10px}.s43-gl b{display:block}.s43-gl p{margin:4px 0 0;font-size:13.5px}
+.fc.s43-sw{transition:transform .15s}
+</style>
+<script>
+/* 3.8 (6): свои вопросы с обменом по коду (75), тест для стажёра (72), сравнение с коллегой (74), голосовой тренажёр (108),
+   карточки свайпами (109), глоссарий терминов (15) */
+(function(){
+"use strict";
+var A=window.senkoApp;
+function jg(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(x){return d}}
+function js(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(x){}}
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function toast(t){try{if(window.SA_toast)window.SA_toast(t)}catch(x){}}
+function api(a,d){if(!A||!A.api)return Promise.resolve({ok:false,error:"Нужна связь с сервером."});return A.api(a,d).then(function(r){return r||{ok:false,error:"Нет ответа сервера."}},function(){return {ok:false,error:"Ошибка связи с программой."}})}
+function T(){return window.SA_TRX}
+function modal(t,h){return window.SA_modal?SA_modal(t,h):null}
+function close(){if(window.SA_modalClose)SA_modalClose()}
+function rid(){return Math.random().toString(36).slice(2,10)}
+var TOP={time:"Сроки",adv:"Адвокат и звонок",ogp:"ОГП и госслужащие",proc:"Процедура и права",force:"Сила и оружие",bail:"Залог",dk:"Дорожный кодекс",uk:"УК: розыск и сроки",my:"Свои вопросы"};
+
+/* ---------- свои вопросы (75) ---------- */
+var MY=jg("bos-myq",[]);if(!Array.isArray(MY))MY=[];
+function saveMy(){js("bos-myq",MY)}
+function myQ(x){return {id:"m|"+x.id,tp:"my",q:x.q,o:x.o.slice(),a:x.a,e:x.e||"",ref:x.ref||""}}
+function runQs(qs,title,extra){var X=window.SA_X;if(!X||!qs.length)return;
+ var sh=T().shufR(qs,Math.random).map(function(q){var c=q.o[q.a],o=T().shufR(q.o,Math.random);return Object.assign({},q,{o:o,a:o.indexOf(c)})});
+ X.quiz=Object.assign({mode:"my",tp:"",title:title,qs:sh,i:0,s:0,sel:-1,wrong:[],t0:Date.now(),dl:0,exam:false,over:false,cid:""},extra||{});X.qv="run";X.msg="";close();state.tab="learn";render();window.scrollTo(0,0)}
+function myHtml(){
+ var h='<p class="sd-note">Составьте свои вопросы с 4 вариантами. Их можно пройти тестом и передать коллегам кодом.</p>';
+ h+='<div class="s43-f"><input class="tin" id="s43q" maxlength="300" placeholder="Вопрос"><div class="sd-note" style="margin:0">Отметьте верный вариант:</div>'+[0,1,2,3].map(function(i){return '<label class="o"><input type="radio" name="s43a" value="'+i+'"'+(i?'':' checked')+'><input type="text" class="tin" id="s43o'+i+'" maxlength="120" placeholder="Вариант '+(i+1)+'"></label>'}).join("")+
+  '<input class="tin" id="s43e" maxlength="300" placeholder="Пояснение и ссылка на статью (необязательно)"><p class="s13-msg" id="s43m" role="status"></p><div class="sd-acts" style="margin:0"><button type="button" class="btn primary" data-s43="add">Добавить вопрос</button></div></div>';
+ if(MY.length)h+='<h4 style="margin:14px 0 6px">Мои вопросы ('+MY.length+')</h4>'+MY.map(function(x,i){return '<div class="s43-q"><b>'+e(x.q)+'</b><br><small>Ответ: '+e(x.o[x.a])+(x.from?' · от '+e(x.from):'')+'</small> <button type="button" class="more" data-s43="del" data-i="'+i+'">Удалить</button></div>'}).join("")+
+  '<div class="sd-acts"><button type="button" class="btn primary" data-s43="run"'+(MY.length<2?' disabled':'')+'>Пройти тест</button><button type="button" class="btn" data-s43="sharemy">Поделиться кодом</button></div>';
+ return h}
+function myOpen(){modal("Свои вопросы",'<div id="s43b">'+myHtml()+'</div>')}
+function myPaint(){var b=document.getElementById("s43b");if(b)b.innerHTML=myHtml()}
+
+/* ---------- тест для стажёра (72) ---------- */
+var TT=jg("bos-ttests",[]);if(!Array.isArray(TT))TT=[];
+var TS={tp:{},n:10,my:false,title:""};
+function ttHtml(){
+ var h='<p class="sd-note">Соберите тест из тем тренажёра (и своих вопросов) и дайте стажёру код. Он вводит код в тренажёре, а результат вы видите здесь.</p>';
+ h+='<input class="tin" id="s43tt" maxlength="80" placeholder="Название, например «Тест стажёра LSPD, неделя 1»" value="'+e(TS.title)+'" style="width:100%">';
+ h+='<div class="filters" style="padding:8px 0 0">'+Object.keys(TOP).filter(function(k){return k!=="my"}).map(function(k){return '<button type="button" class="pill" data-s43tp="'+k+'" aria-pressed="'+(!!TS.tp[k])+'">'+TOP[k]+'</button>'}).join("")+(MY.length?'<button type="button" class="pill" data-s43tp="my" aria-pressed="'+TS.my+'">Свои вопросы ('+MY.length+')</button>':'')+'</div>';
+ h+='<div class="filters" style="padding:6px 0 0"><span class="lab">Вопросов</span>'+[5,10,15,20].map(function(n){return '<button type="button" class="pill" data-s43n="'+n+'" aria-pressed="'+(TS.n===n)+'">'+n+'</button>'}).join("")+'</div>';
+ h+='<p class="s13-msg" id="s43tm" role="status"></p><div class="sd-acts"><button type="button" class="btn primary" data-s43="ttmake">Создать код теста</button></div>';
+ if(TT.length)h+='<h4 style="margin:14px 0 6px">Мои тесты</h4>'+TT.slice(0,15).map(function(t){return '<div class="s43-q"><b>'+e(t.title)+'</b> · код <b>'+e(t.code)+'</b><br><small>'+e(new Date(t.at).toLocaleDateString("ru-RU"))+' · '+t.n+' вопросов</small> <button type="button" class="more" data-s43="res" data-c="'+e(t.code)+'">Результаты</button><div id="s43r'+e(t.code)+'"></div></div>'}).join("");
+ return h}
+function ttOpen(){modal("Тест для стажёра",'<div id="s43b">'+ttHtml()+'</div>')}
+function ttPaint(){var b=document.getElementById("s43b");if(b)b.innerHTML=ttHtml()}
+function ttMake(){
+ var tps=Object.keys(TS.tp).filter(function(k){return TS.tp[k]}),m=document.getElementById("s43tm");TS.title=(document.getElementById("s43tt")||{}).value||"";
+ if(!tps.length&&!TS.my){m.textContent="Выберите хотя бы одну тему.";return}
+ var P=T().pool().filter(function(d){return tps.indexOf(d.tp)>=0}),rnd=Math.random,qs=T().shufR(P,rnd).slice(0,TS.n).map(function(d){return T().mkQ(d,rnd)});
+ if(TS.my)qs=qs.concat(MY.map(myQ));qs=T().shufR(qs,rnd).slice(0,TS.n).map(function(q){return {q:q.q,o:q.o,a:q.a,e:q.e||"",ref:q.ref||""}});
+ if(!qs.length){m.textContent="Не нашлось вопросов.";return}
+ var title=TS.title.trim()||"Тест для стажёра";m.textContent="Создаём код…";
+ api("share",{op:"create",kind:"ttest",title:title,data:JSON.stringify({v:1,title:title,qs:qs})}).then(function(r){if(!r.ok){m.textContent=r.error||"Не удалось.";return}
+  TT.unshift({code:r.code,title:title,n:qs.length,at:Date.now()});TT=TT.slice(0,30);js("bos-ttests",TT);TS.title="";ttPaint();
+  var mm=document.getElementById("s43tm");if(mm)mm.innerHTML='Код теста: <span class="s43-code">'+e(r.code)+'</span> — передайте его стажёру. Код действует '+(r.days||30)+' дней.'})}
+function ttRes(code){var box=document.getElementById("s43r"+code);if(!box)return;box.textContent="Загружаем…";
+ api("share",{op:"results",code:code}).then(function(r){if(!r.ok){box.textContent=r.error||"Не удалось.";return}
+  if(!r.rows.length){box.innerHTML='<small>Пока никто не прошёл.</small>';return}
+  box.innerHTML='<table class="s43-tb"><tr><th>Кто</th><th>Результат</th><th>Когда</th></tr>'+r.rows.map(function(x){return '<tr><td>'+e(x.nick)+'</td><td>'+x.s+' из '+x.n+' ('+Math.round(x.s/x.n*100)+'%)'+(x.wrong.length?'<br><small>Ошибки: '+x.wrong.slice(0,5).map(e).join("; ")+(x.wrong.length>5?" …":"")+'</small>':'')+'</td><td>'+e(new Date(x.at).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}))+'</td></tr>'}).join("")+'</table>'})}
+
+/* ---------- сравнение с коллегой (74) ---------- */
+function myStats(){var st=jg("bos-qstat",{q:{},tp:{}}),o={};Object.keys(TOP).forEach(function(k){var t=st&&st.tp&&st.tp[k];if(t&&t.a)o[k]={a:t.a,w:t.w}});var Tl=jg("bos-tests",[]);
+ var s=null;try{s=A.state()}catch(x){}var u=s&&s.user||{};return {v:1,nick:u.nick||u.login||"",tp:o,tests:Array.isArray(Tl)?Tl.length:0,avg:Array.isArray(Tl)&&Tl.length?Math.round(Tl.slice(0,10).reduce(function(a,t){return a+(t.p||0)},0)/Math.min(10,Tl.length)):0}}
+function cmpOpen(){modal("Сравнение с коллегой",'<div id="s43b"><p class="sd-note">Дайте коллеге свой код — и сравните, кто какую тему знает лучше. В код попадает только процент верных ответов по темам.</p><div class="sd-acts" style="justify-content:flex-start"><button type="button" class="btn primary" data-s43="cmpmy">Мой код</button></div><p id="s43cm"></p>'+
+ '<div class="row" style="display:flex;gap:8px;margin-top:10px"><input class="tin" id="s43cc" maxlength="12" placeholder="Код коллеги" style="max-width:180px"><button type="button" class="btn" data-s43="cmpgo">Сравнить</button></div><div id="s43cr"></div></div>')}
+function cmpShow(sh){var o=null;try{o=JSON.parse(sh.data)}catch(x){}if(!o||!o.tp)return toast("Код повреждён");var me=myStats(),box=document.getElementById("s43cr");
+ if(!box){cmpOpen();box=document.getElementById("s43cr")}
+ var p=function(t){return t&&t.a?Math.round((t.a-t.w)/t.a*100):null};
+ var rows=Object.keys(TOP).filter(function(k){return k!=="my"&&(me.tp[k]||o.tp[k])});
+ box.innerHTML='<table class="s43-tb" style="margin-top:10px"><tr><th>Тема</th><th>Вы</th><th>'+e(o.nick||sh.author||"Коллега")+'</th></tr>'+rows.map(function(k){var a=p(me.tp[k]),b=p(o.tp[k]);return '<tr><td>'+TOP[k]+'</td><td class="'+(a!=null&&(b==null||a>b)?'w':'')+'">'+(a==null?"—":a+"%")+'</td><td class="'+(b!=null&&(a==null||b>a)?'w':'')+'">'+(b==null?"—":b+"%")+'</td></tr>'}).join("")+
+  '<tr><td>Средний результат тестов</td><td>'+(me.avg||"—")+(me.avg?"%":"")+'</td><td>'+(o.avg||"—")+(o.avg?"%":"")+'</td></tr></table><p class="sd-note">Процент — доля верных ответов в теме. Зелёным — кто знает тему лучше.</p>'}
+
+/* ---------- ввод кода ---------- */
+function codeOpen(){modal("Ввести код",'<div id="s43b"><p class="sd-note">Код коллеги: вопросы для тренажёра, тест для стажёра или сравнение результатов.</p><div style="display:flex;gap:8px"><input class="tin" id="s43code" maxlength="12" placeholder="Код" style="max-width:180px"><button type="button" class="btn primary" data-s43="codego">Открыть</button></div><p class="s13-msg" id="s43km" role="status"></p></div>')}
+function fetchCode(c,cb){api("share",{op:"get",code:String(c||"").trim()}).then(function(r){if(!r.ok)return cb(r.error||"Код не найден");cb(null,r.share)})}
+window.SA_trShare=function(sh){
+ var o=null;try{o=JSON.parse(sh.data)}catch(x){}
+ if(sh.kind==="myq"){if(!o||!Array.isArray(o.qs))return toast("Код повреждён");var have={},n=0;MY.forEach(function(x){have[x.q]=1});
+  o.qs.slice(0,200).forEach(function(x){if(!x||have[x.q]||!Array.isArray(x.o)||x.o.length!==4)return;MY.push({id:rid(),q:String(x.q).slice(0,300),o:x.o.map(function(v){return String(v).slice(0,120)}),a:Math.max(0,Math.min(3,+x.a||0)),e:String(x.e||"").slice(0,300),from:sh.author||""});n++});
+  saveMy();toast(n?"Добавлено вопросов: "+n:"Все вопросы из кода у вас уже есть");myOpen();return}
+ if(sh.kind==="ttest"){if(!o||!Array.isArray(o.qs)||!o.qs.length)return toast("Тест повреждён");
+  runQs(o.qs.map(function(x,i){return {id:"t|"+sh.code+"|"+i,tp:"my",q:x.q,o:x.o,a:x.a,e:x.e||"",ref:x.ref||""}}),o.title||sh.title||"Тест для стажёра",{ttest:sh.code,ttAuthor:sh.author||""});toast("Тест от "+(sh.author||"старшего")+": результат увидит автор");return}
+ if(sh.kind==="cmp"){cmpShow(sh);return}};
+// результат теста стажёра уходит автору после последнего ответа
+var r0=window.render;window.render=function(){var r=r0.apply(this,arguments);try{var z=window.SA_X&&SA_X.quiz;if(z&&z.ttest&&z.over&&!z.ttSent){z.ttSent=true;api("share",{op:"result",code:z.ttest,s:z.s,n:z.qs.length,wrong:z.wrong.map(function(w){return w.q})}).then(function(x){toast(x.ok?"Результат отправлен автору теста":"Результат не отправлен: "+(x.error||""))})}
+ injectMenu();glossInject()}catch(x){}return r};
+
+/* ---------- голосовой тренажёр (108) ---------- */
+var V=null;
+function speak(t){try{var s=window.speechSynthesis;if(!s)return;s.cancel();var u=new SpeechSynthesisUtterance(t);u.lang="ru-RU";var vs=s.getVoices().filter(function(v){return /^ru/i.test(v.lang)});if(vs[0])u.voice=vs[0];u.rate=1;s.speak(u)}catch(x){}}
+function vqText(q){return q.q.replace("Какая статья УК: ","Назовите статью. ").replace(/★/g," звезды").replace(/\$/g,"")}
+function vStart(){var P=T().pool().filter(function(d){return /^uG\|/.test(d.id)}),rnd=Math.random;V={qs:T().shufR(P,rnd).slice(0,8).map(function(d){return T().mkQ(d,rnd)}),i:0,s:0,sel:-1,rec:false};vPaint(true)}
+function vHtml(){var q=V.qs[V.i];if(!q)return '<p><b>Готово: '+V.s+' из '+V.qs.length+'.</b> +'+V.s*5+' XP</p><div class="sd-acts"><button type="button" class="btn primary" data-s43="vstart">Ещё раз</button></div>';
+ var d=V.sel>-1;return '<p class="sd-note">Вопрос '+(V.i+1)+' из '+V.qs.length+'. Программа читает вопрос вслух; нажмите «Ответить голосом» и назовите номер статьи, например «двенадцать точка восемь».</p><div class="s43-vq">'+e(q.q)+'</div>'+
+  '<div class="s43-vo">'+q.o.map(function(o,i){var c=d&&i===q.a?"ok":d&&i===V.sel?"no":"";return '<button type="button" class="btn '+c+'" data-s43v="'+i+'"'+(d?' disabled':'')+'>'+e(o)+'</button>'}).join("")+'</div>'+
+  '<p class="s13-msg" id="s43vm" role="status">'+(V.heard?'Услышано: «'+e(V.heard)+'»':'')+'</p><div class="sd-acts">'+(d?'<button type="button" class="btn primary" data-s43="vnext">Дальше</button>':'<button type="button" class="btn" data-s43="vsay">🔊 Повторить</button><button type="button" class="btn primary" data-s43="vrec"'+(V.rec?' disabled':'')+'>'+(V.rec?'Слушаю…':'🎙 Ответить голосом')+'</button>')+'</div>'}
+function vPaint(say){var b=document.getElementById("s43b");if(!b){modal("Голосовой тренажёр",'<div id="s43b"></div>');b=document.getElementById("s43b")}b.innerHTML=vHtml();if(say&&V.qs[V.i])speak(vqText(V.qs[V.i]))}
+function vAnswer(i){var q=V.qs[V.i];if(!q||V.sel>-1)return;V.sel=i;var ok=i===q.a;if(ok){V.s++;T().addXp(5)}T().rec(q.id,q.tp,ok);speak(ok?"Верно":"Неверно. "+q.o[q.a].split(" · ")[0]);vPaint(false)}
+var NUM={"ноль":0,"один":1,"одна":1,"два":2,"две":2,"три":3,"четыре":4,"пять":5,"шесть":6,"семь":7,"восемь":8,"девять":9,"десять":10,"одиннадцать":11,"двенадцать":12,"тринадцать":13,"четырнадцать":14,"пятнадцать":15,"шестнадцать":16,"семнадцать":17,"восемнадцать":18,"девятнадцать":19,"двадцать":20,"тридцать":30,"сорок":40,"пятьдесят":50};
+function codeFrom(t){t=String(t||"").toLowerCase().replace(/ё/g,"е");var m=/\d+(?:[.,]\d+)*/.exec(t);if(m)return m[0].replace(/,/g,".");
+ var parts=[],n=0,any=false;t.split(/[\s,.;:!?-]+/).forEach(function(w){if(NUM[w]!=null){n+=NUM[w];any=true}else if(/^(точка|запятая|и|дробь)$/.test(w)&&any){parts.push(String(n));n=0;any=false}});if(any)parts.push(String(n));return parts.join(".")}
+function wavB64(chunks,rate){var n=0;chunks.forEach(function(c){n+=c.length});var ratio=rate/16000,m=Math.floor(n/ratio),pcm=new Int16Array(m),all=new Float32Array(n),o=0;chunks.forEach(function(c){all.set(c,o);o+=c.length});
+ for(var i=0;i<m;i++){var a=Math.floor(i*ratio),b=Math.max(a+1,Math.floor((i+1)*ratio)),s=0;for(var j=a;j<b&&j<n;j++)s+=all[j];var v=Math.max(-1,Math.min(1,s/(b-a)));pcm[i]=v<0?v*32768:v*32767}
+ var buf=new ArrayBuffer(44+pcm.length*2),dv=new DataView(buf),w=function(off,str){for(var k=0;k<str.length;k++)dv.setUint8(off+k,str.charCodeAt(k))};
+ w(0,"RIFF");dv.setUint32(4,36+pcm.length*2,true);w(8,"WAVE");w(12,"fmt ");dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,1,true);dv.setUint32(24,16000,true);dv.setUint32(28,32000,true);dv.setUint16(32,2,true);dv.setUint16(34,16,true);w(36,"data");dv.setUint32(40,pcm.length*2,true);new Int16Array(buf,44).set(pcm);
+ var bytes=new Uint8Array(buf),bin="";for(var q=0;q<bytes.length;q+=0x8000)bin+=String.fromCharCode.apply(null,bytes.subarray(q,q+0x8000));return btoa(bin)}
+function vRec(){if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){toast("Микрофон недоступен");return}
+ V.rec=true;V.heard="";vPaint(false);
+ navigator.mediaDevices.getUserMedia({audio:true}).then(function(st){var C=window.AudioContext||window.webkitAudioContext,ctx=new C(),src=ctx.createMediaStreamSource(st),pr=ctx.createScriptProcessor(4096,1,1),chunks=[];
+  pr.onaudioprocess=function(ev){chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0)))};src.connect(pr);pr.connect(ctx.destination);
+  setTimeout(function(){try{pr.disconnect();src.disconnect();st.getTracks().forEach(function(t){t.stop()})}catch(x){}var b64=wavB64(chunks,ctx.sampleRate);try{ctx.close()}catch(x){}
+   api("stt",{audio:b64,prompt:"Номер статьи уголовного кодекса, например 12.8 или 6.1"}).then(function(r){V.rec=false;if(!r.ok){V.heard="";vPaint(false);var m=document.getElementById("s43vm");if(m)m.textContent=r.error||"Не удалось распознать. Нажмите вариант мышкой.";return}
+    V.heard=r.text;var c=codeFrom(r.text),q=V.qs[V.i],i=-1;if(c)q.o.forEach(function(o,k){if(o.indexOf("ст. "+c+" ")===0)i=k});
+    if(i>=0)vAnswer(i);else{vPaint(false);var m2=document.getElementById("s43vm");if(m2)m2.textContent="Услышано: «"+r.text+"»"+(c?" — статьи "+c+" нет среди вариантов":"")+". Повторите или нажмите вариант."}})},3500)},function(){V.rec=false;vPaint(false);toast("Нет доступа к микрофону")})}
+
+/* ---------- меню тренажёра ---------- */
+function injectMenu(){if(state.tab!=="learn"||!window.SA_X||SA_X.qv!=="menu")return;var v=document.getElementById("view");if(!v||v.querySelector(".s43-menu"))return;
+ var sec=[].filter.call(v.querySelectorAll("section.panel"),function(s){var h=s.querySelector("h2");return h&&/^Режимы/.test(h.textContent)})[0];if(!sec)return;
+ var d=document.createElement("section");d.className="panel s43-menu";
+ d.innerHTML='<h2>Свои вопросы и обмен</h2><p class="sub">Составляйте свои вопросы, собирайте тест для стажёра и сравнивайте знания с коллегой по коду.</p><div class="trg">'+
+  '<button type="button" class="btn trt" data-s43="my"><b>Свои вопросы'+(MY.length?' <span class="chip">'+MY.length+'</span>':'')+'</b><small>Свои вопросы и карточки, обмен кодом.</small></button>'+
+  '<button type="button" class="btn trt" data-s43="tt"><b>Тест для стажёра</b><small>Соберите тест, дайте код, смотрите результаты.</small></button>'+
+  '<button type="button" class="btn trt" data-s43="cmp"><b>Сравнить с коллегой</b><small>Кто какую тему знает лучше.</small></button>'+
+  '<button type="button" class="btn trt" data-s43="code"><b>Ввести код</b><small>Код коллеги: вопросы, тест или сравнение.</small></button>'+
+  '<button type="button" class="btn trt" data-s43="voice"><b>Голосом</b><small>Программа читает вопрос, вы называете статью.</small></button></div>';
+ sec.parentNode.insertBefore(d,sec.nextSibling)}
+
+/* ---------- клики ---------- */
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s43],[data-s43tp],[data-s43n],[data-s43v]");if(!b)return;var d=b.dataset,k=d.s43;
+ if(d.s43tp){if(d.s43tp==="my")TS.my=!TS.my;else TS.tp[d.s43tp]=!TS.tp[d.s43tp];TS.title=(document.getElementById("s43tt")||{}).value||TS.title;ttPaint();return}
+ if(d.s43n){TS.n=+d.s43n;TS.title=(document.getElementById("s43tt")||{}).value||TS.title;ttPaint();return}
+ if(d.s43v!=null){vAnswer(+d.s43v);return}
+ if(k==="my")return myOpen();if(k==="tt")return ttOpen();if(k==="cmp")return cmpOpen();if(k==="code")return codeOpen();if(k==="voice"){modal("Голосовой тренажёр",'<div id="s43b"></div>');vStart();return}
+ if(k==="add"){var q=(document.getElementById("s43q").value||"").trim(),o=[0,1,2,3].map(function(i){return (document.getElementById("s43o"+i).value||"").trim()}),a=+((document.querySelector('input[name="s43a"]:checked')||{}).value||0),m=document.getElementById("s43m");
+  if(q.length<5){m.textContent="Напишите вопрос.";return}if(o.some(function(x){return !x})){m.textContent="Заполните все 4 варианта.";return}
+  MY.unshift({id:rid(),q:q,o:o,a:a,e:(document.getElementById("s43e").value||"").trim()});saveMy();myPaint();toast("Вопрос добавлен");return}
+ if(k==="del"){MY.splice(+d.i,1);saveMy();myPaint();return}
+ if(k==="run"){runQs(MY.map(myQ),"Свои вопросы");return}
+ if(k==="sharemy"){if(!MY.length)return;b.disabled=true;api("share",{op:"create",kind:"myq",title:"Вопросы ("+MY.length+")",data:JSON.stringify({v:1,qs:MY.map(function(x){return {q:x.q,o:x.o,a:x.a,e:x.e}})})}).then(function(r){b.disabled=false;if(!r.ok)return toast(r.error||"Не удалось");
+  var bx=document.getElementById("s43b");if(bx)bx.insertAdjacentHTML("afterbegin",'<p>Код ваших вопросов: <span class="s43-code">'+e(r.code)+'</span> — коллега вводит его в тренажёре («Ввести код»).</p>')});return}
+ if(k==="ttmake")return ttMake();
+ if(k==="res")return ttRes(d.c);
+ if(k==="cmpmy"){b.disabled=true;api("share",{op:"create",kind:"cmp",title:"Сравнение",data:JSON.stringify(myStats())}).then(function(r){b.disabled=false;var m=document.getElementById("s43cm");if(m)m.innerHTML=r.ok?'Ваш код: <span class="s43-code">'+e(r.code)+'</span> — передайте его коллеге.':e(r.error||"Не удалось")});return}
+ if(k==="cmpgo"){fetchCode((document.getElementById("s43cc")||{}).value,function(er,sh){if(er)return toast(er);if(sh.kind!=="cmp")return toast("Это не код сравнения");cmpShow(sh)});return}
+ if(k==="codego"){var m3=document.getElementById("s43km");fetchCode((document.getElementById("s43code")||{}).value,function(er,sh){if(er){if(m3)m3.textContent=er;return}if(!/^(myq|ttest|cmp)$/.test(sh.kind)){if(m3)m3.textContent="Это код другого вида: вставьте его в строку поиска.";return}if(sh.kind==="cmp"){cmpOpen()}SA_trShare(sh)});return}
+ if(k==="vstart")return vStart();if(k==="vsay"){var q2=V&&V.qs[V.i];if(q2)speak(vqText(q2));return}if(k==="vrec")return vRec();if(k==="vnext"){V.i++;V.sel=-1;V.heard="";vPaint(true);return}
+});
+
+/* ---------- карточки свайпами (109) ---------- */
+var sx=null,sy=0,el0=null;
+document.addEventListener("touchstart",function(ev){var c=ev.target.closest&&ev.target.closest(".fc");if(!c||!ev.touches[0])return;sx=ev.touches[0].clientX;sy=ev.touches[0].clientY;el0=c;c.classList.add("s43-sw")},{passive:true});
+document.addEventListener("touchmove",function(ev){if(sx==null||!el0||!ev.touches[0])return;var dx=ev.touches[0].clientX-sx;if(Math.abs(dx)>Math.abs(ev.touches[0].clientY-sy))el0.style.transform="translateX("+dx+"px) rotate("+dx/30+"deg)"},{passive:true});
+document.addEventListener("touchend",function(ev){if(sx==null||!el0)return;var t=ev.changedTouches[0],dx=t?t.clientX-sx:0,c=el0;sx=null;el0=null;c.style.transform="";
+ if(Math.abs(dx)<70)return;var flip=document.querySelector('[data-x="t_flip"].btn');if(flip&&!c.classList.contains("on")){flip.click();setTimeout(function(){go(dx)},60)}else go(dx);
+ function go(dx){var b=document.querySelector('[data-x="t_know"][data-v="'+(dx>0?1:0)+'"]');if(b)b.click()}},{passive:true});
+
+/* ---------- глоссарий (15) ---------- */
+var GL=jg("bos-gloss",null),GQ="",GLAT=0;
+function glossLoad(){if(Date.now()-GLAT<5*60000)return;GLAT=Date.now();api("glossary",{}).then(function(r){if(r&&r.ok&&Array.isArray(r.items)){GL=r.items;js("bos-gloss",GL);if(state.tab==="gen"){var o=document.querySelector(".s43-glw");if(o)o.remove();glossInject()}}})}
+function refLinks(s){return e(s).replace(/(УК|АК|ДК|ПК)\s+ст\.\s*(\d+(?:\.\d+)*)/g,function(m,k,c){var kind={"УК":"uk","АК":"ak","ДК":"dk","ПК":"pk"}[k];return '<button type="button" class="xref" data-go="'+kind+'|'+c+'">'+m+'</button>'})}
+function glossList(){var q=GQ.toLowerCase(),L=(GL||[]).filter(function(g){return !q||(g.t+" "+g.d).toLowerCase().indexOf(q)>=0});
+ return L.length?'<ul class="s43-gl">'+L.map(function(g){return '<li><b>'+e(g.t)+'</b><p>'+e(g.d)+'</p>'+(g.refs?'<p class="sd-note" style="margin:4px 0 0">'+refLinks(g.refs)+'</p>':'')+'</li>'}).join("")+'</ul>':'<p class="sd-note">Ничего не найдено.</p>'}
+function glossInject(){if(state.tab!=="gen")return;glossLoad();if(!GL||!GL.length)return;var v=document.getElementById("view");if(!v||v.querySelector(".s43-glw"))return;
+ var d=document.createElement("details");d.className="panel s43-glw";d.innerHTML='<summary style="cursor:pointer;font-weight:700">📘 Глоссарий · '+GL.length+' '+(GL.length%10===1&&GL.length%100!==11?'термин':GL.length%10>=2&&GL.length%10<=4&&(GL.length%100<10||GL.length%100>=20)?'термина':'терминов')+'</summary><p class="sub" style="margin-top:8px">Короткие объяснения терминов. Список ведёт владелец, ИИ-помощник тоже его учитывает.</p><input class="tin" id="s43gq" placeholder="Найти термин" style="width:100%;margin-bottom:8px"><div id="s43gl">'+glossList()+'</div>';
+ var first=v.querySelector("section.panel, .panel");if(first&&first.parentNode)first.parentNode.insertBefore(d,first);else v.insertAdjacentElement("afterbegin",d)}
+document.addEventListener("input",function(ev){var t=ev.target;if(t&&t.id==="s43gq"){GQ=t.value;var b=document.getElementById("s43gl");if(b)b.innerHTML=glossList()}});
+setTimeout(glossLoad,5000);
 })();
 </script>
 <script>

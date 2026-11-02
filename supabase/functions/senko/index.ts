@@ -1128,6 +1128,8 @@ async function api(req) {
       return J(await aiVote(b));
     case "ai_dict":
       return J(await aiDictApi(b));
+    case "glossary":
+      return J(await glossApi(b));
     case "ai_hist":
       return J(await aiHist(b));
     case "ai_check":
@@ -1192,7 +1194,9 @@ async function api(req) {
 
 // ───────────── Этап 10: ссылки «Поделиться», перенос по коду, поиски без результата ─────────────
 const SHARE_DAYS = 30; // сколько живёт ссылка на расчёт или набор
-const SHARE_KINDS = { calc: "Расчёт", set: "Набор статей", board: "Тактическая доска" };
+const SHARE_KINDS = { calc: "Расчёт", set: "Набор статей", board: "Тактическая доска", myq: "Вопросы для тренажёра", ttest: "Тест для стажёра", cmp: "Результаты тренажёра" };
+// 3.8: виды ссылок, которые несут свои данные (JSON) вместо списка статей
+const SHARE_DATA = { board: 1, myq: 1, ttest: 1, cmp: 1 };
 const SHARE_ID_RE = /^(uk|ak|dk)[0-9a-zа-яё.]{1,12}-[0-9a-zа-яё.]{0,6}$/i;
 const XFER_MIN = 15; // сколько действует код переноса
 const XFER_BYTES = 900000;
@@ -1213,11 +1217,17 @@ async function shareApi(b) {
     const kind = String(b.kind || "");
     if (!SHARE_KINDS[kind]) return fail("Неизвестный вид ссылки.");
     const ids = (Array.isArray(b.ids) ? b.ids : []).map((x) => clean(x, 30)).filter((x) => SHARE_ID_RE.test(x)).slice(0, 40);
-    // 2.4: доска передаёт рисунок (JSON) вместо статей
-    const board = kind === "board" ? String(b.data == null ? "" : b.data) : "";
-    if (kind === "board" && (board.length < 10 || board.length > 30000 || !/^\{[\s\S]*\}$/.test(board))) return fail("Доска пустая или слишком большая.");
-    if (!ids.length && kind !== "board") return fail("Добавьте статьи, чтобы поделиться.");
-    const body = kind === "board" ? board : cleanText(b.text, 3000);
+    // 2.4: доска передаёт рисунок (JSON) вместо статей; 3.8: так же вопросы, тест для стажёра и результаты тренажёра
+    const isData = !!SHARE_DATA[kind];
+    const board = isData ? String(b.data == null ? "" : b.data) : "";
+    if (isData) {
+      let ok = board.length >= 10 && board.length <= 30000;
+      try { ok = ok && typeof JSON.parse(board) === "object"; } catch (e) { ok = false; }
+      if (!ok) return fail(kind === "board" ? "Доска пустая или слишком большая." : "Данные пустые или слишком большие.");
+      if (kind !== "board" && kind !== "cmp" && (await blacklisted(board))) return fail("В тексте есть недопустимое слово.");
+    }
+    if (!ids.length && !isData) return fail("Добавьте статьи, чтобы поделиться.");
+    const body = isData ? board : cleanText(b.text, 3000);
     if (!(await hit(`sh:${p.id}`, 30, 3600))) return fail(RATE_MSG, { code: "rate" });
     let code = "";
     for (let i = 0; i < 5 && !code; i++) {
@@ -1239,7 +1249,27 @@ async function shareApi(b) {
       : [];
     if (!r) return fail("Ссылка не найдена или устарела: ссылки действуют " + SHARE_DAYS + " дней.");
     await sql`update shares set views = views + 1 where code = ${code}`;
-    return { ok: true, share: { code, kind: r.kind, title: r.title, ids: r.ids, author: r.author, at: new Date(r.created_at).getTime(), data: r.kind === "board" ? r.body : undefined } };
+    return { ok: true, share: { code, kind: r.kind, title: r.title, ids: r.ids, author: r.author, at: new Date(r.created_at).getTime(), data: SHARE_DATA[r.kind] ? r.body : undefined } };
+  }
+  // 3.8 (п. 72): стажёр прошёл тест старшего — результат видит только автор теста
+  if (op === "result") {
+    if (!(await hit(`sr:${p.id}`, 30, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const code = shareCode(b.code);
+    const [r] = code.length === 8 ? await sql`select code, kind from shares where code = ${code} and created_at > now() - make_interval(days => ${SHARE_DAYS})` : [];
+    if (!r || r.kind !== "ttest") return fail("Тест не найден или устарел.");
+    const n = Math.max(1, Math.min(100, parseInt(b.n, 10) || 0)), sc = Math.max(0, Math.min(n, parseInt(b.s, 10) || 0));
+    const wrong = (Array.isArray(b.wrong) ? b.wrong : []).slice(0, 100).map((w) => cleanText(w, 200));
+    await sql`insert into share_results (code, user_id, nick, login, s, n, wrong) values (${code}, ${p.id}, ${p.nick || p.login}, ${p.login}, ${sc}, ${n}, ${JSON.stringify(wrong)}::jsonb)
+              on conflict (code, user_id) do update set s = excluded.s, n = excluded.n, wrong = excluded.wrong, at = now()`;
+    return { ok: true };
+  }
+  if (op === "results") {
+    const code = shareCode(b.code);
+    const [r] = code.length === 8 ? await sql`select user_id, title from shares where code = ${code}` : [];
+    if (!r) return fail("Тест не найден или устарел.");
+    if (r.user_id !== p.id) return fail("Результаты видит только автор теста.");
+    const rows = await sql`select nick, login, s, n, wrong, at from share_results where code = ${code} order by at desc limit 100`;
+    return { ok: true, title: r.title, rows: rows.map((x) => ({ nick: x.nick, login: x.login, s: x.s, n: x.n, wrong: x.wrong || [], at: new Date(x.at).getTime() })) };
   }
   return fail("Неизвестное действие.");
 }
@@ -1255,7 +1285,7 @@ async function shareView(req, url) {
     : [];
   if (!r) return new Response("Senko Assistant\n\nСсылка не найдена или устарела: ссылки действуют " + SHARE_DAYS + " дней.", { status: 404, headers: head });
   await db()`update shares set views = views + 1 where code = ${code}`;
-  const t = `Senko Assistant · ${SHARE_KINDS[r.kind] || "Ссылка"}${r.title ? ": " + r.title : ""}\nОт: ${r.author} · ${fmtDate(r.created_at)}\n\n${r.kind === "board" ? "Схема на карте зон: откройте её в программе." : r.body || ""}\n\n` +
+  const t = `Senko Assistant · ${SHARE_KINDS[r.kind] || "Ссылка"}${r.title ? ": " + r.title : ""}\nОт: ${r.author} · ${fmtDate(r.created_at)}\n\n${r.kind === "board" ? "Схема на карте зон: откройте её в программе." : SHARE_DATA[r.kind] ? "Откройте в программе: Обучение → Тренажёр → «Ввести код»." : r.body || ""}\n\n` +
     `Открыть в программе: скопируйте эту ссылку и вставьте в строку поиска Senko Assistant.\nКод: ${code}`;
   return new Response(t, { status: 200, headers: head });
 }
@@ -5259,7 +5289,7 @@ const SEC_KINDS = ["fail", "otp_fail", "otp_backup", "new_device", "device_end",
 async function panelApi(b, ip, ua) {
   const op = String(b.op || "");
   if (op === "login") return panelLogin(b, ip, ua);
-  const owners = ["audit", "security", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert", "ads_list", "ads_save", "ads_toggle", "ads_delete",
+  const owners = ["audit", "security", "gloss_get", "gloss_save", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert", "ads_list", "ads_save", "ads_toggle", "ads_delete",
     "prog_get", "prog_xp", "prog_ach", "prog_ach_new", "prog_ai",
     "ai_dict_list", "ai_dict_save", "ai_dict_delete", "ai_bad", "ai_gold_list", "ai_gold_save", "ai_gold_delete", "ai_gold_pin", "ai_gold_run", "srvcfg_get", "srvcfg_set"];
   const { p, a, th, err } = await pwho(b, owners.includes(op));
@@ -5310,6 +5340,16 @@ async function panelApi(b, ip, ua) {
         ? await sql`select * from audit_log where (action = ${q} or target ilike ${like} or actor ilike ${like}) and ${sf} order by id desc limit 51 offset ${page * 50}`
         : await sql`select * from audit_log where ${sf} order by id desc limit 51 offset ${page * 50}`;
       return { ok: true, rows: rows.slice(0, 50), more: rows.length > 50, page, actions: AUDIT_ACTIONS, servers: Object.keys(SERVERS).map((k) => ({ id: +k, name: SERVERS[k].name })) };
+    }
+    // 3.8: глоссарий терминов
+    case "gloss_get":
+      return { ok: true, items: await glossRows(), custom: (await getSetting("glossary", null)) != null };
+    case "gloss_save": {
+      const items = glossClean(b.items);
+      await setSetting("glossary", items);
+      glossCache = null;
+      await audit(a.label, "glossary", null, { n: items.length });
+      return { ok: true, items };
     }
     // 3.7: журнал безопасности — неудачные входы, новые устройства, смена пароля, вход с кодом
     case "security": {
@@ -5649,7 +5689,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 40;
+const SCHEMA_V = 41;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -5851,6 +5891,15 @@ alter table public.org_forms enable row level security;
 alter table public.org_apps enable row level security;
 revoke all on table public.org_invites, public.org_forms, public.org_apps from anon, authenticated;
 `;
+// 3.8: результаты тестов для стажёров (видит автор теста)
+const SCHEMA_41 = `
+create table if not exists public.share_results (
+  code text not null, user_id uuid not null references public.profiles(id) on delete cascade,
+  nick text not null default '', login text not null default '', s int not null default 0, n int not null default 0,
+  wrong jsonb not null default '[]', at timestamptz not null default now(), primary key (code, user_id));
+alter table public.share_results enable row level security;
+revoke all on table public.share_results from anon, authenticated;
+`;
 const SCHEMA_37_ONCE = `
 update public.bot_settings set value = (select coalesce(jsonb_object_agg(k, case when v = '"beta"'::jsonb then '"all"'::jsonb else v end), '{}'::jsonb) from jsonb_each(value) e(k, v))
   where key = 'flags' and jsonb_typeof(value) = 'object';
@@ -5864,7 +5913,7 @@ function ensureSchema() {
         if (+v >= SCHEMA_V) return;
         // база уже на 2.4: повторно 2.4 не выполняем (иначе вернулись бы удалённые баннеры по умолчанию)
         // 3.5: SCHEMA_30 и SCHEMA_35 повторяемы (create/alter … if not exists), их добавляем всем, кто ниже 35
-        await db().unsafe((+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35) + (+v < 37 ? SCHEMA_37_ONCE : "") + SCHEMA_38 + SCHEMA_39 + SCHEMA_40);
+        await db().unsafe((+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35) + (+v < 37 ? SCHEMA_37_ONCE : "") + SCHEMA_38 + SCHEMA_39 + SCHEMA_40 + SCHEMA_41);
         adsReady = true;
         await setSetting("schema_v", SCHEMA_V);
       } catch (e) {
@@ -6734,6 +6783,36 @@ async function hmacHex(secret, msg) {
   const k = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return hex(await crypto.subtle.sign("HMAC", k, enc.encode(msg)));
 }
+// ───────────── 3.8 (п. 15): глоссарий терминов ─────────────
+// Хранится в bot_settings.glossary: [{t: термин, d: объяснение, refs: «ПК ст. 17, УК ст. 12.8»}]. Владелец правит его в панели,
+// программа и веб-версия получают через действие glossary, ИИ видит термины, которые встречаются в вопросе.
+const GLOSS_DEFAULT = [
+  { t: "Задержание", d: "Кратковременное ограничение свободы подозреваемого до решения по делу: арест, наказание или освобождение. Порядок задержания расписан в Процессуальном кодексе вашего сервера.", refs: "" },
+  { t: "Процессуальный час", d: "Срок, в течение которого после задержания нужно принять решение. Пока он не истёк, проводят проверку, допрос и вызовы; на время некоторых действий (ожидание адвоката, прокурора) отсчёт может приостанавливаться.", refs: "" },
+  { t: "Законное требование", d: "Требование сотрудника при исполнении, основанное на законе: остановиться, предъявить документы, снять маску и т. п. Невыполнение законного требования само по себе может быть правонарушением.", refs: "" },
+  { t: "Правило Миранды", d: "Разъяснение задержанному его прав: молчать, иметь адвоката, совершить звонок. Показания, полученные до разъяснения прав, обычно признаются недопустимыми.", refs: "" },
+  { t: "Юрисдикция", d: "Какие ведомства вправе работать по статье: региональная (R), регионально-федеральная (F/R), федеральная (F), военная (M), финансовая (E). Статьи вне своей юрисдикции передают профильному ведомству.", refs: "" },
+  { t: "Неприкосновенность", d: "Особый порядок задержания и привлечения к ответственности для отдельных должностных лиц (судьи, руководители органов власти и др.). Список и порядок — в законах сервера.", refs: "" },
+  { t: "Розыск", d: "Уровень розыска (звёзды) по статье УК. От него зависят срок в КПЗ и сумма залога.", refs: "" },
+  { t: "Залог", d: "Сумма, за которую задержанного можно освободить до решения по делу, если закон это допускает. Обычно считается от уровня розыска.", refs: "" },
+  { t: "Недопустимые доказательства", d: "Сведения и предметы, полученные с нарушением закона. Они не могут быть основанием обвинения.", refs: "" },
+  { t: "Ордер", d: "Документ, разрешающий задержание, обыск или арест конкретного лица. Задержание по ордеру проводится по своему порядку.", refs: "" },
+];
+const glossClean = (L) => (Array.isArray(L) ? L : []).slice(0, 300).map((x) => ({ t: clean(x && x.t, 60), d: String((x && x.d) || "").replace(/\s+/g, " ").trim().slice(0, 700), refs: clean(x && x.refs, 120) })).filter((x) => x.t && x.d);
+let glossCache = null;
+async function glossRows() {
+  if (glossCache && Date.now() - glossCache.at < 60e3) return glossCache.rows;
+  const v = await getSetting("glossary", null);
+  const rows = v == null ? GLOSS_DEFAULT : glossClean(v);
+  glossCache = { at: Date.now(), rows };
+  return rows;
+}
+async function glossApi(b) {
+  const { err } = await who(b);
+  if (err) return err;
+  return { ok: true, items: await glossRows() };
+}
+
 async function aiAsk(b) {
   const { p, err } = await who(b);
   if (err) return err;
@@ -6750,6 +6829,12 @@ async function aiAsk(b) {
   const q = String(b.q == null ? "" : b.q).replace(/\s+/g, " ").trim().slice(0, 500);
   if (q.length < 3) return fail("Напишите вопрос подробнее.");
   const ctx = (Array.isArray(b.ctx) ? b.ctx : []).slice(0, 10).map((c) => ({ ref: clean(c && c.ref, 80), text: String((c && c.text) || "").slice(0, 2000) })).filter((c) => c.ref && c.text);
+  // 3.8: термины глоссария, которые встречаются в вопросе, ИИ получает как пояснение (не больше трёх)
+  try {
+    const ql = q.toLowerCase().replace(/ё/g, "е");
+    for (const g of (await glossRows()).filter((g) => ql.includes(g.t.toLowerCase().replace(/ё/g, "е").slice(0, Math.max(4, g.t.length - 2)))).slice(0, 3))
+      ctx.push({ ref: "Глоссарий: " + g.t, text: g.d + (g.refs ? " (" + g.refs + ")" : "") });
+  } catch (e) {}
   const refs = ctx.map((c) => c.ref);
   const cid = (await sha256("web:" + p.id)).slice(0, 32);
   const ts = String(Date.now());

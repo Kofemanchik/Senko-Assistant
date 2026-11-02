@@ -626,3 +626,11 @@ alter table public.org_invites enable row level security;
 alter table public.org_forms enable row level security;
 alter table public.org_apps enable row level security;
 revoke all on table public.org_invites, public.org_forms, public.org_apps from anon, authenticated;
+
+-- 3.8: результаты тестов для стажёров ---------------------------------------
+create table if not exists public.share_results (
+  code text not null, user_id uuid not null references public.profiles(id) on delete cascade,
+  nick text not null default '', login text not null default '', s int not null default 0, n int not null default 0,
+  wrong jsonb not null default '[]', at timestamptz not null default now(), primary key (code, user_id));
+alter table public.share_results enable row level security;
+revoke all on table public.share_results from anon, authenticated;
