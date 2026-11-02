@@ -3512,7 +3512,7 @@ AF.sup=function(){updSup();updDec()};
 /* Обучение: тренажёр (v2): режимы, статистика, карточки, аттестация, уровень, экспорт */
 var TOP={time:"Сроки",adv:"Адвокат и звонок",ogp:"ОГП и госслужащие",proc:"Процедура и права",force:"Сила и оружие",bail:"Залог",dk:"Дорожный кодекс",uk:"УК: розыск и сроки"};
 var TORD=["time","adv","ogp","proc","force","bail","dk","uk"];
-var MN={std:"Тест",daily:"Мини-тест дня",exam:"Аттестация",weak:"Повтор слабых",sec:"Тест по разделу",redo:"Работа над ошибками",ctrl:"Контрольный тест"};
+var MN={std:"Тест",daily:"Мини-тест дня",exam:"Аттестация",weak:"Повтор слабых",sec:"Тест по разделу",redo:"Работа над ошибками",ctrl:"Контрольный тест",guess:"Угадай статью",dept:"По своему ведомству"};
 var SB=[
 ["s1","time","Сколько длится задержание до избрания меры?",["20 минут","1 час","2 часа","72 часа"],1,"Ст. 15 ч. 1, ст. 20 ч. 1 п. «г»","ПК ст. 15"],
 ["s2","adv","Максимальная длительность звонка задержанного?",["1 минута","3 минуты","5 минут","10 минут"],1,"Ст. 22 ч. 1, ст. 17 ч. 5","ПК ст. 22"],
@@ -3554,10 +3554,19 @@ var SB=[
 var SD=SB.map(function(a){return {id:a[0],tp:a[1],q:a[2],o:a[3],a:a[4],e:a[5],ref:a[6]}});
 var UKD=null,IDX=null;
 function ukDescs(){if(UKD)return UKD;UKD=[];UK.forEach(function(r){if(!r.part&&r.stars&&r.m){UKD.push({id:"uS|"+r.code,tp:"uk",u:r,kind:"S"});UKD.push({id:"uM|"+r.code,tp:"uk",u:r,kind:"M"})}});return UKD}
-function descById(id){if(!IDX){IDX={};SD.concat(ukDescs()).forEach(function(d){IDX[d.id]=d})}return IDX[id]}
+// 3.8 (п. 112): «Угадай статью» — по розыску, сроку и штрафу назвать статью; варианты с другим наказанием, чтобы ответ был однозначным
+var GUD=null;
+function puns(r){return [r.stars||0,r.m||0,r.fmax||0].join("|")}
+function guessDescs(){if(GUD)return GUD;GUD=[];var seen={};UK.forEach(function(r){if(r.stars&&r.m&&!seen[r.code]){seen[r.code]=1;GUD.push({id:"uG|"+r.code,tp:"uk",u:r,kind:"G"})}});return GUD}
+function descById(id){if(!IDX){IDX={};SD.concat(ukDescs()).concat(guessDescs()).forEach(function(d){IDX[d.id]=d})}return IDX[id]}
 function seedR(s){var h=1779033703^s.length,i;for(i=0;i<s.length;i++){h=Math.imul(h^s.charCodeAt(i),3432918353);h=h<<13|h>>>19}var a=h>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 function shufR(a,rnd){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(rnd()*(i+1)),t=a[i];a[i]=a[j];a[j]=t}return a}
 function mkQ(d,rnd){
+ if(d.u&&d.kind==="G"){var g=d.u,key=puns(g),pool=[],seen={};seen[g.code]=1;
+  shufR(UK,rnd).forEach(function(x){if(pool.length<3&&x.stars&&x.m&&!seen[x.code]&&puns(x)!==key){seen[x.code]=1;pool.push(x)}});
+  var os=shufR(pool.concat(g),rnd),lab=function(x){return "ст. "+x.code+" · "+String(x.title).replace(/<[^>]+>/g,"").slice(0,60)};
+  var desc=g.stars+" ★ розыска, срок до "+g.m+" мес."+(g.fmax?", штраф до "+money(g.fmax):"")+(g.rec?", судимость":"");
+  return {id:d.id,tp:"uk",q:"Какая статья УК: "+desc+"?",o:os.map(lab),a:os.indexOf(g),e:"Ст. "+g.code+" «"+String(g.title).replace(/<[^>]+>/g,"")+"»",ref:"УК ст. "+g.code}}
  if(d.u){var r=d.u,o;
   if(d.kind==="S"){o=shufR([1,2,3,4,5].filter(function(n){return n!==r.stars}),rnd).slice(0,3).concat(r.stars);o=shufR(o,rnd);
    return {id:d.id,tp:"uk",q:"Сколько звёзд розыска по ст. "+r.code+" «"+r.title+"»?",o:o.map(function(n){return n+" ★"}),a:o.indexOf(r.stars),e:"",ref:"УК ст. "+r.code}}
@@ -3576,7 +3585,8 @@ function pad2(n){return ("0"+n).slice(-2)}
 function dkey(d){return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate())}
 function today(){return dkey(new Date())}
 function yest(){var d=new Date();d.setDate(d.getDate()-1);return dkey(d)}
-function rec(id,tp,ok,ct){var q=ST.q[id]||(ST.q[id]={a:0,w:0,c:0,t:0});q.a++;q.t=Date.now();if(ok)q.c++;else{q.w++;q.c=0}
+function rec(id,tp,ok,ct){try{var gd=lg("bos-goalday",{d:"",n:0});if(!gd||gd.d!==today())gd={d:today(),n:0};gd.n++;sg("bos-goalday",gd);if(window.SA_goalTick)window.SA_goalTick(gd.n)}catch(e){}
+ var q=ST.q[id]||(ST.q[id]={a:0,w:0,c:0,t:0});q.a++;q.t=Date.now();if(ok)q.c++;else{q.w++;q.c=0}
  if(ct!==false){var t=ST.tp[tp]||(ST.tp[tp]={a:0,w:0});t.a++;if(!ok)t.w++}sg("bos-qstat",ST)
  // 2.6: отметки «повторить», интервальное повторение и недельный отчёт
  if(window.SA_onAns)try{window.SA_onAns(id,tp,ok,ct!==false)}catch(e){}}
@@ -3591,7 +3601,10 @@ var RNM=["","Новичок","Практик","Уверенно","Профи","�
 function ratingOf(p){return p>=90?5:p>=75?4:p>=60?3:p>=40?2:1}
 function starsH(r){var s="";for(var i=1;i<=5;i++)s+=i<=r?"★":"<i>★</i>";return '<span class="rt r'+r+'" role="img" aria-label="Рейтинг '+r+' из 5">'+s+'</span>'}
 function curRating(){var T=lg("bos-tests",[]);if(!Array.isArray(T)||!T.length)return 0;var l=T.slice(0,10);return ratingOf(Math.round(l.reduce(function(a,t){return a+(t.p||0)},0)/l.length))}
-function streak(){return (SKR.last===today()||SKR.last===yest())?SKR.n:0}
+function d2(){var d=new Date();d.setDate(d.getDate()-2);return dkey(d)}
+function wkKey(){var d=new Date();d.setDate(d.getDate()-((d.getDay()+6)%7));return dkey(d)}
+function canFreeze(){return SKR.last===d2()&&SKR.fz!==wkKey()}
+function streak(){return (SKR.last===today()||SKR.last===yest()||canFreeze())?SKR.n:0}
 function mmss(ms){var s=Math.ceil(ms/1000);return Math.floor(s/60)+":"+pad2(s%60)}
 function pct(a,b){return b?Math.round(a/b*100):0}
 
@@ -3606,6 +3619,9 @@ function startQuiz(mode,arg){
  else if(mode==="redo"){ds=(arg||[]).map(descById).filter(Boolean)}
  else if(mode==="sec"){tp=arg;if(!TOP[tp])return;ds=shufR(SD.concat(ukDescs()).filter(function(d){return d.tp===tp}),rnd).slice(0,10);title=TOP[tp]}
  else if(mode==="ctrl"){ds=ctrlSet(arg);ex=true;limit=ds.length*45000;title=arg.title||MN.ctrl}
+ else if(mode==="guess"){ds=shufR(guessDescs(),rnd).slice(0,10)}
+ else if(mode==="dept"){var dj=dept&&DEPT_J[dept];if(!dj){X.qv="menu";X.msg="Выберите ведомство в личном кабинете, чтобы тренироваться по его статьям.";return}
+  var okJ=function(d){var r=d.u;return r&&r.j&&dj[r.j]};ds=shufR(ukDescs().filter(okJ),rnd).slice(0,6).concat(shufR(guessDescs().filter(okJ),rnd).slice(0,4));title="По законам "+dept}
  if(!ds.length){X.qv="menu";X.msg=mode==="weak"?"Слабых вопросов пока нет: ошибки появятся после первых тестов.":"Не нашлось вопросов для этого режима.";return}
  var qs=shufR(ds,rnd).map(function(d){return mkQ(d,rnd)});
  X.quiz={mode:mode,tp:tp,title:title,qs:qs,i:0,s:0,sel:-1,wrong:[],t0:Date.now(),dl:limit?Date.now()+limit:0,exam:ex,over:false,cid:mode==="ctrl"?String(arg.id):""};
@@ -3634,7 +3650,7 @@ function fin(z){
  var n=z.qs.length,lv0=lvInfo().n,gain=z.s*10;
  if(z.mode==="exam"&&z.s/n>=0.8){z.pass=true;gain+=50}
  if(z.mode==="ctrl")ctrlSend(z);
- if(z.mode==="daily"&&DY.d!==today()){DY={d:today(),s:z.s,n:n};sg("bos-daily",DY);SKR=(SKR.last===yest())?{last:today(),n:SKR.n+1}:{last:today(),n:1};sg("bos-streak",SKR);gain+=20;z.firstDaily=true}
+ if(z.mode==="daily"&&DY.d!==today()){DY={d:today(),s:z.s,n:n};sg("bos-daily",DY);var fz=canFreeze();SKR=(SKR.last===yest())?{last:today(),n:SKR.n+1,fz:SKR.fz}:fz?{last:today(),n:SKR.n+1,fz:wkKey()}:{last:today(),n:1};if(fz)z.froze=true;sg("bos-streak",SKR);gain+=20;z.firstDaily=true}
  z.gain=gain;addXp(gain);z.lvUp=lvInfo().n>lv0}
 function expire(z,timeout){
  for(;z.i<z.qs.length;z.i++){var q=z.qs[z.i];rec(q.id,q.tp,false);z.wrong.push({id:q.id,q:q.q,mine:null,right:q.o[q.a],e:q.e,ref:q.ref})}
@@ -3730,6 +3746,8 @@ function menuHtml(){
   tile("start","daily","Мини-тест дня",done?"Сегодня уже пройден: "+DY.s+" из "+DY.n+". Можно повторить без бонуса.":"5 вопросов, набор меняется каждый день. Бонус за первое прохождение.",false,done?"✓":"")+
   tile("start","exam","Аттестация","15 вопросов за 8 минут без подсказок. Зачёт от 80%.")+
   tile("start","weak","Повтор слабых",wk?"Вопросы, где вы ошибались: "+wk+".":"Пока пусто, ошибки появятся после тестов.",!wk,wk?String(wk):"")+
+  tile("start","guess","Угадай статью","По розыску, сроку и штрафу назовите статью УК. 10 вопросов.")+
+  tile("start","dept",dept?"По законам "+dept:"По своему ведомству",dept?"Только статьи юрисдикции вашего ведомства: "+deptList(dept)+".":"Выберите ведомство в личном кабинете.",!(dept&&DEPT_J[dept]))+
   tile("cards","1","Карточки","Колоды по вопросам, статьям УК и штрафам. Переверните карточку, затем «Знаю» или «Далее».")+
   tile("stats","1","Статистика ошибок","Видно, в каких темах чаще всего допускаются промахи.")+
  '</div></section>';
@@ -3738,11 +3756,23 @@ function menuHtml(){
   '</div><div class="rowbtn" style="margin-top:0"><button type="button" class="btn primary" data-x="t_start" data-v="sec"'+(X.tsel?'':' disabled')+'>'+(X.tsel?'Начать: '+TOP[X.tsel]:'Выберите раздел')+'</button></div></section>';
  h+='<section class="panel"><h2>Экспорт результатов</h2><p class="sub">Сохраните итоги тестов в файл для себя или наставника.</p><div class="rowbtn" style="margin-top:0"><button type="button" class="btn" data-x="t_exp" data-v="txt">Скачать .txt</button><button type="button" class="btn" data-x="t_exp" data-v="csv">Скачать .csv</button><button type="button" class="btn" data-x="t_exp" data-v="copy">Копировать</button></div><p class="hint" id="trMsg" role="status" aria-live="polite"></p></section>';
  return h}
+// 3.8 (п. 76): график — средний процент верных ответов по дням (последние тесты)
+function chartHtml(){
+ var T=lg("bos-tests",[]);if(!Array.isArray(T)||T.length<2)return "";
+ var by={},days=[];T.slice().reverse().forEach(function(t){var k=dkey(new Date(t.t));if(!by[k]){by[k]=[];days.push(k)}by[k].push(t.p||0)});
+ var pts=days.slice(-14).map(function(k){var a=by[k];return {k:k,p:Math.round(a.reduce(function(s,x){return s+x},0)/a.length),n:a.length}});
+ if(pts.length<2)return "";
+ var W=560,H=150,L=34,B=24,cw=(W-L-10)/(pts.length-1),y=function(p){return 10+(H-B-10)*(1-p/100)};
+ var path=pts.map(function(p,i){return (i?"L":"M")+(L+i*cw).toFixed(1)+","+y(p.p).toFixed(1)}).join(" ");
+ var g=[0,50,80,100].map(function(v){return '<line x1="'+L+'" x2="'+(W-10)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="currentColor" stroke-opacity=".12"/><text x="'+(L-6)+'" y="'+(y(v)+4)+'" font-size="11" text-anchor="end" fill="currentColor" fill-opacity=".6">'+v+'%</text>'}).join("");
+ var dots=pts.map(function(p,i){return '<circle cx="'+(L+i*cw).toFixed(1)+'" cy="'+y(p.p).toFixed(1)+'" r="4" fill="var(--accent)"><title>'+p.k.split("-").reverse().slice(0,2).join(".")+': '+p.p+'% ('+p.n+' '+(p.n===1?'тест':'теста')+')</title></circle>'}).join("");
+ var lab=pts.map(function(p,i){return (i===0||i===pts.length-1||pts.length<=7)?'<text x="'+(L+i*cw).toFixed(1)+'" y="'+(H-6)+'" font-size="11" text-anchor="middle" fill="currentColor" fill-opacity=".6">'+p.k.split("-").reverse().slice(0,2).join(".")+'</text>':''}).join("");
+ return '<section class="panel"><h2>Прогресс по дням</h2><p class="sub">Средний процент верных ответов в тестах за день. Пунктир — зачёт аттестации (80%).</p><svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="График прогресса по тестам" style="width:100%;max-width:640px;height:auto;color:var(--ink)">'+g+'<line x1="'+L+'" x2="'+(W-10)+'" y1="'+y(80)+'" y2="'+y(80)+'" stroke="var(--accent)" stroke-dasharray="4 4" stroke-opacity=".6"/><path d="'+path+'" fill="none" stroke="var(--accent)" stroke-width="2.5"/>'+dots+lab+'</svg></section>'}
 function statsHtml(){
  var tot=0,wr=0,rows=[];
  TORD.forEach(function(k){var t=ST.tp[k];if(t&&t.a){tot+=t.a;wr+=t.w;rows.push({k:k,a:t.a,w:t.w,p:pct(t.w,t.a)})}});
  rows.sort(function(a,b){return b.p-a.p||b.a-a.a});
- var h=backBtn()+'<section class="panel"><h2>Статистика ошибок</h2><p class="sub">Видно, в каких темах чаще всего допускаются промахи.</p>';
+ var h=backBtn()+chartHtml()+'<section class="panel"><h2>Статистика ошибок</h2><p class="sub">Видно, в каких темах чаще всего допускаются промахи.</p>';
  if(!tot)return h+'<div class="empty">Данных пока нет. Пройдите любой тест, и здесь появятся результаты по темам.</div></section>';
  h+='<div class="sumgrid"><div class="sum"><div class="k">Отвечено</div><div class="v">'+tot+'</div></div><div class="sum"><div class="k">Ошибок</div><div class="v">'+wr+'</div></div><div class="sum"><div class="k">Точность</div><div class="v">'+pct(tot-wr,tot)+'%</div></div><div class="sum"><div class="k">Слабых вопросов</div><div class="v">'+weakIds().length+'</div></div></div>';
  var worst=rows.filter(function(r){return r.a>=3&&r.p>0})[0];
@@ -3780,10 +3810,11 @@ function resHtml(z){
  var n=z.qs.length,p=pct(z.s,n),r=ratingOf(p),h='<section class="panel"><h2>Результат · '+esc(z.title)+'</h2><div class="clock" style="font-size:56px">'+z.s+' / '+n+'</div><p class="clocksub">'+p+'% · '+starsH(r)+' '+RNM[r]+'</p>';
  if(z.mode==="ctrl"){var sd=z.send||{};h+=sd.st==="ok"?ban("done","<b>Результат отправлен руководству:</b> "+sd.p+"%."+(z.timeout?" Время вышло, неотвеченные вопросы засчитаны как ошибки.":"")):sd.st==="err"?ban("over","<b>Результат не отправлен.</b> "+esc(sd.e)):ban("warn","Отправляем результат руководству…")}
  else if(z.exam)h+=ban(z.pass?"done":"over","<b>"+(z.pass?"Зачёт.":"Не зачёт.")+"</b> Нужно не менее 80%, у вас "+p+"%."+(z.timeout?" Время вышло, неотвеченные вопросы засчитаны как ошибки.":""));
- h+='<p class="hint" style="text-align:center">'+(z.end?'Время: '+mmss(z.end-z.t0)+' · ':'')+'<b>+'+z.gain+' XP</b>'+(z.firstDaily?' (включая бонус дня)':'')+(z.lvUp?' · новый уровень: '+lvInfo().n+' «'+lvInfo().name+'»':'')+'</p>'+
+ h+='<p class="hint" style="text-align:center">'+(z.end?'Время: '+mmss(z.end-z.t0)+' · ':'')+'<b>+'+z.gain+' XP</b>'+(z.firstDaily?' (включая бонус дня)':'')+(z.froze?' · вчера пропущен, но серия сохранена: одна заморозка в неделю':'')+(z.lvUp?' · новый уровень: '+lvInfo().n+' «'+lvInfo().name+'»':'')+'</p>'+
  '<div class="rowbtn" style="justify-content:center">'+(z.mode==="ctrl"?(z.send&&z.send.st==="err"&&ctrlDone().indexOf(z.cid)<0?'<button type="button" class="btn primary" data-x="t_csend" data-v="1">Отправить ещё раз</button>':''):'<button type="button" class="btn primary" data-x="t_again" data-v="1">'+(z.mode==="redo"?'Ещё раз':'Новый раунд')+'</button>')+(z.wrong.length&&z.mode!=="redo"?'<button type="button" class="btn" data-x="t_redo" data-v="1">Работа над ошибками</button>':'')+'<button type="button" class="btn" data-x="t_menu">В меню</button></div></section>';
  if(z.wrong.length)h+='<section class="panel"><h2>Разбор ошибок</h2><p class="sub">Вопросы с неверным ответом и статья, где написано правильно.</p><ul class="basket">'+z.wrong.map(function(w){return '<li><span class="t"><b>'+esc(w.q)+'</b><br>Ваш ответ: '+(w.mine==null?'<i>нет ответа</i>':esc(w.mine))+'<br>Верно: <b>'+esc(w.right)+'</b>'+(w.e?' · '+esc(w.e):'')+'<br>Статья: '+gref(w.ref)+'</span></li>'}).join("")+'</ul></section>';
  return h}
+window.SA_TRX={mkQ:mkQ,rec:rec,addXp:addXp,seedR:seedR,shufR:shufR,pool:function(){return SD.concat(ukDescs()).concat(guessDescs())},today:today,streak:streak};
 P.quiz=function(){
  var z=X.quiz;
  if(X.qv==="run"&&z&&z.exam&&!z.over&&Date.now()>=z.dl)expire(z,true);
@@ -16252,6 +16283,85 @@ var r0=window.render;window.render=function(){var r=r0.apply(this,arguments);try
 var rows0=window.SA_s13Rows;
 window.SA_s13Rows=function(row,sw,seg){var h=rows0?rows0(row,sw,seg):"";
  h+=row("Мои заметки","Все заметки к статьям: теги, заметки под PIN-кодом, выгрузка и загрузка заметок отдела.",'<button type="button" class="btn" data-s41notes="1">Открыть</button>');return h};
+})();
+</script>
+<style id="s42-style">
+.s42{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:12px 0}
+.s42 .c{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--card,var(--bg))}
+.s42 .c h3{margin:0 0 6px;font-size:14px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.s42 .c h3 small{font-weight:400;color:var(--muted,#888);font-size:12px}
+.s42 .t{font-weight:700;margin:2px 0 4px}.s42 .n{font-size:13px;color:var(--muted,#777);margin:4px 0 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.s42 .o{display:grid;gap:6px;margin-top:8px}.s42 .o button{text-align:left;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);padding:7px 10px;font:inherit;font-size:13px;cursor:pointer}
+.s42 .o button.ok{border-color:#2e9d5b;background:rgba(46,157,91,.12)}.s42 .o button.no{border-color:#c0392b;background:rgba(192,57,43,.1)}
+.s42 .bar{height:8px;border-radius:6px;background:var(--soft,rgba(0,0,0,.08));overflow:hidden;margin:8px 0 4px}.s42 .bar i{display:block;height:100%;background:var(--accent)}
+.s42 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+</style>
+<script>
+/* 3.8 (5): главная — статья дня (32), вопрос дня с опытом (33), ежедневная цель по вопросам (77); тихие часы (110) */
+(function(){
+"use strict";
+var A=window.senkoApp;
+function jg(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(x){return d}}
+function js(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(x){}}
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function toast(t){try{if(window.SA_toast)window.SA_toast(t)}catch(x){}}
+function T(){return window.SA_TRX}
+function today(){return T()?T().today():new Date().toISOString().slice(0,10)}
+var KNM={uk:"УК",ak:"АК",dk:"ДК",pk:"ПК"};
+function strip(s){return String(s||"").replace(/<[^>]+>/g,"")}
+
+/* ---------- статья дня ---------- */
+function artOfDay(){
+ var tx=T();if(!tx)return null;var rnd=tx.seedR("senko-art-"+today());
+ var L=(window.UK||[]).filter(function(r){return (r.stars||r.m)&&r.title}).concat((window.AK||[]).concat(window.DK||[]).filter(function(r){return r.fmax&&r.title}));
+ if(!L.length)return null;return L[Math.floor(rnd()*L.length)]}
+function punText(r){var a=[];if(r.k==="uk"){if(r.stars)a.push(r.stars+" ★");if(r.m)a.push("до "+r.m+" мес.");if(r.fmax)a.push("штраф до "+money(r.fmax));if(r.rec)a.push("судимость")}else if(r.fmax)a.push(r.fmin&&r.fmin!==r.fmax?"штраф "+money(r.fmin)+"–"+money(r.fmax):"штраф до "+money(r.fmax));return a.join(" · ")}
+/* ---------- вопрос дня ---------- */
+function qOfDay(){var tx=T();if(!tx)return null;var rnd=tx.seedR("senko-qday-"+today()),P=tx.pool();if(!P.length)return null;return tx.mkQ(P[Math.floor(rnd()*P.length)],tx.seedR("senko-qopt-"+today()))}
+var QD=jg("bos-qday",{d:"",i:-1});
+/* ---------- цель ---------- */
+function goal(){var g=+jg("bos-goal",0)||0;return g>0?g:0}
+function goalDone(){var gd=jg("bos-goalday",{d:"",n:0});return gd&&gd.d===today()?gd.n:0}
+window.SA_goalTick=function(n){var g=goal();if(g&&n===g)toast("🎯 Цель на сегодня выполнена: "+g+" вопросов!")};
+// вечернее напоминание (с 19:00, один раз в день), если цель не выполнена
+setInterval(function(){try{var g=goal();if(!g)return;var h=new Date().getHours();if(h<19)return;if(jg("bos-goalrem","")===today())return;if(goalDone()>=g)return;js("bos-goalrem",today());
+ toast("🎯 Цель на сегодня: ответов "+goalDone()+" из "+g+". Мини-тест — в разделе «Обучение»");if(!quietNow()&&A&&A.notify)A.notify("Senko · цель на сегодня","Ответов "+goalDone()+" из "+g+". Загляните в тренажёр.")}catch(x){}},60000);
+
+function html(){
+ var h='<div class="s42" data-s42="1">';
+ var r=artOfDay();
+ if(r)h+='<div class="c"><h3>📖 Статья дня <small>'+e(new Date().toLocaleDateString("ru-RU",{day:"numeric",month:"long"}))+'</small></h3><div class="t">'+e((KNM[r.k]||"")+" ст. "+r.code+(r.part&&r.part!=="1"&&r.part!=="0"?" ч."+r.part:""))+' · '+e(strip(r.title))+'</div><div>'+e(punText(r))+'</div>'+(r.note?'<p class="n">'+e(strip(r.note))+'</p>':'')+'<div class="row" style="margin-top:8px"><button type="button" class="btn" data-go2="'+e(r.k+"|"+r.code)+'">Открыть статью</button></div></div>';
+ var q=qOfDay();
+ if(q){var ans=QD.d===today()?QD.i:-1;
+  h+='<div class="c"><h3>❓ Вопрос дня <small>'+(ans<0?'+5 XP за верный ответ':ans===q.a?'верно, +5 XP':'ответ дан')+'</small></h3><div class="t">'+e(q.q)+'</div><div class="o">'+q.o.map(function(o,i){var cls=ans<0?"":i===q.a?"ok":i===ans?"no":"";return '<button type="button" data-s42q="'+i+'" class="'+cls+'"'+(ans<0?'':' disabled')+'>'+e(o)+'</button>'}).join("")+'</div>'+(ans>=0&&(q.e||q.ref)?'<p class="n">'+e(q.e||"")+(q.ref?' ('+e(q.ref)+')':'')+'</p>':'')+'</div>'}
+ var g=goal(),d=goalDone(),sk=T()?T().streak():0;
+ h+='<div class="c"><h3>🎯 Цель на день <small>'+(sk?'серия дней: '+sk:'')+'</small></h3>'+(g?'<div class="t">'+Math.min(d,g)+' из '+g+' вопросов'+(d>=g?' — выполнено ✅':'')+'</div><div class="bar"><i style="width:'+Math.min(100,Math.round(d/g*100))+'%"></i></div>':'<p class="n" style="-webkit-line-clamp:4">Поставьте цель — например 20 вопросов в день. Прогресс будет здесь, а вечером программа напомнит, если цель не выполнена.</p>')+
+  '<div class="row" style="margin-top:8px"><select class="tin" data-s42g="1" aria-label="Цель на день" style="width:auto">'+[[0,"Без цели"],[10,"10 вопросов"],[20,"20 вопросов"],[30,"30 вопросов"],[50,"50 вопросов"]].map(function(o){return '<option value="'+o[0]+'"'+(o[0]===g?' selected':'')+'>'+o[1]+'</option>'}).join("")+'</select><button type="button" class="btn" data-s42t="1">В тренажёр</button></div></div>';
+ return h+'</div>'}
+function paint(){try{var hm=document.querySelector("#view .hm");if(!hm)return;var old=hm.querySelector(".s42");var n=document.createElement("div");n.innerHTML=html();n=n.firstChild;if(old){old.replaceWith(n);return}var a=hm.querySelector(".cv-rc")||hm.querySelector(".hm-q");if(a&&a.nextSibling)hm.insertBefore(n,a.nextSibling);else hm.appendChild(n)}catch(x){}}
+var HX=window.SA_homeExtra;window.SA_homeExtra=function(){if(HX)try{HX.apply(this,arguments)}catch(x){}paint()};
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s42q],[data-s42t],[data-go2]");if(!b)return;
+ if(b.dataset.go2){var g=b.dataset.go2.split("|");state.tab=g[0];state.q=g[1];state.favOnly=false;try{qEl.value=g[1]}catch(x){}render();window.scrollTo(0,0);return}
+ if(b.dataset.s42t){state.tab="learn";render();window.scrollTo(0,0);return}
+ if(b.dataset.s42q!=null){if(QD.d===today())return;var q=qOfDay();if(!q)return;var i=+b.dataset.s42q,ok=i===q.a;QD={d:today(),i:i};js("bos-qday",QD);
+  try{T().rec(q.id,q.tp,ok);if(ok)T().addXp(5)}catch(x){}toast(ok?"Верно! +5 XP":"Неверно. Правильный ответ: "+q.o[q.a]);paint()}});
+document.addEventListener("change",function(ev){var t=ev.target;if(t&&t.dataset&&t.dataset.s42g){js("bos-goal",+t.value||0);paint();if(window.SA_paintSheet)SA_paintSheet()}});
+
+/* ---------- тихие часы ---------- */
+function qh(){var q=jg("bos-quiet",{on:false,from:"23:00",to:"08:00"});return q&&typeof q==="object"?q:{on:false,from:"23:00",to:"08:00"}}
+function mins(t){var p=String(t).split(":");return (+p[0]||0)*60+(+p[1]||0)}
+function quietNow(){var q=qh();if(!q.on)return false;var d=new Date(),n=d.getHours()*60+d.getMinutes(),a=mins(q.from),b=mins(q.to);return a===b?false:a<b?(n>=a&&n<b):(n>=a||n<b)}
+window.SA_quietNow=quietNow;
+function pushQuiet(){var q=qh();try{if(A&&A.set&&!A.web)A.set("quiet",q.on?q.from+"-"+q.to:"")}catch(x){}}
+setTimeout(pushQuiet,1500);
+var rows0=window.SA_s13Rows;
+window.SA_s13Rows=function(row,sw,seg){var h=rows0?rows0(row,sw,seg):"",q=qh();
+ h+='<div class="sgroup">Тихие часы и цель</div>';
+ h+=row("Тихие часы","В это время программа не показывает уведомления Windows и браузера (таймеры задержания в окне и звук продолжают работать).",'<span class="fsctl"><input type="time" class="tin s13-time" id="s42qf" value="'+e(q.from)+'" aria-label="Тихие часы с"><input type="time" class="tin s13-time" id="s42qt" value="'+e(q.to)+'" aria-label="Тихие часы до"><button type="button" class="sw" role="switch" data-s42qs="1" aria-checked="'+(!!q.on)+'" aria-label="Тихие часы"></button></span>');
+ h+=row("Цель на день в тренажёре",goal()?"Сейчас: "+goal()+" вопросов в день.":"Цель не задана.",'<select class="tin" data-s42g="1" aria-label="Цель на день" style="width:auto">'+[[0,"Без цели"],[10,"10"],[20,"20"],[30,"30"],[50,"50"]].map(function(o){return '<option value="'+o[0]+'"'+(o[0]===goal()?' selected':'')+'>'+o[1]+'</option>'}).join("")+'</select>');
+ return h};
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s42qs]");if(!b)return;var q=qh();q.on=!q.on;js("bos-quiet",q);pushQuiet();b.setAttribute("aria-checked",String(q.on));toast(q.on?"Тихие часы включены: "+q.from+"–"+q.to:"Тихие часы выключены")});
+document.addEventListener("change",function(ev){var t=ev.target;if(!t||(t.id!=="s42qf"&&t.id!=="s42qt"))return;if(!/^\d\d:\d\d$/.test(t.value))return;var q=qh();q[t.id==="s42qf"?"from":"to"]=t.value;js("bos-quiet",q);pushQuiet()});
 })();
 </script>
 <script>

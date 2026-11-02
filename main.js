@@ -896,6 +896,11 @@ function applySet(key, val) {
   } else if (key === "miniOpacity") {
     cfg.miniOpacity = Math.min(100, Math.max(30, Math.round(+val || DEFAULTS.miniOpacity)));
     mini.applyOpacity();
+  } else if (key === "quiet") {
+    // 3.8: тихие часы «ЧЧ:ММ-ЧЧ:ММ» или "" (выключены): в это время уведомления Windows не показываются
+    const v = String(val || "");
+    if (v && !/^\d\d:\d\d-\d\d:\d\d$/.test(v)) return { ok: false, error: "Неверное время тихих часов." };
+    cfg.quiet = v; saveCfg();
   } else if (key === "hotkey") {
     if (!validHotkey(val)) return { ok: false, error: "Нужно сочетание с Ctrl, Alt или Win и обычной клавишей." };
     const old = cfg.hotkey;
@@ -1386,7 +1391,7 @@ const laws = require("./laws-sync")({
   },
   onUpdate: (info) => {
     if (win && !win.isDestroyed()) win.webContents.send("laws:event", { type: "done", info });
-    if (info && info.notify && cfg.notify && Notification.isSupported()) {
+    if (info && info.notify && cfg.notify && Notification.isSupported() && !quietNow()) {
       const n = new Notification({
         title: "Законодательство обновлено",
         body: `Изменений: ${info.changes.length}. Откройте раздел «Законы» — изменённые статьи помечены.`,
@@ -1411,8 +1416,15 @@ ipcMain.on("laws:debug", (e) => {
 });
 
 // Системное уведомление (сигнал таймера) — работает и при скрытом/свёрнутом окне
+// 3.8: тихие часы
+function quietNow() {
+  const m = /^(\d\d):(\d\d)-(\d\d):(\d\d)$/.exec(String(cfg.quiet || ""));
+  if (!m) return false;
+  const d = new Date(), n = d.getHours() * 60 + d.getMinutes(), a = +m[1] * 60 + +m[2], b = +m[3] * 60 + +m[4];
+  return a === b ? false : a < b ? n >= a && n < b : n >= a || n < b;
+}
 ipcMain.on("senko:notify", (e, title, body) => {
-  if (!fromMain(e) || !cfg.notify || !Notification.isSupported()) return;
+  if (!fromMain(e) || !cfg.notify || !Notification.isSupported() || quietNow()) return;
   if (win.isVisible() && !win.isMinimized() && win.isFocused()) return; // окно и так перед глазами
   const n = new Notification({
     title: String(title).slice(0, 80) || "Senko Assistant",

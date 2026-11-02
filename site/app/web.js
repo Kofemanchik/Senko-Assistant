@@ -156,6 +156,7 @@
   function notify(title, body) {
     try {
       if (!("Notification" in window) || Notification.permission !== "granted") return;
+      if (window.SA_quietNow && window.SA_quietNow()) return; // 3.8: тихие часы
       if (document.visibilityState === "visible" && document.hasFocus()) return; // вкладка перед глазами: хватит баннера на странице
       var opt = { body: String(body || ""), icon: "/apple-touch-icon.png", badge: "/favicon.svg", tag: "senko-" + String(title).slice(0, 20) };
       if (navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.ready.then(function (r) { r.showNotification(String(title), opt); });
