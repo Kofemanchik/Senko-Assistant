@@ -13,15 +13,16 @@ const kindOf = (t) => { t = String(t || "").toLowerCase(); if (!/кодекс/.t
 const d = JSON.parse(decrypt(fs.readFileSync(SRV.files(sn).enc), process.env.LAWS_KEY));
 const sq = (s, n) => String(s || "").replace(/\s+/g, " ").trim().slice(0, n);
 const out = [];
-const KEY = (process.env.KEYS || "12,16,17,19,20,27,29,57").split(",");
+const KEY = (process.env.KEYS || "12,16,17,19,20,27,29,57").split(",").map((x) => x.trim());
+const FULL = !!process.env.KEYS; // свои номера статей: только их полный текст, без списка названий
 for (const law of d.laws || []) {
   const k = kindOf(law.title);
   if (k !== "pk" && k !== "uk") continue;
   const rows = LC.rowsFromParsed(LC.parse(law.text));
   const seen = {};
   out.push(`## ${k} ${sq(law.title, 60)}`);
-  rows.forEach((r) => { if (!seen[r.code]) { seen[r.code] = 1; out.push(`${k} ${r.code}: ${sq(r.title, 70)}`); } });
-  if (k === "pk") rows.forEach((r) => { if (KEY.includes(String(r.code))) out.push(`  > ${r.code} ч.${r.part || "-"}: ${sq(r.text, 160)}`); });
+  if (!FULL) rows.forEach((r) => { if (!seen[r.code]) { seen[r.code] = 1; out.push(`${k} ${r.code}: ${sq(r.title, 70)}`); } });
+  if (k === "pk") rows.forEach((r) => { if (KEY.includes(String(r.code))) out.push(`  > ${r.code}${FULL ? " " + sq(r.title, 60) : ""} ч.${r.part || "-"}: ${sq(r.text, FULL ? 1200 : 160)}${FULL && r.note ? " [прим.: " + sq(r.note, 300) + "]" : ""}`); });
 }
 const mre = /Вы имеете право хранить молчание[\s\S]{40,900}?(?:Вам\s+ясны\s+(?:ли\s+)?ваши\s+права\s*[?.]?|ясны\s+ли\s+вам\s+(?:ваши\s+)?права\s*[?.]?)/i;
 let mir = "";

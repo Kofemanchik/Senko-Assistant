@@ -8,6 +8,9 @@ on:
       server:
         description: "Номер сервера: 12, 7 или 16"
         default: "7"
+      keys:
+        description: "Номера статей ПК для полного текста (через запятую)"
+        default: ""
       only_hints:
         description: "Только подсказки"
         type: boolean
@@ -23,6 +26,7 @@ jobs:
     env:
       LAWS_KEY: ${{ secrets.LAWS_KEY }}
       SERVER: ${{ inputs.server }}
+      KEYS: ${{ inputs.keys }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,10 +36,10 @@ jobs:
         shell: bash
         run: |
           node scripts/dump-hints.js > "$RUNNER_TEMP/h.txt" 2>&1 || { tail -n 20 "$RUNNER_TEMP/h.txt"; exit 1; }
-          split -C 3400 -d "$RUNNER_TEMP/h.txt" "$RUNNER_TEMP/h."
+          split -C 3400 -d -a 3 "$RUNNER_TEMP/h.txt" "$RUNNER_TEMP/h."
           n=0
           for f in "$RUNNER_TEMP"/h.[0-9]*; do
-            n=$((n+1)); [ $n -gt 10 ] && break
+            n=$((n+1)); [ $n -gt 50 ] && break
             msg=$(sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' "$f")
             echo "::notice title=подсказки сервер $SERVER часть $n::$msg"
           done
