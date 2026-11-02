@@ -24,6 +24,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Подсказки (номера статей ПК и УК, Миранда)
+        shell: bash
+        run: |
+          node scripts/dump-hints.js > "$RUNNER_TEMP/h.txt" 2>&1 || { tail -n 20 "$RUNNER_TEMP/h.txt"; exit 1; }
+          cat "$RUNNER_TEMP/h.txt"
       - name: Штрафы
         shell: bash
         run: |
