@@ -7024,6 +7024,11 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.7.5",d:"02.11.2026",items:[
+  ["📰","Что изменилось за неделю","Вверху раздела «Законы» — все правки законов за 7 дней одним списком: новые, изменённые и удалённые статьи по каждому закону."],
+  ["✂️","Что именно поменяли","У изменённой статьи сразу видна выдержка правки: что убрали, что добавили, и если поменялось число (срок, штраф, минуты) — «было → стало». Полное сравнение — кнопкой «было / стало»."],
+  ["🗑","Корзина заметок и меток","Удалённые заметки к статьям и цветные метки 30 дней лежат в корзине: Настройки → «Другое» → «Корзина заметок и меток»."],
+ ]},
  {v:"3.7.4",d:"02.11.2026",items:[
   ["🔔","Свои звуки таймеров","Настройки → «Звуки таймеров»: свой звук для «5 минут до конца», «час истёк» и ожидания адвоката или прокурора (колокольчик, гонг, мягкий, тревога или без звука) и общая громкость."],
   ["🧭","Настройка за минуту","Новичку после первого входа программа предлагает за 3 шага выбрать роль, тему и горячую клавишу. Пройти заново — в настройках."],
@@ -15904,6 +15909,122 @@ window.render=function(){var r=r0.apply(this,arguments);try{paintPins();decorate
 var v0=window.view||document.getElementById("view"),mT=null;
 if(v0&&window.MutationObserver)new MutationObserver(function(){if(mT)return;mT=setTimeout(function(){mT=null;try{decorate();if(!v0.querySelector(".s38-pins"))paintPins()}catch(x){}},60)}).observe(v0,{childList:true,subtree:true});
 window.SA_s38={undo:undo,pins:function(){return PINS.slice()},fc:function(){return FC}};
+})();
+</script>
+<style id="s39-style">
+.s39-wk{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 14px;background:var(--card,var(--bg))}
+.s39-wk>summary{cursor:pointer;font-weight:700}.s39-wk h4{margin:12px 0 6px;font-size:14px}
+.s39-wk ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.s39-wk li{border-left:3px solid var(--accent);padding:4px 0 4px 10px}
+.s39-wk li.add{border-color:#2e9d5b}.s39-wk li.rem{border-color:#c0392b}
+.s39-wk .k{font-size:12px;color:var(--muted,#888)}.s39-wk .x{font-size:13px;margin-top:3px;line-height:1.45}
+.s39-wk ins{background:rgba(46,157,91,.16);text-decoration:none;padding:0 2px;border-radius:3px}.s39-wk del{background:rgba(192,57,43,.14);padding:0 2px;border-radius:3px}
+.s39-tr{list-style:none;margin:0;padding:0;display:grid;gap:8px;max-height:60vh;overflow:auto}
+.s39-tr li{border:1px solid var(--line);border-radius:10px;padding:8px 10px}.s39-tr small{color:var(--muted,#888)}
+.s39-tr p{margin:4px 0 8px;white-space:pre-wrap;word-break:break-word;font-size:13px}
+</style>
+<script>
+/* 3.8 (2): лента «что изменилось за неделю» (17) с краткой выдержкой правки (71) и корзина заметок и меток на 30 дней (81) */
+(function(){
+"use strict";
+function jg(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(x){return d}}
+function js(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(x){}}
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function toast(t){try{if(window.SA_toast)window.SA_toast(t)}catch(x){}}
+var WEEK=7*864e5;
+function day(t){try{return new Date(t).toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"Europe/Moscow"})}catch(x){return ""}}
+
+/* ---------- 71: выдержка правки — первые добавленные и убранные слова ---------- */
+function words(s){return String(s||"").replace(/\s+/g," ").trim().split(" ").filter(Boolean)}
+function noHead(t){return String(t||"").replace(/^\s*(?:Статья|Раздел)\s+\d[\d.]*\.?[^\n]*\n/i,"")}
+function excerpt(was,now){
+ var a=words(noHead(was)),b=words(noHead(now));if(!a.length&&!b.length)return "";
+ var i=0;while(i<a.length&&i<b.length&&a[i]===b[i])i++;
+ var j=0;while(j<a.length-i&&j<b.length-i&&a[a.length-1-j]===b[b.length-1-j])j++;
+ var del=a.slice(i,a.length-j),ins=b.slice(i,b.length-j);
+ if(!del.length&&!ins.length)return "";
+ var cut=function(L){return L.length>22?L.slice(0,22).join(" ")+" …":L.join(" ")};
+ var ctx=a.slice(Math.max(0,i-4),i).join(" ");
+ var h=(ctx?"…"+e(ctx)+" ":"");
+ if(del.length)h+="<del>"+e(cut(del))+"</del> ";
+ if(ins.length)h+="<ins>"+e(cut(ins))+"</ins>";
+ var nums=function(L){return L.join(" ").match(/\$?\d[\d\s.,]*(?:\s*(?:мес|минут|лет|год|час|\$))?/g)||[]};
+ var dn=nums(del),inum=nums(ins);
+ if(dn.length&&inum.length&&dn[0].trim()!==inum[0].trim())h+='<div class="k">Число изменилось: '+e(dn[0].trim())+' → '+e(inum[0].trim())+'</div>';
+ return h}
+function unitText(L,n){try{var P=typeof lawParsed==="function"?lawParsed(L):LawCore.parse(L.text),u=null;P.units.some(function(x){if(x.key===n){u=x;return true}});return u?u.text:null}catch(x){return null}}
+
+/* ---------- 17: лента за неделю ---------- */
+var reg=0;
+function weekItems(){
+ var raw=window.LAWSYNC&&LAWSYNC.raw,laws=(raw&&raw.laws)||(window.__LAWS_LIVE&&__LAWS_LIVE.laws)||[],now=Date.now(),out=[];
+ laws.forEach(function(L){
+  if(L.my)return;
+  if(L.isNew&&L.changedAt&&now-L.changedAt<WEEK){out.push({L:L,at:L.changedAt,kind:"law"});return}
+  (L.arts||[]).forEach(function(c){if(c.at&&now-c.at<WEEK)out.push({L:L,c:c,at:c.at,kind:c.k})});
+ });
+ return out.sort(function(a,b){return b.at-a.at})}
+function weekHtml(){
+ var it=weekItems();if(!it.length)return "";
+ var by={},order=[];it.forEach(function(x){var k=x.L.id;if(!by[k]){by[k]=[];order.push(k)}by[k].push(x)});
+ var h='<details class="s39-wk"'+(it.length<=6?' open':'')+'><summary>📰 Что изменилось за неделю · '+it.length+' '+(it.length%10===1&&it.length%100!==11?"правка":(it.length%10>=2&&it.length%10<=4&&(it.length%100<10||it.length%100>=20)?"правки":"правок"))+'</summary>';
+ order.forEach(function(id){var L=by[id][0].L;h+='<h4>'+e(L.title)+'</h4><ul>';
+  by[id].slice(0,25).forEach(function(x){
+   if(x.kind==="law"){h+='<li class="add"><div class="k">'+day(x.at)+' · новый закон</div><button type="button" class="btn" data-lw="goto" data-id="'+e(L.id)+'">Открыть закон</button></li>';return}
+   var c=x.c,n=String(c.n).replace(/#\d+$/,""),cls=c.k==="added"?"add":c.k==="removed"?"rem":"",lab=c.k==="added"?"статья добавлена":c.k==="removed"?"статья удалена":"статья изменена";
+   var body="",btn="";
+   if(c.k==="changed"&&c.was!=null){var now=unitText(L,c.n);if(now!=null)body=excerpt(c.was,now);var id="w39-"+(++reg);if(window.CHGREG){c.lid=L.id;c._L=L;CHGREG[id]=c;btn=' <button type="button" class="chgb chgb-btn" data-chg="'+id+'">было / стало</button>'}}
+   else if(c.k==="added"){var t=unitText(L,c.n);if(t)body=e(t.replace(/\s+/g," ").slice(0,220))+(t.length>220?" …":"")}
+   else if(c.k==="removed"&&c.was)body="<del>"+e(String(c.was).replace(/\s+/g," ").slice(0,200))+"</del>";
+   h+='<li class="'+cls+'"><div class="k">'+day(c.at)+' · ст. '+e(n)+' · '+lab+btn+'</div>'+(body?'<div class="x">'+body+'</div>':'')+'</li>'});
+  h+='</ul>'});
+ return h+'</details>'}
+function paintWeek(){
+ if(state.tab!=="laws")return;var v=window.view||document.getElementById("view");if(!v)return;
+ if(v.querySelector(".s39-wk"))return;var h=weekHtml();if(!h)return;
+ var anchor=v.querySelector(".s38-lw")||v.querySelector(".lw-tools")||v.querySelector(".lw-card");if(!anchor)return;
+ anchor.insertAdjacentHTML("beforebegin",h)}
+var v0=window.view||document.getElementById("view"),t0=null;
+if(v0&&window.MutationObserver)new MutationObserver(function(){if(t0||state.tab!=="laws")return;t0=setTimeout(function(){t0=null;try{paintWeek()}catch(x){}},80)}).observe(v0,{childList:true,subtree:true});
+
+/* ---------- 81: корзина заметок и меток ---------- */
+var TR=jg("bos-trash39",[]);if(!Array.isArray(TR))TR=[];
+TR=TR.filter(function(x){return x&&Date.now()-x.at<30*864e5});js("bos-trash39",TR);
+function trPush(x){TR.unshift(x);TR=TR.slice(0,200);js("bos-trash39",TR)}
+var orig={},lastNotes={};try{Object.keys(window.notes||{}).forEach(function(k){lastNotes[k]=notes[k]})}catch(x){}
+document.addEventListener("focusin",function(ev){var t=ev.target;if(t&&t.dataset&&t.dataset.note&&t.tagName==="TEXTAREA")orig[t.dataset.note]=t.value},true);
+var save0=window.save;
+if(typeof save0==="function")window.save=function(){
+ var r=save0.apply(this,arguments);
+ try{var cur=window.notes||{};
+  Object.keys(lastNotes).forEach(function(k){if(cur[k]==null){var v=(orig[k]&&orig[k].trim())?orig[k]:lastNotes[k];if(v&&v.trim())trPush({t:"note",id:k,v:v,at:Date.now()})}});
+  lastNotes={};Object.keys(cur).forEach(function(k){lastNotes[k]=cur[k]})}catch(x){}
+ return r};
+// метки хранит модуль «Избранное и история»: ловим удаление по записи в хранилище
+var LBL=jg("bos-labels",{})||{};
+try{var si0=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){
+ if(this===window.localStorage&&k==="bos-labels"){try{var nw=JSON.parse(v)||{};Object.keys(LBL).forEach(function(a){if(!nw[a])trPush({t:"label",id:a,v:LBL[a],at:Date.now()})});LBL=nw}catch(x){}}
+ return si0.apply(this,arguments)}}catch(x){}
+function artName(key){var p=String(key).split("|"),k=p[0],c=p[1];if(!c){var r=(window.BYID||{})[key];if(r){k=r.k;c=r.code+(r.part&&r.part!=="1"&&r.part!=="0"?" ч."+r.part:"")}}return ({uk:"УК",ak:"АК",dk:"ДК",pk:"ПК"}[k]||"")+" ст. "+(c||key)}
+var LCOL={red:"красная",orange:"оранжевая",yellow:"жёлтая",green:"зелёная",blue:"синяя",purple:"фиолетовая",pink:"розовая"};
+function trHtml(){
+ if(!TR.length)return '<p class="sd-note">Корзина пуста. Удалённые заметки к статьям и цветные метки хранятся здесь 30 дней.</p>';
+ return '<p class="sd-note">Удалённые заметки и метки хранятся 30 дней.</p><ul class="s39-tr">'+TR.map(function(x,i){
+  return '<li><small>'+e(x.t==="note"?"Заметка":"Метка")+' · '+e(artName(x.id))+' · удалено '+e(day(x.at))+', осталось '+Math.max(1,30-Math.floor((Date.now()-x.at)/864e5))+' дн.</small><p>'+(x.t==="note"?e(x.v):"Метка: "+e(LCOL[x.v]||x.v))+'</p><button type="button" class="btn" data-s39r="'+i+'">Вернуть</button> <button type="button" class="btn" data-s39d="'+i+'">Удалить навсегда</button></li>'}).join("")+'</ul><div class="sd-acts"><button type="button" class="btn" data-s39clr="1">Очистить корзину</button></div>'}
+function trOpen(){if(window.SA_modal)SA_modal("Корзина заметок и меток",'<div id="s39trb">'+trHtml()+'</div>')}
+function trPaint(){var b=document.getElementById("s39trb");if(b)b.innerHTML=trHtml()}
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s39r],[data-s39d],[data-s39clr],[data-s39open]");if(!b)return;var d=b.dataset;
+ if(d.s39open){trOpen();return}
+ if(d.s39r!=null){var x=TR[+d.s39r];if(!x)return;
+  if(x.t==="note"){if(notes[x.id]&&notes[x.id]!==x.v)trPush({t:"note",id:x.id,v:notes[x.id],at:Date.now()});TR.splice(TR.indexOf(x),1);js("bos-trash39",TR);notes[x.id]=x.v;save();toast("Заметка восстановлена");trPaint();try{if(typeof rerender==="function")rerender();else render()}catch(y){}return}
+  TR.splice(+d.s39r,1);js("bos-trash39",TR);var L=jg("bos-labels",{})||{};L[x.id]=x.v;js("bos-labels",L);toast("Метка восстановлена, окно обновится");setTimeout(function(){location.reload()},700);return}
+ if(d.s39d!=null){TR.splice(+d.s39d,1);js("bos-trash39",TR);trPaint();return}
+ if(d.s39clr){if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Точно очистить?";return}TR=[];js("bos-trash39",TR);trPaint();return}
+});
+var rows0=window.SA_s13Rows;
+window.SA_s13Rows=function(row,sw,seg){var h=rows0?rows0(row,sw,seg):"";
+ h+=row("Корзина заметок и меток","Удалённые заметки к статьям и цветные метки хранятся 30 дней."+(TR.length?" Сейчас: "+TR.length+".":""),'<button type="button" class="btn" data-s39open="1">Открыть</button>');return h};
+window.SA_s39={trash:function(){return TR.slice()},week:weekItems,excerpt:excerpt};
 })();
 </script>
 <script>
