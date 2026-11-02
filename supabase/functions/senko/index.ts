@@ -946,6 +946,11 @@ async function api(req) {
     // 3.5: журнал действий руководства и отчёт организации за неделю (панель руководителя в программе)
     case "lead_log":
       return J(await leadLog(b));
+    // 3.6: объявления руководства из программы и отметка «прочитал»
+    case "org_news":
+      return J(await orgNews(b));
+    case "notice_read":
+      return J(await noticeRead(b));
     case "org_week":
       return J(await orgWeek(b));
     case "accept_legal":
@@ -1892,6 +1897,66 @@ async function decideApproval(a, id, ok) {
               values (${r.id}, ${"✅ Заявка принята"}, ${a.label}, ${`Добро пожаловать в ${r.org}! Руководство подтвердило ваш аккаунт.`}, now() + interval '7 days')`;
   if (a.kind !== "owner") await quiet(`${ok ? "✅" : "❌"} ${esc(a.profile.login)} ${ok ? "принял" : "отклонил"} заявку <b>${esc(r.login)}</b> в ${esc(r.org)}`);
   return { text: `${ok ? "✅ Принят" : "❌ Отклонён"}: <b>${esc(r.login)}</b> (${esc(r.nick)}) в ${esc(r.org)}${ok ? "" : ".\nЕсли передумаете: /approve " + esc(r.login)}` };
+}
+
+// ───────────── 3.6: объявления руководства и отметка «прочитал» ─────────────
+// Объявление — это рассылка broadcasts с org (то же, что /broadcast_org в боте): сотрудники видят её вверху программы.
+// Программа отмечает объявление прочитанным, когда показала его сотруднику (notice_reads).
+async function noticeRead(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const ids = (Array.isArray(b.ids) ? b.ids : [b.id]).map((x) => parseInt(x, 10)).filter((x) => x > 0).slice(0, 10);
+  if (!ids.length) return { ok: true };
+  if (!(await hit(`nr:${p.id}`, 120, 3600))) return { ok: true };
+  await db()`insert into notice_reads (broadcast_id, user_id)
+             select id, ${p.id} from broadcasts where id = any(${ids}::bigint[]) and org = ${p.org} and (server is null or server = ${sv(p)})
+             on conflict do nothing`;
+  return { ok: true };
+}
+async function orgNews(b) {
+  const { p, err } = await who(b, ["leader", "moderator", "owner"]);
+  if (err) return err;
+  const org = staffOrg(p, b);
+  if (!org) return fail("Выберите организацию.");
+  const srv = staffSrv(p, b);
+  const sql = db();
+  const op = String(b.op || "list");
+  const label = `${p.nick || p.login} (${RANKS[p.rank]})`;
+  if (op === "create") {
+    if (!(await hit(`on:${p.id}`, 20, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const title = clean(b.title, 80), text = String(b.text == null ? "" : b.text).replace(/\r/g, "").replace(/[\u0000-\u0009\u000b-\u001f]/g, " ").trim().slice(0, 1500);
+    if (text.length < 3) return fail("Напишите текст объявления.");
+    const bad = await blacklisted(title, text);
+    if (bad) return fail("В объявлении есть недопустимое слово. Уберите его.");
+    const days = Math.min(30, Math.max(1, parseInt(b.days, 10) || NOTICE_DAYS));
+    const [r] = await sql`insert into broadcasts (org, server, author, title, text, expires_at)
+                          values (${org}, ${srv}, ${label}, ${title || "Объявление " + org}, ${text}, now() + make_interval(days => ${days})) returning id`;
+    await audit(p.login, "broadcast", org, { id: r.id, text: text.slice(0, 200), via: "program" });
+    if (p.rank === "leader") await quiet(`📣 ${esc(p.login)} сделал объявление для ${org} (${srvName(srv)}):\n${esc(text.slice(0, 500))}`);
+  } else if (op === "delete") {
+    const id = parseInt(b.id, 10) || 0;
+    const [r] = await sql`update broadcasts set expires_at = now() where id = ${id} and org = ${org} and (server is null or server = ${srv}) and expires_at > now() returning id`;
+    if (!r) return fail("Объявление не найдено или уже снято.");
+    await audit(p.login, "broadcast_off", org, { id });
+  } else if (op !== "list") return fail("Неизвестное действие.");
+  const people = await sql`select id, login, nick from profiles where org = ${org} and server = ${srv} and not banned and approval = 'ok' order by lower(nick)`;
+  const rows = await sql`select id, title, text, author, created_at, expires_at from broadcasts
+                         where org = ${org} and (server is null or server = ${srv}) and created_at > now() - interval '60 days' order by id desc limit 20`;
+  const ids = rows.map((r) => r.id);
+  const reads = ids.length ? await sql`select broadcast_id, user_id, at from notice_reads where broadcast_id = any(${ids}::bigint[])` : [];
+  const R = {};
+  reads.forEach((x) => ((R[x.broadcast_id] = R[x.broadcast_id] || {})[x.user_id] = x.at));
+  return {
+    ok: true, org, server: srv, total: people.length,
+    items: rows.map((r) => {
+      const got = R[r.id] || {};
+      return {
+        id: String(r.id), title: r.title, text: r.text, author: r.author, at: r.created_at, until: r.expires_at, active: new Date(r.expires_at).getTime() > Date.now(),
+        read: people.filter((x) => got[x.id]).map((x) => ({ nick: x.nick || x.login, at: got[x.id] })),
+        unread: people.filter((x) => !got[x.id]).map((x) => x.nick || x.login),
+      };
+    }),
+  };
 }
 
 // ───────────── 3.5: журнал действий руководства ─────────────
@@ -5152,7 +5217,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 37;
+const SCHEMA_V = 38;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -5312,6 +5377,16 @@ alter table public.dc_auth enable row level security;
 revoke all on table public.dc_auth from anon, authenticated;
 `;
 // 3.5.6: один раз при переходе на схему 37 — новые функции открываются всем, сохранённые режимы «beta» становятся «all» («off» остаётся)
+// 3.6: кто прочитал объявление руководства
+const SCHEMA_38 = `
+create table if not exists public.notice_reads (
+  broadcast_id bigint not null references public.broadcasts(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  at timestamptz not null default now(),
+  primary key (broadcast_id, user_id));
+alter table public.notice_reads enable row level security;
+revoke all on table public.notice_reads from anon, authenticated;
+`;
 const SCHEMA_37_ONCE = `
 update public.bot_settings set value = (select coalesce(jsonb_object_agg(k, case when v = '"beta"'::jsonb then '"all"'::jsonb else v end), '{}'::jsonb) from jsonb_each(value) e(k, v))
   where key = 'flags' and jsonb_typeof(value) = 'object';
@@ -5325,7 +5400,7 @@ function ensureSchema() {
         if (+v >= SCHEMA_V) return;
         // база уже на 2.4: повторно 2.4 не выполняем (иначе вернулись бы удалённые баннеры по умолчанию)
         // 3.5: SCHEMA_30 и SCHEMA_35 повторяемы (create/alter … if not exists), их добавляем всем, кто ниже 35
-        await db().unsafe((+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35) + (+v < 37 ? SCHEMA_37_ONCE : ""));
+        await db().unsafe((+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35) + (+v < 37 ? SCHEMA_37_ONCE : "") + SCHEMA_38);
         adsReady = true;
         await setSetting("schema_v", SCHEMA_V);
       } catch (e) {

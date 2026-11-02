@@ -6430,11 +6430,11 @@ function pOrgs(){
 }
 
 /* Рейтинг недели, смены, контрольные тесты: данные по выбранной организации */
-var E={rate:{},shift:{},ctrl:{},log:{}}, CF={title:"",topics:{},n:10,days:3};
+var E={rate:{},shift:{},ctrl:{},log:{},news:{}}, CF={title:"",topics:{},n:10,days:3};
 function lead35(){try{return typeof window.SA_flag==="function"&&!!window.SA_flag("lead35")}catch(x){return false}}
 function curOrg(){return B.scope||B.org||""}
 function eload(sub,op,extra,ok){
- var e=E[sub], org=curOrg(), act=sub==="rate"?"week_board":sub==="log"?"lead_log":sub;
+ var e=E[sub], org=curOrg(), act=sub==="rate"?"week_board":sub==="log"?"lead_log":sub==="news"?"org_news":sub;
  if(sub!=="rate"&&!org){e.key="";e.data=null;return}
  if(e.loading)return; e.loading=true; e.err=""; e.msg=""; e.key=org+"|"+SRV();
  A.api(act,Object.assign({org:org,server:SRV()},op?{op:op}:{},extra||{})).then(function(r){
@@ -6479,6 +6479,24 @@ function weekCsv(prev){
   draw();
  },function(){WK.busy=false;WK.msg="Ошибка связи с программой.";draw()});
 }
+/* 3.6: объявления руководства: видят сотрудники организации вверху программы; видно, кто прочитал */
+var NF={title:"",text:"",days:7};
+function pNews(){
+ var w=need("news"); if(w)return w; var e=E.news, d=e.data, L=d.items||[];
+ var h='<p class="sub">Объявление увидят сотрудники '+esc(d.org)+' вверху программы. Прочитанным оно считается, когда программа показала его сотруднику.</p>'+emsg(e);
+ h+='<div class="bp-box" style="margin-bottom:12px"><h3>Новое объявление</h3><div class="bp-tools" style="flex-direction:column;align-items:stretch">'+
+  '<input id="nwT" maxlength="80" placeholder="Заголовок, например «Собрание в пятницу»" value="'+esc(NF.title)+'" aria-label="Заголовок">'+
+  '<textarea id="nwX" maxlength="1500" rows="4" placeholder="Текст объявления" aria-label="Текст объявления" style="font:inherit;border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:var(--surface);color:var(--ink)">'+esc(NF.text)+'</textarea></div>'+
+  '<div class="bp-tools"><label>Показывать <select id="nwD">'+[[1,"1 день"],[3,"3 дня"],[7,"7 дней"],[14,"14 дней"],[30,"30 дней"]].map(function(o){return '<option value="'+o[0]+'"'+(NF.days===o[0]?' selected':'')+'>'+o[1]+'</option>'}).join("")+'</select></label>'+
+  '<button type="button" class="btn" data-bp="nwadd"'+(e.loading?' disabled':'')+' style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Опубликовать</button></div></div>';
+ if(!L.length)return h+'<p class="bp-empty">Объявлений за 60 дней не было.</p>';
+ return h+L.map(function(x){
+  return '<details class="bp-box" style="margin-bottom:8px"'+(x.active?' open':'')+'><summary style="cursor:pointer"><b>'+esc(x.title)+'</b> · '+dt(x.at)+' · прочитали '+x.read.length+' из '+d.total+(x.active?' · до '+dt(x.until):' · снято')+'</summary>'+
+   '<p style="white-space:pre-wrap;margin:8px 0">'+esc(x.text)+'</p><p class="bp-empty" style="margin:4px 0">Автор: '+esc(x.author)+'</p>'+
+   (x.read.length?'<p style="margin:6px 0"><b>Прочитали:</b> '+x.read.map(function(r){return esc(r.nick)}).join(", ")+'</p>':'')+
+   (x.unread.length?'<p style="margin:6px 0"><b>Не прочитали ('+x.unread.length+'):</b> '+x.unread.slice(0,60).map(esc).join(", ")+(x.unread.length>60?" …":"")+'</p>':'')+
+   (x.active?'<button type="button" class="btn" data-bp="nwdel" data-id="'+esc(x.id)+'">Снять объявление</button>':'')+'</details>'}).join("");
+}
 /* 3.5: журнал действий руководства */
 function pLog(){
  var w=need("log"); if(w)return w; var L=E.log.data.items||[];
@@ -6519,7 +6537,7 @@ function pCtrl(){
 
 function draw(){
  var rn=window.SA_RP?window.SA_RP.bossNew():0;
- var subs=[["sum","Обзор"],["staff","Сотрудники"],["rate","Рейтинг"],["shift","Смены"],["ctrl","Контрольные тесты"]]; if(lead35())subs.push(["log","Журнал"]); if(window.SA_RP)subs.push(["rep","Рапорты"+(rn?" · "+rn:"")]); if(window.SA_B24)window.SA_B24.subs(subs); if(!B.scope)subs.push(["orgs","Организации"]);
+ var subs=[["sum","Обзор"],["staff","Сотрудники"],["rate","Рейтинг"],["shift","Смены"],["ctrl","Контрольные тесты"]]; subs.push(["news","Объявления"]);if(lead35())subs.push(["log","Журнал"]); if(window.SA_RP)subs.push(["rep","Рапорты"+(rn?" · "+rn:"")]); if(window.SA_B24)window.SA_B24.subs(subs); if(!B.scope)subs.push(["orgs","Организации"]);
  if(!subs.some(function(s){return s[0]===B.sub}))B.sub="sum";
  var title=B.scope?"Панель руководителя · "+esc(B.scope):"Панель руководителя";
  var h='<div class="subnav noprint">'+subs.map(function(s){return '<button class="pill" data-bpsub="'+s[0]+'" aria-pressed="'+(s[0]===B.sub)+'">'+s[1]+'</button>'}).join("")+'</div>';
@@ -6530,7 +6548,7 @@ function draw(){
  if(B.viewer)h+='<p class="sub">Вы видите данные как: '+(RANKS[B.viewer]||B.viewer)+(B.scope?". Доступна только ваша организация.":".")+'</p>';
  if(B.err)h+='<div class="banner bp-err" role="alert">'+esc(B.err)+'</div>';
  if(!B.data)h+='<p class="bp-empty">'+(B.loading?"Загружаем данные…":"Данные недоступны.")+'</p>';
- else h+=(B.sub==="hooks"||B.sub==="events")?window.SA_B24.html(B.sub,curOrg(),draw):B.sub==="rep"?window.SA_RP.boss(curOrg(),draw):B.sub==="staff"?pStaff():B.sub==="orgs"?pOrgs():B.sub==="rate"?pRate():B.sub==="shift"?pShift():B.sub==="ctrl"?pCtrl():B.sub==="log"?pLog():pSum();
+ else h+=(B.sub==="hooks"||B.sub==="events")?window.SA_B24.html(B.sub,curOrg(),draw):B.sub==="rep"?window.SA_RP.boss(curOrg(),draw):B.sub==="staff"?pStaff():B.sub==="orgs"?pOrgs():B.sub==="rate"?pRate():B.sub==="shift"?pShift():B.sub==="ctrl"?pCtrl():B.sub==="log"?pLog():B.sub==="news"?pNews():pSum();
  view.innerHTML=h+'</section>';
 }
 
@@ -6548,6 +6566,10 @@ view.addEventListener("click",function(e){
   draw();return}
  if(t.dataset.bpsub){B.sub=t.dataset.bpsub;if(B.sub==="staff"&&B.sort.k==="det7"&&!B.touched)B.sort={k:"nick",dir:1};draw();return}
  if(t.dataset.bp==="wkcur"||t.dataset.bp==="wkprev"){weekCsv(t.dataset.bp==="wkprev");return}
+ if(t.dataset.bp==="nwadd"){var tt=$("#nwT"),tx=$("#nwX"),dd=$("#nwD");NF.title=tt?tt.value:"";NF.text=tx?tx.value:"";NF.days=dd?+dd.value:7;
+  if(NF.text.trim().length<3){E.news.err="Напишите текст объявления.";draw();return}
+  eload("news","create",{title:NF.title,text:NF.text,days:NF.days},function(e){e.msg="Объявление опубликовано: сотрудники увидят его в течение минуты.";NF={title:"",text:"",days:7}});return}
+ if(t.dataset.bp==="nwdel"){if(!confirm("Снять объявление? Сотрудники перестанут его видеть."))return;eload("news","delete",{id:t.dataset.id},function(e){e.msg="Объявление снято."});return}
  if(t.dataset.bp==="reload"){load();if(E[B.sub]){E[B.sub].key=null;E[B.sub].data=null}if(B.sub==="rep")window.SA_RP.bossReload();if((B.sub==="hooks"||B.sub==="events")&&window.SA_B24)window.SA_B24.reload(B.sub);return}
  if(t.dataset.bp==="win"){if(A.staff)A.staff();return}
  if(t.dataset.bps){var k=t.dataset.bps;B.touched=1;B.sort=B.sort.k===k?{k:k,dir:-B.sort.dir}:{k:k,dir:1};draw();return}
@@ -6630,7 +6652,7 @@ function setDis(a){try{localStorage.setItem(DK,JSON.stringify(a.slice(-50)))}cat
 function st(){try{return A.state()}catch(e){return null}}
 var box=document.createElement("div"); box.id="saNotices"; box.className="noprint";
 var top=document.querySelector("header.top"); if(top) top.insertAdjacentElement("afterend",box);
-var mt=null, CT={};
+var mt=null, CT={}, SEEN={};
 function fmt(v){return v?new Date(v).toLocaleString("ru-RU",{dateStyle:"short",timeStyle:"short"}):""}
 function paint(){
  var s=st(), sys=s&&s.sys, d=dis();
@@ -6645,6 +6667,9 @@ function paint(){
  ((sys&&sys.controls)||[]).forEach(function(c){ if(cd.indexOf(c.id)>=0||!window.SA_TR) return; CT[c.id]=c;
   h+='<div class="sn sn-ctrl" role="status"><div class="sn-b"><b>📋 Контрольный тест: '+esc(c.title)+'</b><p>Руководство организации назначило тест: '+c.n+' вопр. по темам: '+esc((c.topics||[]).map(function(k){return TP[k]||k}).join(", "))+'. Одна попытка, без подсказок, результат увидит руководство.</p><small>Пройти до '+fmt(c.due)+'</small></div><button type="button" class="btn" data-ctrl="'+esc(c.id)+'" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Пройти</button></div>'; });
  box.innerHTML=h; box.hidden=!h;
+ // 3.6: объявление руководства показано — отмечаем «прочитал» (руководство видит, кто прочитал)
+ try{var nids=((sys&&sys.notices)||[]).filter(function(n){return d.indexOf(n.id)<0&&!SEEN[n.id]}).map(function(n){return n.id});
+  if(nids.length&&A.api){nids.forEach(function(i){SEEN[i]=1});Promise.resolve(A.api("notice_read",{ids:nids})).catch(function(){})}}catch(x){}
  var on=sys&&sys.maintenance&&sys.maintenance.on&&!sys.maintenance.exempt;
  if(on&&!mt){
   mt=document.createElement("div"); mt.className="mt-ov"; mt.setAttribute("role","alertdialog"); mt.setAttribute("aria-modal","true"); mt.setAttribute("aria-labelledby","mtT");
@@ -6915,6 +6940,15 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.6.0",d:"02.11.2026",items:[
+  ["🕘","Недавние статьи на главной","10 последних открытых статей на главной: вернуться к статье в один клик."],
+  ["🔎","Масштаб окна","Ctrl+колёсико мыши увеличивает и уменьшает всё окно, Ctrl+«+» и Ctrl+«−» тоже, Ctrl+0 — обычный размер. Масштаб запоминается."],
+  ["↩️","Назад и вперёд","Alt+← и Alt+→ (и боковые кнопки мыши) ходят по истории открытых разделов и статей, как в браузере."],
+  ["💬","Карточка статьи при наведении","Наведите на «ст. 12.8», «УК 12.8» или «ст. 17 ПК» в заметке, рапорте, ответе ИИ или тексте закона — появится карточка с наказанием и кнопкой «Открыть статью»."],
+  ["📋","История буфера","Ctrl+Shift+V открывает последние 10 текстов, скопированных из программы (расчёты, статьи, рапорты): любой можно скопировать снова."],
+  ["⌨️","Быстрый ввод в калькуляторе","Вверху калькулятора поле: набираете 12.8 и Enter, ак 2.1 и Enter, 17.6 ч.2 и Enter — статьи сразу добавляются."],
+  ["📣","Объявления руководства из программы","В панели руководителя раздел «Объявления»: объявление видят сотрудники организации вверху программы, а руководство видит, кто прочитал, а кто нет."]
+ ]},
  {v:"3.5.6",d:"01.11.2026",items:[
   ["🎉","Новые функции — всем","Всё, что раньше было только у бета-тестеров, теперь у всех: процессуальные отметки и журнал смены, групповое задержание, изъятое и свидетели, передача задержанного коллеге, раздел «Коллеги», блокнот, совместный патруль, поиск с опечатками, журнал руководства и отчёт за неделю, рейтинг недели на сайте, нижняя панель и голосовой поиск в веб-версии на телефоне. Новые функции дальше выходят сразу для всех."]
  ]},
@@ -15323,6 +15357,159 @@ html.sa-anim .sa-toast{transition:opacity .2s ease,transform .28s cubic-bezier(.
  window.SA_animSwap=swap;
 })();
 </script>
+<script>
+/* 3.6: удобство — недавние статьи на главной, масштаб Ctrl+колёсико, «Назад/Вперёд» (Alt+← / Alt+→),
+   карточка статьи при наведении на номер в тексте, история буфера (Ctrl+Shift+V), быстрый ввод в калькуляторе. */
+(function(){
+"use strict";
+var D=document,H=D.documentElement;
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(x){}return null}
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function toast(t){try{if(window.SA_toast)window.SA_toast(t)}catch(x){}}
+var KNM={uk:"УК",ak:"АК",dk:"ДК",pk:"ПК"};
+function rowsOf(k){var A={uk:window.UK,ak:window.AK,dk:window.DK,pk:window.PK}[k];return Array.isArray(A)?A:[]}
+function plain(s){return String(s||"").replace(/<[^>]*>/g,"").replace(/\s+/g," ").trim()}
+function money(n){return "$"+String(n).replace(/\B(?=(\d{3})+(?!\d))/g," ")}
+function go(k,c){if(!window.state)return;state.tab=k;state.q=c;state.stars=0;state.fineOnly=false;state.favOnly=false;state.flagOnly=false;if(window.qEl)qEl.value=c;if(typeof window.render==="function")window.render();window.scrollTo(0,0)}
+
+/* ───── недавние статьи на главной ───── */
+function recentBlock(){
+ var R=(window.recent||[]).slice(0,10);if(!R.length)return null;
+ var d=D.createElement("div");d.className="cv-rc";
+ d.innerHTML='<div class="hm-h">Недавние статьи <small>последние открытые</small></div><div class="recent">'+R.map(function(x){
+  var r=rowsOf(x.k).filter(function(y){return y.code===x.c})[0],t=r?plain(r.title):"";
+  return '<button type="button" class="pill" data-go="'+esc(x.k+"|"+x.c)+'" title="'+esc(t)+'"><b>'+KNM[x.k]+" "+esc(x.c)+'</b>'+(t?' <span class="cv-rt">'+esc(t.length>34?t.slice(0,32)+"…":t)+'</span>':'')+'</button>'}).join("")+'</div>';
+ return d}
+var HX=window.SA_homeExtra;
+window.SA_homeExtra=function(){if(HX)try{HX()}catch(x){}
+ try{var hm=D.querySelector("#view .hm");if(!hm||hm.querySelector(".cv-rc"))return;var b=recentBlock();if(!b)return;var q=hm.querySelector(".hm-q");if(q&&q.nextSibling)hm.insertBefore(b,q.nextSibling);else hm.appendChild(b)}catch(x){}};
+
+/* ───── масштаб окна: Ctrl+колёсико, Ctrl+«+», Ctrl+«−», Ctrl+0 ───── */
+var Z=parseFloat(ls("bos-zoom"))||1;
+function applyZ(){H.style.zoom=Z===1?"":String(Z)}
+function setZ(z,say){Z=Math.round(Math.min(1.6,Math.max(0.7,z))*20)/20;applyZ();ls("bos-zoom",String(Z));if(say)toast("Масштаб "+Math.round(Z*100)+"%"+(Z!==1?" · Ctrl+0 — обычный":""))}
+applyZ();
+D.addEventListener("wheel",function(e){
+ if(!e.ctrlKey||e.defaultPrevented)return;
+ if(e.target.closest&&e.target.closest(".s11-map,#s24bdw,.s24-bsvg,canvas,svg"))return; // карта и доска масштабируются сами
+ e.preventDefault();setZ(Z+(e.deltaY<0?0.05:-0.05),true)},{passive:false});
+D.addEventListener("keydown",function(e){
+ if(!e.ctrlKey||e.altKey||e.metaKey)return;
+ if(e.key==="="||e.key==="+"){e.preventDefault();setZ(Z+0.1,true)}
+ else if(e.key==="-"||e.key==="_"){e.preventDefault();setZ(Z-0.1,true)}
+ else if(e.key==="0"&&!e.shiftKey){e.preventDefault();setZ(1,true)}});
+
+/* ───── «Назад» и «Вперёд» по разделам и статьям: Alt+←, Alt+→, боковые кнопки мыши ───── */
+var HI=[],POS=-1,NAV=false,rt=0;
+function snap(){var s=window.state||{};return {tab:s.tab||"",q:s.q||""}}
+function rec(){if(NAV)return;var s=snap();if(!s.tab)return;var c=HI[POS];if(c&&c.tab===s.tab&&c.q===s.q)return;HI=HI.slice(0,POS+1);HI.push(s);if(HI.length>60)HI.shift();POS=HI.length-1}
+var R0=window.render;
+if(typeof R0==="function"){
+ window.render=function(){var r=R0.apply(this,arguments);try{clearTimeout(rt);rt=setTimeout(rec,600);calcQuick()}catch(x){}return r};
+}
+function step(d){var n=POS+d;if(n<0||n>=HI.length){toast(d<0?"Дальше назад некуда":"Дальше вперёд некуда");return}
+ POS=n;var s=HI[n];NAV=true;try{state.tab=s.tab;state.q=s.q;if(window.qEl)qEl.value=s.q;R0()}finally{NAV=false}}
+D.addEventListener("keydown",function(e){if(!e.altKey||e.ctrlKey||e.shiftKey)return;if(e.target&&e.target.closest&&e.target.closest("textarea,[contenteditable=true]"))return;
+ if(e.key==="ArrowLeft"){e.preventDefault();step(-1)}else if(e.key==="ArrowRight"){e.preventDefault();step(1)}});
+D.addEventListener("mouseup",function(e){if(e.button===3){e.preventDefault();step(-1)}else if(e.button===4){e.preventDefault();step(1)}});
+setTimeout(rec,1500);
+
+/* ───── карточка статьи при наведении на «ст. 12.8», «УК 12.8», «12.8 ПК» в любом тексте ───── */
+var card=null,ht=0,cur=null;
+// «ст. 12.8», «УК 12.8», «12.8 УК», «ст. 17 ПК», «ст. 17.6 ч. 2»: рядом обязательно «ст.» или название кодекса, иначе это просто число
+var RE=/(?:(УК|АК|ДК|ПК)\s*(?:ст(?:атья|атьи|атье|\.)?\s*)?|(ст(?:атья|атьи|атье|атьёй|\.))\s*)?(\d{1,3}(?:\.\d{1,3}){0,3})(?:\s*ч(?:асть|\.)?\s*(\d{1,2}))?(?:\s*(УК|АК|ДК|ПК)(?![А-Яа-яЁё]))?/gi;
+function kindOf(s){s=String(s||"").toUpperCase();return s==="УК"?"uk":s==="АК"?"ak":s==="ДК"?"dk":s==="ПК"?"pk":""}
+function find(k,code){var R=rowsOf(k).filter(function(r){return r.code===code});if(!R.length&&/\.\d+$/.test(code)){var c2=code.replace(/\.\d+$/,"");R=rowsOf(k).filter(function(r){return r.code===c2})}return R}
+function hide(){if(card){card.remove();card=null;cur=null}}
+function show(x,y,k,code,R){
+ var id=k+code;if(cur===id&&card)return;hide();cur=id;
+ var r0=R[0],stars=0,m=0,fmin=0,fmax=0;R.forEach(function(r){stars=Math.max(stars,r.stars||0);m=Math.max(m,r.m||0);if(r.fmax){fmax=Math.max(fmax,r.fmax);fmin=fmin?Math.min(fmin,r.fmin||r.fmax):(r.fmin||0)}});
+ var ch=[];if(stars)ch.push("★".repeat(stars));if(m)ch.push("до "+m+" мес.");if(fmax)ch.push(fmin&&fmin!==fmax?"штраф "+money(fmin)+"–"+money(fmax):"штраф до "+money(fmax));
+ card=D.createElement("div");card.className="cv-card";card.setAttribute("role","tooltip");
+ card.innerHTML='<b>'+KNM[k]+' '+esc(r0.code)+'</b> '+esc(plain(r0.title))+(R.length>1?' <small>· частей: '+R.length+'</small>':'')+(ch.length?'<div class="cv-ch">'+ch.map(function(c){return '<span>'+esc(c)+'</span>'}).join("")+'</div>':'')+
+  (k==="pk"&&r0.note?'<p>'+esc(plain(r0.note).slice(0,220))+(plain(r0.note).length>220?"…":"")+'</p>':'')+'<button type="button" class="btn" data-cvgo="'+k+"|"+esc(r0.code)+'">Открыть статью</button>';
+ D.body.appendChild(card);
+ var w=card.offsetWidth,h=card.offsetHeight,vw=innerWidth,vh=innerHeight;
+ card.style.left=Math.max(8,Math.min(vw-w-8,x+12))+"px";card.style.top=(y+18+h>vh?Math.max(8,y-h-12):y+18)+"px";
+}
+function probe(x,y,t){
+ if(!t||!t.closest||t.closest("input,textarea,select,.cv-card,nav.tabs,.tab")){if(!(t&&t.closest&&t.closest(".cv-card")))hide();return}
+ var rg=D.caretRangeFromPoint?D.caretRangeFromPoint(x,y):null;
+ if(!rg||!rg.startContainer||rg.startContainer.nodeType!==3){hide();return}
+ var txt=rg.startContainer.nodeValue||"",off=rg.startOffset,m;RE.lastIndex=0;
+ while((m=RE.exec(txt))){
+  if(m[0]==="")RE.lastIndex++;
+  if(!(m[1]||m[2]||m[5]))continue;
+  if(off<m.index||off>m.index+m[0].length)continue;
+  if(/[$\d.]/.test(txt.charAt(m.index-1)))continue; // «$10.000», даты и версии
+  var k=kindOf(m[1]||m[5]);
+  if(!k){var near=txt.slice(Math.max(0,m.index-40),m.index+m[0].length+40);var mm=/(УК|АК|ДК|ПК)/i.exec(near);k=mm?kindOf(mm[1]):"uk"}
+  var R=find(k,m[3]);if(m[4]){var P=R.filter(function(r){return String(r.part||"1")===m[4]});if(P.length)R=P}
+  if(R.length){show(x,y,k,m[3],R);return}
+ }
+ hide()}
+D.addEventListener("mousemove",function(e){clearTimeout(ht);if(card&&card.contains(e.target))return;var x=e.clientX,y=e.clientY,t=e.target;ht=setTimeout(function(){probe(x,y,t)},380)},{passive:true});
+D.addEventListener("click",function(e){var b=e.target.closest&&e.target.closest("[data-cvgo]");if(!b)return;var p=b.dataset.cvgo.split("|");hide();try{if(window.SA_closeSheet)SA_closeSheet()}catch(x){}go(p[0],p[1])});
+D.addEventListener("scroll",function(){hide()},true);
+D.addEventListener("keydown",function(e){if(e.key==="Escape")hide()});
+
+/* ───── история буфера: последние 10 текстов, скопированных из программы (Ctrl+Shift+V) ───── */
+var CL=[];try{CL=JSON.parse(ls("bos-clip")||"[]")||[]}catch(x){CL=[]}
+function remember(t){t=String(t||"").trim();if(!t||t.length<2)return;CL=CL.filter(function(x){return x.t!==t});CL.unshift({t:t.slice(0,4000),at:Date.now()});CL=CL.slice(0,10);ls("bos-clip",JSON.stringify(CL))}
+var W0=navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText.bind(navigator.clipboard):null;
+if(W0)try{navigator.clipboard.writeText=function(t){remember(t);return W0(t)}}catch(x){}
+D.addEventListener("copy",function(){try{remember(String(getSelection()||""))}catch(x){}});
+var clipBox=null;
+function clipClose(){if(clipBox){clipBox.remove();clipBox=null}}
+function clipOpen(){
+ clipClose();clipBox=D.createElement("div");clipBox.className="cv-clip";clipBox.setAttribute("role","dialog");clipBox.setAttribute("aria-label","История буфера");
+ clipBox.innerHTML='<div class="cv-ch2"><b>История буфера</b><small>последние тексты, скопированные из программы</small><button type="button" class="btn" data-clipx>Закрыть</button></div>'+
+  (CL.length?CL.map(function(c,i){return '<button type="button" class="cv-ci" data-clip="'+i+'"><span>'+esc(c.t.length>220?c.t.slice(0,218)+"…":c.t)+'</span><small>'+new Date(c.at).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})+'</small></button>'}).join(""):'<p class="cv-e">Пока пусто. Скопируйте расчёт, статью или рапорт — он появится здесь.</p>')+
+  (CL.length?'<button type="button" class="btn" data-clipclr>Очистить историю</button>':'');
+ D.body.appendChild(clipBox);var f=clipBox.querySelector("[data-clip]");if(f)f.focus()}
+D.addEventListener("keydown",function(e){
+ if(e.ctrlKey&&e.shiftKey&&(e.code==="KeyV")){if(e.target&&e.target.closest&&e.target.closest("input,textarea,[contenteditable=true]"))return;e.preventDefault();clipBox?clipClose():clipOpen()}
+ else if(e.key==="Escape"&&clipBox)clipClose()});
+D.addEventListener("click",function(e){
+ var b=e.target.closest&&e.target.closest("[data-clip],[data-clipx],[data-clipclr]");if(!b)return;
+ if(b.hasAttribute("data-clipx")){clipClose();return}
+ if(b.hasAttribute("data-clipclr")){CL=[];ls("bos-clip","[]");clipOpen();return}
+ var c=CL[+b.dataset.clip];if(!c)return;var p=W0?W0(c.t):Promise.reject();
+ Promise.resolve(p).then(function(){toast("Скопировано снова")},function(){try{if(window.senkoApp&&senkoApp.copy)senkoApp.copy(c.t);toast("Скопировано снова")}catch(x){}});clipClose()});
+window.SA_clipOpen=clipOpen;
+
+/* ───── быстрый ввод в калькуляторе: «12.8» Enter, «ак 2.1» Enter, «17.6 ч.2» Enter ───── */
+function calcQuick(){
+ if(!window.state||state.tab!=="calc")return;var v=D.getElementById("view");if(!v||v.querySelector(".cv-cq"))return;
+ var d=D.createElement("section");d.className="panel cv-cq";
+ d.innerHTML='<label class="cv-cql"><span>Быстрый ввод</span><input type="text" inputmode="decimal" autocomplete="off" placeholder="12.8 Enter · ак 2.1 · дк 5 · 17.6 ч.2" aria-label="Добавить статью по номеру"></label><span class="cv-cqm" role="status"></span>';
+ v.insertBefore(d,v.firstChild);
+ var inp=d.querySelector("input"),msg=d.querySelector(".cv-cqm");
+ inp.addEventListener("keydown",function(e){
+  if(e.key!=="Enter")return;e.preventDefault();
+  var s=inp.value.trim().toLowerCase().replace(/,/g,"."),m=/^(ук|ак|дк|uk|ak|dk)?\s*(\d{1,3}(?:\.\d{1,3}){0,3})\s*(?:ч\.?\s*(\d{1,2}))?$/.exec(s);
+  if(!m){msg.textContent="Формат: 12.8, ак 2.1, 17.6 ч.2";return}
+  var k={"ук":"uk","ак":"ak","дк":"dk","uk":"uk","ak":"ak","dk":"dk"}[m[1]||"ук"],R=find(k,m[2]);
+  if(m[3])R=R.filter(function(r){return String(r.part||"1")===m[3]});
+  if(!R.length){msg.textContent=KNM[k]+" "+m[2]+(m[3]?" ч."+m[3]:"")+": такой статьи нет";return}
+  var r=R[0];if(!window.basket)return;basket[r.id]=1;if(typeof window.save==="function")save();if(typeof window.updateBadge==="function")updateBadge();
+  window.render();setTimeout(function(){var i2=D.querySelector(".cv-cq input"),m2=D.querySelector(".cv-cqm");if(i2){i2.focus()}if(m2)m2.textContent="Добавлено: "+KNM[k]+" "+r.code+(r.part&&r.part!=="1"?" ч."+r.part:"")+(R.length>1&&!m[3]?" (часть 1; другие части: «"+r.code+" ч.2»)":"")},0)});
+}
+})();
+</script>
+<style id="cv36-style">
+.cv-rc .recent{padding-top:4px}.cv-rc .pill b{font-weight:700}.cv-rt{color:var(--muted);font-weight:400}
+.cv-card{position:fixed;z-index:2147470000;max-width:340px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 34px rgba(0,0,0,.22);padding:10px 12px;font:500 13.5px/1.4 var(--f-body);pointer-events:auto}
+.cv-card b{color:var(--accent)}.cv-card small{color:var(--muted)}.cv-card p{margin:6px 0 0;color:var(--muted);font-size:12.5px}
+.cv-ch{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}.cv-ch span{font:600 12px var(--f-body);background:var(--soft,var(--chip));color:var(--accent);border-radius:6px;padding:2px 7px}
+.cv-card .btn{margin-top:6px;padding:5px 10px;font-size:12.5px}
+.cv-clip{position:fixed;z-index:2147470001;left:50%;top:12vh;transform:translateX(-50%);width:min(520px,92vw);max-height:70vh;overflow:auto;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.3);padding:12px;display:grid;gap:6px}
+.cv-ch2{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.cv-ch2 small{color:var(--muted);flex:1}
+.cv-ci{display:flex;gap:10px;justify-content:space-between;text-align:left;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:8px 10px;font:inherit;cursor:pointer;white-space:pre-wrap}
+.cv-ci:hover,.cv-ci:focus{border-color:var(--accent);outline:none}.cv-ci small{color:var(--muted);flex:0 0 auto}.cv-e{color:var(--muted)}
+.cv-cq{display:flex;flex-wrap:wrap;align-items:center;gap:10px}.cv-cql{display:flex;align-items:center;gap:10px;flex:1 1 320px}.cv-cql span{font-weight:600;white-space:nowrap}
+.cv-cql input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:9px;padding:8px 10px;font:inherit}.cv-cqm{color:var(--muted);font-size:13px}
+</style>
 <script>
 /* Служебные сообщения (3.2): движок эффектов.
    Сервер присылает только данные (список эффектов), программа рисует их сама: текст вставляется только через textContent,
