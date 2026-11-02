@@ -7052,6 +7052,11 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.7.7",d:"02.11.2026",items:[
+  ["🏷","Теги в заметках","Пишите в заметке #задержание, #суд или свой тег — в окне «📝 Мои заметки» (кнопка рядом с «+ Своя статья») заметки фильтруются по тегам, есть поиск и переход к статье."],
+  ["🔒","Заметки под PIN-кодом","Любую заметку можно закрыть PIN-кодом: без него её не открыть ни на этом, ни на другом компьютере — заметка хранится и синхронизируется только в зашифрованном виде. Забытый PIN не восстановить."],
+  ["📁","Заметки отдела","«Выгрузить для отдела» сохраняет ваши заметки (все или по тегу) в файл. Коллеги загружают его — и видят эти заметки под статьями отдельно от своих, в разделе «Отдел»."],
+ ]},
  {v:"3.7.6",d:"02.11.2026",items:[
   ["🎟","Код-приглашение в организацию","Руководство создаёт код в панели руководителя → «Вступление» (срок и число использований). Новичок вводит его при регистрации и сразу попадает в организацию без ручного одобрения; уже зарегистрированный — в личном кабинете («Вступление в организацию»)."],
   ["📝","Анкета вступления","Руководство составляет анкету (до 10 вопросов), желающие заполняют её в личном кабинете, заявки приходят в панель руководителя: принять — и сотрудник сразу переводится в организацию, отклонить — с комментарием. Ответ приходит сообщением в программе."],
@@ -16098,6 +16103,151 @@ document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.targe
   if(ans.some(function(a){return a.length<2})){if(m)m.textContent="Ответьте на все вопросы.";return}
   b.disabled=true;api("org_join",{op:"apply",org:b.dataset.org,answers:ans}).then(function(r){b.disabled=false;if(r.ok){if(window.SA_modalClose)SA_modalClose();toast(r.msg);J.msg=r.msg;J.bad=false;J.data=null;rep()}else if(m)m.textContent=r.error||"Не удалось отправить."});return}
 });
+})();
+</script>
+<style id="s41-style">
+.s41-tag{display:inline-block;background:var(--soft,rgba(0,0,0,.06));color:var(--accent);border-radius:6px;padding:0 5px;font-weight:600}
+.s41-lk{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.s41-dept{border-left:3px solid #3b82f6}
+.s41-bar{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}.s41-bar .pill[aria-pressed=true]{background:var(--accent);color:#fff;border-color:var(--accent)}
+.s41-ls{list-style:none;margin:0;padding:0;display:grid;gap:8px;max-height:52vh;overflow:auto}
+.s41-ls li{border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.s41-ls .h{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between}
+.s41-ls p{margin:6px 0;white-space:pre-wrap;word-break:break-word;font-size:13px}
+.s41-ls .a{display:flex;gap:6px;flex-wrap:wrap}
+.s41-pin{font:700 22px var(--mono,monospace);letter-spacing:6px;text-align:center;max-width:200px}
+</style>
+<script>
+/* 3.8 (4): заметки — теги #задержание (80), заметки отдела файлом (82), заметки под PIN-кодом (129).
+   Заметка под PIN хранится в той же заметке зашифрованной (AES-GCM, ключ из PIN через PBKDF2): синхронизируется только шифр. */
+(function(){
+"use strict";
+var A=window.senkoApp;
+function jg(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(x){return d}}
+function js(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(x){}}
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function toast(t){try{if(window.SA_toast)window.SA_toast(t)}catch(x){}}
+function rr(){try{if(typeof rerender==="function")rerender();else render()}catch(x){}}
+var KNM={uk:"УК",ak:"АК",dk:"ДК",pk:"ПК"};
+function rowOf(id){return (window.BYID||{})[id]||null}
+function nameOf(id){var r=rowOf(id);if(!r)return "Статья "+id;return (KNM[r.k]||"")+" ст. "+r.code+(r.part&&r.part!=="1"&&r.part!=="0"?" ч."+r.part:"")+" · "+String(r.title||"").replace(/<[^>]+>/g,"").slice(0,60)}
+function goOf(id){var r=rowOf(id);return r?r.k+"|"+r.code:""}
+var LK="🔒v1:";
+function isLocked(v){return typeof v==="string"&&v.indexOf(LK)===0}
+var TAG_RE=/(^|[\s(,.;:])#([0-9A-Za-zА-Яа-яЁё_-]{2,30})/g;
+function tagsOf(v){var o=[],m;if(isLocked(v))return o;TAG_RE.lastIndex=0;while((m=TAG_RE.exec(String(v||"")))){var t=m[2].toLowerCase();if(o.indexOf(t)<0)o.push(t)}return o}
+
+/* ---------- шифрование ---------- */
+function b64(u){var s="";u=new Uint8Array(u);for(var i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s)}
+function ub64(s){var b=atob(s),u=new Uint8Array(b.length);for(var i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u}
+function key(pin,salt){var c=crypto.subtle;return c.importKey("raw",new TextEncoder().encode(pin),"PBKDF2",false,["deriveKey"]).then(function(k){return c.deriveKey({name:"PBKDF2",salt:salt,iterations:150000,hash:"SHA-256"},k,{name:"AES-GCM",length:256},false,["encrypt","decrypt"])})}
+function enc(pin,text){var salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));return key(pin,salt).then(function(k){return crypto.subtle.encrypt({name:"AES-GCM",iv:iv},k,new TextEncoder().encode(text))}).then(function(ct){return LK+b64(salt)+":"+b64(iv)+":"+b64(ct)})}
+function dec(pin,v){var p=String(v).slice(LK.length).split(":");if(p.length!==3)return Promise.reject(new Error("bad"));return key(pin,ub64(p[0])).then(function(k){return crypto.subtle.decrypt({name:"AES-GCM",iv:ub64(p[1])},k,ub64(p[2]))}).then(function(b){return new TextDecoder().decode(b)})}
+var PIN="",pinT=null;function keepPin(p){PIN=p;clearTimeout(pinT);pinT=setTimeout(function(){PIN=""},5*60000)}
+function cryptoOk(){return !!(window.crypto&&crypto.subtle&&window.TextEncoder)}
+
+/* ---------- заметки отдела ---------- */
+var DEPT=jg("bos-deptnotes",{});if(!DEPT||typeof DEPT!=="object")DEPT={};
+
+/* ---------- заметка под статьёй ---------- */
+var un0=window.userNoteHtml;
+if(typeof un0==="function")window.userNoteHtml=function(id){
+ var v=(window.notes||{})[id],h;
+ if(isLocked(v))h='<div class="mynote s41-lk"><b>🔒 Заметка под PIN-кодом</b><button type="button" class="more" data-s41open="'+e(id)+'">Открыть</button></div>';
+ else{h=un0(id);if(v&&h&&h.indexOf('class="mynote"')>=0)h=h.replace(TAG_RE,function(m,p,t){return p+'<span class="s41-tag">#'+t+'</span>'})}
+ var d=DEPT[id];if(d&&d.t)h+='<div class="mynote s41-dept"><b>📁 Отдел'+(d.from?" · "+e(d.from):"")+':</b> '+e(d.t)+'</div>';
+ return h};
+// ✎ у заметки под PIN — сначала PIN
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-note-btn]");if(!b)return;var id=b.dataset.noteBtn;if(isLocked((window.notes||{})[id])){ev.preventDefault();ev.stopPropagation();openLocked(id)}},true);
+
+/* ---------- окно «Мои заметки» ---------- */
+var M={tab:"my",tag:"",q:""};
+function myList(){var N=window.notes||{};return Object.keys(N).filter(function(k){return N[k]&&String(N[k]).trim()}).map(function(k){return {id:k,v:N[k]}})}
+function listHtml(){
+ var L=M.tab==="my"?myList():Object.keys(DEPT).map(function(k){return {id:k,v:DEPT[k].t,from:DEPT[k].from,at:DEPT[k].at}});
+ var tags={};if(M.tab==="my")L.forEach(function(x){tagsOf(x.v).forEach(function(t){tags[t]=(tags[t]||0)+1})});
+ var lockedN=M.tab==="my"?L.filter(function(x){return isLocked(x.v)}).length:0;
+ var q=M.q.toLowerCase();
+ var F=L.filter(function(x){if(M.tag==="🔒")return isLocked(x.v);if(M.tag&&tagsOf(x.v).indexOf(M.tag)<0)return false;if(q&&(String(isLocked(x.v)?"":x.v)+" "+nameOf(x.id)).toLowerCase().indexOf(q)<0)return false;return true});
+ var h='<div class="s41-bar"><button type="button" class="pill" data-s41t="my" aria-pressed="'+(M.tab==="my")+'">Мои ('+myList().length+')</button><button type="button" class="pill" data-s41t="dept" aria-pressed="'+(M.tab==="dept")+'">Отдел ('+Object.keys(DEPT).length+')</button></div>';
+ h+='<input class="tin" id="s41q" placeholder="Поиск по заметкам" value="'+e(M.q)+'" style="width:100%;margin-bottom:8px" aria-label="Поиск по заметкам">';
+ if(M.tab==="my"){var tk=Object.keys(tags).sort(function(a,b){return tags[b]-tags[a]});
+  h+='<div class="s41-bar"><button type="button" class="pill" data-s41g="" aria-pressed="'+(!M.tag)+'">Все</button>'+tk.map(function(t){return '<button type="button" class="pill" data-s41g="'+e(t)+'" aria-pressed="'+(M.tag===t)+'">#'+e(t)+' · '+tags[t]+'</button>'}).join("")+(lockedN?'<button type="button" class="pill" data-s41g="🔒" aria-pressed="'+(M.tag==="🔒")+'">🔒 · '+lockedN+'</button>':'')+'</div>';
+  if(!tk.length)h+='<p class="sd-note">Добавьте в текст заметки тег, например <b>#задержание</b> или <b>#суд</b>, — и фильтруйте заметки по нему.</p>'}
+ if(!F.length)h+='<p class="sd-note">'+(M.tab==="dept"?'Заметок отдела нет. Загрузите файл, который выгрузил коллега или руководство.':'Заметок не найдено.')+'</p>';
+ else h+='<ul class="s41-ls">'+F.slice(0,300).map(function(x){var lk=isLocked(x.v),g=goOf(x.id);
+  return '<li><div class="h"><b>'+e(nameOf(x.id))+'</b>'+(g?'<button type="button" class="btn" data-s41go="'+e(g)+'">Открыть статью</button>':'')+'</div>'+
+   (lk?'<p>🔒 Под PIN-кодом</p>':'<p>'+e(x.v).replace(TAG_RE,function(m,p,t){return p+'<span class="s41-tag">#'+t+'</span>'})+'</p>')+(x.from?'<p class="sd-note" style="margin:0">От: '+e(x.from)+'</p>':'')+
+   '<div class="a">'+(M.tab==="my"?(lk?'<button type="button" class="btn" data-s41open="'+e(x.id)+'">🔓 Открыть</button>':(cryptoOk()?'<button type="button" class="btn" data-s41lock="'+e(x.id)+'">🔒 Закрыть PIN-кодом</button>':'')):'<button type="button" class="btn" data-s41ddel="'+e(x.id)+'">Убрать</button>')+'</div></li>'}).join("")+'</ul>';
+ h+='<div class="sd-acts" style="flex-wrap:wrap">'+(M.tab==="my"?'<button type="button" class="btn" data-s41exp="1">Выгрузить для отдела'+(M.tag&&M.tag!=="🔒"?' (#'+e(M.tag)+')':'')+'</button>':'<button type="button" class="btn" data-s41dclr="1">Удалить все заметки отдела</button>')+'<button type="button" class="btn" data-s41imp="1">Загрузить файл отдела</button><input type="file" id="s41file" accept=".json,application/json" hidden></div>';
+ if(M.tab==="my")h+='<p class="sd-note">Выгрузка для отдела: файл с заметками (без заметок под PIN) — коллеги загружают его, и заметки появляются у них под статьями в разделе «Отдел», отдельно от своих.</p>';
+ return h}
+function paint(){var b=document.getElementById("s41b");if(!b)return;var f=document.activeElement&&document.activeElement.id==="s41q",pos=f?document.activeElement.selectionStart:0;b.innerHTML=listHtml();if(f){var q=document.getElementById("s41q");q.focus();try{q.setSelectionRange(pos,pos)}catch(x){}}}
+function open(){if(window.SA_modal)SA_modal("Мои заметки",'<div id="s41b">'+listHtml()+'</div>',true)}
+window.SA_notes41={open:open};
+
+/* ---------- PIN ---------- */
+function pinBox(title,note,btn,cb,twice){
+ if(!window.SA_modal)return;
+ SA_modal(title,'<div id="s41p"><p class="sd-note">'+note+'</p><input class="tin s41-pin" id="s41pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" aria-label="PIN-код">'+(twice?'<p class="sd-note" style="margin-top:8px">Повторите PIN</p><input class="tin s41-pin" id="s41pin2" type="password" inputmode="numeric" maxlength="8" autocomplete="off" aria-label="PIN-код ещё раз">':'')+'<p class="s13-msg" id="s41pm" role="status"></p><div class="sd-acts"><button type="button" class="btn primary" id="s41pok">'+btn+'</button></div></div>');
+ var go=function(){var p=document.getElementById("s41pin").value,m=document.getElementById("s41pm");
+  if(!/^\d{4,8}$/.test(p)){m.textContent="PIN — от 4 до 8 цифр.";return}
+  if(twice&&document.getElementById("s41pin2").value!==p){m.textContent="PIN-коды не совпадают.";return}
+  cb(p,function(msg){m.textContent=msg})};
+ setTimeout(function(){var i=document.getElementById("s41pin");if(i)i.focus()},50);
+ document.getElementById("s41pok").onclick=go;
+ document.getElementById("s41p").addEventListener("keydown",function(ev){if(ev.key==="Enter")go()})}
+function lockNote(id){
+ if(!cryptoOk()){toast("Шифрование недоступно в этом браузере");return}
+ var v=(window.notes||{})[id];if(!v||isLocked(v))return;
+ var doLock=function(p,err){enc(p,v).then(function(c){notes[id]=c;save();keepPin(p);if(window.SA_modalClose)SA_modalClose();toast("Заметка закрыта PIN-кодом");rr();setTimeout(open,50)},function(){err("Не удалось зашифровать.")})};
+ if(PIN){doLock(PIN,toast);return}
+ pinBox("Закрыть заметку PIN-кодом","Без PIN заметку не открыть ни здесь, ни на других компьютерах. <b>Забыли PIN — заметку не восстановить.</b> Один PIN для всех закрытых заметок удобнее.","Закрыть заметку",doLock,true)}
+function openLocked(id){
+ var v=(window.notes||{})[id];if(!isLocked(v))return;
+ var show=function(text,p){keepPin(p);
+  SA_modal("Заметка под PIN",'<div id="s41e"><p class="sd-note">'+e(nameOf(id))+'</p><textarea class="tin" id="s41t" rows="6" style="width:100%">'+e(text)+'</textarea><div class="sd-acts"><button type="button" class="btn" id="s41un">Снять PIN</button><button type="button" class="btn primary" id="s41sv">Сохранить</button></div></div>');
+  document.getElementById("s41sv").onclick=function(){var t=document.getElementById("s41t").value;if(!t.trim()){delete notes[id];save();SA_modalClose();rr();return}enc(p,t).then(function(c){notes[id]=c;save();SA_modalClose();toast("Сохранено под PIN");rr()})};
+  document.getElementById("s41un").onclick=function(){notes[id]=document.getElementById("s41t").value;save();SA_modalClose();toast("PIN снят");rr()}};
+ var tryPin=function(p,err){dec(p,v).then(function(t){show(t,p)},function(){PIN="";err("Неверный PIN.")})};
+ if(PIN){dec(PIN,v).then(function(t){show(t,PIN)},function(){PIN="";openLocked(id)});return}
+ pinBox("Заметка под PIN","Введите PIN-код, которым закрыта заметка.","Открыть",tryPin,false)}
+
+/* ---------- выгрузка и загрузка для отдела ---------- */
+function exportDept(){
+ var st=null;try{st=A.state()}catch(x){}var u=st&&st.user||{};
+ var L=myList().filter(function(x){return !isLocked(x.v)&&(!M.tag||M.tag==="🔒"||tagsOf(x.v).indexOf(M.tag)>=0)});
+ if(!L.length){toast("Нечего выгружать: нет заметок без PIN");return}
+ var o={senko:"deptnotes",v:1,from:(u.nick||u.login||"")+(u.org?" ("+u.org+")":""),at:Date.now(),notes:{}};L.forEach(function(x){o.notes[x.id]=x.v});
+ try{var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(o,null,1)],{type:"application/json"}));a.download="senko-dept-notes"+(M.tag&&M.tag!=="🔒"?"-"+M.tag:"")+".json";document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},2000);toast("Выгружено заметок: "+L.length)}catch(x){toast("Не удалось сохранить файл")}}
+function importDept(file){var r=new FileReader();r.onload=function(){var o=null;try{o=JSON.parse(r.result)}catch(x){}
+ if(!o||o.senko!=="deptnotes"||!o.notes||typeof o.notes!=="object"){toast("Это не файл заметок отдела Senko Assistant");return}
+ var n=0;Object.keys(o.notes).slice(0,2000).forEach(function(k){var t=String(o.notes[k]||"").slice(0,5000);if(!t.trim()||isLocked(t)||!rowOf(k))return;DEPT[k]={t:t,from:String(o.from||"").slice(0,80),at:+o.at||Date.now()};n++});
+ js("bos-deptnotes",DEPT);M.tab="dept";paint();rr();toast("Загружено заметок отдела: "+n)};r.readAsText(file)}
+
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s41t],[data-s41g],[data-s41go],[data-s41lock],[data-s41open],[data-s41ddel],[data-s41dclr],[data-s41exp],[data-s41imp],[data-s41notes]");if(!b)return;var d=b.dataset;
+ if(d.s41notes){open();return}
+ if(d.s41t){M.tab=d.s41t;M.tag="";paint();return}
+ if(d.s41g!=null){M.tag=d.s41g;paint();return}
+ if(d.s41go){if(window.SA_modalClose)SA_modalClose();var g=d.s41go.split("|");state.tab=g[0];state.q=g[1];state.favOnly=false;try{qEl.value=g[1]}catch(x){}render();window.scrollTo(0,0);return}
+ if(d.s41lock){lockNote(d.s41lock);return}
+ if(d.s41open){ev.stopPropagation();openLocked(d.s41open);return}
+ if(d.s41ddel){delete DEPT[d.s41ddel];js("bos-deptnotes",DEPT);paint();rr();return}
+ if(d.s41dclr){if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Точно удалить все?";return}DEPT={};js("bos-deptnotes",DEPT);paint();rr();return}
+ if(d.s41exp){exportDept();return}
+ if(d.s41imp){var f=document.getElementById("s41file");if(f)f.click();return}
+});
+document.addEventListener("change",function(ev){var t=ev.target;if(t&&t.id==="s41file"&&t.files&&t.files[0]){importDept(t.files[0]);t.value=""}});
+document.addEventListener("input",function(ev){var t=ev.target;if(t&&t.id==="s41q"){M.q=t.value;paint()}});
+
+/* ---------- входы: кнопка рядом с «Избранное» и строка в настройках ---------- */
+function pill(){var v=window.view||document.getElementById("view");if(!v)return;if(v.querySelector("[data-s41notes]"))return;
+ var f=v.querySelector('.pill.my-add')||v.querySelector('.pill[data-fav]');if(!f)return;
+ f.insertAdjacentHTML("afterend",'<button type="button" class="pill" data-s41notes="1">📝 Мои заметки</button>')}
+var r0=window.render;window.render=function(){var r=r0.apply(this,arguments);try{pill()}catch(x){}return r};
+var rows0=window.SA_s13Rows;
+window.SA_s13Rows=function(row,sw,seg){var h=rows0?rows0(row,sw,seg):"";
+ h+=row("Мои заметки","Все заметки к статьям: теги, заметки под PIN-кодом, выгрузка и загрузка заметок отдела.",'<button type="button" class="btn" data-s41notes="1">Открыть</button>');return h};
 })();
 </script>
 <script>
