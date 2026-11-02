@@ -11,6 +11,8 @@ const mini = require("./mini"); // 2.4: мини-окно задержания �
 const trayMenu = require("./traymenu"); // 2.5: своё меню значка в трее вместо системного
 const dialogs = require("./dialogs"); // 2.8.0-beta.5: окна-сообщения в стиле программы
 const ai = require("./ai");       // ИИ-помощник (через прокси)
+const createRecovery = require("./recovery"); // 3.8: автооткат неудачного обновления и отчёт о сбое
+let rec = null;
 
 // ───────────── НАСТРОЙКИ ─────────────
 // Папка в репозитории GitHub, где лежат version.json и index.html для обновления данных памятки.
@@ -467,7 +469,14 @@ function initUpdater() {
     autoUpdater.allowPrerelease = !!cfg.betaUpdates; // 2.4: тестеры получают бета-версии
     autoUpdater.logger = { info: (...a) => updLog("info", ...a), warn: (...a) => updLog("warn", ...a), error: (...a) => updLog("error", ...a), debug: () => {} };
     autoUpdater.on("checking-for-update", () => { if (upd.state !== "ready" && upd.state !== "downloading") upd.state = "checking"; });
+    // 3.8: версию, на которой программа дважды не запустилась и откатилась, автообновление не ставит
+    const blockedVer = rec ? rec.blocked() : "";
+    if (blockedVer) autoUpdater.autoDownload = false;
     autoUpdater.on("update-available", (i) => {
+      if (blockedVer) {
+        if (i.version === blockedVer) { updLog("info", `версия ${i.version} пропущена: на ней программа не запускалась`); if (manualCheck) { endManual(); info(`Версия ${i.version} пропущена`, "На этом компьютере она не запускалась. Программа дождётся следующего исправления."); } return; }
+        autoUpdater.downloadUpdate().catch((err) => updLog("error", "downloadUpdate:", err));
+      }
       upd.state = "downloading"; upd.version = i.version; upd.percent = 0;
       showUpdScreen();
       if (manualCheck) {
@@ -1510,6 +1519,7 @@ function createAuthWindow() {
       preload: path.join(__dirname, "auth-preload.js")
     }
   });
+  if (rec) rec.watch(authWin, "auth");
   authWin.loadFile(path.join(__dirname, "app", "auth.html"));
   authWin.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   authWin.webContents.on("will-navigate", (e) => e.preventDefault());
@@ -1641,6 +1651,7 @@ function createMainWindow() {
     }
   });
   win = w;
+  if (rec) { rec.watch(w, "main"); setTimeout(() => { if (rec) rec.offerReport(); }, 20000); }
 
   w.once("ready-to-show", () => {
     if (startHidden && cfg.tray) { startHidden = false; return; } // запуск из автозагрузки — сразу в трей
@@ -1711,13 +1722,22 @@ app.on("second-instance", (_e, argv) => {
   }
 });
 
-app.on("before-quit", () => { quitting = true; winx.stop(); sync.pushNow().catch(() => {}); });
+app.on("before-quit", () => { quitting = true; if (rec) rec.quitting(); winx.stop(); sync.pushNow().catch(() => {}); });
 app.on("will-quit", () => { try { globalShortcut.unregisterAll(); } catch (e) {} });
 app.on("window-all-closed", () => app.quit());
 
 app.whenReady().then(() => {
   if (!gotLock) return;
   loadCfg();
+  try {
+    rec = createRecovery({
+      app, fs, path, shell, box, log: updLog, version: app.getVersion(),
+      report: (text, log) => accounts.bugReport(text, log),
+      loggedIn: () => !!accounts.current(),
+    });
+    rec.begin();
+    setTimeout(() => { rec.checkRollback().catch(() => {}); }, 6000);
+  } catch (e) { rec = null; updLog("error", "recovery:", e); }
   setTimeout(() => { refreshAutostart(); removeOldFolders(); }, 8000);
   voice.init({
     getWin: () => (win && !win.isDestroyed() ? win : null),

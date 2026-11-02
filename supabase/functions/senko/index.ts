@@ -1545,6 +1545,42 @@ async function backupFile() {
   const b64 = (u) => btoa(Array.from(u, (c) => String.fromCharCode(c)).join(""));
   return { counts: { profiles: data.profiles.length, sync: data.sync_items_24h.length }, json: JSON.stringify({ v: 1, alg: "AES-256-GCM/PBKDF2-SHA256-200000", salt: b64(salt), iv: b64(iv), data: b64(ct) }) };
 }
+// 3.8 (п. 58): копию проверяем так же, как её прочтёт владелец: расшифровываем тем же ключом и разбираем JSON
+async function backupDecrypt(j) {
+  const ub = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  const base = await crypto.subtle.importKey("raw", enc.encode(BACKUP_KEY), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: ub(j.salt), iterations: 200000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+  return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: ub(j.iv) }, key, ub(j.data))));
+}
+// Раз в неделю (понедельник, после 05:00 МСК): свежая резервная копия владельцу в Telegram и проверка, что она читается
+async function weeklyBackupCheck() {
+  if (!OWNER_TG) return;
+  const wk = mskWeek();
+  if (wk.key !== mskDay() || mskHM() < "05:00") return;
+  const s = (await getSetting("bkcheck", {})) || {};
+  if (s.last === wk.key) return;
+  await setSetting("bkcheck", { last: wk.key });
+  if (!BACKUP_KEY) {
+    await send(OWNER_TG, "⚠️ Еженедельная резервная копия не сделана: не задан секрет BACKUP_KEY (Supabase → Edge Functions → Secrets).");
+    return;
+  }
+  try {
+    const f = await backupFile();
+    const data = await backupDecrypt(JSON.parse(f.json));
+    const ok = data && Array.isArray(data.profiles) && data.profiles.length === f.counts.profiles && data.profiles.length > 0;
+    await audit("система", "backup", null, { ...f.counts, weekly: true, ok });
+    if (!ok) {
+      await send(OWNER_TG, "❌ Еженедельная проверка: резервная копия после расшифровки не совпала с базой. Сделайте копию вручную: /backup");
+      return;
+    }
+    const r = await sendFile(OWNER_TG, `senko-backup-${mskDay()}.json`, f.json,
+      `🔒 Еженедельная резервная копия проверена: расшифровывается и читается. Аккаунтов: ${f.counts.profiles}.\nХраните файл отдельно от компьютера. Расшифровка: node tools/decrypt-backup.js`);
+    if (!r || !r.ok) await send(OWNER_TG, "⚠️ Резервная копия проверена, но файл не отправился в Telegram. Сделайте копию вручную: /backup");
+  } catch (e) {
+    console.error("weekly backup", e);
+    await send(OWNER_TG, `❌ Еженедельная проверка резервной копии не прошла: ${esc(String((e && e.message) || e).slice(0, 300))}`);
+  }
+}
 async function sendFile(chat, name, text, caption, type = "application/json") {
   if (String(chat).startsWith("panel:")) {
     const out = PANEL_OUT.get(String(chat));
@@ -4498,6 +4534,11 @@ async function tick() {
     await watchServices();
   } catch (e) {
     console.error("watch", e);
+  }
+  try {
+    await weeklyBackupCheck();
+  } catch (e) {
+    console.error("bkcheck", e);
   }
   if (Math.random() < 0.05) await cleanup();
   return { ok: true, jobs: jobs.length };

@@ -1,7 +1,7 @@
 {
   "name": "senko-assistant",
   "productName": "Senko Assistant",
-  "version": "3.7.7",
+  "version": "3.7.8",
   "description": "Senko Assistant — памятка по законодательству Majestic RP",
   "main": "main.js",
   "author": "Hanami Senko | Senko Corporation",
@@ -32,6 +32,7 @@
     "files": [
       "main.js",
       "accounts.js",
+      "recovery.js",
       "laws-sync.js",
       "preload.js",
       "auth-preload.js",
