@@ -8,6 +8,10 @@ on:
       server:
         description: "Номер сервера: 12, 7 или 16"
         default: "7"
+      only_hints:
+        description: "Только подсказки"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,8 +32,15 @@ jobs:
         shell: bash
         run: |
           node scripts/dump-hints.js > "$RUNNER_TEMP/h.txt" 2>&1 || { tail -n 20 "$RUNNER_TEMP/h.txt"; exit 1; }
-          cat "$RUNNER_TEMP/h.txt"
+          split -C 3400 -d "$RUNNER_TEMP/h.txt" "$RUNNER_TEMP/h."
+          n=0
+          for f in "$RUNNER_TEMP"/h.[0-9]*; do
+            n=$((n+1)); [ $n -gt 10 ] && break
+            msg=$(sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' "$f")
+            echo "::notice title=подсказки сервер $SERVER часть $n::$msg"
+          done
       - name: Штрафы
+        if: ${{ !inputs.only_hints }}
         shell: bash
         run: |
           node scripts/dump-fines.js > "$RUNNER_TEMP/f.txt" 2>&1 || { tail -n 20 "$RUNNER_TEMP/f.txt"; exit 1; }
@@ -42,6 +53,7 @@ jobs:
             echo "::notice title=штрафы сервер $SERVER часть $n::$msg"
           done
       - name: Структура (uk)
+        if: ${{ !inputs.only_hints }}
         shell: bash
         run: |
           # лимиты GitHub: до 10 аннотаций на шаг и ~4 КБ в каждой, поэтому один кодекс на шаг
@@ -55,6 +67,7 @@ jobs:
           done
           rm -f "$RUNNER_TEMP"/p.*
       - name: Структура (ak)
+        if: ${{ !inputs.only_hints }}
         shell: bash
         run: |
           # лимиты GitHub: до 10 аннотаций на шаг и ~4 КБ в каждой, поэтому один кодекс на шаг
@@ -68,6 +81,7 @@ jobs:
           done
           rm -f "$RUNNER_TEMP"/p.*
       - name: Структура (dk)
+        if: ${{ !inputs.only_hints }}
         shell: bash
         run: |
           # лимиты GitHub: до 10 аннотаций на шаг и ~4 КБ в каждой, поэтому один кодекс на шаг
@@ -81,6 +95,7 @@ jobs:
           done
           rm -f "$RUNNER_TEMP"/p.*
       - name: Структура (pk)
+        if: ${{ !inputs.only_hints }}
         shell: bash
         run: |
           # лимиты GitHub: до 10 аннотаций на шаг и ~4 КБ в каждой, поэтому один кодекс на шаг
