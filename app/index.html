@@ -7024,6 +7024,17 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.7.4",d:"02.11.2026",items:[
+  ["🔔","Свои звуки таймеров","Настройки → «Звуки таймеров»: свой звук для «5 минут до конца», «час истёк» и ожидания адвоката или прокурора (колокольчик, гонг, мягкий, тревога или без звука) и общая громкость."],
+  ["🧭","Настройка за минуту","Новичку после первого входа программа предлагает за 3 шага выбрать роль, тему и горячую клавишу. Пройти заново — в настройках."],
+  ["↩️","Ctrl+Z","Случайно удалили задержание или очистили калькулятор — Ctrl+Z возвращает (последние 10 действий)."],
+  ["⭐","Избранное по частоте","Чаще открываемые статьи в избранном стоят выше. Свой порядок перетаскиванием можно оставить в настройках."],
+  ["🖱","Перетаскивание в калькулятор","Возьмите часть статьи мышкой и перетащите в появившуюся зону или на пункт «Калькулятор» в меню."],
+  ["📌","Закреплённые статьи","Кнопка 📌 у статьи держит до 3 статей вверху разделов кодексов: между ними переключаться одним нажатием."],
+  ["🔖","Закладки в законах","В разделе «Законы» у каждой статьи кнопка 🔖, список закладок вверху и «Продолжить с места» — программа помнит, где вы остановились."],
+  ["📋","Статья в блокнот","Кнопка 📋 у статьи добавляет её номер, название и текст в блокнот."],
+  ["🩺","Самопроверка законов","Если файл законов на компьютере повреждён, программа сама откладывает его и скачивает заново."],
+ ]},
  {v:"3.7.3",d:"02.11.2026",items:[
   ["🗺","Веб-версия: свой сервер","Исправлено: в веб-версии игроки Los Angeles и Denver видели законы, таблицы и подсказки Boston, а в личном кабинете сервер всегда показывался как Boston. Теперь веб-версия берёт сервер из аккаунта, как программа."],
  ]},
@@ -15642,6 +15653,259 @@ function calcQuick(){
 .cv-cq{display:flex;flex-wrap:wrap;align-items:center;gap:10px}.cv-cql{display:flex;align-items:center;gap:10px;flex:1 1 320px}.cv-cql span{font-weight:600;white-space:nowrap}
 .cv-cql input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:9px;padding:8px 10px;font:inherit}.cv-cqm{color:var(--muted);font-size:13px}
 </style>
+<style id="s38-style">
+.s38-pins{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.s38-pin{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:999px;background:var(--card,var(--bg));max-width:100%}
+.s38-pin>button{border:0;background:none;color:var(--ink);font:inherit;font-size:13px;padding:5px 4px 5px 11px;cursor:pointer;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s38-pin.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.s38-pin>button.x{padding:5px 9px 5px 2px;color:var(--muted,#888)}
+.s38-pinh{font-size:12px;color:var(--muted,#888);align-self:center;margin-right:2px}
+.part[draggable=true]{cursor:grab}
+.s38-drop{position:fixed;right:18px;bottom:18px;z-index:9000;padding:18px 22px;border:2px dashed var(--accent);border-radius:16px;background:var(--card,#fff);color:var(--ink);font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.18);display:none}
+.s38-drop.show{display:block}.s38-drop.over{background:var(--accent);color:#fff}
+.s38-hp{opacity:.35;margin-left:4px}.s38-hp.on,.s38-hp:hover{opacity:1}
+.s38-bm{border:0;background:none;cursor:pointer;font-size:15px;opacity:.45;margin-left:6px;padding:0 4px;vertical-align:middle}
+.s38-bm.on,.s38-bm:hover{opacity:1}
+.s38-lw{border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin:0 0 14px;background:var(--card,var(--bg))}
+.s38-lw b{display:block;margin-bottom:6px}.s38-lw ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.s38-lw li{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}.s38-lw li button{border:0;background:none;color:var(--ink);font:inherit;font-size:13px;padding:4px 10px;cursor:pointer;max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s38-lw li button.x{padding:4px 8px;color:var(--muted,#888)}
+.s38-cont{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.s38-wz{display:grid;gap:10px}.s38-wz .opts{display:flex;flex-wrap:wrap;gap:8px}.s38-wz .opts button[aria-pressed=true]{background:var(--accent);color:#fff;border-color:var(--accent)}
+.s38-wz .step{font-size:12px;color:var(--muted,#888)}
+.s38-snd{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.s38-snd select{border:1px solid var(--line);border-radius:8px;padding:4px 6px;background:var(--bg);color:var(--ink)}
+</style>
+<script>
+/* 3.8: удобство (хвост плана 3.6) и самопроверка законов.
+   47 звуки таймеров на выбор · 48 мастер первой настройки · 51 Ctrl+Z (таймер, калькулятор) · 78 автосортировка избранного
+   122 перетаскивание статей в калькулятор · 123 закреплённые статьи · 20 закладки и «продолжить с места» в законах · 70 статья в блокнот */
+(function(){
+"use strict";
+var A=window.senkoApp;
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(x){return null}}
+function jg(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(x){return d}}
+function js(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(x){}}
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function toast(t){try{if(window.SA_toast)window.SA_toast(t)}catch(x){}}
+function rr(){try{if(typeof rerender==="function")rerender();else render()}catch(x){}}
+function editing(t){t=t||document.activeElement;return !!(t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)))}
+var KNM={uk:"УК",ak:"АК",dk:"ДК",pk:"ПК"};
+function artOf(id){return (window.BYID||{})[id]||null}
+
+/* ---------- 47: звуки таймеров ---------- */
+var SND=jg("bos-snd38",{}); if(!SND||typeof SND!=="object")SND={};
+var SKINDS=[["warn","5 минут до конца часа"],["end","Час истёк"],["wait","Ожидание (адвокат, прокурор…)"]];
+var SPRE=[["beep","Обычный"],["chime","Колокольчик"],["bell","Гонг"],["soft","Мягкий"],["alarm","Тревога"],["off","Без звука"]];
+function sVol(){var v=+SND.vol;return isFinite(v)&&v>=0&&v<=100?v:100}
+function synth(p,n,vol){
+ try{audioUnlock();var ctx=window.actx||actx;if(!ctx)return;var t0=ctx.currentTime,g0=0.4*vol/100;if(g0<=0)return;
+  var tone=function(f,s,len,type){var o=ctx.createOscillator(),g=ctx.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(g0,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+len);o.connect(g);g.connect(ctx.destination);o.start(s);o.stop(s+len+0.05)};
+  for(var i=0;i<n;i++){
+   if(p==="chime"){var s=t0+i*0.55;tone(988,s,0.35,"triangle");tone(1319,s+0.16,0.45,"triangle")}
+   else if(p==="bell"){tone(523,t0+i*0.9,1.1,"triangle");tone(1046,t0+i*0.9,0.6,"sine")}
+   else if(p==="soft"){tone(440,t0+i*0.6,0.5,"sine")}
+   else if(p==="alarm"){tone(980,t0+i*0.3,0.12,"square");tone(780,t0+i*0.3+0.14,0.12,"square")}
+  }
+ }catch(x){}
+}
+var beep0=window.beep;
+function kindOf(n,f){return n===3&&f===880?"warn":n===4?"end":f===660?"wait":""}
+if(typeof beep0==="function"){
+ window.beep=function(n,freq,len){
+  var k=kindOf(n,freq),p=k?(SND[k]||"beep"):"beep",vol=sVol();
+  if(p==="off")return;
+  if(p==="beep"&&vol===100)return beep0(n,freq,len);
+  if(typeof sndOn==="function"&&!sndOn())return;
+  if(p==="beep"){synthBeep(n,freq,len,vol);return}
+  synth(p,n,vol);
+ };
+}
+function synthBeep(n,f,len,vol){try{audioUnlock();var ctx=window.actx||actx;if(!ctx)return;var t0=ctx.currentTime,g0=0.4*vol/100;if(g0<=0)return;for(var i=0;i<n;i++){var o=ctx.createOscillator(),g=ctx.createGain(),s=t0+i*0.4,L=len||0.28;o.type="sine";o.frequency.value=f||880;g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(g0,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+L);o.connect(g);g.connect(ctx.destination);o.start(s);o.stop(s+L+0.05)}}catch(x){}}
+function sndTest(k){var p=SND[k]||"beep",n=k==="warn"?3:k==="end"?4:2,f=k==="end"?520:k==="wait"?660:880;if(p==="off"){toast("Для этого события звук выключен");return}if(p==="beep")synthBeep(n,f,k==="end"?0.4:0.28,sVol());else synth(p,n,sVol())}
+
+/* ---------- 51: Ctrl+Z ---------- */
+var UNDO=[];
+function snapTm(){var m={};(window.tms||[]).forEach(function(t,i){try{m[t.id]={i:i,j:JSON.stringify(t)}}catch(x){}});return m}
+var lastTm=snapTm(),lastBasket=JSON.stringify(window.basket||{});
+function pushUndo(u,msg){UNDO.push(u);if(UNDO.length>10)UNDO.shift();toast(msg+" Ctrl+Z — вернуть")}
+var saveTm0=window.saveTm;
+if(typeof saveTm0==="function")window.saveTm=function(){
+ var r=saveTm0.apply(this,arguments);
+ try{var now=snapTm(),arch={};(window.thist||[]).slice(0,20).forEach(function(h){arch[h.id]=1});
+  Object.keys(lastTm).forEach(function(id){if(!now[id]&&!arch[id]){pushUndo({k:"tm",i:lastTm[id].i,j:lastTm[id].j},"Задержание удалено.")}});
+  lastTm=now}catch(x){}
+ return r};
+var save0=window.save;
+if(typeof save0==="function")window.save=function(){
+ var r=save0.apply(this,arguments);
+ try{var cur=JSON.stringify(window.basket||{}),prev=lastBasket;
+  if(cur==="{}"&&prev&&prev!=="{}")pushUndo({k:"calc",v:prev},"Калькулятор очищен.");
+  lastBasket=cur}catch(x){}
+ return r};
+function undo(){
+ var u=UNDO.pop();if(!u){toast("Нечего возвращать");return}
+ if(u.k==="tm"){var t=JSON.parse(u.j);if((window.tms||[]).some(function(x){return x.id===t.id})){undo();return}tms.splice(Math.min(u.i,tms.length),0,t);try{selId=t.id}catch(x){}saveTm();render();toast("Задержание возвращено")}
+ else if(u.k==="calc"){basket=JSON.parse(u.v);save();if(typeof updateBadge==="function")updateBadge();rr();toast("Калькулятор восстановлен")}
+}
+document.addEventListener("keydown",function(ev){
+ if((ev.ctrlKey||ev.metaKey)&&!ev.shiftKey&&!ev.altKey&&(ev.code==="KeyZ"||/^[zя]$/i.test(ev.key))&&!editing(ev.target)){if(!UNDO.length)return;ev.preventDefault();undo()}
+});
+
+/* ---------- 78: автосортировка избранного ---------- */
+var FC=jg("bos-favcnt",{}); if(!FC||typeof FC!=="object")FC={};
+function favAuto(){return ls("bos-favsort")!=="manual"}
+var pr0=window.pushRecent;
+if(typeof pr0==="function")window.pushRecent=function(k,c){
+ try{var rc=window.recent||[];if(!(rc[0]&&rc[0].k===k&&rc[0].c===c)){var key=k+"|"+c;FC[key]=(FC[key]||0)+1;js("bos-favcnt",FC)}}catch(x){}
+ return pr0.apply(this,arguments)};
+var lh0=window.listHtml;
+if(typeof lh0==="function")window.listHtml=function(kind,data,Q){
+ if(state.favOnly&&favAuto()&&data&&data.length>1){
+  var idx={};data.forEach(function(r,i){if(idx[r.code]===undefined)idx[r.code]=i});
+  data=data.map(function(r,i){return {r:r,i:i}}).sort(function(a,b){var ca=FC[a.r.k+"|"+a.r.code]||0,cb=FC[b.r.k+"|"+b.r.code]||0;if(ca!==cb)return cb-ca;return idx[a.r.code]-idx[b.r.code]||a.i-b.i}).map(function(o){return o.r});
+  // ручной порядок (перетаскиванием) не применяем, пока включена автосортировка
+  state.favOnly=false;try{return lh0(kind,data,Q)}finally{state.favOnly=true}
+ }
+ return lh0(kind,data,Q)};
+
+/* ---------- 123: закреплённые статьи ---------- */
+var PINS=jg("bos-pins38",[]); if(!Array.isArray(PINS))PINS=[];
+function pinKey(r){return r.k+"|"+r.code}
+function pinToggle(key){var i=PINS.indexOf(key);if(i>=0)PINS.splice(i,1);else{if(PINS.length>=3){toast("Закрепить можно до 3 статей. Открепите одну из них");return}PINS.push(key)}js("bos-pins38",PINS);paintPins();decorate(true)}
+function pinTitle(key){var p=key.split("|"),k=p[0],c=p[1],L=(window.DATA||{})[k]||[],r=null;for(var i=0;i<L.length;i++)if(L[i].code===c){r=L[i];break}return (KNM[k]||k)+" "+c+(r?" · "+String(r.title||"").replace(/<[^>]+>/g,""):"")}
+function paintPins(){
+ var v=window.view||document.getElementById("view");if(!v)return;var old=v.querySelector(".s38-pins");
+ var ok=PINS.length&&/^(uk|ak|dk|pk|home)$/.test(state.tab);
+ if(!ok){if(old)old.remove();return}
+ var cur=state.tab+"|"+String(state.q||"").trim();
+ var h='<span class="s38-pinh">📌</span>'+PINS.map(function(k){return '<span class="s38-pin'+(k===cur?' on':'')+'"><button type="button" data-go="'+e(k)+'" title="'+e(pinTitle(k))+'">'+e(pinTitle(k))+'</button><button type="button" class="x" data-s38unpin="'+e(k)+'" aria-label="Открепить">×</button></span>'}).join("");
+ if(!old){old=document.createElement("div");old.className="s38-pins noprint";old.setAttribute("role","toolbar");old.setAttribute("aria-label","Закреплённые статьи");v.insertAdjacentElement("afterbegin",old)}
+ old.innerHTML=h}
+
+/* ---------- 70: статья в блокнот ---------- */
+function artText(r){var t=(KNM[r.k]||"")+" ст. "+r.code+(r.part&&r.part!=="0"&&r.part!=="1"?" ч."+r.part:"")+" — "+String(r.title||"").replace(/<[^>]+>/g,"");var n=String(r.note||"").replace(/\s+/g," ").trim();if(n)t+="\n"+n.slice(0,400);return t}
+function toPad(id){var r=artOf(id);if(!r)return;var t=artText(r);
+ if(window.SA_pad&&SA_pad.ok()){var cur=ls("bos-pad")||"";ls("bos-pad",(cur.replace(/\s+$/,"")+(cur.trim()?"\n\n":"")+t).slice(0,20000));toast("Статья добавлена в блокнот")}
+ else{try{navigator.clipboard.writeText(t);toast("Блокнот выключен в настройках — текст статьи скопирован")}catch(x){}}}
+
+/* ---------- 122: перетаскивание в калькулятор ---------- */
+var drop=null,dragId="";
+function dropEl(){if(!drop){drop=document.createElement("div");drop.className="s38-drop noprint";drop.textContent="Отпустите здесь — статья добавится в калькулятор";document.body.appendChild(drop)
+ drop.addEventListener("dragover",function(ev){ev.preventDefault();drop.classList.add("over")});drop.addEventListener("dragleave",function(){drop.classList.remove("over")});
+ drop.addEventListener("drop",function(ev){ev.preventDefault();addCalc(dragId||String(ev.dataTransfer.getData("text/plain")).replace(/^senko:/,""));endDrag()})}return drop}
+function addCalc(id){var r=artOf(id);if(!r||r.k==="pk")return;if(basket[id]){toast("Эта статья уже в калькуляторе");return}basket[id]=1;save();if(typeof updateBadge==="function")updateBadge();
+ var b=document.querySelector('[data-add-id="'+id+'"]');if(b){b.classList.add("added");b.textContent="✓"}if(state.tab==="calc")rr();toast((KNM[r.k]||"")+" ст. "+r.code+" — в калькуляторе")}
+function endDrag(){dragId="";if(drop){drop.classList.remove("show","over")}}
+document.addEventListener("dragstart",function(ev){var p=ev.target&&ev.target.closest&&ev.target.closest(".part[data-s38id]");if(!p)return;dragId=p.dataset.s38id;try{ev.dataTransfer.setData("text/plain","senko:"+dragId);ev.dataTransfer.effectAllowed="copy"}catch(x){}dropEl().classList.add("show")});
+document.addEventListener("dragend",endDrag);
+// меню: пункт «Калькулятор» тоже принимает статью
+document.addEventListener("dragover",function(ev){if(!dragId)return;var n=ev.target.closest&&ev.target.closest('[data-nav="calc"],.tab[data-tab="calc"]');if(n)ev.preventDefault()});
+document.addEventListener("drop",function(ev){if(!dragId)return;var n=ev.target.closest&&ev.target.closest('[data-nav="calc"],.tab[data-tab="calc"]');if(n){ev.preventDefault();addCalc(dragId);endDrag()}});
+
+/* ---------- кнопки у статей и перетаскивание ---------- */
+function decorate(force){
+ var v=window.view||document.getElementById("view");if(!v)return;
+ v.querySelectorAll(".part .acts").forEach(function(a){
+  var fb=a.querySelector("[data-fav-id]");if(!fb)return;var id=fb.dataset.favId,r=artOf(id);if(!r)return;
+  var ex=a.querySelector(".s38-a");if(ex&&!force)return;if(ex)ex.remove();
+  var s=document.createElement("span");s.className="s38-a";s.style.display="contents";
+  s.innerHTML='<button class="ic" type="button" data-s38pad="'+e(id)+'" aria-label="В блокнот" title="В блокнот">📋</button>';
+  a.appendChild(s);
+  var art=a.closest(".art"),hd=art&&art.querySelector(".art-h");
+  if(hd){var hp=hd.querySelector(".s38-hp"),pinned=PINS.indexOf(pinKey(r))>=0;if(!hp){hd.querySelector("h3").insertAdjacentHTML("afterend",'<button class="ic s38-hp" type="button" data-s38pin="'+e(pinKey(r))+'"></button>');hp=hd.querySelector(".s38-hp")}
+   hp.classList.toggle("on",pinned);hp.textContent="📌";hp.setAttribute("aria-label",pinned?"Открепить статью":"Закрепить статью вверху");hp.title=pinned?"Открепить":"Закрепить вверху (до 3 статей)"}
+  var part=a.closest(".part");if(part&&r.k!=="pk"&&!part.dataset.s38id){part.dataset.s38id=id;part.setAttribute("draggable","true");part.title="Перетащите, чтобы добавить в калькулятор"}
+ });
+ if(state.tab==="laws")lawDecorate(v);
+}
+
+/* ---------- 20: закладки и «продолжить с места» в законах ---------- */
+var BM=jg("bos-lawbm",[]); if(!Array.isArray(BM))BM=[];
+var LPOS=jg("bos-lawpos",null);
+function hTitle(h){var n=h.querySelector(".lt-n"),t=h.querySelector(".lt-at"),law=h.closest('[id^="lw-"]:not([id^="lw-a-"])'),lt=law&&law.querySelector(".lw-t");
+ var s=(n?n.textContent:"")+(t&&t.textContent?" · "+t.textContent:"");if(!s.trim())s=h.textContent;s=String(s).replace(/🔖/g,"").replace(/\s+/g," ").trim();
+ return ((lt?String(lt.firstChild&&lt.firstChild.nodeType===3?lt.firstChild.textContent:lt.textContent).replace(/\s+/g," ").trim().slice(0,40)+": ":"")+s).slice(0,100)}
+function lawIdOf(el){var c=el.closest('[id^="lw-"]:not([id^="lw-a-"]):not([id^="lw-l-"])');return c?c.id.slice(3):""}
+function lawGo(law,el){if(window.SenkoLaws&&law)SenkoLaws.open(law);setTimeout(function(){var t=document.getElementById(el);if(t){t.scrollIntoView({block:"start"});t.style.outline="2px solid var(--accent)";setTimeout(function(){t.style.outline=""},1600)}else toast("Статья не найдена: возможно, закон изменился")},150)}
+function lawDecorate(v){
+ v.querySelectorAll("h6.lt-art").forEach(function(h){if(h.querySelector(".s38-bm"))return;var on=BM.some(function(b){return b.el===h.id});h.insertAdjacentHTML("beforeend",'<button type="button" class="s38-bm'+(on?' on':'')+'" data-s38bm="'+e(h.id)+'" aria-label="Закладка" title="'+(on?'Убрать закладку':'Поставить закладку')+'">🔖</button>')});
+ var box=v.querySelector(".s38-lw"),has=BM.length||(LPOS&&LPOS.el);
+ if(!has){if(box)box.remove();return}
+ var h='';
+ if(LPOS&&LPOS.el)h+='<div class="s38-cont"><span>Вы остановились: <b style="display:inline">'+e(LPOS.t)+'</b></span><button type="button" class="btn" data-s38cont="1">Продолжить с места</button></div>';
+ if(BM.length)h+='<b>🔖 Закладки</b><ul>'+BM.map(function(b,i){return '<li><button type="button" data-s38bmgo="'+i+'" title="'+e(b.t)+'">'+e(b.t)+'</button><button type="button" class="x" data-s38bmdel="'+i+'" aria-label="Удалить закладку">×</button></li>'}).join("")+'</ul>';
+ if(!box){box=document.createElement("div");box.className="s38-lw noprint";var first=v.querySelector(".lw-card, .lw-list, article");if(first&&first.parentNode)first.parentNode.insertBefore(box,first);else v.insertAdjacentElement("afterbegin",box)}
+ box.innerHTML=h}
+var posT=null;
+window.addEventListener("scroll",function(){if(state.tab!=="laws")return;clearTimeout(posT);posT=setTimeout(function(){
+ var hs=document.querySelectorAll("#view h6.lt-art"),pick=null;for(var i=0;i<hs.length;i++){var r=hs[i].getBoundingClientRect();if(r.top>=40){pick=hs[i];break}}
+ if(pick){var law=lawIdOf(pick);if(law){LPOS={law:law,el:pick.id,t:hTitle(pick),at:Date.now()};js("bos-lawpos",LPOS)}}},700)},{passive:true});
+
+/* ---------- клики ---------- */
+document.addEventListener("click",function(ev){
+ var t=ev.target.closest&&ev.target.closest("[data-s38pin],[data-s38unpin],[data-s38pad],[data-s38bm],[data-s38bmgo],[data-s38bmdel],[data-s38cont],[data-s38snd],[data-s38t],[data-s38fav],[data-s38wz]");if(!t)return;
+ var d=t.dataset;
+ if(d.s38pin){ev.stopPropagation();pinToggle(d.s38pin);return}
+ if(d.s38unpin){ev.stopPropagation();pinToggle(d.s38unpin);return}
+ if(d.s38pad){ev.stopPropagation();toPad(d.s38pad);return}
+ if(d.s38bm){ev.stopPropagation();var h=document.getElementById(d.s38bm),i=-1;BM.forEach(function(b,j){if(b.el===d.s38bm)i=j});
+  if(i>=0){BM.splice(i,1);t.classList.remove("on");toast("Закладка удалена")}else if(h){BM.unshift({law:lawIdOf(h),el:h.id,t:hTitle(h)});BM=BM.slice(0,30);t.classList.add("on");toast("Закладка поставлена")}
+  js("bos-lawbm",BM);lawDecorate(window.view||document.getElementById("view"));return}
+ if(d.s38bmgo!=null){var b=BM[+d.s38bmgo];if(b)lawGo(b.law,b.el);return}
+ if(d.s38bmdel!=null){BM.splice(+d.s38bmdel,1);js("bos-lawbm",BM);var v=window.view||document.getElementById("view");v.querySelectorAll(".s38-bm").forEach(function(x){x.remove()});lawDecorate(v);return}
+ if(d.s38cont){if(LPOS)lawGo(LPOS.law,LPOS.el);return}
+ if(d.s38snd){sndTest(d.s38snd);return}
+ if(d.s38t){var p=d.s38t.split("|");SND[p[0]]=p[1];js("bos-snd38",SND);if(window.SA_paintSheet)SA_paintSheet();if(p[1]!=="off")sndTest(p[0]);return}
+ if(d.s38fav){ls("bos-favsort",d.s38fav);if(window.SA_paintSheet)SA_paintSheet();if(state.favOnly)rr();return}
+ if(d.s38wz){wzOpen(true);return}
+},true);
+document.addEventListener("change",function(ev){var t=ev.target;if(!t)return;
+ if(t.dataset&&t.dataset.s38sel){SND[t.dataset.s38sel]=t.value;js("bos-snd38",SND);if(t.value!=="off")sndTest(t.dataset.s38sel);return}
+ if(t.id==="s38vol"){SND.vol=+t.value;js("bos-snd38",SND);sndTest("wait")}});
+document.addEventListener("input",function(ev){var t=ev.target;if(t&&t.id==="s38vol"){var o=document.getElementById("s38volo");if(o)o.textContent=t.value+"%"}});
+
+/* ---------- настройки ---------- */
+var rows0=window.SA_s13Rows;
+window.SA_s13Rows=function(row,sw,seg){
+ var h=rows0?rows0(row,sw,seg):"";
+ h+='<div class="sgroup">Звуки таймеров</div>';
+ SKINDS.forEach(function(k){var cur=SND[k[0]]||"beep";h+=row(e(k[1]),"Свой звук для этого события. Общий выключатель звука — в разделе «Задержание».",'<span class="s38-snd"><select data-s38sel="'+k[0]+'" aria-label="'+e(k[1])+'">'+SPRE.map(function(p){return '<option value="'+p[0]+'"'+(p[0]===cur?' selected':'')+'>'+p[1]+'</option>'}).join("")+'</select><button type="button" class="btn" data-s38snd="'+k[0]+'">▶</button></span>')});
+ h+=row("Громкость звуков","",'<span class="s38-snd"><input type="range" id="s38vol" min="0" max="100" step="5" value="'+sVol()+'" aria-label="Громкость звуков"><output id="s38volo">'+sVol()+'%</output></span>');
+ h+='<div class="sgroup">Избранное и первая настройка</div>';
+ h+=row("Порядок избранного",favAuto()?"Чаще открываемые статьи стоят выше.":"Ваш порядок: перетаскивайте статьи в избранном.",'<div class="seg" role="group"><button type="button" data-s38fav="auto" aria-pressed="'+favAuto()+'">По частоте</button><button type="button" data-s38fav="manual" aria-pressed="'+(!favAuto())+'">Свой порядок</button></div>');
+ h+=row("Настройка за минуту","Роль, тема и горячая клавиша в 3 шага.",'<button type="button" class="btn" data-s38wz="1">Пройти заново</button>');
+ return h};
+
+/* ---------- 48: мастер первой настройки ---------- */
+var WZ={step:0};
+function wzHtml(){
+ var R=window.SA_ROLES,S=window.SA_S||{},st=null;try{st=A&&A.state?A.state():null}catch(x){}
+ var web=!!(A&&A.web),total=web?2:3,h='<div class="s38-wz"><span class="step">Шаг '+(WZ.step+1)+' из '+total+'</span>';
+ if(WZ.step===0){var cur=R?R.cur():"off";h+='<b>Кто вы в игре?</b><p class="sd-note">От роли зависит, какие разделы видны в меню. Поменять можно в любой момент вверху меню.</p><div class="opts">'+(R?R.list():[]).map(function(r){return '<button type="button" class="btn" data-wzr="'+e(r.id)+'" aria-pressed="'+(r.id===cur)+'">'+e(r.name)+'</button>'}).join("")+'</div>'}
+ else if(WZ.step===1){h+='<b>Тема оформления</b><div class="opts">'+[["auto","Как в системе"],["light","Светлая"],["dark","Тёмная"]].map(function(t){return '<button type="button" class="btn" data-wzt="'+t[0]+'" aria-pressed="'+(S.theme===t[0])+'">'+t[1]+'</button>'}).join("")+'</div>'}
+ else{var hk=st&&st.cfg?st.cfg.hotkey:"";h+='<b>Горячая клавиша</b><p class="sd-note">Показывает и прячет окно программы поверх игры.'+(hk?' Сейчас: <b>'+e(hk)+'</b>.':'')+'</p><div class="opts">'+["Alt+Q","Ctrl+Shift+S","Ctrl+Alt+Z"].map(function(k){return '<button type="button" class="btn" data-wzk="'+k+'" aria-pressed="'+(hk===k)+'">'+k+'</button>'}).join("")+'</div><p class="sd-note">Любое своё сочетание — в настройках, раздел «Окно».</p>'}
+ h+='<div class="sd-acts"><button type="button" class="btn" data-wzx="1">'+(WZ.step?'Назад':'Пропустить')+'</button><button type="button" class="btn primary" data-wzn="1">'+(WZ.step+1>=total?'Готово':'Далее')+'</button></div></div>';
+ return h}
+function wzPaint(){var b=document.getElementById("s38wzb");if(b)b.innerHTML=wzHtml()}
+function wzOpen(again){WZ.step=0;if(!window.SA_modal)return;SA_modal("Настройка за минуту",'<div id="s38wzb">'+wzHtml()+'</div>');if(!again)ls("bos-setup38","1")}
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-wzr],[data-wzt],[data-wzk],[data-wzx],[data-wzn]");if(!b||!document.getElementById("s38wzb"))return;var d=b.dataset,S=window.SA_S;
+ if(d.wzr){if(window.SA_ROLES)SA_ROLES.set(d.wzr);wzPaint();return}
+ if(d.wzt&&S){S.theme=d.wzt;S.tt=false;js("bos-settings",S);if(window.SA_apply)SA_apply();wzPaint();return}
+ if(d.wzk&&A&&A.set){var r=A.set("hotkey",d.wzk);if(r&&r.ok===false&&r.error)toast(r.error);else{try{A.set("hotkeyEnabled",true)}catch(x){}toast("Горячая клавиша: "+d.wzk)}setTimeout(wzPaint,100);return}
+ if(d.wzx){if(WZ.step){WZ.step--;wzPaint()}else{ls("bos-setup38","1");if(window.SA_modalClose)SA_modalClose()}return}
+ if(d.wzn){var total=A&&A.web?2:3;if(WZ.step+1>=total){ls("bos-setup38","1");if(window.SA_modalClose)SA_modalClose();toast("Готово! Обучение по программе — на главной");return}WZ.step++;wzPaint();return}
+});
+// показываем новичку один раз: на этом компьютере ещё не выбирали роль и не проходили тур
+setTimeout(function(){try{var st=A&&A.state?A.state():null;if(!st||!st.user)return;if(ls("bos-setup38")||ls("bos-tour")||ls("bos-role"))return;wzOpen(false)}catch(x){}},1800);
+
+/* ---------- перерисовка ---------- */
+var r0=window.render;
+window.render=function(){var r=r0.apply(this,arguments);try{paintPins();decorate()}catch(x){}return r};
+var v0=window.view||document.getElementById("view"),mT=null;
+if(v0&&window.MutationObserver)new MutationObserver(function(){if(mT)return;mT=setTimeout(function(){mT=null;try{decorate();if(!v0.querySelector(".s38-pins"))paintPins()}catch(x){}},60)}).observe(v0,{childList:true,subtree:true});
+window.SA_s38={undo:undo,pins:function(){return PINS.slice()},fc:function(){return FC}};
+})();
+</script>
 <script>
 /* Служебные сообщения (3.2): движок эффектов.
    Сервер присылает только данные (список эффектов), программа рисует их сама: текст вставляется только через textContent,

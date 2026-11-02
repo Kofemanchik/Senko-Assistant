@@ -30,10 +30,23 @@ module.exports = function (opts) {
     loadedFor = srv(); data = null; remote = null; lastOkAt = 0; hold = 0; lastErr = ""; missing = false;
     try { const m = JSON.parse(fs.readFileSync(metaFile(), "utf8")); remote = m.remote || null; lastOkAt = m.lastOkAt || 0; hold = m.hold || 0; } catch (e) {}
   }
+  // 3.8: самопроверка. Файл законов повреждён (не читается или без статей) — откладываем его в .bad и сразу скачиваем заново
+  let healing = 0;
   function read() {
     loadState();
     if (data) return data;
-    try { data = JSON.parse(fs.readFileSync(file(), "utf8")); } catch (e) { data = null; }
+    if (!fs.existsSync(file())) return null;
+    let bad = "";
+    try {
+      data = JSON.parse(fs.readFileSync(file(), "utf8"));
+      if (!data || !Array.isArray(data.laws) || !data.laws.length) bad = "в файле нет законов";
+    } catch (e) { bad = "файл не читается"; }
+    if (bad) {
+      data = null;
+      try { fs.renameSync(file(), file() + ".bad"); } catch (e) {}
+      lastErr = "Файл законов был повреждён (" + bad + "), скачиваю заново.";
+      if (Date.now() - healing > 60000) { healing = Date.now(); setTimeout(() => { sync().catch(() => {}); }, 1500); }
+    }
     return data;
   }
   const saveMeta = () => { try { fs.writeFileSync(metaFile(), JSON.stringify({ remote, lastOkAt, hold })); } catch (e) {} };
