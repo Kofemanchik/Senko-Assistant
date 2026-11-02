@@ -17,6 +17,23 @@
   function enter() { location.replace(next()); }
   function clean(s, m) { return String(s == null ? "" : s).replace(/[\u0000-\u001f]/g, " ").trim().slice(0, m); }
 
+  // 3.8: вход по QR-коду из программы (одноразовый код в адресе)
+  var qr = "";
+  try { qr = new URLSearchParams(location.search).get("qr") || ""; } catch (e) {}
+  if (/^[0-9a-f]{32}$/.test(qr)) {
+    history.replaceState(null, "", location.pathname);
+    W.call(Object.assign({ action: "qr_login", op: "redeem", code: qr }, W.client())).then(function (r) {
+      if (r && r.ok) {
+        W.ls("sa-web-last", r.user.login);
+        W.saveSession(r.user.login, r.token, true);
+        W.cacheUser(r.user, { sys: r.sys });
+        location.replace("/app/");
+      } else {
+        var n = document.getElementById("lErr");
+        if (n) { n.textContent = (r && r.error) || "Не удалось войти по QR-коду."; n.hidden = false; }
+      }
+    });
+  } else
   // уже вошли — сразу в помощник
   if (W.session() && !/[?&]out=1/.test(location.search)) { enter(); return; }
 

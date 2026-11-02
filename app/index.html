@@ -4576,7 +4576,7 @@ function cabHtml(){
       fld("discord","Discord",acc.discord,40,"ник в Discord")+fld("telegram","Telegram",acc.telegram,33,"@name или пусто")+fld("phone","Номер в игре",acc.phone,12,"только цифры или пусто")+
       '<div class="sbtns" style="margin:0"><button type="button" class="btn" data-cab="accsave" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Сохранить</button></div>'+
       '<div id="accMsg" role="status" aria-live="polite" style="font-size:12.5px;color:var(--muted);min-height:1.2em"></div></div></div>';
-    ah+=cabPart(function(){return deptInfo(acc.org||dept)})+cabPart(function(){return window.SA_PROG?window.SA_PROG.html():""})+cabPart(function(){return window.SA_CAB11?window.SA_CAB11(true):""})+cabPart(function(){return window.SA_CAB13?window.SA_CAB13(true):""})+cabPart(function(){return window.SA_CAB24?window.SA_CAB24():""})+cabPart(function(){return window.SA_CAB28?window.SA_CAB28():""})+cabPart(function(){return window.SA_CAB35?window.SA_CAB35():""})+cabPart(dcCabHtml)+cabPart(function(){return window.SA_CAB38?window.SA_CAB38():""})+cabPart(function(){return window.SA_RP?window.SA_RP.cabHtml():""})+cabPart(detHtml)+cabPart(testHtml);
+    ah+=cabPart(function(){return deptInfo(acc.org||dept)})+cabPart(function(){return window.SA_PROG?window.SA_PROG.html():""})+cabPart(function(){return window.SA_CAB11?window.SA_CAB11(true):""})+cabPart(function(){return window.SA_CAB13?window.SA_CAB13(true):""})+cabPart(function(){return window.SA_CAB24?window.SA_CAB24():""})+cabPart(function(){return window.SA_CAB28?window.SA_CAB28():""})+cabPart(function(){return window.SA_CAB35?window.SA_CAB35():""})+cabPart(dcCabHtml)+cabPart(function(){return window.SA_CAB38?window.SA_CAB38():""})+cabPart(function(){return window.SA_CAB44?window.SA_CAB44():""})+cabPart(function(){return window.SA_RP?window.SA_RP.cabHtml():""})+cabPart(detHtml)+cabPart(testHtml);
     ah+='<p class="cab-foot">Данные кабинета хранятся в вашем аккаунте. После смены ведомства или сервера программу нужно перезапустить: законы и подсказки подстроятся под выбранный сервер.</p>';
     return ah;
   }
@@ -7089,6 +7089,27 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.7.9",d:"02.11.2026",items:[
+  ["📖","Статья и вопрос дня","На главной каждый день статья с наказанием и вопрос из тренажёра: за верный ответ +5 опыта."],
+  ["🎯","Цель на день","Поставьте цель, например 20 вопросов в день: прогресс на главной, вечером программа напомнит, если цель не выполнена."],
+  ["🔎","Угадай статью","Новый режим тренажёра: по розыску, сроку и штрафу назовите статью УК."],
+  ["🏢","Тренировка по своему ведомству","Вопросы только по статьям юрисдикции вашего ведомства."],
+  ["🎙","Голосовой тренажёр","Программа читает вопрос вслух, вы называете номер статьи голосом."],
+  ["✍️","Свои вопросы и обмен по коду","Составляйте свои вопросы, проходите их тестом и передавайте коллегам кодом. Старший собирает тест для стажёра и видит его результат. Сравнение знаний с коллегой по темам — тоже по коду."],
+  ["📈","График прогресса","В статистике тренажёра — график среднего результата тестов по дням."],
+  ["❄️","Заморозка серии","Один пропущенный день в неделю не обнуляет серию дней."],
+  ["📱","Карточки свайпами","На телефоне карточку можно смахнуть: вправо — «знаю», влево — «далее»."],
+  ["📶","Контрольный тест без интернета","Если связи нет, результат контрольного теста сохраняется и уходит руководству сам, когда интернет вернётся."],
+  ["📘","Глоссарий","В «Общей части» — термины с короткими объяснениями. Список ведёт владелец, ИИ-помощник тоже его учитывает."],
+  ["🧮","Мини-калькулятор поверх игры","Своя горячая клавиша (Настройки → «Мини-калькулятор поверх игры») открывает маленькое окно: «12.8 17.6» — и сразу срок, штраф и розыск."],
+  ["📲","Вход в веб-версию по QR","Личный кабинет → Безопасность → «Показать QR-код»: телефон открывает веб-версию под вашим аккаунтом без пароля. Код одноразовый, живёт 3 минуты."],
+  ["⏰","Напоминание о смене","Задайте время и дни смен — за 15 минут программа напомнит."],
+  ["🗓","Итоги недели","В понедельник при первом запуске — карточка: опыт, задержания и тесты за прошлую неделю. Можно отключить."],
+  ["🌙","Тихие часы","В заданное время программа не показывает уведомления Windows и браузера."],
+  ["📋","Цитата из закона","Кнопка 📋 у статьи в разделе «Законы» копирует её с названием закона — для рапорта или чата."],
+  ["💾","Настройки окна в файле","Файл данных (Настройки → Данные) теперь переносит и настройки окна: поверх окон, прозрачность, горячие клавиши, мини-окно и рацию."],
+  ["📰","Правки за неделю на сайте","На странице «Изменения законов» после выбора сервера — правки за неделю по статьям с выдержкой «было → стало»."],
+ ]},
  {v:"3.7.8",d:"02.11.2026",items:[
   ["🛟","Откат неудачного обновления","Если новая версия дважды подряд не запустилась нормально, программа предложит скачать предыдущую, которая работала на этом компьютере, и больше не будет ставить эту версию сама — дождётся исправления."],
   ["🧾","Отчёт о сбое","Если окно программы аварийно закрылось, оно откроется заново, а программа спросит, отправить ли разработчику отчёт с причиной сбоя и журналом. Заметки, пароли и данные аккаунта в отчёт не попадают."],
@@ -7501,8 +7522,11 @@ var msg="";
 function say(t){msg=t; var m=document.getElementById("sdMsg"); if(m) m.textContent=t; else if(window.SA_paintSheet) window.SA_paintSheet();}
 function dump(){
  var data={}; lsKeys().forEach(function(k){var v=lsGet(k); if(v!=null) data[k]=v});
- return JSON.stringify({app:"Senko Assistant",kind:"export",format:1,version:ver(),savedAt:new Date().toISOString(),data:data},null,1);
+ // 3.8 (п. 126): настройки окна программы (поверх окон, прозрачность, горячие клавиши, мини-окно, рация) тоже в файле
+ var cfg=null;try{var c0=A&&!A.web&&A.state&&A.state().cfg;if(c0){cfg={};CFGK.forEach(function(k){if(c0[k]!==undefined)cfg[k]=c0[k]})}}catch(e){cfg=null}
+ return JSON.stringify({app:"Senko Assistant",kind:"export",format:1,version:ver(),savedAt:new Date().toISOString(),data:data,cfg:cfg},null,1);
 }
+var CFGK=["alwaysOnTop","hotkeyEnabled","hotkey","compact","opacity","tray","notify","rememberBounds","ghost","ghostOpacity","ghostBy","strip","snap","watchApps","watchMode","watchOpacity","streamAuto","voiceEnabled","voiceHotkey","voiceOpacity","miniEnabled","miniHotkey","miniOpacity","radioEnabled","radioHotkey","radioPin","radioHide","radioVoice","radioVoiceName","radioRate","radioSfx","radioOnline","radioSize","quiet"];
 function doExport(){
  var text=dump(), day=new Date().toISOString().slice(0,10);
  if(A&&A.exportData){
@@ -7517,7 +7541,7 @@ function parseFile(text){
  var data={}, n=0;
  Object.keys(j.data).forEach(function(k){ if(k.indexOf("bos-")===0&&typeof j.data[k]==="string"&&k.length<64){ data[k]=j.data[k]; n++ } });
  if(!n) return {error:"В файле нет данных."};
- return {data:data,n:n,at:j.savedAt||"",version:j.version||""};
+ return {data:data,n:n,at:j.savedAt||"",version:j.version||"",cfg:j.cfg&&typeof j.cfg==="object"?j.cfg:null};
 }
 function count(d,k){ try{ var v=JSON.parse(d[k]||"null"); return Array.isArray(v)?v.length:(v&&typeof v==="object"?Object.keys(v).length:0) }catch(e){ return 0 } }
 function confirmImport(f){
@@ -7534,6 +7558,7 @@ function confirmImport(f){
   var go=function(){
    lsKeys().forEach(function(k){try{localStorage.removeItem(k)}catch(e){}});
    Object.keys(f.data).forEach(function(k){lsSet(k,f.data[k])});
+   if(f.cfg&&A&&A.set&&!A.web)CFGK.forEach(function(k){if(f.cfg[k]!==undefined){try{A.set(k,f.cfg[k])}catch(e){}}});
    if(!lsGet("bos-seen-ver")) lsSet("bos-seen-ver",ver());
    location.reload();
   };
@@ -13742,7 +13767,7 @@ var TABS=[
  ["rep","Рапорты","rep","Ваши рапорты и их статус у руководства.",["Мои рапорты"]],
  ["learn","Обучение","learn","Результаты тренажёра, ошибки, которые стоит повторить, и контрольные тесты ведомства.",["Пройденные тесты","Стоит повторить","Контрольные тесты"]],
  ["people","Коллеги и связь","people","Что видят коллеги, спецсвязи и рейтинг на сайте.",["Спецсвязи","Профиль для коллег","Рейтинг недели на сайте"]],
- ["sec","Безопасность","lock","Пароль, входы в аккаунт и вход через Discord.",["Безопасность","Вход через Discord"]]
+ ["sec","Безопасность","lock","Пароль, входы в аккаунт и вход через Discord.",["Безопасность","Вход через Discord","Веб-версия на телефоне"]]
 ];
 var cur=null, q="";
 try{cur=localStorage.getItem("bos-cabtab")}catch(x){}
@@ -16551,6 +16576,118 @@ function glossInject(){if(state.tab!=="gen")return;glossLoad();if(!GL||!GL.lengt
  var first=v.querySelector("section.panel, .panel");if(first&&first.parentNode)first.parentNode.insertBefore(d,first);else v.insertAdjacentElement("afterbegin",d)}
 document.addEventListener("input",function(ev){var t=ev.target;if(t&&t.id==="s43gq"){GQ=t.value;var b=document.getElementById("s43gl");if(b)b.innerHTML=glossList()}});
 setTimeout(glossLoad,5000);
+})();
+</script>
+<style id="s44-style">
+.s44-qr{display:flex;gap:14px;align-items:center;flex-wrap:wrap}.s44-qr .qr svg{width:170px;height:170px;background:#fff;border-radius:10px}
+.s44-wk{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:8px 0}
+.s44-wk div{border:1px solid var(--line);border-radius:12px;padding:10px 12px}.s44-wk b{display:block;font-size:22px}.s44-wk span{font-size:12.5px;color:var(--muted,#888)}
+.s44-cq{border:0;background:none;cursor:pointer;font-size:14px;opacity:.45;margin-left:4px;padding:0 4px;vertical-align:middle}.s44-cq:hover{opacity:1}
+</style>
+<script>
+/* 3.8 (7): мини-калькулятор поверх игры — расчёт (30), вход в веб-версию по QR (35), напоминание о смене (36),
+   недельная сводка (34), цитата статьи закона в один клик (18) */
+(function(){
+"use strict";
+var A=window.senkoApp;
+function jg(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(x){return d}}
+function js(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(x){}}
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function toast(t){try{if(window.SA_toast)window.SA_toast(t)}catch(x){}}
+function api(a,d){if(!A||!A.api)return Promise.resolve({ok:false,error:"Нужна связь с сервером."});return A.api(a,d).then(function(r){return r||{ok:false,error:"Нет ответа сервера."}},function(){return {ok:false,error:"Ошибка связи с программой."}})}
+var KNM={uk:"УК",ak:"АК",dk:"ДК",pk:"ПК"};
+
+/* ---------- 30: разбор строки «12.8 17.6, ак 2.1, 10.5 ч.2» ---------- */
+function parseArts(q){
+ var toks=String(q||"").toLowerCase().replace(/ё/g,"е").replace(/,/g," ").split(/\s+/).filter(Boolean),out=[],miss=[],kind="uk";
+ for(var i=0;i<toks.length;i++){var t=toks[i];
+  if(/^(ук|ак|дк|uk|ak|dk)$/.test(t)){kind={"ук":"uk","ак":"ak","дк":"dk",uk:"uk",ak:"ak",dk:"dk"}[t];continue}
+  if(/^ст\.?$/.test(t))continue;
+  var m=/^(\d+(?:\.\d+)*)$/.exec(t);if(!m){if(!/^ч\.?\d*$/.test(t))miss.push(t);continue}
+  var code=m[1],part="",n=toks[i+1];
+  if(n&&/^ч\.?(\d+)$/.test(n)){part=/(\d+)/.exec(n)[1];i++}else if(n==="ч."||n==="ч"){var n2=toks[i+2];if(n2&&/^\d+$/.test(n2)){part=n2;i+=2}}
+  var L=(window.DATA||{})[kind]||[],rows=L.filter(function(r){return r.code===code}),r=null;
+  if(rows.length)r=part?rows.filter(function(x){return String(x.part||"1")===part})[0]||null:rows.filter(function(x){return !x.part||x.part==="1"||x.part==="0"})[0]||rows[0];
+  if(r)out.push(r);else miss.push((KNM[kind]||"")+" "+code+(part?" ч."+part:""));
+  kind="uk"}
+ return {items:out,miss:miss}}
+function calcOf(q){
+ var p=parseArts(q),it=p.items;if(!it.length)return {ok:false,error:p.miss.length?"Не найдено: "+p.miss.join(", "):"Введите номера статей."};
+ var uk=it.filter(function(r){return r.k==="uk"}),stars=Math.max.apply(null,uk.map(function(r){return r.stars||0}).concat([0])),ft=typeof finalTerm==="function"?finalTerm(it):{m:0},fine=it.filter(function(r){return r.k!=="uk"||!r.m}).reduce(function(a,r){return a+(r.fmax||0)},0);
+ var term=ft.m?"Срок: до "+ft.m+" мес."+(ft.cut?" (предел)":""):(fine?"Без срока":"Наказание не указано");
+ var line=[stars?"Розыск: "+stars+" ★":"",fine?"Штраф до "+money(fine):"",uk.some(function(r){return r.rec})?"судимость":""].filter(Boolean).join(" · ");
+ return {ok:true,term:term,line:line,items:it.map(function(r){return (KNM[r.k]||"")+" "+r.code+(r.part&&r.part!=="1"&&r.part!=="0"?" ч."+r.part:"")+" — "+String(r.title||"").replace(/<[^>]+>/g,"").slice(0,50)}),miss:p.miss}}
+window.SA_qcalc=calcOf;
+if(A&&A.qcalcOn)A.qcalcOn(function(d){try{A.qcalcReply(calcOf(d.q))}catch(x){A.qcalcReply({ok:false,error:"Ошибка расчёта"})}},function(q){var p=parseArts(q);p.items.forEach(function(r){basket[r.id]=1});save();if(typeof updateBadge==="function")updateBadge();if(state.tab==="calc")render();toast("Добавлено в калькулятор: "+p.items.length)});
+
+/* ---------- 35: QR-вход в веб-версию ---------- */
+var QRT=null;
+function qrSvgS(t){try{var q=qrcode(0,"M");q.addData(t);q.make();return q.createSvgTag({cellSize:4,margin:2,scalable:true,alt:"QR-код входа"})}catch(x){return ""}}
+function qrOpen(){if(!window.SA_modal)return;SA_modal("Открыть на телефоне",'<div id="s44q"><p class="sd-note">Создаём одноразовый код…</p></div>');
+ api("qr_login",{op:"create"}).then(function(r){var b=document.getElementById("s44q");if(!b)return;if(!r.ok){b.innerHTML='<p class="sd-note">'+e(r.error||"Не удалось.")+'</p>';return}
+  var until=Date.now()+(r.ttl||180)*1000;
+  b.innerHTML='<div class="s44-qr"><div class="qr">'+qrSvgS(r.url)+'</div><div><p>Наведите камеру телефона на QR-код — веб-версия откроется сразу под вашим аккаунтом, без пароля.</p><p class="sd-note">Код одноразовый и действует <b id="s44qt">3:00</b>. Никому не показывайте его на стриме.</p></div></div>';
+  clearInterval(QRT);QRT=setInterval(function(){var t=document.getElementById("s44qt");if(!t){clearInterval(QRT);return}var s=Math.max(0,Math.round((until-Date.now())/1000));t.textContent=Math.floor(s/60)+":"+("0"+s%60).slice(-2);if(!s){clearInterval(QRT);b.innerHTML='<p class="sd-note">Код устарел. Закройте окно и откройте снова.</p>'}},1000)})}
+window.SA_CAB44=function(){try{var s=A.state();if(!s||!s.user||s.user.offline||A.web)return ""}catch(x){return ""}
+ return '<section class="panel s13-cab"><h2>Веб-версия на телефоне<small>вход по QR-коду</small></h2><p class="sd-note">Откройте веб-версию на телефоне под этим аккаунтом без ввода пароля: покажите QR-код и наведите на него камеру.</p><button type="button" class="btn primary" data-s44="qr">Показать QR-код</button></section>'};
+
+/* ---------- 36: напоминание о смене ---------- */
+var DN=["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+function sr(){var v=jg("bos-shiftrem",null);return v&&typeof v==="object"?v:{on:false,time:"19:00",days:[0,1,2,3,4]}}
+setInterval(function(){try{var c=sr();if(!c.on||!/^\d\d:\d\d$/.test(c.time))return;var d=new Date(),wd=(d.getDay()+6)%7;if(c.days.indexOf(wd)<0)return;
+ var p=c.time.split(":"),at=new Date(d.getFullYear(),d.getMonth(),d.getDate(),+p[0],+p[1]).getTime(),diff=at-d.getTime();if(diff>15*60000||diff<14*60000-30000)return;
+ var key=d.toDateString();if(jg("bos-shiftrem-last","")===key)return;js("bos-shiftrem-last",key);
+ toast("⏰ Через 15 минут смена ("+c.time+")");if(A&&A.notify&&!(window.SA_quietNow&&SA_quietNow()))A.notify("Senko · скоро смена","Смена начинается в "+c.time+". Через 15 минут.")}catch(x){}},30000);
+
+/* ---------- 34: недельная сводка (понедельник, первый вход) ---------- */
+function wkKey(d){d=d||new Date();var x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x.getFullYear()+"-"+(x.getMonth()+1)+"-"+x.getDate()}
+(function(){var W=jg("bos-wk34",{}),now=wkKey(),xp=+jg("bos-xp",0)||0;
+ if(!W.k){js("bos-wk34",{k:now,xp:xp});return}
+ if(W.k===now)return;
+ var prevXp=W.xp||0;js("bos-wk34",{k:now,xp:xp,lastShown:W.lastShown});
+ if(jg("bos-wk34off",false))return;
+ setTimeout(function(){try{
+  var start=new Date(now.split("-")[0],now.split("-")[1]-1,now.split("-")[2]).getTime(),from=start-7*864e5;
+  var H=Array.isArray(window.thist)?thist:[],det=H.filter(function(h){return h.end>=from&&h.end<start}).length;
+  var T=jg("bos-tests",[]),tests=Array.isArray(T)?T.filter(function(t){return t.t>=from&&t.t<start}):[],avg=tests.length?Math.round(tests.reduce(function(a,t){return a+(t.p||0)},0)/tests.length):0;
+  var gain=Math.max(0,xp-prevXp);
+  if(!det&&!tests.length&&!gain)return;
+  var h='<p class="sd-note">Неделя '+new Date(from).toLocaleDateString("ru-RU",{day:"numeric",month:"long"})+' — '+new Date(start-864e5).toLocaleDateString("ru-RU",{day:"numeric",month:"long"})+'</p><div class="s44-wk"><div><b>+'+gain+'</b><span>опыта</span></div><div><b>'+det+'</b><span>задержаний</span></div><div><b>'+tests.length+'</b><span>тестов'+(avg?' · средний '+avg+'%':'')+'</span></div></div>'+
+   '<div class="sd-acts"><label class="sd-note" style="display:flex;gap:6px;align-items:center;margin:0 auto 0 0"><input type="checkbox" id="s44wo"> Больше не показывать</label><button type="button" class="btn primary" data-sd="x">Хорошо</button></div>';
+  if(window.SA_modal)SA_modal("Итоги недели",h)}catch(x){}},4000)})();
+document.addEventListener("change",function(ev){var t=ev.target;if(t&&t.id==="s44wo")js("bos-wk34off",!!t.checked)});
+
+/* ---------- 18: цитата статьи закона ---------- */
+function lawQuote(h){var law=h.closest('[id^="lw-"]:not([id^="lw-a-"]):not([id^="lw-l-"])'),lt=law&&law.querySelector(".lw-t");
+ var title=lt?String(lt.firstChild&&lt.firstChild.nodeType===3?lt.firstChild.textContent:lt.textContent).trim():"";
+ var head=[].map.call(h.querySelectorAll(".lt-n,.lt-at"),function(x){return x.textContent.trim()}).join(". ");
+ var body=[],n=h.nextElementSibling;while(n&&!/^(H4|H5|H6)$/.test(n.tagName)){var t=n.textContent.replace(/📋|🔖/g,"").replace(/\s+/g," ").trim();if(t)body.push(t);n=n.nextElementSibling}
+ return (title?title+", ":"")+head+(body.length?"\n"+body.join("\n"):"")}
+function decorateLaws(){if(state.tab!=="laws")return;document.querySelectorAll("#view h6.lt-art").forEach(function(h){if(h.querySelector(".s44-cq"))return;h.insertAdjacentHTML("beforeend",'<button type="button" class="s44-cq" data-s44cq="1" aria-label="Скопировать статью" title="Скопировать статью с названием закона">📋</button>')})}
+var v0=document.getElementById("view"),tt=null;if(v0&&window.MutationObserver)new MutationObserver(function(){if(tt||state.tab!=="laws")return;tt=setTimeout(function(){tt=null;try{decorateLaws()}catch(x){}},90)}).observe(v0,{childList:true,subtree:true});
+
+/* ---------- настройки и клики ---------- */
+var rows0=window.SA_s13Rows;
+window.SA_s13Rows=function(row,sw,seg){var h=rows0?rows0(row,sw,seg):"",c=sr(),st=null;try{st=A.state()}catch(x){}
+ h+='<div class="sgroup">Смена и неделя</div>';
+ h+=row("Напоминание о смене","За 15 минут до начала программа покажет уведомление.",'<span class="fsctl"><input type="time" class="tin s13-time" id="s44st" value="'+e(c.time)+'" aria-label="Время смены"><button type="button" class="sw" role="switch" data-s44sr="1" aria-checked="'+(!!c.on)+'" aria-label="Напоминание о смене"></button></span>');
+ h+=row("Дни смен","",'<div class="seg" role="group">'+DN.map(function(n,i){return '<button type="button" data-s44d="'+i+'" aria-pressed="'+(c.days.indexOf(i)>=0)+'">'+n+'</button>'}).join("")+'</div>');
+ h+=row("Итоги недели","В понедельник при первом запуске — карточка: опыт, задержания и тесты за неделю.",'<button type="button" class="sw" role="switch" data-s44wk="1" aria-checked="'+(!jg("bos-wk34off",false))+'" aria-label="Итоги недели"></button>');
+ if(st&&st.cfg&&!A.web){var qk=st.cfg.qcalcHotkey||"";
+  h+='<div class="sgroup">Мини-калькулятор поверх игры</div>';
+  h+=row("Горячая клавиша","Маленькое окно поверх игры: введите «12.8 17.6» — сразу срок, штраф и розыск."+(st.cfg.qcalcError?" "+e(st.cfg.qcalcError):""),'<div class="seg" role="group">'+[["","Выкл"],["Ctrl+Alt+C","Ctrl+Alt+C"],["Ctrl+Shift+C","Ctrl+Shift+C"],["Alt+F2","Alt+F2"]].map(function(o){return '<button type="button" data-s44qk="'+o[0]+'" aria-pressed="'+(qk===o[0])+'">'+o[1]+'</button>'}).join("")+'</div><button type="button" class="btn" data-s44="qcalc" style="margin-left:8px">Открыть</button>')}
+ return h};
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s44],[data-s44sr],[data-s44d],[data-s44wk],[data-s44qk],[data-s44cq]");if(!b)return;var d=b.dataset;
+ if(d.s44==="qr")return qrOpen();
+ if(d.s44==="qcalc"){if(A&&A.set)A.set("qcalcOpen",true);return}
+ if(d.s44cq){ev.stopPropagation();var h=b.closest("h6");var t=lawQuote(h);try{if(A&&A.copy)A.copy(t);else navigator.clipboard.writeText(t);toast("Статья скопирована с названием закона")}catch(x){}return}
+ var c=sr();
+ if(d.s44sr){c.on=!c.on;js("bos-shiftrem",c);b.setAttribute("aria-checked",String(c.on));toast(c.on?"Напомню о смене в "+(c.time):"Напоминание о смене выключено");return}
+ if(d.s44d!=null){var i=+d.s44d,k=c.days.indexOf(i);if(k>=0)c.days.splice(k,1);else c.days.push(i);js("bos-shiftrem",c);b.setAttribute("aria-pressed",String(k<0));return}
+ if(d.s44wk){var off=!jg("bos-wk34off",false);js("bos-wk34off",off);b.setAttribute("aria-checked",String(!off));return}
+ if(d.s44qk!=null){var r=A&&A.set?A.set("qcalcHotkey",d.s44qk):null;if(r&&r.ok===false&&r.error)toast(r.error);else toast(d.s44qk?"Мини-калькулятор: "+d.s44qk:"Горячая клавиша мини-калькулятора выключена");if(window.SA_paintSheet)SA_paintSheet();return}
+},true);
+document.addEventListener("change",function(ev){var t=ev.target;if(t&&t.id==="s44st"&&/^\d\d:\d\d$/.test(t.value)){var c=sr();c.time=t.value;js("bos-shiftrem",c)}});
 })();
 </script>
 <script>

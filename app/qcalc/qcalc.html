@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'">
+<title>Мини-калькулятор · Senko Assistant</title>
+<style>
+:root{--bg:#1b1714;--card:#25201b;--ink:#f3ece4;--muted:#b3a698;--line:#3a322b;--accent:#ff8a3d}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.4 "Segoe UI",system-ui,sans-serif;overflow:hidden}
+.w{padding:12px 14px;height:100%;display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:12px}
+.h{display:flex;justify-content:space-between;align-items:center;-webkit-app-region:drag}.h b{font-size:13px}.h button{-webkit-app-region:no-drag}
+input{width:100%;font:600 18px Consolas,monospace;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--card);color:var(--ink);outline:none}
+input:focus{border-color:var(--accent)}
+.r{flex:1;overflow:auto;font-size:13.5px}.big{font-size:20px;font-weight:700;color:var(--accent)}.m{color:var(--muted);font-size:12px}
+.row{display:flex;gap:8px}.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:5px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+.x{border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1}
+.err{color:#ff7b6b}
+ul{margin:4px 0 0;padding-left:18px}
+</style>
+</head>
+<body>
+<div class="w">
+ <div class="h"><b>🧮 Мини-калькулятор</b><button type="button" class="x" id="x" aria-label="Закрыть">×</button></div>
+ <input id="q" placeholder="12.8 17.6 · ак 2.1 · 10.5 ч.2" autocomplete="off" spellcheck="false" aria-label="Статьи">
+ <div class="r" id="r" aria-live="polite"><span class="m">Введите номера статей через пробел и нажмите Enter. Префикс «ак» или «дк» — для АК и ДК. Esc — закрыть.</span></div>
+ <div class="row"><button type="button" class="btn" id="add">В калькулятор программы</button></div>
+</div>
+<script>
+(function(){
+var Q=window.senkoQcalc,q=document.getElementById("q"),r=document.getElementById("r"),t=null;
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function ask(){var v=q.value.trim();if(!v){r.innerHTML='<span class="m">Введите номера статей.</span>';return}Q.ask(v)}
+q.addEventListener("input",function(){clearTimeout(t);t=setTimeout(ask,350)});
+q.addEventListener("keydown",function(ev){if(ev.key==="Enter"){clearTimeout(t);ask()}if(ev.key==="Escape")Q.close()});
+document.getElementById("x").onclick=function(){Q.close()};
+document.getElementById("add").onclick=function(){var v=q.value.trim();if(v){Q.add(v);r.insertAdjacentHTML("beforeend",'<p class="m">Добавлено в калькулятор программы.</p>')}};
+Q.onShow(function(d){if(d.accent)document.documentElement.style.setProperty("--accent",d.accent);q.focus();q.select()});
+Q.onResult(function(d){
+ if(!d.ok){r.innerHTML='<span class="err">'+e(d.error||"Не удалось посчитать.")+'</span>';return}
+ var h='<div class="big">'+e(d.term)+'</div><div>'+e(d.line)+'</div>';
+ if(d.items&&d.items.length)h+='<ul>'+d.items.map(function(x){return '<li>'+e(x)+'</li>'}).join("")+'</ul>';
+ if(d.miss&&d.miss.length)h+='<p class="err">Не найдено: '+e(d.miss.join(", "))+'</p>';
+ r.innerHTML=h});
+})();
+</script>
+</body>
+</html>

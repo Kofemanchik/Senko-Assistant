@@ -1130,6 +1130,8 @@ async function api(req) {
       return J(await aiDictApi(b));
     case "glossary":
       return J(await glossApi(b));
+    case "qr_login":
+      return J(await qrLoginApi(b, ip));
     case "ai_hist":
       return J(await aiHist(b));
     case "ai_check":
@@ -5689,7 +5691,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 41;
+const SCHEMA_V = 42;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -5900,6 +5902,13 @@ create table if not exists public.share_results (
 alter table public.share_results enable row level security;
 revoke all on table public.share_results from anon, authenticated;
 `;
+// 3.8: одноразовые коды входа в веб-версию по QR
+const SCHEMA_42 = `
+create table if not exists public.qr_logins (
+  code_hash text primary key, user_id uuid not null references public.profiles(id) on delete cascade, expires_at timestamptz not null);
+alter table public.qr_logins enable row level security;
+revoke all on table public.qr_logins from anon, authenticated;
+`;
 const SCHEMA_37_ONCE = `
 update public.bot_settings set value = (select coalesce(jsonb_object_agg(k, case when v = '"beta"'::jsonb then '"all"'::jsonb else v end), '{}'::jsonb) from jsonb_each(value) e(k, v))
   where key = 'flags' and jsonb_typeof(value) = 'object';
@@ -5913,7 +5922,7 @@ function ensureSchema() {
         if (+v >= SCHEMA_V) return;
         // база уже на 2.4: повторно 2.4 не выполняем (иначе вернулись бы удалённые баннеры по умолчанию)
         // 3.5: SCHEMA_30 и SCHEMA_35 повторяемы (create/alter … if not exists), их добавляем всем, кто ниже 35
-        await db().unsafe((+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35) + (+v < 37 ? SCHEMA_37_ONCE : "") + SCHEMA_38 + SCHEMA_39 + SCHEMA_40 + SCHEMA_41);
+        await db().unsafe((+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35) + (+v < 37 ? SCHEMA_37_ONCE : "") + SCHEMA_38 + SCHEMA_39 + SCHEMA_40 + SCHEMA_41 + SCHEMA_42);
         adsReady = true;
         await setSetting("schema_v", SCHEMA_V);
       } catch (e) {
@@ -6783,6 +6792,39 @@ async function hmacHex(secret, msg) {
   const k = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return hex(await crypto.subtle.sign("HMAC", k, enc.encode(msg)));
 }
+// ───────────── 3.8 (п. 35): вход в веб-версию по QR-коду из программы ─────────────
+// Программа (уже вошедшая) создаёт одноразовый код на 3 минуты; телефон открывает ссылку с кодом и получает свою сессию.
+// Код хранится только хэшем, срабатывает один раз; о входе пользователь получает сообщение в программе.
+async function qrLoginApi(b, ip) {
+  const op = String(b.op || "");
+  const sql = db();
+  if (op === "create") {
+    const { p, err } = await who(b);
+    if (err) return err;
+    if (!(await hit(`qrc:${p.id}`, 10, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const code = rand(16);
+    await sql`delete from qr_logins where expires_at < now()`;
+    await sql`insert into qr_logins (code_hash, user_id, expires_at) values (${await sha256("qr:" + code)}, ${p.id}, now() + interval '3 minutes')`;
+    return { ok: true, url: SITE_URL + "/app/login/?qr=" + code, ttl: 180 };
+  }
+  if (op === "redeem") {
+    if (!(await hit(`qrr:${ip}`, 20, 600))) return fail(RATE_MSG, { code: "rate" });
+    const code = String(b.code || "");
+    if (!/^[0-9a-f]{32}$/.test(code)) return fail("Код входа неверный. Покажите QR-код в программе ещё раз.");
+    const [r] = await sql`delete from qr_logins where code_hash = ${await sha256("qr:" + code)} and expires_at > now() returning user_id`;
+    if (!r) return fail("Код входа устарел или уже использован. Покажите QR-код в программе ещё раз.", { code: "qr_gone" });
+    const p = await liftExpiredBan(await profileById(r.user_id));
+    if (!p) return fail("Аккаунт не найден.");
+    if (p.banned) return fail(banMsg(p), { code: "banned" });
+    if (p.approval && p.approval !== "ok") return fail(approvalMsg(p), { code: p.approval });
+    const token = await newSession(p.id, true, { ...b, ver: String(b.ver || "web") + " · QR" }, ip);
+    await logIn(p.id, "login", { ...b, ver: String(b.ver || "web") + " · QR" }, ip);
+    await secNotice(p, "📱 Вход в веб-версию по QR-коду", `Веб-версия открыта по QR-коду из программы${b.os ? " (" + clean(b.os, 40) + ")" : ""}, ${fmtDate(new Date())}. Если это были не вы, завершите этот вход в личном кабинете (Безопасность → Мои устройства).`);
+    return { ok: true, token, user: pub(p), sys: await sysFor(p) };
+  }
+  return fail("Неизвестное действие.");
+}
+
 // ───────────── 3.8 (п. 15): глоссарий терминов ─────────────
 // Хранится в bot_settings.glossary: [{t: термин, d: объяснение, refs: «ПК ст. 17, УК ст. 12.8»}]. Владелец правит его в панели,
 // программа и веб-версия получают через действие glossary, ИИ видит термины, которые встречаются в вопросе.

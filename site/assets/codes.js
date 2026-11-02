@@ -87,7 +87,7 @@
         if (!r || !r.ok || !r.gz) return { rows: base, live: false, error: r && r.error };
         return gunzip(r.gz).then(function (txt) {
           var d = JSON.parse(txt);
-          return { rows: merge(base, d.laws || [], s !== 12), live: true, at: r.updatedAt };
+          return { rows: merge(base, d.laws || [], s !== 12), live: true, at: r.updatedAt, laws: d.laws || [] };
         });
       }).catch(function () { return { rows: base, live: false }; });
     }).then(function (x) {
@@ -285,8 +285,46 @@
         }).join("");
       });
     }
-    sel.addEventListener("change", function () { var u = new URL(location.href); if (sel.value === "0") u.searchParams.delete("s"); else u.searchParams.set("s", sel.value); history.replaceState(null, "", u.toString()); go(); });
-    go();
+    sel.addEventListener("change", function () { var u = new URL(location.href); if (sel.value === "0") u.searchParams.delete("s"); else u.searchParams.set("s", sel.value); history.replaceState(null, "", u.toString()); go(); week(); });
+    go(); week();
+  }
+  /* 3.8 (п. 17, 71): правки за неделю по статьям с выдержкой «было → стало» — те же данные, что у программы */
+  function words(t) { return String(t || "").replace(/^\s*(?:Статья|Раздел)\s+\d[\d.]*\.?[^\n]*\n/i, "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean); }
+  function excerpt(was, now) {
+    var a = words(was), b = words(now), i = 0, j = 0;
+    while (i < a.length && i < b.length && a[i] === b[i]) i++;
+    while (j < a.length - i && j < b.length - i && a[a.length - 1 - j] === b[b.length - 1 - j]) j++;
+    var del = a.slice(i, a.length - j), ins = b.slice(i, b.length - j);
+    if (!del.length && !ins.length) return "";
+    var cut = function (L) { return L.length > 22 ? L.slice(0, 22).join(" ") + " …" : L.join(" "); };
+    var ctx = a.slice(Math.max(0, i - 4), i).join(" ");
+    return (ctx ? "…" + esc(ctx) + " " : "") + (del.length ? '<del class="cx-del">' + esc(cut(del)) + "</del> " : "") + (ins.length ? '<ins class="cx-ins">' + esc(cut(ins)) + "</ins>" : "");
+  }
+  function week() {
+    var wb = $("[data-chweek]"), s = parseInt($("[data-chs]").value, 10) || 0;
+    if (!wb) { wb = document.createElement("div"); wb.setAttribute("data-chweek", ""); var lb = $("[data-changes]"); lb.parentNode.insertBefore(wb, lb); }
+    if (!s) { wb.innerHTML = '<p class="doc-note">Выберите сервер, чтобы увидеть правки за неделю по статьям с выдержкой «было → стало».</p>'; return; }
+    wb.innerHTML = '<p class="cx-load">Загружаю правки за неделю…</p>';
+    load(s).then(function (x) {
+      var now = Date.now(), out = [];
+      (x.laws || []).forEach(function (L) {
+        if (L.isNew && L.changedAt && now - L.changedAt < 7 * 864e5) out.push({ L: L, at: L.changedAt, law: true });
+        (L.arts || []).forEach(function (c) { if (c.at && now - c.at < 7 * 864e5) out.push({ L: L, c: c, at: c.at }); });
+      });
+      if (!out.length) { wb.innerHTML = '<p class="doc-note">За последние 7 дней правок по статьям нет.</p>'; return; }
+      out.sort(function (a, b) { return b.at - a.at; });
+      var unit = function (L, n) { try { var P = LawCore.parse(L.text), u = null; P.units.some(function (y) { if (y.key === n) { u = y; return true; } }); return u ? u.text : null; } catch (e) { return null; } };
+      wb.innerHTML = '<h2 class="cx-h">За неделю: ' + out.length + " " + (out.length % 10 === 1 && out.length % 100 !== 11 ? "правка" : out.length % 10 >= 2 && out.length % 10 <= 4 && (out.length % 100 < 10 || out.length % 100 >= 20) ? "правки" : "правок") + "</h2>" +
+        out.slice(0, 80).map(function (it) {
+          var day = new Date(it.at).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+          if (it.law) return '<div class="cx-item cx-ch"><b>Новый закон</b><span>' + esc(it.L.title) + "</span><small>" + day + "</small></div>";
+          var c = it.c, n = String(c.n).replace(/#\d+$/, ""), body = "";
+          if (c.k === "changed" && c.was != null) { var t = unit(it.L, c.n); if (t != null) body = excerpt(c.was, t); }
+          else if (c.k === "added") { var t2 = unit(it.L, c.n); if (t2) body = esc(t2.replace(/\s+/g, " ").slice(0, 220)) + (t2.length > 220 ? " …" : ""); }
+          else if (c.k === "removed" && c.was) body = '<del class="cx-del">' + esc(String(c.was).replace(/\s+/g, " ").slice(0, 200)) + "</del>";
+          return '<div class="cx-item cx-ch"><b>' + (c.k === "added" ? "Добавлена" : c.k === "removed" ? "Удалена" : "Изменена") + " ст. " + esc(n) + "</b><span>" + esc(it.L.title) + (body ? '<br><span class="cx-ex">' + body + "</span>" : "") + "</span><small>" + day + "</small></div>";
+        }).join("");
+    });
   }
 
   /* /search/ */

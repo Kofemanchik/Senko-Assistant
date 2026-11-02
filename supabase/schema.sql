@@ -634,3 +634,9 @@ create table if not exists public.share_results (
   wrong jsonb not null default '[]', at timestamptz not null default now(), primary key (code, user_id));
 alter table public.share_results enable row level security;
 revoke all on table public.share_results from anon, authenticated;
+
+-- 3.8: коды входа в веб-версию по QR ------------------------------------------
+create table if not exists public.qr_logins (
+  code_hash text primary key, user_id uuid not null references public.profiles(id) on delete cascade, expires_at timestamptz not null);
+alter table public.qr_logins enable row level security;
+revoke all on table public.qr_logins from anon, authenticated;

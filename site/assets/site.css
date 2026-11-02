@@ -398,3 +398,8 @@ section{scroll-margin-top:80px}
 .cx-rt tr:last-child td{border-bottom:0}
 .nav a{white-space:nowrap}
 .brand span{white-space:nowrap}
+/* 3.8: правки за неделю по статьям */
+.cx-ex{display:inline-block;margin-top:4px;font-size:13.5px;line-height:1.5}
+.cx-del{background:rgba(192,57,43,.14);padding:0 2px;border-radius:3px}
+.cx-ins{background:rgba(46,157,91,.16);text-decoration:none;padding:0 2px;border-radius:3px}
+.cx-h{font-size:18px;margin:6px 0 10px}

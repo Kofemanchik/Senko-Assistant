@@ -157,6 +157,8 @@ contextBridge.exposeInMainWorld("senkoApp", {
   updateProfile: (d) => ipcRenderer.invoke("senko:profile-update", d || {}), // сохранить данные кабинета в аккаунт
   bug: (text, log, shot) => ipcRenderer.invoke("senko:bug", String(text || "").slice(0, 2000), typeof log === "string" ? log.slice(0, 60000) : "", typeof shot === "string" ? shot : ""), // сообщение об ошибке (+ журнал, + снимок окна с 2.4)
   shot: () => ipcRenderer.invoke("senko:shot"), // 2.4: снимок окна программы (data:image/jpeg)
+  qcalcOn: (onAsk, onAdd) => { if (typeof onAsk === "function") ipcRenderer.on("qcalc:ask", (_e, d) => onAsk(d || {})); if (typeof onAdd === "function") ipcRenderer.on("qcalc:add", (_e, q) => onAdd(String(q || ""))); }, // 3.8: мини-калькулятор
+  qcalcReply: (d) => ipcRenderer.send("qcalc:reply", d && typeof d === "object" ? d : {}),
   miniState: (d) => ipcRenderer.send("senko:mini-state", d && typeof d === "object" ? d : {}), // 2.4: данные для мини-окна задержания
   radioState: (d) => ipcRenderer.send("senko:radio-state", d && typeof d === "object" ? d : {}), // 2.6: задержания для экрана рации
   radioSay: (r) => ipcRenderer.send("senko:radio-say", r && typeof r === "object" ? r : {}), // 2.6: ответ диспетчера голосом рации

@@ -12,6 +12,7 @@ const trayMenu = require("./traymenu"); // 2.5: своё меню значка �
 const dialogs = require("./dialogs"); // 2.8.0-beta.5: окна-сообщения в стиле программы
 const ai = require("./ai");       // ИИ-помощник (через прокси)
 const createRecovery = require("./recovery"); // 3.8: автооткат неудачного обновления и отчёт о сбое
+const qcalc = require("./qcalc"); // 3.8: мини-калькулятор поверх игры
 let rec = null;
 
 // ───────────── НАСТРОЙКИ ─────────────
@@ -190,6 +191,7 @@ const DEFAULTS = {
   ghostOpacity: 55,          // прозрачность окна в призрачном режиме, %
   miniEnabled: true,         // 2.4: мини-окно задержания по горячей клавише
   miniHotkey: "Ctrl+Alt+M",
+  qcalcHotkey: "", // 3.8: мини-калькулятор поверх игры; по умолчанию выключен, клавиша задаётся в настройках
   miniOpacity: 90,           // непрозрачность мини-окна, %
   miniWidth: 320,            // ширина мини-окна: 260 | 320 | 400
   miniPos: null,             // позиция мини-окна {x, y}
@@ -220,6 +222,7 @@ function loadCfg() {
   cfg = { ...DEFAULTS, ...j };
   for (const k of ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "maximized", "voiceEnabled", "ghost", "voicePtt", "miniEnabled", "betaUpdates", "radioEnabled", "radioPin", "radioVoice", "radioSfx", "radioOnline"]) cfg[k] = !!cfg[k];
   if (!validHotkey(cfg.radioHotkey)) cfg.radioHotkey = DEFAULTS.radioHotkey;
+  if (cfg.qcalcHotkey && !validHotkey(cfg.qcalcHotkey)) cfg.qcalcHotkey = "";
   cfg.radioHide = Math.min(120, Math.max(5, Math.round(+cfg.radioHide || DEFAULTS.radioHide)));
   cfg.radioRate = Math.min(180, Math.max(60, Math.round(+cfg.radioRate || DEFAULTS.radioRate)));
   if (!["s", "m", "l"].includes(cfg.radioSize)) cfg.radioSize = "m";
@@ -786,7 +789,7 @@ function getState() {
       voiceEnabled: cfg.voiceEnabled, voiceHotkey: cfg.voiceHotkey, voiceOpacity: cfg.voiceOpacity, voiceMode: cfg.voiceMode,
       voiceHide: cfg.voiceHide, voiceSize: cfg.voiceSize, voiceFont: cfg.voiceFont, voicePtt: cfg.voicePtt, voiceMic: cfg.voiceMic,
       ghostBy: cfg.ghostBy, strip: cfg.strip, snap: cfg.snap, watchApps: cfg.watchApps.slice(), watchMode: cfg.watchMode, watchOpacity: cfg.watchOpacity, streamAuto: cfg.streamAuto,
-      miniEnabled: cfg.miniEnabled, miniHotkey: cfg.miniHotkey, miniOpacity: cfg.miniOpacity, betaUpdates: cfg.betaUpdates,
+      miniEnabled: cfg.miniEnabled, miniHotkey: cfg.miniHotkey, miniOpacity: cfg.miniOpacity, betaUpdates: cfg.betaUpdates, qcalcHotkey: cfg.qcalcHotkey || "", qcalcError: qcalc.hotkeyError(),
       radioEnabled: cfg.radioEnabled, radioHotkey: cfg.radioHotkey, radioPin: cfg.radioPin, radioHide: cfg.radioHide, radioVoice: cfg.radioVoice,
       radioVoiceName: cfg.radioVoiceName, radioRate: cfg.radioRate, radioSfx: cfg.radioSfx, radioOnline: cfg.radioOnline, radioSize: cfg.radioSize
     },
@@ -857,6 +860,16 @@ function applySet(key, val) {
     }
   } else if (key === "mini") {
     mini.toggle(val === undefined || val === null ? undefined : !!val);
+  } else if (key === "qcalcHotkey") {
+    const v = String(val || "");
+    if (v && !validHotkey(v)) return { ok: false, error: "Нужно сочетание с Ctrl, Alt или Win и обычной клавишей." };
+    if (v && ((v === cfg.hotkey && cfg.hotkeyEnabled) || (v === cfg.voiceHotkey && cfg.voiceEnabled) || (v === cfg.miniHotkey && cfg.miniEnabled) || v === cfg.radioHotkey)) return { ok: false, error: "Это сочетание уже занято в программе." };
+    const oldQ = cfg.qcalcHotkey;
+    cfg.qcalcHotkey = v;
+    result = qcalc.registerHotkey();
+    if (!result.ok) { cfg.qcalcHotkey = oldQ; qcalc.registerHotkey(); }
+  } else if (key === "qcalcOpen") {
+    qcalc.toggle(true);
   } else if (key === "miniHotkey") {
     if (!validHotkey(val)) return { ok: false, error: "Нужно сочетание с Ctrl, Alt или Win и обычной клавишей." };
     if ((val === cfg.hotkey && cfg.hotkeyEnabled) || (val === cfg.voiceHotkey && cfg.voiceEnabled)) return { ok: false, error: "Это сочетание уже занято в программе." };
@@ -1211,7 +1224,7 @@ ipcMain.handle("senko:sync-rebase", async (e) => {
 const PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password", "ads",
   "status", "beta", "hooks", "srv_cfg", "events", "ideas", "patrol", // 2.4
   "ai_dict", "ai_hist", "ai_check", "colleagues", "handoff", "svc",
-  "lead_log", "org_week", "pub_board_opt", "dc_auth_start", "dc_auth_poll", "dc_unlink", "org_news", "notice_read", "totp", "org_join", "org_join_admin", "glossary", "stt"]; // 3.5: журнал руководства, отчёт за неделю, рейтинг на сайте; 3.5.3: привязка Discord // 2.7, 2.8: коллеги, передача задержанного; 3.2: служебные сообщения
+  "lead_log", "org_week", "pub_board_opt", "dc_auth_start", "dc_auth_poll", "dc_unlink", "org_news", "notice_read", "totp", "org_join", "org_join_admin", "glossary", "stt", "qr_login"]; // 3.5: журнал руководства, отчёт за неделю, рейтинг на сайте; 3.5.3: привязка Discord // 2.7, 2.8: коллеги, передача задержанного; 3.2: служебные сообщения
 // 2.3: список микрофонов и проверка уровня для настроек (микрофон доступен только окну оверлея)
 ipcMain.handle("senko:voice-mics", async (e) => (fromMain(e) ? voice.mics() : { ok: false, error: "Недоступно." }));
 ipcMain.handle("senko:voice-test", async (e, on) => (fromMain(e) ? voice.test(!!on) : { ok: false, error: "Недоступно." }));
@@ -1621,6 +1634,7 @@ function initSystem() {
   voice.registerHotkey();
   mini.registerHotkey();
   radio.registerHotkey();
+  qcalc.registerHotkey();
   applyWindowCfg();
   updateTrayMenu();
 }
@@ -1631,6 +1645,7 @@ function tearDownSystem() {
   hotkeyActive = null;
   voice.destroy();
   mini.destroy();
+  qcalc.destroy();
   radio.destroy();
   mini.registerHotkey(); // сбросить запомненную клавишу (все уже сняты выше); снова включится в initSystem
 
@@ -1771,6 +1786,7 @@ app.whenReady().then(() => {
   });
   trayMenu.init({ state: trayState, act: trayAct });
   dialogs.init();
+  qcalc.init({ getCfg: () => cfg, fromMain, getWin: () => (win && !win.isDestroyed() ? win : null) });
   mini.init({
     getCfg: () => cfg,
     saveCfg,
