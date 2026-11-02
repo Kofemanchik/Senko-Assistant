@@ -607,3 +607,22 @@ alter table public.sessions add column if not exists ver text;
 alter table public.sessions add column if not exists os text;
 alter table public.sessions add column if not exists ip text;
 create index if not exists login_log_user_kind_idx on public.login_log (user_id, kind, at desc);
+
+-- 3.8: вступление в организацию — приглашения, анкеты, заявки -------------
+create table if not exists public.org_invites (
+  code_hash text primary key, code_tail text not null, org text not null, server int not null,
+  created_by uuid references public.profiles(id) on delete set null, created_by_label text not null default '',
+  created_at timestamptz not null default now(), expires_at timestamptz not null, uses int not null default 0, max_uses int not null default 1, revoked boolean not null default false);
+create index if not exists org_invites_org_idx on public.org_invites (org, server);
+create table if not exists public.org_forms (
+  org text not null, server int not null, questions jsonb not null default '[]', open boolean not null default false,
+  updated_by text not null default '', updated_at timestamptz not null default now(), primary key (org, server));
+create table if not exists public.org_apps (
+  id bigint generated always as identity primary key, user_id uuid not null references public.profiles(id) on delete cascade,
+  org text not null, server int not null, answers jsonb not null default '[]', status text not null default 'new',
+  note text not null default '', created_at timestamptz not null default now(), decided_at timestamptz, decided_by text);
+create index if not exists org_apps_org_idx on public.org_apps (org, server, status);
+alter table public.org_invites enable row level security;
+alter table public.org_forms enable row level security;
+alter table public.org_apps enable row level security;
+revoke all on table public.org_invites, public.org_forms, public.org_apps from anon, authenticated;

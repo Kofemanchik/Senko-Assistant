@@ -78,7 +78,7 @@
       return W.call(Object.assign({
         action: "register", login: d.login, password: d.password, nick: d.nick, static: d.static,
         server: clean(d.server, 4), org: d.org, orgOther: d.orgOther, role: d.role, discord: d.discord, telegram: d.telegram, phone: d.phone,
-        remember: !!d.remember, migrated: false, legal: d.legal
+        remember: !!d.remember, migrated: false, invite: clean(d.invite, 20), legal: d.legal
       }, W.client())).then(function (r) {
         if (!r.ok) return { ok: false, error: r.error || "Не удалось зарегистрироваться.", code: r.code };
         W.ls("sa-web-last", r.user.login);

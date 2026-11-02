@@ -326,6 +326,13 @@ async function register(b, ip) {
   if (clean(b.legal.version, 20) !== LEGAL_VERSION)
     return fail("Условия обновились. Обновите программу до последней версии и повторите регистрацию.", { code: "update" });
   if (!(await hit(`reg:${ip}`, 8, 3600))) return fail(RATE_MSG, { code: "rate" });
+  // 3.8: код-приглашение от руководства: организация и сервер берутся из приглашения, подтверждение не нужно
+  let inv = null;
+  if (b.invite && String(b.invite).trim()) {
+    inv = await inviteFind(b.invite);
+    if (!inv) return fail("Код приглашения не подходит: он неверный, истёк или уже использован. Уточните код у руководства или очистите поле.", { code: "invite" });
+    b = { ...b, org: inv.org, server: inv.server, role: b.role !== "off" && inv.org !== GOV_ORG ? "off" : b.role };
+  }
   const v = validate(b);
   if (v.error) return fail(v.error);
   if (!(await serverOpen(v.server, null))) return fail(`Сервер ${srvName(v.server)} пока доступен только бета-тестерам. Выберите Boston (12): сервер можно будет сменить в личном кабинете, когда он откроется.`, { code: "server_closed" });
@@ -348,7 +355,7 @@ async function register(b, ip) {
   if (bad) return fail("Логин или ник содержит недопустимое слово. Выберите другой.");
   const code = newRecoveryCode();
   const codeHash = await sha256(normCode(code));
-  const pend = !!(await getSetting("approval", { on: false })).on; // приём новичков: аккаунт ждёт подтверждения руководства
+  const pend = !inv && !!(await getSetting("approval", { on: false })).on; // приём новичков: аккаунт ждёт подтверждения руководства (по приглашению — сразу)
   let p;
   try {
     p = await sql.begin(async (t) => {
@@ -366,6 +373,7 @@ async function register(b, ip) {
   }
   const token = pend ? null : await newSession(p.id, !!b.remember, b, ip);
   await logIn(p.id, "register", b, ip);
+  if (inv) await inviteUse(inv, p);
   maybeCleanup();
   const ver = appVer(b);
   if (ver) await sql`update profiles set app_version = ${ver} where id = ${p.id}`;
@@ -1102,6 +1110,10 @@ async function api(req) {
       return J(await missesApi(b));
     case "contacts":
       return J(await contactsApi(b));
+    case "org_join":
+      return J(await orgJoinApi(b));
+    case "org_join_admin":
+      return J(await orgJoinAdmin(b));
     case "totp":
       return J(await totpApi(b, ip));
     case "logins":
@@ -2096,6 +2108,131 @@ async function decideApproval(a, id, ok) {
               values (${r.id}, ${"✅ Заявка принята"}, ${a.label}, ${`Добро пожаловать в ${r.org}! Руководство подтвердило ваш аккаунт.`}, now() + interval '7 days')`;
   if (a.kind !== "owner") await quiet(`${ok ? "✅" : "❌"} ${esc(a.profile.login)} ${ok ? "принял" : "отклонил"} заявку <b>${esc(r.login)}</b> в ${esc(r.org)}`);
   return { text: `${ok ? "✅ Принят" : "❌ Отклонён"}: <b>${esc(r.login)}</b> (${esc(r.nick)}) в ${esc(r.org)}${ok ? "" : ".\nЕсли передумаете: /approve " + esc(r.login)}` };
+}
+
+// ───────────── 3.8: вступление в организацию — код-приглашение (27) и анкета (105) ─────────────
+// Приглашение создаёт руководство: код действует N дней и M использований. С кодом новичок регистрируется сразу в организацию
+// (без ручного одобрения), а уже зарегистрированный — переходит в неё из личного кабинета.
+// Анкета: руководство задаёт вопросы, желающие отвечают в программе, заявки приходят в панель руководителя.
+const INV_ABC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const invNorm = (c) => String(c == null ? "" : c).toUpperCase().replace(/^SA-?/, "").replace(/[^A-Z0-9]/g, "");
+async function inviteFind(code) {
+  const n = invNorm(code);
+  if (n.length !== 8) return null;
+  const [r] = await db()`select * from org_invites where code_hash = ${await sha256("inv:" + n)} and not revoked and expires_at > now() and uses < max_uses`;
+  return r || null;
+}
+async function inviteUse(inv, p) {
+  await db()`update org_invites set uses = uses + 1 where code_hash = ${inv.code_hash}`;
+  await audit(p.login, "invite_use", p.login, { org: inv.org, by: inv.created_by_label || "" });
+  try {
+    await postHook(inv.org, inv.server, "join", "🆕 Новый сотрудник по приглашению", `**${esc(p.nick)}** (статик ${esc(p.static_id)}) вступил по коду-приглашению.`);
+  } catch (e) {}
+}
+async function orgJoinApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const sql = db();
+  const op = String(b.op || "forms");
+  const srv = sv(p);
+  if (op === "code") {
+    if (!(await hit(`oj:${p.id}`, 10, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const inv = await inviteFind(b.code);
+    if (!inv) return fail("Код приглашения не подходит: он неверный, истёк или уже использован.");
+    if (inv.org === p.org && inv.server === srv) return fail(`Вы уже в ${inv.org}.`);
+    const dept = DEPTS.includes(inv.org) ? inv.org : "";
+    const role = p.game_role !== "off" && inv.org !== GOV_ORG ? "off" : p.game_role;
+    const [np] = await sql`update profiles set org = ${inv.org}, dept = ${dept}, server = ${inv.server}, game_role = ${role}, rank = case when rank = 'leader' then 'user' else rank end where id = ${p.id} returning *`;
+    await inviteUse(inv, np);
+    await audit(p.login, "org_join", p.login, { from: p.org, to: inv.org, via: "invite" });
+    return { ok: true, user: pub(np), msg: `Вы вступили в ${inv.org} (${srvName(inv.server)}).` };
+  }
+  if (op === "forms") {
+    const forms = await sql`select org, questions from org_forms where server = ${srv} and open and org <> ${p.org} order by org`;
+    const mine = await sql`select id, org, status, note, created_at, decided_at from org_apps where user_id = ${p.id} order by id desc limit 10`;
+    return { ok: true, forms: forms.map((f) => ({ org: f.org, questions: f.questions || [] })), mine: mine.map((a) => ({ id: String(a.id), org: a.org, status: a.status, note: a.note || "", at: a.created_at, decided: a.decided_at })) };
+  }
+  if (op === "apply") {
+    if (!(await hit(`oa:${p.id}`, 5, 86400))) return fail("Можно отправить не больше 5 заявок в сутки.", { code: "rate" });
+    const org = clean(b.org, 60);
+    const [f] = await sql`select questions from org_forms where org = ${org} and server = ${srv} and open`;
+    if (!f) return fail("Эта организация сейчас не принимает заявки.");
+    if (org === p.org) return fail(`Вы уже в ${org}.`);
+    const [dup] = await sql`select id from org_apps where user_id = ${p.id} and org = ${org} and status = 'new'`;
+    if (dup) return fail("Ваша заявка в эту организацию уже на рассмотрении.");
+    const qs = f.questions || [];
+    const ans = (Array.isArray(b.answers) ? b.answers : []).slice(0, qs.length).map((a) => cleanText(a, 600));
+    for (let i = 0; i < qs.length; i++) if (!ans[i] || ans[i].length < 2) return fail(`Ответьте на вопрос ${i + 1}: «${qs[i]}».`);
+    const bad = await blacklisted(...ans);
+    if (bad) return fail("В ответах есть недопустимое слово.");
+    const [r] = await sql`insert into org_apps (user_id, org, server, answers) values (${p.id}, ${org}, ${srv}, ${JSON.stringify(qs.map((q, i) => ({ q, a: ans[i] })))}::jsonb) returning id`;
+    const leaders = await sql`select tg_id from profiles where org = ${org} and server = ${srv} and rank = 'leader' and tg_id is not null and not banned`;
+    for (const l of leaders) await send(String(l.tg_id), `📝 <b>Заявка на вступление в ${esc(org)}</b> №${r.id}\nОт: ${esc(p.nick)} (${esc(p.login)}, сейчас ${esc(p.org)})\nРассмотреть: панель руководителя в программе → «Вступление».`).catch(() => null);
+    try { await postHook(org, srv, "join", "📝 Заявка на вступление", `**${esc(p.nick)}** заполнил(а) анкету. Рассмотреть — в панели руководителя.`); } catch (e) {}
+    return { ok: true, id: String(r.id), msg: `Заявка в ${org} отправлена. Ответ придёт сообщением в программе.` };
+  }
+  return fail("Неизвестное действие.");
+}
+async function orgJoinAdmin(b) {
+  const { p, err } = await who(b, ["leader", "moderator", "owner"]);
+  if (err) return err;
+  const org = staffOrg(p, b);
+  if (!org) return fail("Выберите организацию.");
+  const srv = staffSrv(p, b);
+  const sql = db();
+  const op = String(b.op || "list");
+  const label = `${p.nick || p.login} (${RANKS[p.rank]})`;
+  let msg = "", code = "";
+  if (op === "inv_create") {
+    if (!(await hit(`ic:${p.id}`, 20, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const days = Math.min(30, Math.max(1, parseInt(b.days, 10) || 7)), uses = Math.min(50, Math.max(1, parseInt(b.uses, 10) || 1));
+    const n = Array.from(crypto.getRandomValues(new Uint8Array(8))).map((x) => INV_ABC[x % INV_ABC.length]).join("");
+    await sql`insert into org_invites (code_hash, code_tail, org, server, created_by, created_by_label, expires_at, max_uses)
+              values (${await sha256("inv:" + n)}, ${n.slice(-4)}, ${org}, ${srv}, ${p.id}, ${label}, now() + make_interval(days => ${days}), ${uses})`;
+    code = "SA-" + n.slice(0, 4) + "-" + n.slice(4);
+    await audit(p.login, "invite_create", org, { days, uses });
+    msg = `Код создан: ${code}. Скопируйте его сейчас — потом он не покажется.`;
+  } else if (op === "inv_revoke") {
+    const r = await sql`update org_invites set revoked = true where code_tail = ${clean(b.tail, 4)} and org = ${org} and server = ${srv} and not revoked returning code_tail`;
+    if (!r.length) return fail("Приглашение не найдено.");
+    await audit(p.login, "invite_revoke", org, { tail: r[0].code_tail });
+    msg = "Приглашение отозвано.";
+  } else if (op === "form_save") {
+    const qs = (Array.isArray(b.questions) ? b.questions : String(b.questions || "").split("\n")).map((q) => clean(q, 200)).filter(Boolean).slice(0, 10);
+    const open = !!b.open;
+    if (open && !qs.length) return fail("Добавьте хотя бы один вопрос анкеты.");
+    const bad = await blacklisted(...qs);
+    if (bad) return fail("В вопросах есть недопустимое слово.");
+    await sql`insert into org_forms (org, server, questions, open, updated_by) values (${org}, ${srv}, ${JSON.stringify(qs)}::jsonb, ${open}, ${label})
+              on conflict (org, server) do update set questions = excluded.questions, open = excluded.open, updated_by = excluded.updated_by, updated_at = now()`;
+    await audit(p.login, "form_save", org, { n: qs.length, open });
+    msg = open ? "Анкета сохранена и открыта: желающие видят её в программе." : "Анкета сохранена. Приём заявок закрыт.";
+  } else if (op === "app_decide") {
+    const id = parseInt(b.id, 10) || 0, ok = !!b.ok, note = clean(b.note, 300);
+    const [a] = await sql`update org_apps set status = ${ok ? "ok" : "no"}, decided_at = now(), decided_by = ${label}, note = ${note} where id = ${id} and org = ${org} and server = ${srv} and status = 'new' returning *`;
+    if (!a) return fail("Заявка не найдена или уже рассмотрена.");
+    const [u] = await sql`select * from profiles where id = ${a.user_id}`;
+    if (u && ok) {
+      const role = u.game_role !== "off" && org !== GOV_ORG ? "off" : u.game_role;
+      await sql`update profiles set org = ${org}, dept = ${DEPTS.includes(org) ? org : ""}, game_role = ${role}, rank = case when rank = 'leader' then 'user' else rank end where id = ${u.id} and server = ${srv}`;
+    }
+    if (u) await sql`insert into broadcasts (user_id, title, author, text, expires_at)
+                     values (${u.id}, ${ok ? "✅ Заявка принята" : "❌ Заявка отклонена"}, ${label}, ${ok ? `Вас приняли в ${org}! Организация в программе уже изменена.` + (note ? "\nКомментарий: " + note : "") : `Руководство ${org} отклонило заявку.` + (note ? "\nПричина: " + note : "")}, now() + interval '7 days')`;
+    await audit(p.login, ok ? "app_ok" : "app_no", u ? u.login : String(a.user_id), { org, note });
+    msg = ok ? "Заявка принята: сотрудник переведён в организацию." : "Заявка отклонена.";
+  } else if (op !== "list") return fail("Неизвестное действие.");
+  const invs = await sql`select code_tail, created_by_label, created_at, expires_at, uses, max_uses from org_invites
+                         where org = ${org} and server = ${srv} and not revoked and expires_at > now() and uses < max_uses order by created_at desc limit 20`;
+  const [form] = await sql`select questions, open, updated_by, updated_at from org_forms where org = ${org} and server = ${srv}`;
+  const apps = await sql`select a.id, a.answers, a.status, a.note, a.created_at, a.decided_by, p.login, p.nick, p.static_id, p.org as cur_org
+                         from org_apps a left join profiles p on p.id = a.user_id
+                         where a.org = ${org} and a.server = ${srv} and (a.status = 'new' or a.decided_at > now() - interval '14 days') order by (a.status = 'new') desc, a.id desc limit 40`;
+  return {
+    ok: true, org, server: srv, msg, code,
+    invites: invs.map((i) => ({ tail: i.code_tail, by: i.created_by_label, at: i.created_at, until: i.expires_at, uses: i.uses, max: i.max_uses })),
+    form: { questions: (form && form.questions) || [], open: !!(form && form.open), by: form ? form.updated_by : "", at: form ? form.updated_at : null },
+    apps: apps.map((a) => ({ id: String(a.id), answers: a.answers || [], status: a.status, note: a.note || "", at: a.created_at, by: a.decided_by || "", login: a.login || "—", nick: a.nick || "Удалённый аккаунт", static: a.static_id || "", cur: a.cur_org || "" })),
+  };
 }
 
 // ───────────── 3.6: объявления руководства и отметка «прочитал» ─────────────
@@ -5471,7 +5608,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 39;
+const SCHEMA_V = 40;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -5653,6 +5790,26 @@ alter table public.sessions add column if not exists os text;
 alter table public.sessions add column if not exists ip text;
 create index if not exists login_log_user_kind_idx on public.login_log (user_id, kind, at desc);
 `;
+// 3.8: вступление в организацию — приглашения, анкеты, заявки
+const SCHEMA_40 = `
+create table if not exists public.org_invites (
+  code_hash text primary key, code_tail text not null, org text not null, server int not null,
+  created_by uuid references public.profiles(id) on delete set null, created_by_label text not null default '',
+  created_at timestamptz not null default now(), expires_at timestamptz not null, uses int not null default 0, max_uses int not null default 1, revoked boolean not null default false);
+create index if not exists org_invites_org_idx on public.org_invites (org, server);
+create table if not exists public.org_forms (
+  org text not null, server int not null, questions jsonb not null default '[]', open boolean not null default false,
+  updated_by text not null default '', updated_at timestamptz not null default now(), primary key (org, server));
+create table if not exists public.org_apps (
+  id bigint generated always as identity primary key, user_id uuid not null references public.profiles(id) on delete cascade,
+  org text not null, server int not null, answers jsonb not null default '[]', status text not null default 'new',
+  note text not null default '', created_at timestamptz not null default now(), decided_at timestamptz, decided_by text);
+create index if not exists org_apps_org_idx on public.org_apps (org, server, status);
+alter table public.org_invites enable row level security;
+alter table public.org_forms enable row level security;
+alter table public.org_apps enable row level security;
+revoke all on table public.org_invites, public.org_forms, public.org_apps from anon, authenticated;
+`;
 const SCHEMA_37_ONCE = `
 update public.bot_settings set value = (select coalesce(jsonb_object_agg(k, case when v = '"beta"'::jsonb then '"all"'::jsonb else v end), '{}'::jsonb) from jsonb_each(value) e(k, v))
   where key = 'flags' and jsonb_typeof(value) = 'object';
@@ -5666,7 +5823,7 @@ function ensureSchema() {
         if (+v >= SCHEMA_V) return;
         // база уже на 2.4: повторно 2.4 не выполняем (иначе вернулись бы удалённые баннеры по умолчанию)
         // 3.5: SCHEMA_30 и SCHEMA_35 повторяемы (create/alter … if not exists), их добавляем всем, кто ниже 35
-        await db().unsafe((+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35) + (+v < 37 ? SCHEMA_37_ONCE : "") + SCHEMA_38 + SCHEMA_39);
+        await db().unsafe((+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35) + (+v < 37 ? SCHEMA_37_ONCE : "") + SCHEMA_38 + SCHEMA_39 + SCHEMA_40);
         adsReady = true;
         await setSetting("schema_v", SCHEMA_V);
       } catch (e) {

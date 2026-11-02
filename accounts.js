@@ -308,7 +308,7 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
         login: d.login, password: d.password, nick: d.nick, static: d.static,
         org: d.org, orgOther: d.orgOther, role: d.role, server: clean(d.server, 4),
         discord: d.discord, telegram: d.telegram, phone: d.phone,
-        remember: !!d.remember, migrated: !!lg,
+        remember: !!d.remember, migrated: !!lg, invite: clean(d.invite, 20),
         legal: d.legal, ...client()
       });
       if (!r.ok) return { ok: false, error: r.error || "Не удалось зарегистрироваться.", code: r.code };

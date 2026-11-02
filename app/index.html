@@ -4539,7 +4539,7 @@ function cabHtml(){
       fld("discord","Discord",acc.discord,40,"ник в Discord")+fld("telegram","Telegram",acc.telegram,33,"@name или пусто")+fld("phone","Номер в игре",acc.phone,12,"только цифры или пусто")+
       '<div class="sbtns" style="margin:0"><button type="button" class="btn" data-cab="accsave" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Сохранить</button></div>'+
       '<div id="accMsg" role="status" aria-live="polite" style="font-size:12.5px;color:var(--muted);min-height:1.2em"></div></div></div>';
-    ah+=cabPart(function(){return deptInfo(acc.org||dept)})+cabPart(function(){return window.SA_PROG?window.SA_PROG.html():""})+cabPart(function(){return window.SA_CAB11?window.SA_CAB11(true):""})+cabPart(function(){return window.SA_CAB13?window.SA_CAB13(true):""})+cabPart(function(){return window.SA_CAB24?window.SA_CAB24():""})+cabPart(function(){return window.SA_CAB28?window.SA_CAB28():""})+cabPart(function(){return window.SA_CAB35?window.SA_CAB35():""})+cabPart(dcCabHtml)+cabPart(function(){return window.SA_RP?window.SA_RP.cabHtml():""})+cabPart(detHtml)+cabPart(testHtml);
+    ah+=cabPart(function(){return deptInfo(acc.org||dept)})+cabPart(function(){return window.SA_PROG?window.SA_PROG.html():""})+cabPart(function(){return window.SA_CAB11?window.SA_CAB11(true):""})+cabPart(function(){return window.SA_CAB13?window.SA_CAB13(true):""})+cabPart(function(){return window.SA_CAB24?window.SA_CAB24():""})+cabPart(function(){return window.SA_CAB28?window.SA_CAB28():""})+cabPart(function(){return window.SA_CAB35?window.SA_CAB35():""})+cabPart(dcCabHtml)+cabPart(function(){return window.SA_CAB38?window.SA_CAB38():""})+cabPart(function(){return window.SA_RP?window.SA_RP.cabHtml():""})+cabPart(detHtml)+cabPart(testHtml);
     ah+='<p class="cab-foot">Данные кабинета хранятся в вашем аккаунте. После смены ведомства или сервера программу нужно перезапустить: законы и подсказки подстроятся под выбранный сервер.</p>';
     return ah;
   }
@@ -6514,11 +6514,11 @@ function pOrgs(){
 }
 
 /* Рейтинг недели, смены, контрольные тесты: данные по выбранной организации */
-var E={rate:{},shift:{},ctrl:{},log:{},news:{}}, CF={title:"",topics:{},n:10,days:3};
+var E={rate:{},shift:{},ctrl:{},log:{},news:{},join:{}}, JF={days:7,uses:1,q:null,open:null}, CF={title:"",topics:{},n:10,days:3};
 function lead35(){try{return typeof window.SA_flag==="function"&&!!window.SA_flag("lead35")}catch(x){return false}}
 function curOrg(){return B.scope||B.org||""}
 function eload(sub,op,extra,ok){
- var e=E[sub], org=curOrg(), act=sub==="rate"?"week_board":sub==="log"?"lead_log":sub==="news"?"org_news":sub;
+ var e=E[sub], org=curOrg(), act=sub==="rate"?"week_board":sub==="log"?"lead_log":sub==="news"?"org_news":sub==="join"?"org_join_admin":sub;
  if(sub!=="rate"&&!org){e.key="";e.data=null;return}
  if(e.loading)return; e.loading=true; e.err=""; e.msg=""; e.key=org+"|"+SRV();
  A.api(act,Object.assign({org:org,server:SRV()},op?{op:op}:{},extra||{})).then(function(r){
@@ -6581,6 +6581,29 @@ function pNews(){
    (x.unread.length?'<p style="margin:6px 0"><b>Не прочитали ('+x.unread.length+'):</b> '+x.unread.slice(0,60).map(esc).join(", ")+(x.unread.length>60?" …":"")+'</p>':'')+
    (x.active?'<button type="button" class="btn" data-bp="nwdel" data-id="'+esc(x.id)+'">Снять объявление</button>':'')+'</details>'}).join("");
 }
+/* 3.8: вступление — коды-приглашения, анкета и заявки */
+function pJoin(){
+ var w=need("join"); if(w)return w; var e=E.join, d=e.data, f=d.form||{questions:[],open:false};
+ if(JF.q==null||JF.key!==d.org+"|"+d.server){JF.key=d.org+"|"+d.server;JF.q=(f.questions||[]).join("\n");JF.open=!!f.open}
+ var BTN=' style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600"';
+ var h='<p class="sub">Новичок с кодом-приглашением сразу попадает в '+esc(d.org)+' — без ручного одобрения. Уже зарегистрированный вводит код в личном кабинете. Анкета — для тех, кто хочет вступить: заявки приходят сюда.</p>'+emsg(e);
+ if(d.code)h+='<div class="bp-box" style="margin-bottom:12px;border-color:var(--accent)"><h3>Новый код</h3><p style="font:700 22px var(--mono,monospace);letter-spacing:2px;margin:6px 0">'+esc(d.code)+'</p><button type="button" class="btn" data-bp="jcopy" data-v="'+esc(d.code)+'">Скопировать</button></div>';
+ h+='<div class="bp-box" style="margin-bottom:12px"><h3>Код-приглашение</h3><div class="bp-tools"><label>Действует <select id="jDays">'+[[1,"1 день"],[3,"3 дня"],[7,"7 дней"],[14,"14 дней"],[30,"30 дней"]].map(function(o){return '<option value="'+o[0]+'"'+(JF.days===o[0]?' selected':'')+'>'+o[1]+'</option>'}).join("")+'</select></label>'+
+  '<label>Использований <select id="jUses">'+[1,3,5,10,20,50].map(function(n){return '<option value="'+n+'"'+(JF.uses===n?' selected':'')+'>'+n+'</option>'}).join("")+'</select></label>'+
+  '<button type="button" class="btn" data-bp="jinv"'+(e.loading?' disabled':'')+BTN+'>Создать код</button></div>';
+ h+=(d.invites&&d.invites.length?'<div class="bp-wrap" style="margin-top:8px"><table><thead><tr><th>Код</th><th>Создал(а)</th><th>До</th><th>Использовано</th><th></th></tr></thead><tbody>'+d.invites.map(function(i){return '<tr><td>SA-…'+esc(i.tail)+'</td><td>'+esc(i.by)+'</td><td>'+dt(i.until)+'</td><td>'+i.uses+' из '+i.max+'</td><td><button type="button" class="btn" data-bp="jrev" data-v="'+esc(i.tail)+'">Отозвать</button></td></tr>'}).join("")+'</tbody></table></div>':'<p class="bp-empty" style="margin:8px 0 0">Активных приглашений нет.</p>')+'</div>';
+ h+='<div class="bp-box" style="margin-bottom:12px"><h3>Анкета вступления</h3><p class="bp-empty" style="margin:0 0 8px">По одному вопросу в строке, до 10. Например: «Возраст персонажа», «Опыт в гос. структурах», «Почему хотите к нам?».</p>'+
+  '<textarea id="jQs" rows="5" maxlength="2000" aria-label="Вопросы анкеты" style="width:100%;font:inherit;border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:var(--surface);color:var(--ink)">'+esc(JF.q)+'</textarea>'+
+  '<div class="bp-tools"><label><input type="checkbox" id="jOpen"'+(JF.open?' checked':'')+'> Принимать заявки</label><button type="button" class="btn" data-bp="jform"'+(e.loading?' disabled':'')+BTN+'>Сохранить анкету</button>'+(f.by?'<span class="bp-empty">Изменил(а): '+esc(f.by)+'</span>':'')+'</div></div>';
+ var A2=d.apps||[],nw=A2.filter(function(a){return a.status==="new"});
+ h+='<h3 style="margin:14px 0 8px">Заявки'+(nw.length?' · новых: '+nw.length:'')+'</h3>';
+ if(!A2.length)return h+'<p class="bp-empty">Заявок пока нет.</p>';
+ return h+A2.map(function(a){var isNew=a.status==="new";
+  return '<details class="bp-box" style="margin-bottom:8px"'+(isNew?' open':'')+'><summary style="cursor:pointer"><b>'+esc(a.nick)+'</b> · '+esc(a.login)+(a.static?' · статик '+esc(a.static):'')+' · сейчас '+esc(a.cur||"—")+' · '+dt(a.at)+' · '+(isNew?'<b>ждёт решения</b>':a.status==="ok"?'принята':'отклонена')+(a.by?' ('+esc(a.by)+')':'')+'</summary>'+
+   '<dl style="margin:8px 0">'+(a.answers||[]).map(function(x){return '<dt style="font-weight:600;margin-top:6px">'+esc(x.q)+'</dt><dd style="margin:2px 0 0;white-space:pre-wrap">'+esc(x.a)+'</dd>'}).join("")+'</dl>'+
+   (a.note?'<p class="bp-empty">Комментарий: '+esc(a.note)+'</p>':'')+
+   (isNew?'<div class="bp-tools"><input id="jN'+esc(a.id)+'" maxlength="300" placeholder="Комментарий для кандидата (необязательно)" style="flex:1"><button type="button" class="btn" data-bp="jno" data-id="'+esc(a.id)+'">Отклонить</button><button type="button" class="btn" data-bp="jok" data-id="'+esc(a.id)+'"'+BTN+'>Принять</button></div>':'')+'</details>'}).join("");
+}
 /* 3.5: журнал действий руководства */
 function pLog(){
  var w=need("log"); if(w)return w; var L=E.log.data.items||[];
@@ -6621,7 +6644,7 @@ function pCtrl(){
 
 function draw(){
  var rn=window.SA_RP?window.SA_RP.bossNew():0;
- var subs=[["sum","Обзор"],["staff","Сотрудники"],["rate","Рейтинг"],["shift","Смены"],["ctrl","Контрольные тесты"]]; subs.push(["news","Объявления"]);if(lead35())subs.push(["log","Журнал"]); if(window.SA_RP)subs.push(["rep","Рапорты"+(rn?" · "+rn:"")]); if(window.SA_B24)window.SA_B24.subs(subs); if(!B.scope)subs.push(["orgs","Организации"]);
+ var subs=[["sum","Обзор"],["staff","Сотрудники"],["rate","Рейтинг"],["shift","Смены"],["ctrl","Контрольные тесты"]]; subs.push(["news","Объявления"]);subs.push(["join","Вступление"]);if(lead35())subs.push(["log","Журнал"]); if(window.SA_RP)subs.push(["rep","Рапорты"+(rn?" · "+rn:"")]); if(window.SA_B24)window.SA_B24.subs(subs); if(!B.scope)subs.push(["orgs","Организации"]);
  if(!subs.some(function(s){return s[0]===B.sub}))B.sub="sum";
  var title=B.scope?"Панель руководителя · "+esc(B.scope):"Панель руководителя";
  var h='<div class="subnav noprint">'+subs.map(function(s){return '<button class="pill" data-bpsub="'+s[0]+'" aria-pressed="'+(s[0]===B.sub)+'">'+s[1]+'</button>'}).join("")+'</div>';
@@ -6632,7 +6655,7 @@ function draw(){
  if(B.viewer)h+='<p class="sub">Вы видите данные как: '+(RANKS[B.viewer]||B.viewer)+(B.scope?". Доступна только ваша организация.":".")+'</p>';
  if(B.err)h+='<div class="banner bp-err" role="alert">'+esc(B.err)+'</div>';
  if(!B.data)h+='<p class="bp-empty">'+(B.loading?"Загружаем данные…":"Данные недоступны.")+'</p>';
- else h+=(B.sub==="hooks"||B.sub==="events")?window.SA_B24.html(B.sub,curOrg(),draw):B.sub==="rep"?window.SA_RP.boss(curOrg(),draw):B.sub==="staff"?pStaff():B.sub==="orgs"?pOrgs():B.sub==="rate"?pRate():B.sub==="shift"?pShift():B.sub==="ctrl"?pCtrl():B.sub==="log"?pLog():B.sub==="news"?pNews():pSum();
+ else h+=(B.sub==="hooks"||B.sub==="events")?window.SA_B24.html(B.sub,curOrg(),draw):B.sub==="rep"?window.SA_RP.boss(curOrg(),draw):B.sub==="staff"?pStaff():B.sub==="orgs"?pOrgs():B.sub==="rate"?pRate():B.sub==="shift"?pShift():B.sub==="ctrl"?pCtrl():B.sub==="log"?pLog():B.sub==="news"?pNews():B.sub==="join"?pJoin():pSum();
  view.innerHTML=h+'</section>';
 }
 
@@ -6653,6 +6676,11 @@ view.addEventListener("click",function(e){
  if(t.dataset.bp==="nwadd"){var tt=$("#nwT"),tx=$("#nwX"),dd=$("#nwD");NF.title=tt?tt.value:"";NF.text=tx?tx.value:"";NF.days=dd?+dd.value:7;
   if(NF.text.trim().length<3){E.news.err="Напишите текст объявления.";draw();return}
   eload("news","create",{title:NF.title,text:NF.text,days:NF.days},function(e){e.msg="Объявление опубликовано: сотрудники увидят его в течение минуты.";NF={title:"",text:"",days:7}});return}
+ if(t.dataset.bp==="jinv"){var jd=$("#jDays"),ju=$("#jUses");JF.days=jd?+jd.value:7;JF.uses=ju?+ju.value:1;eload("join","inv_create",{days:JF.days,uses:JF.uses});draw();return}
+ if(t.dataset.bp==="jrev"){if(!confirm("Отозвать приглашение? По этому коду больше не вступить."))return;eload("join","inv_revoke",{tail:t.dataset.v});draw();return}
+ if(t.dataset.bp==="jcopy"){A.copy(t.dataset.v);t.textContent="Скопировано";return}
+ if(t.dataset.bp==="jform"){var jq=$("#jQs"),jo=$("#jOpen");JF.q=jq?jq.value:"";JF.open=!!(jo&&jo.checked);eload("join","form_save",{questions:JF.q.split("\n"),open:JF.open});draw();return}
+ if(t.dataset.bp==="jok"||t.dataset.bp==="jno"){var ok=t.dataset.bp==="jok";if(!ok&&!t.dataset.arm){t.dataset.arm="1";t.textContent="Точно отклонить?";return}var jn=document.getElementById("jN"+t.dataset.id);eload("join","app_decide",{id:t.dataset.id,ok:ok,note:jn?jn.value:""});draw();return}
  if(t.dataset.bp==="nwdel"){if(!confirm("Снять объявление? Сотрудники перестанут его видеть."))return;eload("news","delete",{id:t.dataset.id},function(e){e.msg="Объявление снято."});return}
  if(t.dataset.bp==="reload"){load();if(E[B.sub]){E[B.sub].key=null;E[B.sub].data=null}if(B.sub==="rep")window.SA_RP.bossReload();if((B.sub==="hooks"||B.sub==="events")&&window.SA_B24)window.SA_B24.reload(B.sub);return}
  if(t.dataset.bp==="win"){if(A.staff)A.staff();return}
@@ -7024,6 +7052,10 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.7.6",d:"02.11.2026",items:[
+  ["🎟","Код-приглашение в организацию","Руководство создаёт код в панели руководителя → «Вступление» (срок и число использований). Новичок вводит его при регистрации и сразу попадает в организацию без ручного одобрения; уже зарегистрированный — в личном кабинете («Вступление в организацию»)."],
+  ["📝","Анкета вступления","Руководство составляет анкету (до 10 вопросов), желающие заполняют её в личном кабинете, заявки приходят в панель руководителя: принять — и сотрудник сразу переводится в организацию, отклонить — с комментарием. Ответ приходит сообщением в программе."],
+ ]},
  {v:"3.7.5",d:"02.11.2026",items:[
   ["📰","Что изменилось за неделю","Вверху раздела «Законы» — все правки законов за 7 дней одним списком: новые, изменённые и удалённые статьи по каждому закону."],
   ["✂️","Что именно поменяли","У изменённой статьи сразу видна выдержка правки: что убрали, что добавили, и если поменялось число (срок, штраф, минуты) — «было → стало». Полное сравнение — кнопкой «было / стало»."],
@@ -13657,7 +13689,7 @@ var IC={
 function ic(k){return '<svg viewBox="0 0 24 24" aria-hidden="true">'+(IC[k]||"")+'</svg>'}
 /* [id, название, иконка, описание, начала заголовков блоков] */
 var TABS=[
- ["me","Профиль","me","Ник, статик, сервер, ведомство и контакты. После изменений нажмите «Сохранить».",["@top","Компетенция"]],
+ ["me","Профиль","me","Ник, статик, сервер, ведомство и контакты. После изменений нажмите «Сохранить».",["@top","Компетенция","Вступление в организацию"]],
  ["prog","Прогресс","prog","Уровень, опыт, достижения, рейтинг недели и активность.",["Мой прогресс","Достижения","Топ недели","Активность"]],
  ["shift","Смена","shift","Итоги смены, журнал задержаний за день и статьи, которые вы применяете чаще всего.",["Итоги за смену","Журнал смены","Мои частые статьи","Последние задержания"]],
  ["rep","Рапорты","rep","Ваши рапорты и их статус у руководства.",["Мои рапорты"]],
@@ -16025,6 +16057,47 @@ var rows0=window.SA_s13Rows;
 window.SA_s13Rows=function(row,sw,seg){var h=rows0?rows0(row,sw,seg):"";
  h+=row("Корзина заметок и меток","Удалённые заметки к статьям и цветные метки хранятся 30 дней."+(TR.length?" Сейчас: "+TR.length+".":""),'<button type="button" class="btn" data-s39open="1">Открыть</button>');return h};
 window.SA_s39={trash:function(){return TR.slice()},week:weekItems,excerpt:excerpt};
+})();
+</script>
+<script>
+/* 3.8 (3): вступление в организацию из личного кабинета — по коду-приглашению (27) или по анкете (105) */
+(function(){
+"use strict";
+var A=window.senkoApp;
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function toast(t){try{if(window.SA_toast)window.SA_toast(t)}catch(x){}}
+function api(a,d){return A.api(a,d).then(function(r){return r||{ok:false,error:"Нет ответа сервера."}},function(){return {ok:false,error:"Ошибка связи с программой."}})}
+function online(){try{var s=A.state();return !!(A.api&&s&&s.user&&!s.user.offline)}catch(x){return false}}
+var J={data:null,loading:false,msg:"",bad:false};
+function rep(){if(window.SA_cabRepaint)SA_cabRepaint()}
+function load(){if(J.loading)return;J.loading=true;api("org_join",{op:"forms"}).then(function(r){J.loading=false;J.data=r.ok?r:{forms:[],mine:[],err:r.error};rep()})}
+var ST={new:"на рассмотрении",ok:"принята",no:"отклонена"};
+window.SA_CAB38=function(){
+ if(!online()||!A.api)return "";
+ if(!J.data)setTimeout(load,0);
+ var d=J.data||{forms:[],mine:[]};
+ var h='<section class="panel s13-cab"><h2>Вступление в организацию<small>по коду или анкете</small></h2>';
+ h+='<p class="sd-note">Руководство дало код-приглашение — введите его, и вы сразу перейдёте в организацию.</p><div class="s13-btns" style="align-items:center"><input class="tin" id="s40code" maxlength="14" placeholder="SA-XXXX-XXXX" autocomplete="off" spellcheck="false" style="max-width:200px"><button type="button" class="btn primary" data-s40="code">Вступить по коду</button></div>';
+ if(J.msg)h+='<p class="s13-msg" role="status" style="'+(J.bad?'color:var(--danger,#c33)':'')+'">'+e(J.msg)+'</p>';
+ if(d.err)h+='<p class="sd-note">'+e(d.err)+'</p>';
+ if(d.forms&&d.forms.length)h+='<p class="sd-note" style="margin-top:12px">Без кода: заполните анкету организации, руководство рассмотрит заявку.</p><div class="s13-btns">'+d.forms.map(function(f){return '<button type="button" class="btn" data-s40="form" data-org="'+e(f.org)+'">Анкета в '+e(f.org)+'</button>'}).join("")+'</div>';
+ else if(J.data&&!d.err)h+='<p class="sd-note" style="margin-top:12px">Сейчас ни одна организация вашего сервера не принимает заявки по анкете.</p>';
+ if(d.mine&&d.mine.length)h+='<ul class="s13-lgl" style="margin-top:10px">'+d.mine.map(function(m){return '<li class="'+(m.status==="no"?"bad":"")+'"><b>'+e(m.org)+'</b><span>заявка '+e(ST[m.status]||m.status)+'</span><small>'+e(new Date(m.at).toLocaleDateString("ru-RU"))+(m.note?' · '+e(m.note):'')+'</small></li>'}).join("")+'</ul>';
+ return h+'</section>'};
+function after(r){
+ J.msg=r.msg||"";J.bad=false;J.data=null;rep();
+ // сменилась организация (и, возможно, сервер): обновляем данные аккаунта и перезагружаем окно
+ var p=A.recheck?A.recheck():Promise.resolve();Promise.resolve(p).then(function(){try{if(A.laws&&A.laws.sync)A.laws.sync()}catch(x){}setTimeout(function(){location.reload()},1200)})}
+function formOpen(org){var f=((J.data||{}).forms||[]).filter(function(x){return x.org===org})[0];if(!f||!window.SA_modal)return;
+ SA_modal("Анкета в "+e(org),'<div id="s40f">'+f.questions.map(function(q,i){return '<label class="s13-f" style="display:block;margin-bottom:10px">'+e(q)+'<textarea class="tin" data-s40a="'+i+'" rows="2" maxlength="600" style="width:100%"></textarea></label>'}).join("")+'<p class="s13-msg" id="s40fm" role="status"></p><div class="sd-acts"><button type="button" class="btn primary" data-s40="send" data-org="'+e(org)+'">Отправить заявку</button></div></div>')}
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s40]");if(!b)return;var k=b.dataset.s40;
+ if(k==="code"){var c=(document.getElementById("s40code")||{}).value||"";if(!c.trim()){J.msg="Введите код приглашения.";J.bad=true;rep();return}
+  b.disabled=true;api("org_join",{op:"code",code:c}).then(function(r){b.disabled=false;if(r.ok){toast(r.msg);after(r)}else{J.msg=r.error||"Не удалось.";J.bad=true;rep()}});return}
+ if(k==="form"){formOpen(b.dataset.org);return}
+ if(k==="send"){var ans=[].map.call(document.querySelectorAll("#s40f [data-s40a]"),function(t){return t.value.trim()}),m=document.getElementById("s40fm");
+  if(ans.some(function(a){return a.length<2})){if(m)m.textContent="Ответьте на все вопросы.";return}
+  b.disabled=true;api("org_join",{op:"apply",org:b.dataset.org,answers:ans}).then(function(r){b.disabled=false;if(r.ok){if(window.SA_modalClose)SA_modalClose();toast(r.msg);J.msg=r.msg;J.bad=false;J.data=null;rep()}else if(m)m.textContent=r.error||"Не удалось отправить."});return}
+});
 })();
 </script>
 <script>
