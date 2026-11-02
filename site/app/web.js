@@ -65,7 +65,7 @@
       cfg: cfg(), win: { stream: [], profiles: [], profile: "" }, platform: "web", web: true, autostart: false,
       sync: sync.status(), hotkeyError: "", packaged: true, version: shownVer(u), dataVersion: CFG.ver || "",
       depts: DEPTS.slice(), servers: SERVERS.slice(), shareUrl: CFG.api, sys: sys,
-      user: u ? { login: u.login, nick: u.nick, static: u.static, discord: u.discord, telegram: u.telegram, phone: u.phone, role: u.role, roleName: u.roleName, org: u.org, rank: u.rank, rankName: u.rankName, offline: !!u.offline } : null
+      user: u ? { login: u.login, nick: u.nick, static: u.static, discord: u.discord, telegram: u.telegram, phone: u.phone, role: u.role, roleName: u.roleName, org: u.org, server: parseInt(u.server, 10) || 12, serverName: u.serverName || "", staffServer: u.staffServer || 0, rank: u.rank, rankName: u.rankName, offline: !!u.offline } : null // 3.7.3: без server веб-версия всегда показывала Boston
     };
   }
   function pushState() { var s = getState(); listeners.slice().forEach(function (f) { try { f(s); } catch (e) {} }); }
