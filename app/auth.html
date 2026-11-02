@@ -104,6 +104,7 @@ body:not(.framed) .tbar{display:none}
     <form id="fLogin" autocomplete="off" novalidate>
       <label><span>Логин <span class="req">обязательно</span></span><input id="lLogin" maxlength="24" autocomplete="username" autofocus></label>
       <label><span>Пароль <span class="req">обязательно</span></span><span class="pw"><input id="lPass" type="password" maxlength="72" autocomplete="current-password"><button type="button" data-eye="lPass">Показать</button></span></label>
+      <label id="lOtpW" hidden><span>Код из приложения <span class="req">6 цифр или резервный код</span></span><input id="lOtp" maxlength="12" inputmode="numeric" autocomplete="one-time-code" spellcheck="false"></label>
       <label class="chk"><input type="checkbox" id="lRem"> Запомнить меня на этом компьютере</label>
       <div class="ok" id="lOk" role="status" hidden></div>
       <div class="err" id="lErr" role="alert" hidden></div>
@@ -539,17 +540,35 @@ body:not(.framed) .tbar{display:none}
   }
 
   // ───── вход ─────
+  var dcResume=null;
+  function otpAsk(msg){ $("lOtpW").hidden=false; $("lOtp").value=""; showErr("lErr",msg||""); setTimeout(function(){ $("lOtp").focus() },30) }
+  function otpHide(){ $("lOtpW").hidden=true; $("lOtp").value="" }
   fLogin_init();
   function fLogin_init(){
+    $("lLogin").addEventListener("input",function(){ if(!$("lOtpW").hidden){ dcResume=null; otpHide() } });
     $("fLogin").addEventListener("submit",function(e){
       e.preventDefault(); showErr("lErr",""); $("lOk").hidden=true; notice("");
-      var login=$("lLogin").value.trim(), pass=$("lPass").value;
+      var login=$("lLogin").value.trim(), pass=$("lPass").value, otp=$("lOtpW").hidden?"":$("lOtp").value.trim();
+      // 3.7: вход через Discord ждёт код — продолжаем тот же вход
+      if(dcResume){
+        if(!otp){showErr("lErr","Введите код из приложения.");$("lOtp").focus();return}
+        $("lBtn").disabled=true;
+        A.discord({remember:$("lRem").checked,otp:otp,resume:dcResume}).then(function(r){
+          if(r.ok&&r.needLegal){ $("lBtn").disabled=false; dcResume=null; otpHide(); showLegalUpdate(); return }
+          if(r.ok) return;
+          $("lBtn").disabled=false;
+          if(r.code==="otp"){ dcResume=r.resume||dcResume; otpAsk(r.error); return }
+          dcResume=null; otpHide(); showErr("lErr",r.error);
+        },function(){showErr("lErr","Ошибка связи с программой."); $("lBtn").disabled=false});
+        return;
+      }
       if(!login||!pass){showErr("lErr","Введите логин и пароль.");return}
       $("lBtn").disabled=true;
-      A.login({login:login,password:pass,remember:$("lRem").checked}).then(function(r){
-        if(r.ok&&r.needLegal){ $("lBtn").disabled=false; showLegalUpdate(); return }
+      A.login({login:login,password:pass,remember:$("lRem").checked,otp:otp}).then(function(r){
+        if(r.ok&&r.needLegal){ $("lBtn").disabled=false; otpHide(); showLegalUpdate(); return }
         if(r.ok) return; // окно закроется, откроется программа
         $("lBtn").disabled=false;
+        if(r.code==="otp"){ otpAsk(r.bad?r.error:"Включён вход с кодом: введите код из приложения-аутентификатора и нажмите «Войти»."); return }
         if(r.code==="migrate"){ startMigrate(r.prefill,pass); return }
         showErr("lErr",r.error); $("lPass").select();
       },function(){showErr("lErr","Ошибка связи с программой."); $("lBtn").disabled=false});
@@ -559,14 +578,16 @@ body:not(.framed) .tbar{display:none}
       $("dcOr").hidden=false; $("lDc").hidden=false;
       var dcEnd=function(){ $("lDc").disabled=false; $("lDcX").hidden=true; $("lBtn").disabled=false };
       $("lDc").onclick=function(){
-        showErr("lErr",""); $("lOk").hidden=true; notice("");
+        showErr("lErr",""); $("lOk").hidden=true; notice(""); dcResume=null; otpHide();
         $("lDc").disabled=true; $("lBtn").disabled=true; $("lDcX").hidden=false;
         $("lDcSt").textContent="Подтвердите вход в окне Discord в браузере. Программа войдёт сама."; $("lDcSt").hidden=false;
         A.discord({remember:$("lRem").checked}).then(function(r){
           $("lDcSt").hidden=true;
           if(r.ok&&r.needLegal){ dcEnd(); showLegalUpdate(); return }
           if(r.ok) return;
-          dcEnd(); if(!r.cancelled) showErr("lErr",r.error);
+          dcEnd();
+          if(r.code==="otp"&&r.resume){ dcResume=r.resume; otpAsk("Discord подтвердил вход. Включён вход с кодом: введите код из приложения и нажмите «Войти»."); return }
+          if(!r.cancelled) showErr("lErr",r.error);
         },function(){ $("lDcSt").hidden=true; dcEnd(); showErr("lErr","Ошибка связи с программой.") });
       };
       $("lDcX").onclick=function(){ if(A.discordCancel) A.discordCancel(); $("lDcSt").hidden=true; dcEnd() };

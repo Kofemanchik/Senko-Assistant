@@ -6940,6 +6940,13 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.7.0",d:"02.11.2026",items:[
+  ["🔐","Вход с кодом из приложения","Личный кабинет → Безопасность → «Вход с кодом из приложения»: отсканируйте QR-код в Google Authenticator, Яндекс Ключе или Aegis. После этого для входа в аккаунт (по паролю или через Discord) и в панель нужен ещё 6-значный код с телефона. Есть резервные коды на случай, если телефона нет под рукой."],
+  ["💻","Мои устройства","В «Безопасности» видно, где сейчас открыт ваш аккаунт: система, версия, начало IP-адреса и когда устройство было активно. С любого устройства можно выйти одной кнопкой."],
+  ["🚨","Предупреждения о входах","Если с прошлого входа кто-то 5 и больше раз ввёл неверный пароль или код, после входа придёт предупреждение. Вход с нового устройства — тоже сообщение в программе."],
+  ["⏳","Забытые входы завершаются","Вход, которым не пользовались 30 дней, завершается сам: на заброшенном компьютере аккаунт не останется открытым."],
+  ["🛡","Защита от спама","Одинаковое сообщение об ошибке повторно за сутки и уже предложенную идею отправить нельзя — программа подскажет номер существующей."],
+ ]},
  {v:"3.6.0",d:"02.11.2026",items:[
   ["🕘","Недавние статьи на главной","10 последних открытых статей на главной: вернуться к статье в один клик."],
   ["🔎","Масштаб окна","Ctrl+колёсико мыши увеличивает и уменьшает всё окно, Ctrl+«+» и Ctrl+«−» тоже, Ctrl+0 — обычный размер. Масштаб запоминается."],
@@ -11584,17 +11591,46 @@ function ordMove(t,d){var G=ordList(),flat=[];G.forEach(function(g){var L=g[1],i
  var O=obj(jget("bos-taborder",{}));O[role()]=flat;jset("bos-taborder",O);ordPaint();if(window.SA_paintSide)SA_paintSide();else if(window.render)render()}
 
 /* ================= личный кабинет: персонаж, пароль, журнал входов ================= */
+(function(){var st=document.createElement("style");st.id="s37-style";st.textContent=".s37-on{color:var(--ok,#2e9d5b)}.s37-steps{margin:6px 0 10px 18px;line-height:1.5}.s37-qr{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:8px 0}.s37-qr .qr svg{width:150px;height:150px;background:#fff;border-radius:8px}.s37-key{font:600 14px Consolas,monospace;letter-spacing:1px;user-select:all;word-break:break-all}.s37-codes{font:600 15px Consolas,monospace;background:var(--soft,rgba(0,0,0,.05));padding:10px 14px;border-radius:10px;columns:2;user-select:all}.s37-h{font-weight:700;margin:10px 0 4px}.s37-dev li{position:relative;padding-right:84px}.s37-x{position:absolute;right:0;top:50%;transform:translateY(-50%);padding:4px 10px}";document.head.appendChild(st)})();
 var LG=null,LGERR="",PWMSG="";
-var KIND={login:"Вход",fail:"Неверный пароль",password:"Пароль изменён",reset:"Пароль сброшен",register:"Регистрация",logout_all:"Завершены другие входы"};
+var KIND={login:"Вход",fail:"Неверный пароль",password:"Пароль изменён",reset:"Пароль сброшен",register:"Регистрация",logout_all:"Завершены другие входы",
+ otp_fail:"Неверный код",otp_backup:"Вход по резервному коду",new_device:"Новое устройство",device_end:"Завершён вход на устройстве",totp_on:"Включён вход с кодом",totp_off:"Выключен вход с кодом",totp_codes:"Новые резервные коды"};
+/* 3.7: вход с кодом из приложения (Google Authenticator, Яндекс Ключ, Aegis…) */
+var TP=null,TPMSG="";
+function tpQr(t){try{var q=qrcode(0,"M");q.addData(t);q.make();return q.createSvgTag({cellSize:4,margin:2,scalable:true,alt:"QR-код для приложения"})}catch(x){return ""}}
+function tpHtml(){
+ var on=TP?TP.on:!!(me()&&me().totp);
+ var h='<details class="s13-det"'+(TP&&(TP.secret||TP.codes||TPMSG)?' open':'')+'><summary>Вход с кодом из приложения'+(on?' · <b class="s37-on">включён</b>':'')+'</summary>';
+ if(TP&&TP.codes){h+='<p class="sd-note">Резервные коды. Каждый срабатывает один раз, если телефона нет под рукой. Сохраните их сейчас: больше они не покажутся.</p><pre class="s37-codes">'+e(TP.codes.join("\n"))+'</pre><div class="s13-btns"><button type="button" class="btn" data-s13="tpcopy">Скопировать</button><button type="button" class="btn primary" data-s13="tpdone">Я сохранил коды</button></div>'}
+ else if(TP&&TP.secret){h+='<ol class="s37-steps"><li>Установите на телефон приложение-аутентификатор: Google Authenticator, Яндекс Ключ, Microsoft Authenticator или Aegis.</li><li>Отсканируйте QR-код или введите ключ вручную.</li><li>Введите 6 цифр из приложения.</li></ol>'+
+  '<div class="s37-qr"><div class="qr">'+tpQr(TP.uri)+'</div><div><p class="sd-note">Ключ для ручного ввода:</p><code class="s37-key">'+e(TP.secret)+'</code></div></div>'+
+  '<label class="s13-f">Код из приложения<input class="tin" id="s37c" inputmode="numeric" maxlength="7" autocomplete="one-time-code" placeholder="123456"></label><p class="s13-msg" role="status">'+e(TPMSG)+'</p><div class="s13-btns"><button type="button" class="btn primary" data-s13="tpon">Включить</button><button type="button" class="btn" data-s13="tpx">Отмена</button></div>'}
+ else if(on){h+='<p class="sd-note">При входе в аккаунт (по паролю или через Discord) и в панель после пароля нужен 6-значный код из приложения. Без телефона можно войти резервным кодом.'+(TP&&TP.backupLeft!=null?' Осталось резервных кодов: '+TP.backupLeft+'.':'')+'</p>'+
+  '<div class="s13-pw"><label class="s13-f">Пароль от аккаунта<input class="tin" type="password" id="s37p" autocomplete="current-password"></label><label class="s13-f">Код из приложения<input class="tin" id="s37c" inputmode="numeric" maxlength="9" autocomplete="one-time-code"></label></div>'+
+  '<p class="s13-msg" role="status">'+e(TPMSG)+'</p><div class="s13-btns"><button type="button" class="btn" data-s13="tpcodes">Новые резервные коды</button><button type="button" class="btn" data-s13="tpoff">Выключить</button></div>'}
+ else h+='<p class="sd-note">Даже если пароль узнают, без кода с вашего телефона войти не получится. Код нужен при каждом новом входе, а не при каждом запуске программы.</p><p class="s13-msg" role="status">'+e(TPMSG)+'</p><button type="button" class="btn primary" data-s13="tpsetup">Включить вход с кодом</button>';
+ return h+'</details>'}
+function tpGo(k,b){
+ var c=(document.getElementById("s37c")||{}).value||"",p=(document.getElementById("s37p")||{}).value||"";
+ if(k==="tpsetup"){b.disabled=true;api("totp",{op:"setup"}).then(function(r){if(r.ok){TP={on:false,secret:r.secret,uri:r.uri};TPMSG=""}else TPMSG=r.error||"Не удалось.";cabRepaint()});return}
+ if(k==="tpx"){TP=null;TPMSG="";cabRepaint();return}
+ if(k==="tpdone"){TP={on:true,backupLeft:TP.codes.length};TPMSG="";cabRepaint();return}
+ if(k==="tpcopy"){try{navigator.clipboard.writeText("Senko Assistant — резервные коды для входа:\n"+TP.codes.join("\n"))}catch(x){}toast("Коды скопированы");return}
+ if(k==="tpon"){if(c.replace(/\D/g,"").length!==6){TPMSG="Введите 6 цифр из приложения.";cabRepaint();return}
+  b.disabled=true;api("totp",{op:"enable",code:c}).then(function(r){if(r.ok){TP={on:true,codes:r.codes};TPMSG="";toast("Вход с кодом включён");if(me())me().totp=true}else TPMSG=r.error||"Не удалось.";cabRepaint()});return}
+ if(k==="tpoff"||k==="tpcodes"){if(!p||!c){TPMSG="Введите пароль и код из приложения.";cabRepaint();return}
+  if(k==="tpoff"&&!arm(b,"Точно выключить?"))return;
+  b.disabled=true;api("totp",{op:k==="tpoff"?"disable":"backup",password:p,code:c}).then(function(r){if(r.ok){TPMSG="";if(k==="tpoff"){TP={on:false};toast("Вход с кодом выключен");if(me())me().totp=false}else TP={on:true,codes:r.codes}}else TPMSG=r.error||"Не удалось.";cabRepaint()})}}
 function charHtml(){var c=window.SA_chList&&SA_chList();if(!c||c.list.length<2)return "";
  return '<section class="panel s13-cab"><h2>Персонаж<small>'+e(window.SA_HK&&SA_HK.get("char")?SA_HK.get("char")+" — следующий":"")+'</small></h2><div class="s13-chs">'+c.list.map(function(x){return '<button type="button" class="pill" data-s13ch="'+e(x.id)+'" aria-pressed="'+(x.id===c.cur)+'">🎭 '+e(x.n)+'</button>'}).join("")+'</div></section>'}
 function secHtml(){
  var h='<section class="panel s13-cab" id="s13sec"><h2>Безопасность<small>пароль и входы в аккаунт</small></h2>';
  h+='<details class="s13-det"'+(PWMSG?' open':'')+'><summary>Сменить пароль</summary><div class="s13-pw"><label class="s13-f">Текущий пароль<input class="tin" type="password" id="s13po" autocomplete="current-password"></label><label class="s13-f">Новый пароль<input class="tin" type="password" id="s13pn" autocomplete="new-password" placeholder="не короче 6 символов"></label><label class="s13-f">Повторите новый<input class="tin" type="password" id="s13pr" autocomplete="new-password"></label></div>'+
   '<p class="sd-note">Остальные компьютеры, где вы вошли, выйдут из аккаунта. Этот компьютер останется в аккаунте.</p><p class="s13-msg" id="s13pm" role="status">'+e(PWMSG)+'</p><button type="button" class="btn primary" data-s13="pw">Сменить пароль</button></details>';
- h+='<div class="s13-lg"><div class="s13-lgh"><b>Журнал входов</b>'+(LG?'<span>'+(LG.others?"Ещё открыто входов на других компьютерах: "+LG.others:"Других открытых входов нет")+'</span>':'')+'</div>';
- if(!LG)h+='<p class="sd-note">'+(LGERR?e(LGERR):'Последние 30 входов: время, система, версия программы и начало IP-адреса.')+'</p><button type="button" class="btn" data-s13="lg">Показать</button>';
- else h+=(LG.list.length?'<ul class="s13-lgl">'+LG.list.map(function(r){return '<li class="'+(r.kind==="fail"?"bad":"")+'"><b>'+e(KIND[r.kind]||r.kind)+'</b><span>'+e(day(r.at))+'</span><small>'+e([r.os,r.ver?"версия "+r.ver:"",r.ip].filter(Boolean).join(" · ")||"—")+'</small></li>'}).join("")+'</ul>':'<p class="sd-note">Записей пока нет.</p>')+
+ h+=tpHtml();
+ h+='<div class="s13-lg"><div class="s13-lgh"><b>Устройства и журнал входов</b>'+(LG?'<span>'+(LG.others?"Ещё открыто входов на других компьютерах: "+LG.others:"Других открытых входов нет")+'</span>':'')+'</div>';
+ if(!LG)h+='<p class="sd-note">'+(LGERR?e(LGERR):'Где сейчас открыт ваш аккаунт и последние 30 входов: время, система, версия программы и начало IP-адреса. Вход, которым не пользовались 30 дней, завершается сам.')+'</p><button type="button" class="btn" data-s13="lg">Показать</button>';
+ else h+=(LG.devices&&LG.devices.length?'<p class="s37-h">Мои устройства</p><ul class="s13-lgl s37-dev">'+LG.devices.map(function(d){return '<li><b>'+e(d.os||"Устройство")+(d.cur?' · это устройство':'')+'</b><span>был активен '+e(day(d.last))+'</span><small>'+e([d.ver?"версия "+d.ver:"",d.ip,"вход "+day(d.at)].filter(Boolean).join(" · "))+'</small>'+(d.cur?'':'<button type="button" class="btn s37-x" data-s13="dvend" data-id="'+e(d.id)+'">Выйти</button>')+'</li>'}).join("")+'</ul><p class="s37-h">Журнал входов</p>':'')+(LG.list.length?'<ul class="s13-lgl">'+LG.list.map(function(r){return '<li class="'+(r.kind==="fail"||r.kind==="otp_fail"||r.kind==="new_device"?"bad":"")+'"><b>'+e(KIND[r.kind]||r.kind)+'</b><span>'+e(day(r.at))+'</span><small>'+e([r.os,r.ver?"версия "+r.ver:"",r.ip].filter(Boolean).join(" · ")||"—")+'</small></li>'}).join("")+'</ul>':'<p class="sd-note">Записей пока нет.</p>')+
   '<div class="s13-btns"><button type="button" class="btn" data-s13="lg">Обновить</button>'+(LG.others?'<button type="button" class="btn" data-s13="endall">Выйти на других компьютерах</button>':'')+'</div><p class="sd-note">Если видите вход, которого не было, смените пароль.</p>';
  return h+'</div></section>'}
 window.SA_CAB13=function(acc){return charHtml()+(acc&&online()?secHtml():"")};
@@ -11668,6 +11704,8 @@ document.addEventListener("click",function(ev){
  if(k2==="savedir"){A.openBackups();return}
  if(k2==="pw"){pwGo(b);return}
  if(k2==="lg"){b.disabled=true;lgLoad();return}
+ if(k2==="dvend"){if(!arm(b,"Выйти на этом устройстве?"))return;b.disabled=true;api("logins",{op:"end_one",id:b.dataset.id}).then(function(r){toast(r.ok?"Вход на устройстве завершён":(r.error||"Не удалось"));lgLoad()});return}
+ if(/^tp/.test(k2)){tpGo(k2,b);return}
  if(k2==="endall"){if(!arm(b,"Точно выйти везде?"))return;b.disabled=true;api("logins",{op:"end_others"}).then(function(r){toast(r.ok?"Другие входы завершены: "+r.ended:(r.error||"Не удалось"));lgLoad()});return}
 });
 document.addEventListener("input",function(ev){var t=ev.target;if(!t||!t.id)return;

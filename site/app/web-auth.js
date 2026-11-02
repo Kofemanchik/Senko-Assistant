@@ -28,8 +28,8 @@
       d = d || {};
       var login = clean(d.login, 24), password = String(d.password == null ? "" : d.password);
       if (!login || !password) return Promise.resolve({ ok: false, error: "Введите логин и пароль." });
-      return W.call(Object.assign({ action: "login", login: login, password: password, remember: !!d.remember }, W.client())).then(function (r) {
-        if (!r.ok) return { ok: false, error: r.error || "Не удалось войти.", code: r.code };
+      return W.call(Object.assign({ action: "login", login: login, password: password, remember: !!d.remember, otp: clean(d.otp, 20) }, W.client())).then(function (r) {
+        if (!r.ok) return { ok: false, error: r.error || "Не удалось войти.", code: r.code, bad: !!r.bad };
         W.ls("sa-web-last", r.user.login);
         if (r.user.needLegal) { pending = { login: r.user.login, token: r.token, remember: !!d.remember, user: r.user }; return { ok: true, needLegal: true, user: r.user }; }
         W.saveSession(r.user.login, r.token, !!d.remember);
@@ -43,20 +43,23 @@
     discord: function (d) {
       d = d || {};
       var run = ++dcRun, win = null;
-      try { win = window.open("about:blank", "senko-discord", "width=520,height=760"); } catch (e) {}
-      return W.call({ action: "dc_auth_start", purpose: "login" }).then(function (st) {
+      // 3.7: продолжение входа после ввода кода (resume — тот же запрос входа, Discord второй раз не открываем)
+      var rs = d.resume && d.resume.state && d.resume.pk ? d.resume : null;
+      if (!rs) try { win = window.open("about:blank", "senko-discord", "width=520,height=760"); } catch (e) {}
+      return (rs ? Promise.resolve(Object.assign({ ok: true, ttl: 600 }, rs)) : W.call({ action: "dc_auth_start", purpose: "login" })).then(function (st) {
         if (!st.ok) { try { win && win.close(); } catch (e) {} return { ok: false, error: st.error || "Не удалось начать вход через Discord.", code: st.code }; }
-        if (win && !win.closed) win.location.href = st.url;
+        if (rs) {} else if (win && !win.closed) win.location.href = st.url;
         else return { ok: false, error: "Браузер заблокировал окно Discord. Разрешите всплывающие окна для этого сайта и нажмите ещё раз." };
         var until = Date.now() + Math.min(600, +st.ttl || 600) * 1000;
         return new Promise(function (done) {
           (function tick() {
             if (run !== dcRun) return done({ ok: false, cancelled: true, error: "Вход через Discord отменён." });
             if (Date.now() > until) return done({ ok: false, error: "Время на вход вышло. Нажмите «Войти через Discord» ещё раз." });
-            W.call(Object.assign({ action: "dc_auth_poll", state: st.state, pk: st.pk, remember: !!d.remember }, W.client())).then(function (r) {
+            W.call(Object.assign({ action: "dc_auth_poll", state: st.state, pk: st.pk, remember: !!d.remember, otp: clean(d.otp, 20) }, W.client())).then(function (r) {
               if (run !== dcRun) return done({ ok: false, cancelled: true, error: "Вход через Discord отменён." });
               if ((r.ok && r.pending) || (!r.ok && (r.code === "network" || r.offline))) return setTimeout(tick, 2000);
               try { if (win && !win.closed) win.close(); } catch (e) {}
+              if (!r.ok && r.code === "otp") return done({ ok: false, code: "otp", bad: !!r.bad, error: r.error, resume: { state: st.state, pk: st.pk } });
               if (!r.ok) return done({ ok: false, error: r.error || "Не удалось войти через Discord.", code: r.code });
               W.ls("sa-web-last", r.user.login);
               if (r.user.needLegal) { pending = { login: r.user.login, token: r.token, remember: !!d.remember, user: r.user }; return done({ ok: true, needLegal: true, user: r.user }); }

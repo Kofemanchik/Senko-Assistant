@@ -44,6 +44,7 @@ const SYNC_ITEM_BYTES = 65536; // размер одного элемента
 const SYNC_USER_ROWS = 5000; // элементов на пользователя
 const SESSION_DAYS = 60;
 const SESSION_SHORT_HOURS = 24;
+const SESSION_IDLE_DAYS = 30; // 3.7: вход, которым не пользовались 30 дней, завершается сам
 const RESET_TTL_MIN = 30; // сколько ждём подтверждения сброса
 const RESET_APPROVED_MIN = 15; // сколько после подтверждения можно задать новый пароль
 
@@ -227,15 +228,18 @@ function pub(p) {
     bio: p.bio || "",
     hideDiscord: !!p.hide_discord,
     dcLinked: !!p.discord_uid,
+    totp: !!p.totp_on,
     dcName: p.discord_uname || "",
   };
 }
 
-async function newSession(userId, remember) {
+async function newSession(userId, remember, b, ip) {
   const token = rand(32);
   const hours = remember ? SESSION_DAYS * 24 : SESSION_SHORT_HOURS;
-  await db()`insert into sessions (token_hash, user_id, expires_at, remember)
-             values (${await sha256(token)}, ${userId}, now() + make_interval(hours => ${hours}), ${!!remember})`;
+  // 3.7: у входа запоминаем устройство — список «Мои устройства» в кабинете и выход с одного из них
+  await db()`insert into sessions (token_hash, user_id, expires_at, remember, ver, os, ip)
+             values (${await sha256(token)}, ${userId}, now() + make_interval(hours => ${hours}), ${!!remember},
+                     ${clean(b && b.ver, 30)}, ${clean(b && b.os, 40)}, ${ipShort(ip)})`;
   return token;
 }
 
@@ -246,7 +250,8 @@ async function sessionUser(token) {
   const [p] = await sql`
     select p.*, s.remember as s_remember, s.last_used as s_last_used
     from sessions s join profiles p on p.id = s.user_id
-    where s.token_hash = ${th} and s.expires_at > now()`;
+    where s.token_hash = ${th} and s.expires_at > now()
+      and coalesce(s.last_used, s.created_at) > now() - make_interval(days => ${SESSION_IDLE_DAYS})`;
   if (!p) return null;
   if (!p.s_last_used || Date.now() - new Date(p.s_last_used).getTime() > 3600e3) {
     const hours = p.s_remember ? SESSION_DAYS * 24 : SESSION_SHORT_HOURS;
@@ -359,7 +364,7 @@ async function register(b, ip) {
     if (e && e.code === "23505") return fail("Такой логин уже занят.");
     throw e;
   }
-  const token = pend ? null : await newSession(p.id, !!b.remember);
+  const token = pend ? null : await newSession(p.id, !!b.remember, b, ip);
   await logIn(p.id, "register", b, ip);
   maybeCleanup();
   const ver = appVer(b);
@@ -420,10 +425,190 @@ async function loginsApi(b, ip) {
     await logIn(p.id, "logout_all", b, ip);
     return { ok: true, ended: r.length };
   }
+  if (b.op === "end_one") {
+    const id = String(b.id || "");
+    if (!/^[0-9a-f]{16}$/.test(id)) return fail("Устройство не найдено.");
+    if (th.startsWith(id)) return fail("Это устройство — текущее. Чтобы выйти с него, нажмите «Выйти».");
+    if (!(await hit(`eo:${p.id}`, 30, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const r = await sql`delete from sessions where user_id = ${p.id} and left(token_hash, 16) = ${id} returning os, ver`;
+    if (!r.length) return fail("Этот вход уже завершён.");
+    await logIn(p.id, "device_end", { ver: r[0].ver, os: r[0].os }, ip);
+    return { ok: true, ended: r.length };
+  }
   const list = await sql`select at, kind, ver, os, ip from login_log where user_id = ${p.id} order by at desc limit 30`;
-  const [{ n }] = await sql`select count(*)::int as n from sessions where user_id = ${p.id} and expires_at > now() and token_hash <> ${th}`;
-  return { ok: true, list: list.map((r) => ({ at: new Date(r.at).getTime(), kind: r.kind, ver: r.ver, os: r.os, ip: r.ip })), others: n };
+  const devs = await sql`select token_hash, created_at, last_used, ver, os, ip, remember from sessions
+                         where user_id = ${p.id} and expires_at > now() and coalesce(last_used, created_at) > now() - make_interval(days => ${SESSION_IDLE_DAYS})
+                         order by coalesce(last_used, created_at) desc limit 30`;
+  const others = devs.filter((d) => d.token_hash !== th).length;
+  return {
+    ok: true,
+    list: list.map((r) => ({ at: new Date(r.at).getTime(), kind: r.kind, ver: r.ver, os: r.os, ip: r.ip })),
+    others,
+    devices: devs.map((d) => ({ id: d.token_hash.slice(0, 16), cur: d.token_hash === th, at: new Date(d.created_at).getTime(), last: new Date(d.last_used || d.created_at).getTime(), ver: d.ver || "", os: d.os || "", ip: d.ip || "", remember: !!d.remember })),
+    idleDays: SESSION_IDLE_DAYS,
+    totp: !!p.totp_on,
+  };
 }
+// ───────────── 3.7: вход с кодом из приложения (TOTP, RFC 6238) ─────────────
+// Секрет — 20 случайных байт в base32; коды из Google Authenticator, Яндекс Ключа, Aegis и т. п. Код живёт 30 с, принимаем соседние шаги (±30 с).
+// Один и тот же код дважды не принимается (totp_last). Резервные коды — 8 штук по 8 символов, каждый срабатывает один раз.
+const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+function b32enc(bytes) {
+  let bits = 0, val = 0, out = "";
+  for (const x of bytes) {
+    val = (val << 8) | x; bits += 8;
+    while (bits >= 5) { out += B32[(val >>> (bits - 5)) & 31]; bits -= 5; }
+  }
+  if (bits > 0) out += B32[(val << (5 - bits)) & 31];
+  return out;
+}
+function b32dec(s) {
+  const out = [];
+  let bits = 0, val = 0;
+  for (const ch of String(s).toUpperCase().replace(/[^A-Z2-7]/g, "")) {
+    val = (val << 5) | B32.indexOf(ch); bits += 5;
+    if (bits >= 8) { out.push((val >>> (bits - 8)) & 255); bits -= 8; }
+  }
+  return new Uint8Array(out);
+}
+async function totpCode(secret, step) {
+  const key = await crypto.subtle.importKey("raw", b32dec(secret), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+  const msg = new Uint8Array(8);
+  let c = step;
+  for (let i = 7; i >= 0; i--) { msg[i] = c & 255; c = Math.floor(c / 256); }
+  const h = new Uint8Array(await crypto.subtle.sign("HMAC", key, msg));
+  const o = h[19] & 15;
+  const n = (((h[o] & 127) << 24) | (h[o + 1] << 16) | (h[o + 2] << 8) | h[o + 3]) % 1e6;
+  return String(n).padStart(6, "0");
+}
+// Возвращает шаг времени принятого кода или 0
+async function totpMatch(secret, code, last) {
+  code = String(code == null ? "" : code).replace(/\D/g, "");
+  if (!secret || code.length !== 6) return 0;
+  const t = Math.floor(Date.now() / 30000);
+  for (const d of [0, -1, 1]) if (t + d > (+last || 0) && safeEq(await totpCode(secret, t + d), code)) return t + d;
+  return 0;
+}
+const backupNorm = (c) => String(c == null ? "" : c).toLowerCase().replace(/[^a-z0-9]/g, "");
+// Проверка кода пользователя (из приложения или резервного). Удачный код сразу «тратится».
+async function otpCheck(p, code) {
+  const sql = db();
+  const step = await totpMatch(p.totp_secret, code, p.totp_last);
+  if (step) {
+    const r = await sql`update profiles set totp_last = ${step} where id = ${p.id} and totp_last < ${step} returning id`;
+    return r.length ? "app" : "";
+  }
+  const bc = backupNorm(code);
+  if (bc.length !== 8) return "";
+  const h = await sha256("bk:" + bc);
+  const r = await sql`update profiles set totp_backup = array_remove(totp_backup, ${h}) where id = ${p.id} and ${h} = any(totp_backup) returning cardinality(totp_backup) as left`;
+  if (!r.length) return "";
+  if (r[0].left <= 2) await secNotice(p, "🔑 Заканчиваются резервные коды", `Осталось резервных кодов: ${r[0].left}. Создайте новые в личном кабинете (Безопасность → Вход с кодом).`);
+  return "backup";
+}
+// Шлюз при входе: включена защита — нужен верный код (b.otp). Возвращает ошибку или null.
+async function otpGate(p, b, ip, where) {
+  if (!p.totp_on || !p.totp_secret) return null;
+  const code = String(b.otp == null ? "" : b.otp).trim();
+  // недописанный код попыткой не считается
+  if (code.replace(/\D/g, "").length !== 6 && backupNorm(code).length !== 8) return fail("Введите код из приложения-аутентификатора (или резервный код). Если поля для кода нет, обновите программу.", { code: "otp" });
+  if (!(await hit(`otp:${p.id}`, 8, 900))) return fail(RATE_MSG, { code: "rate" });
+  const kind = await otpCheck(p, code);
+  if (!kind) {
+    await logIn(p.id, "otp_fail", { ver: where || (b && b.ver), os: b && b.os }, ip);
+    return fail("Неверный код. Проверьте время на телефоне и введите новый код.", { code: "otp", bad: true });
+  }
+  if (kind === "backup") await logIn(p.id, "otp_backup", { ver: where || (b && b.ver), os: b && b.os }, ip);
+  return null;
+}
+// Сообщение пользователю в программе (раздел уведомлений), живёт 7 дней
+async function secNotice(p, title, text) {
+  try {
+    await db()`insert into broadcasts (user_id, title, author, text, expires_at) values (${p.id}, ${title}, 'system', ${text}, now() + interval '7 days')`;
+  } catch (e) {
+    console.error("secNotice", e);
+  }
+}
+// 3.7: после удачного входа — предупреждение, если с прошлого входа были 5+ неудачных попыток
+async function secAfterLogin(p, b, ip) {
+  try {
+    const sql = db();
+    const [r] = await sql`select count(*)::int as n, max(at) as last from login_log
+                          where user_id = ${p.id} and kind in ('fail', 'otp_fail')
+                            and at > coalesce((select max(at) from login_log where user_id = ${p.id} and kind = 'login'), now() - interval '30 days')`;
+    if (r && r.n >= 5)
+      await secNotice(p, "⚠️ Были неудачные попытки входа",
+        `С прошлого входа в ваш аккаунт пытались войти с неверным паролем или кодом: ${r.n} раз(а), последняя попытка ${fmtDate(new Date(r.last))}.\nЕсли это были не вы, смените пароль и включите вход с кодом (Личный кабинет → Безопасность).`);
+  } catch (e) {
+    console.error("secAfterLogin", e);
+  }
+}
+async function totpApi(b, ip) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const sql = db();
+  const op = String(b.op || "status");
+  const left = (p.totp_backup || []).length;
+  if (op === "status") return { ok: true, on: !!p.totp_on, backupLeft: left };
+  if (!(await hit(`tp:${p.id}`, 20, 900))) return fail(RATE_MSG, { code: "rate" });
+  const newCodes = async () => {
+    const codes = [], hashes = [];
+    for (let i = 0; i < 8; i++) {
+      const c = rand(4);
+      codes.push(c.slice(0, 4) + "-" + c.slice(4));
+      hashes.push(await sha256("bk:" + c));
+    }
+    return { codes, hashes };
+  };
+  if (op === "setup") {
+    if (p.totp_on) return fail("Вход с кодом уже включён.");
+    const secret = b32enc(crypto.getRandomValues(new Uint8Array(20)));
+    await sql`update profiles set totp_pending = ${secret} where id = ${p.id}`;
+    const label = encodeURIComponent("Senko Assistant:" + p.login);
+    const uri = `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent("Senko Assistant")}&algorithm=SHA1&digits=6&period=30`;
+    return { ok: true, secret: secret.replace(/(.{4})/g, "$1 ").trim(), uri };
+  }
+  if (op === "enable") {
+    if (p.totp_on) return fail("Вход с кодом уже включён.");
+    if (!p.totp_pending) return fail("Начните заново: нажмите «Включить вход с кодом».");
+    const step = await totpMatch(p.totp_pending, b.code, 0);
+    if (!step) return fail("Код не подошёл. Проверьте, что время на телефоне точное, и введите новый код.");
+    const { codes, hashes } = await newCodes();
+    await sql`update profiles set totp_secret = totp_pending, totp_pending = null, totp_on = true, totp_last = ${step}, totp_backup = ${hashes} where id = ${p.id}`;
+    await logIn(p.id, "totp_on", b, ip);
+    await audit(p.login, "totp_on", p.login, {});
+    if (p.tg_id) await tg("sendMessage", { chat_id: p.tg_id, text: "🔐 В Senko Assistant включён вход с кодом из приложения." }).catch(() => null);
+    return { ok: true, on: true, codes, backupLeft: codes.length };
+  }
+  if (!p.totp_on) return fail("Вход с кодом выключен.");
+  // выключение и новые резервные коды — только с паролем и кодом
+  const pass = String(b.password == null ? "" : b.password);
+  const [{ ok }] = await sql`select extensions.crypt(${pass}, ${p.pass_hash}) = ${p.pass_hash} as ok`;
+  if (!pass || !ok) {
+    await logIn(p.id, "fail", b, ip);
+    return fail("Неверный пароль.");
+  }
+  if (!(await otpCheck(p, b.code))) {
+    await logIn(p.id, "otp_fail", b, ip);
+    return fail("Неверный код из приложения.");
+  }
+  if (op === "disable") {
+    await sql`update profiles set totp_on = false, totp_secret = null, totp_pending = null, totp_backup = '{}' where id = ${p.id}`;
+    await logIn(p.id, "totp_off", b, ip);
+    await audit(p.login, "totp_off", p.login, {});
+    await secNotice(p, "🔓 Вход с кодом выключен", "Для входа снова нужен только пароль. Если это сделали не вы, срочно смените пароль.");
+    if (p.tg_id) await tg("sendMessage", { chat_id: p.tg_id, text: "🔓 В Senko Assistant выключен вход с кодом. Если это были не вы, смените пароль." }).catch(() => null);
+    return { ok: true, on: false };
+  }
+  if (op === "backup") {
+    const { codes, hashes } = await newCodes();
+    await sql`update profiles set totp_backup = ${hashes} where id = ${p.id}`;
+    await logIn(p.id, "totp_codes", b, ip);
+    return { ok: true, on: true, codes, backupLeft: codes.length };
+  }
+  return fail("Неизвестное действие.");
+}
+
 // ───────────── Смена пароля из личного кабинета (2.2) ─────────────
 async function changePassword(b, ip) {
   const { p, err } = await who(b);
@@ -491,10 +676,13 @@ async function login(b, ip) {
   }
   if (p.banned) return fail(banMsg(p), { code: "banned" });
   if (p.approval && p.approval !== "ok") return fail(approvalMsg(p), { code: p.approval });
+  const oe = await otpGate(p, b, ip);
+  if (oe) return oe;
   await sql`delete from rate_limits where key = ${"lg:" + lc + ":" + ip} or key = ${"lf:" + lc}`;
-  const token = await newSession(p.id, !!b.remember);
+  const token = await newSession(p.id, !!b.remember, b, ip);
   await sql`update profiles set last_seen = now() where id = ${p.id}`;
-  await noteClient(p, b);
+  await secAfterLogin(p, b, ip);
+  await noteClient(p, b, ip);
   await logIn(p.id, "login", b, ip);
   maybeCleanup();
   return { ok: true, token, user: pub(p), sys: await sysFor(p) };
@@ -859,7 +1047,7 @@ async function api(req) {
     case "me": {
       const { p, err } = await who(b);
       if (err) return J(err);
-      await noteClient(p, b);
+      await noteClient(p, b, ip);
       return J({ ok: true, user: pub(p), sys: await sysFor(p), web: { laws: !!LAWS_KEY, ai: !!AI_KEY } });
     }
     case "laws":
@@ -914,6 +1102,8 @@ async function api(req) {
       return J(await missesApi(b));
     case "contacts":
       return J(await contactsApi(b));
+    case "totp":
+      return J(await totpApi(b, ip));
     case "logins":
       return J(await loginsApi(b, ip));
     case "change_password":
@@ -1211,17 +1401,23 @@ function appVer(b) {
   return /^web/i.test(v) ? "" : v;
 }
 // Версия программы и устройство: версия для /versions, новое устройство у руководства — уведомление владельцу
-async function noteClient(p, b) {
+async function noteClient(p, b, ip) {
   const ver = appVer(b);
   const dev = clean(b.device, 40);
   const sql = db();
   if (ver && ver !== p.app_version) await sql`update profiles set app_version = ${ver} where id = ${p.id}`;
-  if (!dev || !["leader", "moderator", "owner"].includes(p.rank)) return;
+  if (!dev) return;
   const h = (await sha256("dev:" + dev)).slice(0, 16);
   const known = p.devices || [];
   if (known.includes(h)) return;
   await sql`update profiles set devices = (array_append(devices, ${h}))[greatest(1, cardinality(devices) - 8):] where id = ${p.id}`;
-  if (known.length) await quiet(`🔐 Вход с нового устройства: <b>${esc(p.login)}</b> (${RANKS[p.rank]}, ${esc(p.org)})`);
+  if (!known.length) return;
+  // 3.7: о новом устройстве узнаёт и сам пользователь — сообщением в программе
+  const where = [clean(b.os, 40), clean(b.ver, 30), ipShort(ip) ? "IP " + ipShort(ip) : ""].filter(Boolean).join(", ");
+  await secNotice(p, "🔐 Вход с нового устройства",
+    `В ваш аккаунт вошли с нового устройства${where ? ": " + where : ""}, ${fmtDate(new Date())}.\nЕсли это были не вы, завершите этот вход в личном кабинете (Безопасность → Мои устройства), смените пароль и включите вход с кодом.`);
+  await logIn(p.id, "new_device", b, ip);
+  if (["leader", "moderator", "owner"].includes(p.rank)) await quiet(`🔐 Вход с нового устройства: <b>${esc(p.login)}</b> (${RANKS[p.rank]}, ${esc(p.org)})`);
 }
 
 // ───────────── API: сообщение об ошибке из программы ─────────────
@@ -1231,6 +1427,9 @@ async function bugReport(b) {
   if (!(await hit(`bug:${p.id}`, 5, 86400))) return fail("Можно отправить не больше 5 сообщений в сутки.", { code: "rate" });
   const text = String(b.text == null ? "" : b.text).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").trim().slice(0, 2000);
   if (text.length < 10) return fail("Опишите проблему подробнее (хотя бы 10 символов).");
+  // 3.7: одинаковое сообщение повторно за сутки не принимаем
+  const [dup] = await db()`select id from bug_reports where user_id = ${p.id} and text = ${text} and at > now() - interval '1 day' limit 1`;
+  if (dup) return fail(`Такое сообщение уже отправлено (№${dup.id}). Ответ придёт в программу.`, { code: "dup" });
   const ver = clean(b.ver, 20);
   // 2.2: журнал программы (версии, состояние, хвост updater.log) приходит владельцу отдельным файлом
   const log = String(b.log == null ? "" : b.log).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ").slice(0, 60000);
@@ -4158,8 +4357,44 @@ async function tick() {
   } catch (e) {
     console.error("events", e);
   }
+  try {
+    await watchServices();
+  } catch (e) {
+    console.error("watch", e);
+  }
   if (Math.random() < 0.05) await cleanup();
   return { ok: true, jobs: jobs.length };
+}
+
+// 3.7: наблюдение за сервисами. Сервис не отвечает дольше 5 минут — владельцу сообщение в Telegram, при восстановлении — ещё одно.
+// Если упал сам сервер (функция), об этом сообщает Discord-бот (канал «Мониторинг»).
+const WATCH_DOWN_MS = 5 * 60e3;
+async function watchServices() {
+  if (!OWNER_TG) return;
+  const checks = [
+    ["ai", "ИИ-помощник", async () => { const r = await fetch(AI_HEALTH_URL, { signal: AbortSignal.timeout(8000) }); const j = await r.json().catch(() => ({})); return r.ok && j.ok !== false; }],
+    ["site", "Сайт", async () => (await fetch(SITE_URL + "/status.html", { signal: AbortSignal.timeout(8000) })).status < 500],
+    ["db", "База данных", async () => { await db()`select 1`; return true; }],
+  ];
+  const W = (await getSetting("watch", {})) || {};
+  const now = Date.now();
+  let changed = false;
+  for (const [k, name, fn] of checks) {
+    let ok = false;
+    try { ok = await fn(); } catch (e) { ok = false; }
+    const w = W[k] || {};
+    if (ok) {
+      if (w.alerted) await send(OWNER_TG, `✅ <b>${name}</b> снова работает. Был недоступен ${Math.max(1, Math.round((now - w.since) / 60e3))} мин.`);
+      if (w.since) { W[k] = {}; changed = true; }
+    } else {
+      if (!w.since) { W[k] = { since: now }; changed = true; }
+      else if (!w.alerted && now - w.since >= WATCH_DOWN_MS) {
+        await send(OWNER_TG, `🚨 <b>${name}</b> не отвечает уже ${Math.round((now - w.since) / 60e3)} мин. Состояние: ${SITE_URL}/status.html`);
+        W[k] = { ...w, alerted: true }; changed = true;
+      }
+    }
+  }
+  if (changed) await setSetting("watch", W);
 }
 
 // ───────────── /laws: ручной запуск проверки законов на GitHub ─────────────
@@ -4613,6 +4848,8 @@ async function panelLogin(b, ip, ua) {
     return fail("Неверный логин, пароль или пароль панели.");
   }
   if (p.banned) return fail(banMsg(p), { code: "banned" });
+  const oe = await otpGate(p, b, ip, "панель");
+  if (oe) return oe;
   await sql`delete from rate_limits where key = ${"pl:" + lc} or key = ${"plf:" + lc}`;
   await sql`delete from panel_sessions where expires_at < now() or last_at < now() - make_interval(mins => ${PANEL_IDLE_MIN})`;
   const token = rand(32);
@@ -4631,8 +4868,8 @@ async function panelLogin(b, ip, ua) {
 // Редактор базы (только владелец): какие таблицы и поля можно менять.
 // Роль и Telegram ID меняются только через /role (с подтверждением), пароли и сессии не видны вовсе.
 const PANEL_DB = {
-  profiles: { title: "Пользователи", key: "id", order: "created_at", search: ["login", "nick", "static_id", "discord"], hide: ["pass_hash", "devices", "login_lc"],
-    cols: { nick: "text", static_id: "text", org: DEPTS, dept: "text", game_role: ["off", "pros", "adv"], discord: "text", telegram: "text", phone: "text", tags: "tags", contacts_open: "tags", approval: ["ok", "pending", "rejected"], banned: "bool", ban_reason: "text", banned_until: "time", app_version: "text" } },
+  profiles: { title: "Пользователи", key: "id", order: "created_at", search: ["login", "nick", "static_id", "discord"], hide: ["pass_hash", "devices", "login_lc", "totp_secret", "totp_pending", "totp_backup", "totp_last"],
+    cols: { nick: "text", static_id: "text", org: DEPTS, dept: "text", game_role: ["off", "pros", "adv"], discord: "text", telegram: "text", phone: "text", tags: "tags", contacts_open: "tags", approval: ["ok", "pending", "rejected"], banned: "bool", totp_on: "bool", ban_reason: "text", banned_until: "time", app_version: "text" } },
   bot_settings: { title: "Настройки бота", key: "key", order: "updated_at", search: ["key"], cols: { value: "json" }, del: true },
   broadcasts: { title: "Сообщения в программе", key: "id", order: "id", search: ["title", "text", "author", "org"], cols: { title: "text", text: "long", org: "text", expires_at: "time" }, del: true },
   account_notes: { title: "Заметки к аккаунтам", key: "id", order: "id", search: ["text", "author"], cols: { text: "long" }, del: true, user: true },
@@ -4840,10 +5077,11 @@ async function panelStaff(a) {
   return { ok: true, rows: rows.map((r) => (a.kind === "owner" ? r : { ...r, key_at: null, key_used: null, panels: null })), site: SITE_URL };
 }
 
+const SEC_KINDS = ["fail", "otp_fail", "otp_backup", "new_device", "device_end", "logout_all", "password", "totp_on", "totp_off", "totp_codes"];
 async function panelApi(b, ip, ua) {
   const op = String(b.op || "");
   if (op === "login") return panelLogin(b, ip, ua);
-  const owners = ["audit", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert", "ads_list", "ads_save", "ads_toggle", "ads_delete",
+  const owners = ["audit", "security", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert", "ads_list", "ads_save", "ads_toggle", "ads_delete",
     "prog_get", "prog_xp", "prog_ach", "prog_ach_new", "prog_ai",
     "ai_dict_list", "ai_dict_save", "ai_dict_delete", "ai_bad", "ai_gold_list", "ai_gold_save", "ai_gold_delete", "ai_gold_pin", "ai_gold_run", "srvcfg_get", "srvcfg_set"];
   const { p, a, th, err } = await pwho(b, owners.includes(op));
@@ -4894,6 +5132,22 @@ async function panelApi(b, ip, ua) {
         ? await sql`select * from audit_log where (action = ${q} or target ilike ${like} or actor ilike ${like}) and ${sf} order by id desc limit 51 offset ${page * 50}`
         : await sql`select * from audit_log where ${sf} order by id desc limit 51 offset ${page * 50}`;
       return { ok: true, rows: rows.slice(0, 50), more: rows.length > 50, page, actions: AUDIT_ACTIONS, servers: Object.keys(SERVERS).map((k) => ({ id: +k, name: SERVERS[k].name })) };
+    }
+    // 3.7: журнал безопасности — неудачные входы, новые устройства, смена пароля, вход с кодом
+    case "security": {
+      const kinds = SEC_KINDS.includes(b.kind) ? [b.kind] : SEC_KINDS;
+      const days = Math.max(1, Math.min(90, parseInt(b.days, 10) || 14));
+      const q = clean(b.q, 24).toLowerCase();
+      const rows = await sql`select l.at, l.kind, l.ver, l.os, l.ip, p.login, p.nick, p.rank, p.org
+                             from login_log l join profiles p on p.id = l.user_id
+                             where l.kind = any(${kinds}) and l.at > now() - make_interval(days => ${days}) ${q ? sql`and p.login_lc like ${likeEsc(q) + "%"}` : sql``}
+                             order by l.at desc limit 300`;
+      const top = await sql`select p.login, p.rank, count(*)::int as n, max(l.at) as last from login_log l join profiles p on p.id = l.user_id
+                            where l.kind in ('fail', 'otp_fail') and l.at > now() - interval '1 day' group by p.login, p.rank having count(*) >= 3 order by n desc limit 15`;
+      const [st] = await sql`select count(*) filter (where totp_on)::int as totp, count(*)::int as users,
+                               count(*) filter (where totp_on and rank in ('owner', 'moderator', 'leader'))::int as staff_totp,
+                               count(*) filter (where rank in ('owner', 'moderator', 'leader'))::int as staff from profiles`;
+      return { ok: true, rows, top, stats: st, kinds: SEC_KINDS, days };
     }
     case "bugs": {
       const rows = await sql`select b.id, b.user_id, b.text, b.app_version, b.answered, b.at, length(b.log)::int as log_len, b.source, b.contact, p.login, p.nick, p.org
@@ -5217,7 +5471,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 38;
+const SCHEMA_V = 39;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -5387,6 +5641,18 @@ create table if not exists public.notice_reads (
 alter table public.notice_reads enable row level security;
 revoke all on table public.notice_reads from anon, authenticated;
 `;
+// 3.7: вход с кодом (TOTP) и устройство у каждого входа
+const SCHEMA_39 = `
+alter table public.profiles add column if not exists totp_secret text;
+alter table public.profiles add column if not exists totp_pending text;
+alter table public.profiles add column if not exists totp_on boolean not null default false;
+alter table public.profiles add column if not exists totp_last bigint not null default 0;
+alter table public.profiles add column if not exists totp_backup text[] not null default '{}';
+alter table public.sessions add column if not exists ver text;
+alter table public.sessions add column if not exists os text;
+alter table public.sessions add column if not exists ip text;
+create index if not exists login_log_user_kind_idx on public.login_log (user_id, kind, at desc);
+`;
 const SCHEMA_37_ONCE = `
 update public.bot_settings set value = (select coalesce(jsonb_object_agg(k, case when v = '"beta"'::jsonb then '"all"'::jsonb else v end), '{}'::jsonb) from jsonb_each(value) e(k, v))
   where key = 'flags' and jsonb_typeof(value) = 'object';
@@ -5400,7 +5666,7 @@ function ensureSchema() {
         if (+v >= SCHEMA_V) return;
         // база уже на 2.4: повторно 2.4 не выполняем (иначе вернулись бы удалённые баннеры по умолчанию)
         // 3.5: SCHEMA_30 и SCHEMA_35 повторяемы (create/alter … if not exists), их добавляем всем, кто ниже 35
-        await db().unsafe((+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35) + (+v < 37 ? SCHEMA_37_ONCE : "") + SCHEMA_38);
+        await db().unsafe((+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35) + (+v < 37 ? SCHEMA_37_ONCE : "") + SCHEMA_38 + SCHEMA_39);
         adsReady = true;
         await setSetting("schema_v", SCHEMA_V);
       } catch (e) {
@@ -5643,6 +5909,8 @@ async function ideasApi(b) {
   if (op === "add") {
     const text = cleanText(b.text, 600);
     if (text.length < 15) return fail("Опишите идею подробнее: хотя бы одно предложение.");
+    const [dup] = await sql`select id from ideas where lower(text) = lower(${text}) limit 1`;
+    if (dup) return fail(`Такая идея уже есть (№${dup.id}). Проголосуйте за неё.`, { code: "dup" });
     if (!(await hit(`ia:${p.id}`, 3, 86400))) return fail("Можно предложить не больше 3 идей в сутки.", { code: "rate" });
     const bad = await blacklisted(text);
     if (bad) return fail("В тексте есть запрещённое слово.");
@@ -6130,6 +6398,14 @@ async function dcAuthPoll(b, ip, ua) {
   const [row] = await sql`select * from dc_auth where state = ${state}`;
   if (!row || !safeEq(await sha256(pk), row.pk_hash)) return fail("Вход не найден. Начните заново.", { code: "dc_gone" });
   if (!row.done) return new Date(row.expires_at).getTime() < Date.now() ? fail("Время на вход вышло. Начните заново.", { code: "dc_gone" }) : { ok: true, pending: true };
+  // 3.7: при двухфакторной защите вход через Discord тоже просит код; запрос не удаляем, пока код не введён
+  if (!row.error && row.purpose !== "link" && row.discord_id) {
+    const pz = (await sql`select * from profiles where discord_uid = ${row.discord_id}`)[0];
+    if (pz && pz.totp_on && !pz.banned) {
+      const oe = await otpGate(pz, b, ip);
+      if (oe) return oe;
+    }
+  }
   await sql`delete from dc_auth where state = ${state}`;
   if (row.error) return fail(row.error, { code: "dc_err" });
   if (row.purpose === "link") {
@@ -6163,9 +6439,10 @@ async function dcAuthPoll(b, ip, ua) {
   }
   if (p.banned) return fail(banMsg(p), { code: "banned" });
   if (p.approval && p.approval !== "ok") return fail(approvalMsg(p), { code: p.approval });
-  const token = await newSession(p.id, !!b.remember);
+  const token = await newSession(p.id, !!b.remember, b, ip);
   await sql`update profiles set last_seen = now() where id = ${p.id}`;
-  await noteClient(p, b);
+  await secAfterLogin(p, b, ip);
+  await noteClient(p, b, ip);
   await logIn(p.id, "login", { ...b, ver: String(b.ver || "") + " · Discord" }, ip);
   maybeCleanup();
   return { ok: true, token, user: pub(p), sys: await sysFor(p) };

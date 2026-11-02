@@ -248,15 +248,25 @@
     if (key.replace(/[^a-z0-9]/gi, "").length !== 32) { $("a-err").textContent = "Пароль панели — 32 знака: латинские буквы и цифры."; return; }
     var go = $("a-go");
     go.disabled = true; go.textContent = "Вхожу…";
-    api("login", { login: login, password: pass, key: key }).then(function (r) {
+    var otp = $("a-otp").value.trim();
+    api("login", { login: login, password: pass, key: key, otp: otp }).then(function (r) {
       go.disabled = false; go.textContent = "Войти";
+      if (!r.ok && r.code === "otp") { otpAsk(r.bad ? r.error : "Включён вход с кодом: введите код из приложения и нажмите «Войти»."); return; }
       if (!r.ok) { $("a-err").textContent = r.error || "Не удалось войти."; $("a-key").select(); return; }
+      $("a-otp").value = ""; $("a-otp-w").hidden = true;
       ls("sa-panel-last", login);
       $("a-pass").value = ""; $("a-key").value = "";
       TOKEN = r.ptoken; ss(SKEY, TOKEN);
       start(r.me);
     });
   });
+  // 3.7: вход с кодом из приложения — поле появляется, когда сервер просит код
+  function otpAsk(msg) {
+    $("a-otp-w").hidden = false;
+    $("a-err").textContent = msg || "";
+    $("a-otp").value = "";
+    setTimeout(function () { $("a-otp").focus(); }, 30);
+  }
   // 3.5.3: вход через Discord — вместо логина и пароля аккаунта; пароль панели всё равно нужен
   var dcRun = 0;
   function raw(body) {
@@ -280,9 +290,15 @@
       (function tick() {
         if (run !== dcRun) return;
         if (Date.now() > until) return done("Время на вход вышло. Нажмите ещё раз.");
-        raw({ action: "dc_auth_poll", state: st.state, pk: st.pk, key: key }).then(function (r) {
+        raw({ action: "dc_auth_poll", state: st.state, pk: st.pk, key: key, otp: $("a-otp").value.trim() }).then(function (r) {
           if (run !== dcRun) return;
           if ((r.ok && r.pending) || (!r.ok && r.code === "network")) return setTimeout(tick, 2000);
+          if (!r.ok && r.code === "otp") {
+            // ждём, пока введут код: опрос продолжается с кодом из поля
+            if (r.bad || $("a-otp-w").hidden) { otpAsk(r.bad ? r.error : "Включён вход с кодом: введите код из приложения, вход продолжится сам."); $("a-otp").value = ""; }
+            dc.lastChild.textContent = "Жду код из приложения…";
+            return setTimeout(tick, 2500);
+          }
           if (!r.ok) return done(r.error || "Не удалось войти через Discord.");
           done("");
           $("a-key").value = "";
@@ -311,7 +327,7 @@
   // ───── меню
   var NAV = [
     ["Обзор", [["dash", "i-home", "Сводка", "Цифры и режимы"], ["health", "i-pulse", "Состояние", "Сервисы, версии, поиск"]]],
-    ["Люди", [["users", "i-users", "Пользователи", "Поиск и действия"], ["staff", "i-key", "Роли и доступ", "Модераторы и руководство"], ["queue", "i-inbox", "Заявки и сбросы", "Новички и пароли", "queue"]]],
+    ["Люди", [["users", "i-users", "Пользователи", "Поиск и действия"], ["staff", "i-key", "Роли и доступ", "Модераторы и руководство"], ["security", "i-shield", "Безопасность", "Входы, устройства, коды", null, 1], ["queue", "i-inbox", "Заявки и сбросы", "Новички и пароли", "queue"]]],
     ["Работа", [["reports", "i-file", "Рапорты", "Рапорты сотрудников", "reports"], ["rating", "i-trophy", "Рейтинг", "Неделя и контрольные"], ["news", "i-mega", "Рассылки", "Сообщения в программе", null, 1], ["bugs", "i-bug", "Ошибки", "Сообщения пользователей", "bugs", 1], ["ideas", "i-mega", "Идеи", "Предложения пользователей"], ["ai", "i-ai", "ИИ-помощник", "Словарь, плохие ответы, самопроверка", null, 1]]],
     ["Тестирование", [["beta", "i-shield", "Тестеры", "Роль, задания, функции"]]],
     ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["srvcfg", "i-sliders", "Подсказки серверов", "Миранда и номера статей", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1], ["pranks", "i-menu", "Пранки", "Каталог из 150 вариантов", null, 1]]],
@@ -791,6 +807,54 @@
       });
     }
     return loadList();
+  };
+
+  // 3.7: журнал безопасности
+  var SEC_RU = { fail: "неверный пароль", otp_fail: "неверный код", otp_backup: "вход по резервному коду", new_device: "новое устройство", device_end: "завершён вход на устройстве", logout_all: "выход на всех устройствах", password: "смена пароля", totp_on: "включён вход с кодом", totp_off: "выключен вход с кодом", totp_codes: "новые резервные коды" };
+  var SEC_BAD = { fail: 1, otp_fail: 1, totp_off: 1 };
+  PAGES.security = function (el) {
+    if (!ME.owner) return ownerOnly(el);
+    var st = { kind: "", days: 14, q: "" };
+    var sel = h("select", { on: { change: function (e) { st.kind = e.target.value; load(); } } }, h("option", { value: "", text: "Все события" }));
+    Object.keys(SEC_RU).forEach(function (k) { sel.appendChild(h("option", { value: k, text: SEC_RU[k] })); });
+    var dsel = h("select", { on: { change: function (e) { st.days = +e.target.value; load(); } } });
+    [[1, "сутки"], [7, "7 дней"], [14, "14 дней"], [30, "30 дней"], [90, "90 дней"]].forEach(function (d) { var o = h("option", { value: d[0], text: d[1] }); if (d[0] === 14) o.selected = true; dsel.appendChild(o); });
+    var qi = h("input", { placeholder: "Логин", maxlength: 24, style: "max-width:160px" });
+    var qt = null;
+    qi.addEventListener("input", function () { clearTimeout(qt); qt = setTimeout(function () { st.q = qi.value.trim(); load(); }, 400); });
+    head(el, "Безопасность", "Неудачные входы, новые устройства, смена пароля и вход с кодом у пользователей. Записи хранятся 90 дней.", h("div", { class: "row", style: "gap:8px" }, qi, sel, dsel));
+    var box = h("div");
+    el.appendChild(box);
+    function load() {
+      box.textContent = "";
+      box.appendChild(h("div", { class: "load", text: "Загружаю…" }));
+      return api("security", st).then(function (r) {
+        box.textContent = "";
+        if (!r.ok) return box.appendChild(errMsg(r));
+        var s = r.stats || {};
+        box.appendChild(h("div", { class: "pills", style: "margin-bottom:12px" },
+          pill("Вход с кодом: " + (s.totp || 0) + " из " + (s.users || 0)), pill("У руководства: " + (s.staff_totp || 0) + " из " + (s.staff || 0), s.staff && s.staff_totp < s.staff ? "warn" : "on")));
+        if (r.top && r.top.length) {
+          var tc = card("Много неудачных попыток за сутки");
+          tc.style.marginBottom = "14px";
+          r.top.forEach(function (t) {
+            tc.appendChild(h("div", { class: "row", style: "justify-content:space-between;padding:4px 0" }, h("a", { href: "#user/" + encodeURIComponent(t.login), text: t.login }), h("span", { class: "muted small", text: t.n + " попыток, последняя " + fmt(t.last) })));
+          });
+          box.appendChild(tc);
+        }
+        if (!r.rows.length) return box.appendChild(h("div", { class: "card empty", text: "Событий нет." }));
+        var tb = h("tbody");
+        r.rows.forEach(function (x) {
+          tb.appendChild(h("tr", null,
+            h("td", { class: "muted small", text: fmt(x.at) }),
+            h("td", null, h("a", { href: "#user/" + encodeURIComponent(x.login), text: x.login })),
+            h("td", null, pill(SEC_RU[x.kind] || x.kind, SEC_BAD[x.kind] ? "warn" : null)),
+            h("td", { class: "muted small", text: [x.ver, x.os, x.ip].filter(Boolean).join(" · ") })));
+        });
+        box.appendChild(h("div", { class: "tbl-wrap" }, h("table", { class: "tbl" }, h("thead", null, h("tr", null, h("th", { text: "Когда" }), h("th", { text: "Аккаунт" }), h("th", { text: "Событие" }), h("th", { text: "Устройство" }))), tb)));
+      });
+    }
+    return load();
   };
 
   PAGES.bugs = function (el) {

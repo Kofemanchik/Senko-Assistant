@@ -596,3 +596,14 @@ create table if not exists public.notice_reads (
   primary key (broadcast_id, user_id));
 alter table public.notice_reads enable row level security;
 revoke all on table public.notice_reads from anon, authenticated;
+
+-- 3.7.0: вход с кодом из приложения (TOTP) и устройство у каждого входа ------
+alter table public.profiles add column if not exists totp_secret text;
+alter table public.profiles add column if not exists totp_pending text;
+alter table public.profiles add column if not exists totp_on boolean not null default false;
+alter table public.profiles add column if not exists totp_last bigint not null default 0;
+alter table public.profiles add column if not exists totp_backup text[] not null default '{}';
+alter table public.sessions add column if not exists ver text;
+alter table public.sessions add column if not exists os text;
+alter table public.sessions add column if not exists ip text;
+create index if not exists login_log_user_kind_idx on public.login_log (user_id, kind, at desc);

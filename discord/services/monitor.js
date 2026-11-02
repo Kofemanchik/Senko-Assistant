@@ -18,7 +18,12 @@ const RESOURCES = [
     name: "Supabase API",
     url: config.apiUrl,
     method: "POST",
-    body: JSON.stringify({ action: "health" }),
+    body: JSON.stringify({ action: "status" }), // 3.7: действия "health" у сервера нет — проверка всегда показывала сбой
+  },
+  {
+    key: "ai",
+    name: "ИИ-помощник",
+    url: process.env.SENKO_AI_HEALTH_URL || "https://senko-ai.senko-assistant.workers.dev/health",
   },
   {
     key: "github_laws",
@@ -58,6 +63,10 @@ async function checkResource(resource) {
       const data = await res.json().catch(() => ({}));
       ok = !!(data && data.name);
       if (!ok) detail = "Файл laws-status.json не найден";
+    } else if (resource.key === "ai") {
+      const data = await res.json().catch(() => ({}));
+      ok = res.ok && data.ok !== false;
+      if (!ok) detail = data.error || `HTTP ${res.status}`;
     } else if (resource.key === "site") {
       ok = res.status < 500;
       if (!ok) detail = `HTTP ${res.status}`;
@@ -100,6 +109,26 @@ async function checkAll() {
 // Основной цикл мониторинга
 let monitorTimer = null;
 let lastState = [];
+// 3.7: ресурс недоступен дольше 5 минут — отдельное сообщение в «Мониторинг» (с упоминанием владельца, если задан DISCORD_OWNER_ID)
+const DOWN_ALERT_MS = 5 * 60 * 1000;
+const down = {}; // имя ресурса → { since, alerted }
+async function downAlerts(client, settings, results) {
+  const channel = settings.channels && settings.channels.monitor ? client.channels.cache.get(settings.channels.monitor) : null;
+  const who = process.env.DISCORD_OWNER_ID ? `<@${process.env.DISCORD_OWNER_ID}> ` : "";
+  for (const r of results) {
+    const d = down[r.resource];
+    if (r.ok) {
+      if (d && d.alerted && channel) await channel.send(`✅ **${r.resource}** снова работает. Был недоступен ${Math.max(1, Math.round((Date.now() - d.since) / 60000))} мин.`).catch(() => null);
+      delete down[r.resource];
+      continue;
+    }
+    if (!d) { down[r.resource] = { since: r.at || Date.now(), alerted: false }; continue; }
+    if (!d.alerted && Date.now() - d.since >= DOWN_ALERT_MS) {
+      d.alerted = true;
+      if (channel) await channel.send({ content: `${who}🚨 **${r.resource}** не отвечает уже ${Math.round((Date.now() - d.since) / 60000)} мин.${r.detail ? " Причина: " + String(r.detail).slice(0, 200) : ""}`, allowedMentions: { users: process.env.DISCORD_OWNER_ID ? [process.env.DISCORD_OWNER_ID] : [] } }).catch(() => null);
+    }
+  }
+}
 
 async function runMonitor(client, state) {
   if (!state.settings.monitorEnabled) return;
@@ -110,6 +139,7 @@ async function runMonitor(client, state) {
 
     // Публикуем в канал «Мониторинг»
     await publishMonitor(client, state.settings, results);
+    await downAlerts(client, state.settings, results);
   } catch (e) {
     console.error("Мониторинг: ошибка:", e.message);
   }

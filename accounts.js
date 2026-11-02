@@ -241,7 +241,7 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
       const login = clean(d.login, 24);
       const password = String(d.password == null ? "" : d.password);
       if (!login || !password) return { ok: false, error: "Введите логин и пароль." };
-      const r = await call({ action: "login", login, password, remember: !!d.remember, ...client() });
+      const r = await call({ action: "login", login, password, remember: !!d.remember, otp: clean(d.otp, 20), ...client() });
       takeSys(r);
       if (r.ok) {
         remember = !!d.remember;
@@ -261,21 +261,26 @@ module.exports = function createAccounts({ dataDir, docsDir, fetch: netFetch, sa
         const lg = legacyCheck(login, password);
         if (lg) return { ok: false, code: "migrate", prefill: lg.prefill, error: "Ваш локальный аккаунт нужно перенести на сервер. Дополните данные." };
       }
-      return { ok: false, error: r.error || "Не удалось войти.", code: r.code };
+      return { ok: false, error: r.error || "Не удалось войти.", code: r.code, bad: !!r.bad };
     },
 
     // 3.5.3: вход через Discord. openUrl открывает ссылку Discord в браузере; результат ждём у сервера (опрос раз в 2 с, до 10 минут)
     async discordLogin(d, openUrl) {
       d = d || {};
       const id = ++dcRun;
-      const st = await call({ action: "dc_auth_start", purpose: "login", ...client() });
+      // 3.7: resume — продолжение того же входа после ввода кода из приложения (Discord второй раз не открываем)
+      const rs = d.resume && /^[0-9a-f]{48}$/.test(String(d.resume.state)) && /^[0-9a-f]{48}$/.test(String(d.resume.pk)) ? d.resume : null;
+      const st = rs ? { ok: true, state: String(rs.state), pk: String(rs.pk), ttl: 600 } : await call({ action: "dc_auth_start", purpose: "login", ...client() });
       if (!st.ok) return { ok: false, error: st.error || "Не удалось начать вход через Discord.", code: st.code };
-      try { openUrl(st.url); } catch (e) { return { ok: false, error: "Не удалось открыть браузер." }; }
+      if (!rs) try { openUrl(st.url); } catch (e) { return { ok: false, error: "Не удалось открыть браузер." }; }
       const until = Date.now() + Math.min(600, +st.ttl || 600) * 1000;
+      let tries = 0;
       while (Date.now() < until) {
-        await new Promise((ok) => setTimeout(ok, 2000));
+        if (!rs || tries++) await new Promise((ok) => setTimeout(ok, 2000));
         if (id !== dcRun) return { ok: false, cancelled: true, error: "Вход через Discord отменён." };
-        const r = await call({ action: "dc_auth_poll", state: st.state, pk: st.pk, remember: !!d.remember, ...client() });
+        const r = await call({ action: "dc_auth_poll", state: st.state, pk: st.pk, remember: !!d.remember, otp: clean(d.otp, 20), ...client() });
+        if (rs && !r.ok && isOffline(r)) return { ok: false, error: r.error || "Нет связи с сервером.", code: r.code };
+        if (!r.ok && r.code === "otp") return { ok: false, code: "otp", bad: !!r.bad, error: r.error, resume: { state: st.state, pk: st.pk } };
         if (r.ok && r.pending) continue;
         if (!r.ok && isOffline(r)) continue; // связь мигнула — пробуем ещё
         takeSys(r);
