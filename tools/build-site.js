@@ -133,6 +133,14 @@ const GUIDE = [
 }
 /* 3.5: справочник кодексов, статьи, калькулятор, лента изменений, поиск, форма ошибки, FAQ, страница для руководства.
    Сбой здесь не должен ломать остальной сайт: страницы выше всё равно запишутся. */
+/* 3.8.1: ссылки вместо кодов — /go/?p=КОД открывает программу или веб-версию */
+out["go/index.html"] = page("Ссылка · Senko Assistant", "Ссылка от коллеги в Senko Assistant: экипаж, приглашение, тест или расчёт.",
+  '<div class="wrap">\n<div class="doc-hero" id="go">\n <div class="crumbs"><a href="/">Senko Assistant</a> / Ссылка</div>\n <h1 id="go-t">Открываем ссылку…</h1>\n <p class="lead" id="go-d"></p>\n' +
+  ' <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:22px"><a class="btn btn-p btn-lg" id="go-app" hidden>Открыть в программе</a><a class="btn btn-s btn-lg" id="go-web" hidden>Открыть в браузере</a><a class="btn btn-s btn-lg" id="go-txt" hidden rel="nofollow">Посмотреть текстом</a></div>\n' +
+  ' <p class="lead" id="go-hint" hidden style="margin-top:16px;font-size:15.5px">Программа не открылась? Установите её на <a href="/#download">главной странице</a> или нажмите «Открыть в браузере» — веб-версия работает без установки.</p>\n' +
+  ' <div id="go-code" hidden style="margin-top:26px;padding:16px 18px;border:1px solid var(--line);border-radius:14px;background:var(--surface);max-width:520px"><div id="go-cl" style="color:var(--muted);font-size:14px"></div><div style="display:flex;align-items:center;gap:12px;margin-top:6px;flex-wrap:wrap"><b id="go-cv" style="font:700 22px var(--f-mono,ui-monospace,monospace);letter-spacing:2px"></b><button type="button" class="btn btn-s btn-sm" id="go-cb">Скопировать код</button></div></div>\n' +
+  '</div>\n</div>',
+  ["/app/config.js", "/assets/go.js"], '<meta name="robots" content="noindex">\n<style>#go [hidden]{display:none!important}</style>\n');
 try {
   const info = require("./build-codes.js")({ page, esc, ROOT, SITE, out, GUIDE });
   console.log("site: справочник — статей " + info.articles + ", страниц " + info.pages);

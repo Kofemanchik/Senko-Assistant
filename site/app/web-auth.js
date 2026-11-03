@@ -12,7 +12,7 @@
   function next() {
     var n = "";
     try { n = new URLSearchParams(location.search).get("next") || ""; } catch (e) {}
-    return "/app/" + (/^[?#][\w\-.:=&%#?]*$/.test(n) ? n : "");
+    return "/app/" + (/^[?#][\w\-.:=&%#?~]*$/.test(n) ? n : "");
   }
   function enter() { location.replace(next()); }
   function clean(s, m) { return String(s == null ? "" : s).replace(/[\u0000-\u001f]/g, " ").trim().slice(0, m); }

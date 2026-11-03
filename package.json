@@ -1,7 +1,7 @@
 {
   "name": "senko-assistant",
   "productName": "Senko Assistant",
-  "version": "3.8.0",
+  "version": "3.8.1",
   "description": "Senko Assistant — памятка по законодательству Majestic RP",
   "main": "main.js",
   "author": "Hanami Senko | Senko Corporation",
@@ -92,6 +92,14 @@
       {
         "from": "voice-model",
         "to": "voice-model"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "Senko Assistant",
+        "schemes": [
+          "senko-assistant"
+        ]
       }
     ]
   }

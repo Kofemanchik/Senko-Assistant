@@ -76,7 +76,21 @@ let quitting = false; // true — программа действительно 
 let startHidden = process.argv.includes("--hidden"); // запуск из автозагрузки
 // 2.2: ярлык «сразу на вкладке или статье»: Senko Assistant.exe --open=calc | --open=uk:12.8 | --open=field:f_radio
 const OPEN_RE = /^[a-z_]{2,12}(?::[0-9a-z_.]{1,16})?$/i;
+// 3.8.1: ссылки senko-assistant://go/?p=КОД (патруль, приглашение, обмен, перенос, вид интерфейса) — страница /go/ на сайте
+const GO_RE = { p: /^[A-Z0-9]{6}$/, i: /^SA-[A-Z0-9]{4}-[A-Z0-9]{4}$/, s: /^[A-Za-z0-9]{8}$/, x: /^\d{6}$/, ui: /^[A-Za-z0-9._~-]{3,160}$/ };
+function goArg(argv) {
+  const a = (argv || []).map(String).find((x) => /^senko-assistant:/i.test(x));
+  if (!a || a.length > 400) return "";
+  const m = /^senko-assistant:\/*go\/?\?(p|i|s|x|ui)=([^&#]+)/i.exec(a);
+  if (!m) return "";
+  let v = m[2];
+  try { v = decodeURIComponent(v); } catch (e) { return ""; }
+  const k = m[1].toLowerCase();
+  return GO_RE[k].test(v) ? "go|" + k + "=" + v : "";
+}
 function openArg(argv) {
+  const g = goArg(argv);
+  if (g) return g;
   const a = (argv || []).find((x) => /^--open=/.test(String(x)));
   const v = a ? String(a).slice(7).trim() : "";
   return OPEN_RE.test(v) ? v : "";
@@ -1755,6 +1769,7 @@ app.on("window-all-closed", () => app.quit());
 
 app.whenReady().then(() => {
   if (!gotLock) return;
+  try { if (app.isPackaged && !app.isDefaultProtocolClient("senko-assistant")) app.setAsDefaultProtocolClient("senko-assistant"); } catch (e) {}
   loadCfg();
   try {
     rec = createRecovery({

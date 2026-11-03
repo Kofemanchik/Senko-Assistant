@@ -6634,7 +6634,7 @@ function pJoin(){
  if(JF.q==null||JF.key!==d.org+"|"+d.server){JF.key=d.org+"|"+d.server;JF.q=(f.questions||[]).join("\n");JF.open=!!f.open}
  var BTN=' style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600"';
  var h='<p class="sub">Новичок с кодом-приглашением сразу попадает в '+esc(d.org)+' — без ручного одобрения. Уже зарегистрированный вводит код в личном кабинете. Анкета — для тех, кто хочет вступить: заявки приходят сюда.</p>'+emsg(e);
- if(d.code)h+='<div class="bp-box" style="margin-bottom:12px;border-color:var(--accent)"><h3>Новый код</h3><p style="font:700 22px var(--mono,monospace);letter-spacing:2px;margin:6px 0">'+esc(d.code)+'</p><button type="button" class="btn" data-bp="jcopy" data-v="'+esc(d.code)+'">Скопировать</button></div>';
+ if(d.code)h+='<div class="bp-box" style="margin-bottom:12px;border-color:var(--accent)"><h3>Новый код</h3><p style="font:700 22px var(--mono,monospace);letter-spacing:2px;margin:6px 0">'+esc(d.code)+'</p><button type="button" class="btn" data-bp="jcopy" data-v="'+esc(d.code)+'">Скопировать код</button>'+(window.SA_linkHtml?SA_linkHtml("i",d.code):"")+'</div>';
  h+='<div class="bp-box" style="margin-bottom:12px"><h3>Код-приглашение</h3><div class="bp-tools"><label>Действует <select id="jDays">'+[[1,"1 день"],[3,"3 дня"],[7,"7 дней"],[14,"14 дней"],[30,"30 дней"]].map(function(o){return '<option value="'+o[0]+'"'+(JF.days===o[0]?' selected':'')+'>'+o[1]+'</option>'}).join("")+'</select></label>'+
   '<label>Использований <select id="jUses">'+[1,3,5,10,20,50].map(function(n){return '<option value="'+n+'"'+(JF.uses===n?' selected':'')+'>'+n+'</option>'}).join("")+'</select></label>'+
   '<button type="button" class="btn" data-bp="jinv"'+(e.loading?' disabled':'')+BTN+'>Создать код</button></div>';
@@ -7099,6 +7099,13 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.8.1",d:"03.11.2026",items:[
+  ["🔗","Ссылки вместо кодов","Совместный патруль, приглашение в организацию, вопросы и тест для стажёра, сравнение, перенос на другой компьютер и расчёты теперь передаются ссылкой. Ссылка открывает программу или веб-версию, код по-прежнему работает."],
+  ["⌨️","Ctrl+K — поиск поверх раздела","Статьи, законы и команды «/» в окне поверх любого раздела, даже на калькуляторе и в задержании. Сюда же можно вставить ссылку коллеги."],
+  ["↩️","Кнопка «Вернуть»","Убрали статью из калькулятора или избранного, удалили задержание или очистили расчёт — внизу появится «Вернуть». Ctrl+Z тоже работает."],
+  ["📡","Плашка «Нет интернета»","Если связь пропала, программа скажет, что работает без сети, а что вернётся вместе со связью."],
+  ["🎨","Сброс и обмен видом","Во вкладке «Интерфейс»: сбросить вид к стандартному одной кнопкой и поделиться своим видом ссылкой."]
+ ]},
  {v:"3.8.0",d:"03.11.2026",items:[
   ["🎨","Раздел «Интерфейс»","В настройках новая вкладка: готовые виды Senko, Тактический, Документ, Терминал, Для игры и Контраст. Любую деталь можно поменять отдельно."],
   ["📐","Форма под себя","Скругление углов, плотность, моноширинные цифры, узкая колонка для чтения статей и заглавные заголовки разделов."],
@@ -10133,10 +10140,12 @@ function shareOpen(kind,ids,title,text){
  api("share",{op:"create",kind:kind,ids:ids,title:title,text:text}).then(function(r){
   var b=document.getElementById("s10sh");if(!b)return;
   if(!r.ok){b.innerHTML='<p class="sub" style="color:var(--danger,#c33)">'+e(r.error||"Не удалось создать ссылку.")+'</p>';return}
-  var url=/^https?:/i.test(r.url||"")?r.url:((st()||{}).shareUrl||"")+"?s="+r.code;
+  var url=window.SA_link?SA_link("s",r.code):(/^https?:/i.test(r.url||"")?r.url:((st()||{}).shareUrl||"")+"?s="+r.code);
   b.innerHTML='<div class="s10-link"><input class="tin notebox" style="margin:0" readonly value="'+e(url)+'" aria-label="Ссылка"><button type="button" class="btn primary" data-s10cp="'+e(url)+'">Скопировать ссылку</button></div>'+
    '<div class="s10-qr"><div class="qr">'+qrSvg(url)+'</div><p>Наведите камеру телефона на QR-код, чтобы открыть расчёт в браузере. В программе ссылку вставляют в строку поиска: статьи можно сразу добавить в калькулятор или сохранить набором.<br><br>Ссылка действует '+(r.days||30)+' дней.</p></div>'});
 }
+window.SA_shareGet=function(c){if(!online()){toast("Чтобы открыть ссылку, войдите в аккаунт");return}toast("Открываем ссылку…");
+ api("share",{op:"get",code:String(c).toUpperCase()}).then(function(r){if(!r.ok){toast(r.error||"Ссылка не найдена");return}shareShow(r.share||{})})};
 function shareShow(sh){
  if(sh&&sh.kind==="board"&&window.SA_board){SA_board.open(sh);return} /* 2.4: тактическая доска */
  if(sh&&/^(myq|ttest|cmp)$/.test(sh.kind)&&window.SA_trShare){SA_trShare(sh);return} /* 3.8: вопросы, тест для стажёра, сравнение */
@@ -10166,14 +10175,15 @@ function xferPut(){
  var o=modal("Перенос по коду",'<p class="sub" id="s10xf">Готовим код…</p>');if(!o)return;
  api("xfer",{op:"put",data:d}).then(function(r){var b=document.getElementById("s10xf");if(!b)return;
   if(!r.ok){b.style.color="var(--danger,#c33)";b.textContent=r.error||"Не удалось получить код.";return}
-  b.outerHTML='<p>На другом компьютере войдите в тот же аккаунт и откройте Настройки → «Перенос и ссылки» → «Ввести код».</p><div class="s10-code" aria-label="Код переноса">'+e(r.code.slice(0,3)+" "+r.code.slice(3))+'</div>'+
+  b.outerHTML='<p>На другом компьютере войдите в тот же аккаунт и откройте Настройки → «Перенос и ссылки» → «Ввести код».</p><div class="s10-code" aria-label="Код переноса">'+e(r.code.slice(0,3)+" "+r.code.slice(3))+'</div>'+(window.SA_linkHtml?SA_linkHtml("x",r.code,"Или откройте эту ссылку на втором компьютере:"):"")+
    '<p class="sd-note" style="text-align:center">Код действует '+(r.min||15)+' минут и срабатывает один раз. Переносятся избранное, заметки, история, настройки и всё, что сохраняется в файл.</p><div class="sd-acts"><button type="button" class="btn" data-s10="xfcancel">Отменить код</button><button type="button" class="btn primary" data-sd="x">Готово</button></div>'})}
 function xferEnter(){
  if(!online()){modal("Ввести код",'<p>Войдите в тот же аккаунт, что и на первом компьютере, затем введите код.</p>');return}
- modal("Ввести код переноса",'<p class="sd-note">Код из 6 цифр с другого компьютера. Текущие данные здесь заменятся перенесёнными, перед этим программа сохранит их копию.</p><input class="notebox s10-codein" id="s10xin" inputmode="numeric" maxlength="7" autocomplete="off" placeholder="000 000" aria-label="Код переноса"><p class="sd-note" id="s10xm" aria-live="polite"></p><div class="sd-acts"><button type="button" class="btn" data-sd="x">Отмена</button><button type="button" class="btn primary" data-s10="xfgo">Перенести</button></div>');
+ modal("Ввести код переноса",'<p class="sd-note">Код из 6 цифр с другого компьютера. Текущие данные здесь заменятся перенесёнными, перед этим программа сохранит их копию.</p><input class="notebox s10-codein" id="s10xin" inputmode="numeric" maxlength="80" autocomplete="off" placeholder="000 000" aria-label="Код переноса"><p class="sd-note" id="s10xm" aria-live="polite"></p><div class="sd-acts"><button type="button" class="btn" data-sd="x">Отмена</button><button type="button" class="btn primary" data-s10="xfgo">Перенести</button></div>');
  var i=document.getElementById("s10xin");if(i)i.focus()}
+window.SA_xferEnter=function(c){xferEnter();var i=document.getElementById("s10xin");if(i&&c)i.value=String(c).slice(0,3)+" "+String(c).slice(3)};
 function xferGo(b){
- var i=document.getElementById("s10xin"),m=document.getElementById("s10xm"),c=(i?i.value:"").replace(/\D/g,"");
+ var i=document.getElementById("s10xin"),m=document.getElementById("s10xm"),c=(i?(window.SA_codeOf?SA_codeOf(i.value,"x"):i.value):"").replace(/\D/g,"");
  if(c.length!==6){if(m)m.textContent="Введите 6 цифр.";return}
  b.disabled=true;if(m)m.textContent="Проверяем код…";
  api("xfer",{op:"get",code:c}).then(function(r){b.disabled=false;
@@ -11583,7 +11593,7 @@ function openTarget(v){
  go(t,s&&TABS[t]&&TABS[t][1].some(function(x){return x[0]===s})?s:"")}
 window.SA_open=openTarget;
 if(A&&A.onOpen)A.onOpen(openTarget);
-window.addEventListener("load",function(){setTimeout(function(){var v="";try{v=A&&A.openArg?A.openArg():""}catch(x){}if(v)openTarget(v)},150)});
+window.addEventListener("load",function(){setTimeout(function(){var v="";try{v=A&&A.openArg?A.openArg():""}catch(x){}if(v&&/^go\|/.test(v)){if(window.SA_go)SA_go(v)}else if(v)openTarget(v)},150)});
 function lnkOpen(){
  var o=targets().map(function(t){return '<option value="'+t[0]+'">'+e(t[1])+'</option>'}).join("");
  modal("Ярлык на рабочем столе",'<div id="s12ln"><p class="sd-note">Ярлык запускает программу сразу на выбранном разделе или статье. Если программа уже открыта, она просто перейдёт туда.</p>'+
@@ -13093,6 +13103,12 @@ function ptApply(r){
  (r.items||[]).forEach(function(i){if(i.mine&&!(i.uid in PT.sent))PT.sent[i.uid]=JSON.stringify(i.data)});
 }
 function ptPaint(){var el=document.getElementById("s24pt");if(el)el.innerHTML=ptInner()}
+/* 3.8.1: вход в экипаж по ссылке */
+window.SA_ptJoin=function(c){c=String(c||"").replace(/[^A-Za-z0-9]/g,"").toUpperCase();
+ if(!online())return Promise.resolve({ok:false,error:"Экипаж работает после входа в аккаунт и при подключении к интернету."});
+ if(!flag("patrol"))return Promise.resolve({ok:false,error:"Совместный патруль сейчас выключен."});
+ if(PT.code===c)return Promise.resolve({ok:true,code:c,already:true});
+ return ptCall("join",{code:c})};
 function ptCall(op,extra){PT.busy=true;return api("patrol",Object.assign({op:op},extra||{})).then(function(r){PT.busy=false;ptApply(r);ptPaint();return r})}
 /* свои таймеры уходят в экипаж: новые и изменённые — put, удалённые — del */
 function ptSync(){
@@ -13110,11 +13126,11 @@ function ptInner(){
  if(!PT.code){
   return h+'<p class="sub">Объединитесь с напарниками в экипаж: задержания и таймеры каждого будут видны всем в реальном времени. Создайте экипаж и передайте код или введите код напарника.</p>'+
    '<div class="s24-row" style="margin-top:0"><button type="button" class="btn primary" data-p24="create"'+(PT.busy?' disabled':'')+'>Создать экипаж</button>'+
-   '<input class="s24-in" data-p24in="join" maxlength="7" placeholder="Код напарника" value="'+e(PT.join)+'" style="flex:0 1 160px;text-transform:uppercase;font-family:var(--f-mono,monospace)" aria-label="Код экипажа"><button type="button" class="btn" data-p24="join"'+(PT.busy?' disabled':'')+'>Войти</button></div>'+
+   '<input class="s24-in" data-p24in="join" maxlength="120" placeholder="Код или ссылка" value="'+e(PT.join)+'" style="flex:0 1 160px;text-transform:uppercase;font-family:var(--f-mono,monospace)" aria-label="Код экипажа"><button type="button" class="btn" data-p24="join"'+(PT.busy?' disabled':'')+'>Войти</button></div>'+
    (PT.err?'<p class="s24-msg err">'+e(PT.err)+'</p>':'');
  }
  var d=PT.d||{},M=d.members||[],I=d.items||[];
- h+='<div class="s24-row" style="margin-top:0"><span class="s24-code" aria-label="Код экипажа">'+e(PT.code)+'</span><button type="button" class="btn" data-p24="copy">Скопировать код</button><button type="button" class="btn" data-p24="leave">Выйти из экипажа</button></div>';
+ h+='<div class="s24-row" style="margin-top:0"><span class="s24-code" aria-label="Код экипажа">'+e(PT.code)+'</span><button type="button" class="btn" data-p24="copy">Скопировать код</button><button type="button" class="btn primary" data-p24="link">Скопировать ссылку</button><button type="button" class="btn" data-p24="leave">Выйти из экипажа</button></div>';
  h+='<div class="s24-mem">'+M.map(function(m){return '<span><i class="'+(m.online?'on':'')+'"></i>'+e(m.nick)+(m.me?' (вы)':'')+'<small class="s24-meta">'+e(m.org||"")+'</small></span>'}).join("")+'</div>';
  if(!I.length)h+='<p class="s24-empty">Пока задержаний нет. Запущенные таймеры появятся здесь у всех участников.</p>';
  else h+='<div class="s24-list">'+I.map(function(i,n){var t=i.data||{};return '<div class="s24-pti'+(i.mine?' mine':'')+'" data-p24i="'+n+'"><span><b>'+e(t.nick||"Задержанный")+'</b>'+(t.st?' · '+e(t.st):'')+'<br><small class="s24-meta">'+(t.arts?e(t.arts)+' · ':'')+(i.mine?'вы':e(i.by))+'</small></span><span class="ck" data-p24ck="'+n+'"></span></div>'}).join("")+'</div>';
@@ -13132,7 +13148,8 @@ document.addEventListener("keydown",function(ev){var t=ev.target;if(ev.key==="En
 document.addEventListener("click",function(ev){
  var b=ev.target.closest&&ev.target.closest("[data-p24]");if(!b)return;var a=b.dataset.p24;
  if(a==="create"){ptCall("create").then(function(r){if(r.ok)toast("Экипаж создан: "+r.code)});ptPaint();return}
- if(a==="join"){var c=PT.join.replace(/[^A-Za-z0-9]/g,"").toUpperCase();if(c.length!==6){PT.err="Код экипажа — 6 букв и цифр.";ptPaint();return}ptCall("join",{code:c}).then(function(r){if(r.ok){PT.join="";toast("Вы в экипаже "+r.code)}});return}
+ if(a==="link"){if(window.SA_copyLink)SA_copyLink("p",PT.code);return}
+ if(a==="join"){var c=(window.SA_codeOf?SA_codeOf(PT.join,"p"):PT.join).replace(/[^A-Za-z0-9]/g,"").toUpperCase();if(c.length!==6){PT.err="Код экипажа — 6 букв и цифр.";ptPaint();return}ptCall("join",{code:c}).then(function(r){if(r.ok){PT.join="";toast("Вы в экипаже "+r.code)}});return}
  if(a==="copy"){if(typeof copyText==="function")copyText(PT.code,b);else if(A&&A.copy){A.copy(PT.code);toast("Код скопирован")}return}
  if(a==="leave"){if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Точно выйти?";return}ptCall("leave");return}
 });
@@ -13232,7 +13249,7 @@ document.addEventListener("click",function(ev){
   api("share",{op:"create",kind:"board",title:BD.t||"Тактическая доска",data:data}).then(function(r){BT.msg="";
    var box=document.getElementById("s24bsh");b.disabled=false;if(!box)return;
    if(!r.ok){box.className="s24-msg err";box.textContent=r.error||"Не удалось создать ссылку.";return}
-   var url=/^https?:/i.test(r.url||"")?r.url:(((st()||{}).shareUrl||"")+"?s="+r.code);
+   var url=window.SA_link?SA_link("s",r.code):(/^https?:/i.test(r.url||"")?r.url:(((st()||{}).shareUrl||"")+"?s="+r.code));
    box.className="";box.innerHTML='<div class="s24-row"><input class="s24-in" readonly value="'+e(url)+'" aria-label="Ссылка"><button type="button" class="btn primary" data-bt24cp="'+e(url)+'">Скопировать</button></div><p class="hint">Напарник вставляет ссылку в строку поиска программы. Ссылка действует '+(r.days||30)+' дней.</p>'});
   return}
 });
@@ -13637,7 +13654,7 @@ var TABS=[
   ["Готовые виды",["Вид интерфейса"]],
   ["Форма",["Скругление углов","Плотность","Цифры и номера","Ширина текста статей","Заголовки разделов"]],
   ["Главная и меню",["Приветствие на главной","Блоки главной","Уровень в меню"]],
-  ["Поиск",["Команды в поиске"]]]],
+  ["Поиск",["Команды в поиске"]],["Обмен и сброс",["Поделиться видом","Сбросить вид"]]]],
  ["arts","Статьи и поиск","arts","Как выглядят статьи, свои статьи и законы, озвучка.",[
   ["Списки",["Стиль отображения статей","Компактный режим списков"]],
   ["Свои статьи и законы",["Свои статьи","Свои законы","Свои данные статей"]],
@@ -15857,8 +15874,9 @@ function sndTest(k){var p=SND[k]||"beep",n=k==="warn"?3:k==="end"?4:2,f=k==="end
 /* ---------- 51: Ctrl+Z ---------- */
 var UNDO=[];
 function snapTm(){var m={};(window.tms||[]).forEach(function(t,i){try{m[t.id]={i:i,j:JSON.stringify(t)}}catch(x){}});return m}
-var lastTm=snapTm(),lastBasket=JSON.stringify(window.basket||{});
-function pushUndo(u,msg){UNDO.push(u);if(UNDO.length>10)UNDO.shift();toast(msg+" Ctrl+Z — вернуть")}
+var lastTm=snapTm(),lastBasket=JSON.stringify(window.basket||{}),lastFav=JSON.stringify(window.favs||{});
+function pushUndo(u,msg){UNDO.push(u);if(UNDO.length>10)UNDO.shift();if(window.SA_undoToast)SA_undoToast(msg,undo);else toast(msg+" Ctrl+Z — вернуть")}
+window.SA_pushUndo=pushUndo;
 var saveTm0=window.saveTm;
 if(typeof saveTm0==="function")window.saveTm=function(){
  var r=saveTm0.apply(this,arguments);
@@ -15871,12 +15889,18 @@ if(typeof save0==="function")window.save=function(){
  var r=save0.apply(this,arguments);
  try{var cur=JSON.stringify(window.basket||{}),prev=lastBasket;
   if(cur==="{}"&&prev&&prev!=="{}")pushUndo({k:"calc",v:prev},"Калькулятор очищен.");
+  else if(prev&&cur!==prev){var P=JSON.parse(prev),C=JSON.parse(cur),gone={},n=0;Object.keys(P).forEach(function(id){if(!(id in C)){gone[id]=P[id];n++}});
+   if(n&&n<=3)pushUndo({k:"calc1",v:gone},n>1?"Статьи убраны из калькулятора.":"Статья убрана из калькулятора.")}
+  var fc=JSON.stringify(window.favs||{});if(fc!==lastFav){var PF=JSON.parse(lastFav),CF=JSON.parse(fc),fg={},fn=0;Object.keys(PF).forEach(function(id){if(!(id in CF)){fg[id]=PF[id];fn++}});
+   if(fn&&fn<=3)pushUndo({k:"fav",v:fg},"Убрано из избранного.");lastFav=fc}
   lastBasket=cur}catch(x){}
  return r};
 function undo(){
  var u=UNDO.pop();if(!u){toast("Нечего возвращать");return}
  if(u.k==="tm"){var t=JSON.parse(u.j);if((window.tms||[]).some(function(x){return x.id===t.id})){undo();return}tms.splice(Math.min(u.i,tms.length),0,t);try{selId=t.id}catch(x){}saveTm();render();toast("Задержание возвращено")}
  else if(u.k==="calc"){basket=JSON.parse(u.v);save();if(typeof updateBadge==="function")updateBadge();rr();toast("Калькулятор восстановлен")}
+ else if(u.k==="calc1"){Object.keys(u.v).forEach(function(id){basket[id]=u.v[id]});save();if(typeof updateBadge==="function")updateBadge();rr();toast("Статья возвращена в калькулятор")}
+ else if(u.k==="fav"){Object.keys(u.v).forEach(function(id){favs[id]=u.v[id]});save();rr();toast("Возвращено в избранное")}
 }
 document.addEventListener("keydown",function(ev){
  if((ev.ctrlKey||ev.metaKey)&&!ev.shiftKey&&!ev.altKey&&(ev.code==="KeyZ"||/^[zя]$/i.test(ev.key))&&!editing(ev.target)){if(!UNDO.length)return;ev.preventDefault();undo()}
@@ -16178,6 +16202,7 @@ window.SA_CAB38=function(){
  else if(J.data&&!d.err)h+='<p class="sd-note" style="margin-top:12px">Сейчас ни одна организация вашего сервера не принимает заявки по анкете.</p>';
  if(d.mine&&d.mine.length)h+='<ul class="s13-lgl" style="margin-top:10px">'+d.mine.map(function(m){return '<li class="'+(m.status==="no"?"bad":"")+'"><b>'+e(m.org)+'</b><span>заявка '+e(ST[m.status]||m.status)+'</span><small>'+e(new Date(m.at).toLocaleDateString("ru-RU"))+(m.note?' · '+e(m.note):'')+'</small></li>'}).join("")+'</ul>';
  return h+'</section>'};
+window.SA_orgJoin=function(c){return api("org_join",{op:"code",code:c}).then(function(r){if(r.ok){toast(r.msg);after(r)}return r})};
 function after(r){
  J.msg=r.msg||"";J.bad=false;J.data=null;rep();
  // сменилась организация (и, возможно, сервер): обновляем данные аккаунта и перезагружаем окно
@@ -16185,7 +16210,7 @@ function after(r){
 function formOpen(org){var f=((J.data||{}).forms||[]).filter(function(x){return x.org===org})[0];if(!f||!window.SA_modal)return;
  SA_modal("Анкета в "+e(org),'<div id="s40f">'+f.questions.map(function(q,i){return '<label class="s13-f" style="display:block;margin-bottom:10px">'+e(q)+'<textarea class="tin" data-s40a="'+i+'" rows="2" maxlength="600" style="width:100%"></textarea></label>'}).join("")+'<p class="s13-msg" id="s40fm" role="status"></p><div class="sd-acts"><button type="button" class="btn primary" data-s40="send" data-org="'+e(org)+'">Отправить заявку</button></div></div>')}
 document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s40]");if(!b)return;var k=b.dataset.s40;
- if(k==="code"){var c=(document.getElementById("s40code")||{}).value||"";if(!c.trim()){J.msg="Введите код приглашения.";J.bad=true;rep();return}
+ if(k==="code"){var c=(document.getElementById("s40code")||{}).value||"";if(window.SA_codeOf)c=SA_codeOf(c,"i");if(!c.trim()){J.msg="Введите код приглашения.";J.bad=true;rep();return}
   b.disabled=true;api("org_join",{op:"code",code:c}).then(function(r){b.disabled=false;if(r.ok){toast(r.msg);after(r)}else{J.msg=r.error||"Не удалось.";J.bad=true;rep()}});return}
  if(k==="form"){formOpen(b.dataset.org);return}
  if(k==="send"){var ans=[].map.call(document.querySelectorAll("#s40f [data-s40a]"),function(t){return t.value.trim()}),m=document.getElementById("s40fm");
@@ -16485,7 +16510,7 @@ function ttMake(){
  var title=TS.title.trim()||"Тест для стажёра";m.textContent="Создаём код…";
  api("share",{op:"create",kind:"ttest",title:title,data:JSON.stringify({v:1,title:title,qs:qs})}).then(function(r){if(!r.ok){m.textContent=r.error||"Не удалось.";return}
   TT.unshift({code:r.code,title:title,n:qs.length,at:Date.now()});TT=TT.slice(0,30);js("bos-ttests",TT);TS.title="";ttPaint();
-  var mm=document.getElementById("s43tm");if(mm)mm.innerHTML='Код теста: <span class="s43-code">'+e(r.code)+'</span> — передайте его стажёру. Код действует '+(r.days||30)+' дней.'})}
+  var mm=document.getElementById("s43tm");if(mm)mm.innerHTML='Код теста: <span class="s43-code">'+e(r.code)+'</span> — передайте его стажёру. Код действует '+(r.days||30)+' дней.'+(window.SA_linkHtml?SA_linkHtml("s",r.code,"Или ссылка — стажёр просто откроет её:"):"")})}
 function ttRes(code){var box=document.getElementById("s43r"+code);if(!box)return;box.textContent="Загружаем…";
  api("share",{op:"results",code:code}).then(function(r){if(!r.ok){box.textContent=r.error||"Не удалось.";return}
   if(!r.rows.length){box.innerHTML='<small>Пока никто не прошёл.</small>';return}
@@ -16495,7 +16520,7 @@ function ttRes(code){var box=document.getElementById("s43r"+code);if(!box)return
 function myStats(){var st=jg("bos-qstat",{q:{},tp:{}}),o={};Object.keys(TOP).forEach(function(k){var t=st&&st.tp&&st.tp[k];if(t&&t.a)o[k]={a:t.a,w:t.w}});var Tl=jg("bos-tests",[]);
  var s=null;try{s=A.state()}catch(x){}var u=s&&s.user||{};return {v:1,nick:u.nick||u.login||"",tp:o,tests:Array.isArray(Tl)?Tl.length:0,avg:Array.isArray(Tl)&&Tl.length?Math.round(Tl.slice(0,10).reduce(function(a,t){return a+(t.p||0)},0)/Math.min(10,Tl.length)):0}}
 function cmpOpen(){modal("Сравнение с коллегой",'<div id="s43b"><p class="sd-note">Дайте коллеге свой код — и сравните, кто какую тему знает лучше. В код попадает только процент верных ответов по темам.</p><div class="sd-acts" style="justify-content:flex-start"><button type="button" class="btn primary" data-s43="cmpmy">Мой код</button></div><p id="s43cm"></p>'+
- '<div class="row" style="display:flex;gap:8px;margin-top:10px"><input class="tin" id="s43cc" maxlength="12" placeholder="Код коллеги" style="max-width:180px"><button type="button" class="btn" data-s43="cmpgo">Сравнить</button></div><div id="s43cr"></div></div>')}
+ '<div class="row" style="display:flex;gap:8px;margin-top:10px"><input class="tin" id="s43cc" maxlength="120" placeholder="Код или ссылка коллеги" style="max-width:180px"><button type="button" class="btn" data-s43="cmpgo">Сравнить</button></div><div id="s43cr"></div></div>')}
 function cmpShow(sh){var o=null;try{o=JSON.parse(sh.data)}catch(x){}if(!o||!o.tp)return toast("Код повреждён");var me=myStats(),box=document.getElementById("s43cr");
  if(!box){cmpOpen();box=document.getElementById("s43cr")}
  var p=function(t){return t&&t.a?Math.round((t.a-t.w)/t.a*100):null};
@@ -16504,8 +16529,8 @@ function cmpShow(sh){var o=null;try{o=JSON.parse(sh.data)}catch(x){}if(!o||!o.tp
   '<tr><td>Средний результат тестов</td><td>'+(me.avg||"—")+(me.avg?"%":"")+'</td><td>'+(o.avg||"—")+(o.avg?"%":"")+'</td></tr></table><p class="sd-note">Процент — доля верных ответов в теме. Зелёным — кто знает тему лучше.</p>'}
 
 /* ---------- ввод кода ---------- */
-function codeOpen(){modal("Ввести код",'<div id="s43b"><p class="sd-note">Код коллеги: вопросы для тренажёра, тест для стажёра или сравнение результатов.</p><div style="display:flex;gap:8px"><input class="tin" id="s43code" maxlength="12" placeholder="Код" style="max-width:180px"><button type="button" class="btn primary" data-s43="codego">Открыть</button></div><p class="s13-msg" id="s43km" role="status"></p></div>')}
-function fetchCode(c,cb){api("share",{op:"get",code:String(c||"").trim()}).then(function(r){if(!r.ok)return cb(r.error||"Код не найден");cb(null,r.share)})}
+function codeOpen(){modal("Ввести код",'<div id="s43b"><p class="sd-note">Код коллеги: вопросы для тренажёра, тест для стажёра или сравнение результатов.</p><div style="display:flex;gap:8px"><input class="tin" id="s43code" maxlength="120" placeholder="Код или ссылка" style="max-width:180px"><button type="button" class="btn primary" data-s43="codego">Открыть</button></div><p class="s13-msg" id="s43km" role="status"></p></div>')}
+function fetchCode(c,cb){if(window.SA_codeOf)c=SA_codeOf(c,"s");api("share",{op:"get",code:String(c||"").trim()}).then(function(r){if(!r.ok)return cb(r.error||"Код не найден");cb(null,r.share)})}
 window.SA_trShare=function(sh){
  var o=null;try{o=JSON.parse(sh.data)}catch(x){}
  if(sh.kind==="myq"){if(!o||!Array.isArray(o.qs))return toast("Код повреждён");var have={},n=0;MY.forEach(function(x){have[x.q]=1});
@@ -16513,7 +16538,7 @@ window.SA_trShare=function(sh){
   saveMy();toast(n?"Добавлено вопросов: "+n:"Все вопросы из кода у вас уже есть");myOpen();return}
  if(sh.kind==="ttest"){if(!o||!Array.isArray(o.qs)||!o.qs.length)return toast("Тест повреждён");
   runQs(o.qs.map(function(x,i){return {id:"t|"+sh.code+"|"+i,tp:"my",q:x.q,o:x.o,a:x.a,e:x.e||"",ref:x.ref||""}}),o.title||sh.title||"Тест для стажёра",{ttest:sh.code,ttAuthor:sh.author||""});toast("Тест от "+(sh.author||"старшего")+": результат увидит автор");return}
- if(sh.kind==="cmp"){cmpShow(sh);return}};
+ if(sh.kind==="cmp"){if(!document.getElementById("s43cr"))cmpOpen();cmpShow(sh);return}};
 // результат теста стажёра уходит автору после последнего ответа
 var r0=window.render;window.render=function(){var r=r0.apply(this,arguments);try{var z=window.SA_X&&SA_X.quiz;if(z&&z.ttest&&z.over&&!z.ttSent){z.ttSent=true;api("share",{op:"result",code:z.ttest,s:z.s,n:z.qs.length,wrong:z.wrong.map(function(w){return w.q})}).then(function(x){toast(x.ok?"Результат отправлен автору теста":"Результат не отправлен: "+(x.error||""))})}
  injectMenu();glossInject()}catch(x){}return r};
@@ -16570,10 +16595,10 @@ document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.targe
  if(k==="del"){MY.splice(+d.i,1);saveMy();myPaint();return}
  if(k==="run"){runQs(MY.map(myQ),"Свои вопросы");return}
  if(k==="sharemy"){if(!MY.length)return;b.disabled=true;api("share",{op:"create",kind:"myq",title:"Вопросы ("+MY.length+")",data:JSON.stringify({v:1,qs:MY.map(function(x){return {q:x.q,o:x.o,a:x.a,e:x.e}})})}).then(function(r){b.disabled=false;if(!r.ok)return toast(r.error||"Не удалось");
-  var bx=document.getElementById("s43b");if(bx)bx.insertAdjacentHTML("afterbegin",'<p>Код ваших вопросов: <span class="s43-code">'+e(r.code)+'</span> — коллега вводит его в тренажёре («Ввести код»).</p>')});return}
+  var bx=document.getElementById("s43b");if(bx)bx.insertAdjacentHTML("afterbegin",'<p>Код ваших вопросов: <span class="s43-code">'+e(r.code)+'</span> — коллега вводит его в тренажёре («Ввести код»).</p>'+(window.SA_linkHtml?SA_linkHtml("s",r.code,"Или ссылка:"):""))});return}
  if(k==="ttmake")return ttMake();
  if(k==="res")return ttRes(d.c);
- if(k==="cmpmy"){b.disabled=true;api("share",{op:"create",kind:"cmp",title:"Сравнение",data:JSON.stringify(myStats())}).then(function(r){b.disabled=false;var m=document.getElementById("s43cm");if(m)m.innerHTML=r.ok?'Ваш код: <span class="s43-code">'+e(r.code)+'</span> — передайте его коллеге.':e(r.error||"Не удалось")});return}
+ if(k==="cmpmy"){b.disabled=true;api("share",{op:"create",kind:"cmp",title:"Сравнение",data:JSON.stringify(myStats())}).then(function(r){b.disabled=false;var m=document.getElementById("s43cm");if(m)m.innerHTML=r.ok?'Ваш код: <span class="s43-code">'+e(r.code)+'</span> — передайте его коллеге.'+(window.SA_linkHtml?SA_linkHtml("s",r.code,"Или ссылка:"):""):e(r.error||"Не удалось")});return}
  if(k==="cmpgo"){fetchCode((document.getElementById("s43cc")||{}).value,function(er,sh){if(er)return toast(er);if(sh.kind!=="cmp")return toast("Это не код сравнения");cmpShow(sh)});return}
  if(k==="codego"){var m3=document.getElementById("s43km");fetchCode((document.getElementById("s43code")||{}).value,function(er,sh){if(er){if(m3)m3.textContent=er;return}if(!/^(myq|ttest|cmp)$/.test(sh.kind)){if(m3)m3.textContent="Это код другого вида: вставьте его в строку поиска.";return}if(sh.kind==="cmp"){cmpOpen()}SA_trShare(sh)});return}
  if(k==="vstart")return vStart();if(k==="vsay"){var q2=V&&V.qs[V.i];if(q2)speak(vqText(q2));return}if(k==="vrec")return vRec();if(k==="vnext"){V.i++;V.sel=-1;V.heard="";vPaint(true);return}
@@ -16796,8 +16821,34 @@ window.SA_s13Rows=function(row,sw,seg0){var h=rows0?rows0(row,sw,seg0):"";
  h+=row("Приветствие на главной","Фирменная тёмная карточка с идущим задержанием или спокойная светлая.",seg("hero",[["brand","Фирменное"],["soft","Светлое"]]));
  h+=row("Блоки главной","Что показывать на главной.",'<div class="seg" role="group">'+HMB.map(function(b){var on=(","+S.hmhide+",").indexOf(","+b[0]+",")<0;return '<button type="button" data-s45h="'+b[0]+'" aria-pressed="'+on+'">'+b[1]+'</button>'}).join("")+'</div>');
  h+=row("Уровень в меню","Полоска опыта и уровня внизу меню.",seg("lvl",[["true","Показывать"],["false","Скрыть"]]));
- h+=row("Команды в поиске","Наберите «/» в строке поиска: /задержание, /калькулятор, /рапорт, /ии, /заметки, /тема и другие.",seg("cmd",[["true","Включены"],["false","Выключены"]]));
+ h+=row("Команды в поиске","Наберите «/» в строке поиска: /задержание, /калькулятор, /рапорт, /ии, /заметки, /тема и другие. Ctrl+K открывает поиск поверх любого раздела.",seg("cmd",[["true","Включены"],["false","Выключены"]]));
+ h+=row("Поделиться видом","Ссылка с вашими настройками внешнего вида: коллега откроет её и получит такой же интерфейс.",'<div class="s13-btns"><button type="button" class="btn" data-s45x="share">Скопировать ссылку на вид</button><button type="button" class="btn" data-s45x="paste">Вставить ссылку</button></div>');
+ h+=row("Сбросить вид","Вернуть фирменный вид Senko: цвета, шрифт, размер текста, форма и блоки главной.",'<button type="button" class="btn" data-s45x="reset">Сбросить к стандартному</button>');
  return h};
+/* ---------- 3.8.1: сброс и ссылка на вид ---------- */
+var UIK=["theme","style","accent","font","hc","compact","radius","density","nums","read","caps","hero","fs","hmhide","lvl"];
+var UIV={theme:["auto","light","dark"],style:["senko","police","sheriff","teal","cherry","violet","graphite"],font:["plex","pt","system","serif","dys"],radius:["soft","std","sharp"],density:["airy","std","dense"],nums:["std","mono"],read:["full","narrow"],hero:["brand","soft"]};
+var HMK=["acts","rc","art","q","goal"];
+function uiCode(){return "1~"+UIK.map(function(k){var v=S[k];if(k==="accent")return String(v||"").replace("#","");if(typeof v==="boolean")return v?"1":"0";if(k==="hmhide")return String(v||"").split(",").filter(function(x){return HMK.indexOf(x)>=0}).join("_");return String(v==null?"":v)}).join("~")}
+function uiParse(c){var a=String(c||"").split("~");if(a[0]!=="1"||a.length!==UIK.length+1)return null;var o={};
+ for(var i=0;i<UIK.length;i++){var k=UIK[i],v=a[i+1];
+  if(UIV[k]){if(UIV[k].indexOf(v)<0)return null;o[k]=v}
+  else if(k==="accent"){if(v&&!/^[0-9a-f]{6}$/i.test(v))return null;o[k]=v?"#"+v:""}
+  else if(k==="fs"){v=+v;if(!(v>=80&&v<=150))return null;o[k]=v}
+  else if(k==="hmhide"){var L=v?v.split("_"):[];if(L.some(function(x){return HMK.indexOf(x)<0}))return null;o[k]=L.join(",")}
+  else{if(v!=="0"&&v!=="1")return null;o[k]=v==="1"}}
+ return o}
+function uiReset(){var p=PRE[0][3];Object.keys(p).forEach(function(k){S[k]=p[k]});S.fs=100;S.hmhide="";S.lvl=true;S.cmd=true;S.tt=false;S.ui="senko";apply();toast("Вид сброшен к стандартному")}
+function uiApply(o){var prev={};UIK.forEach(function(k){prev[k]=S[k]});Object.keys(o).forEach(function(k){S[k]=o[k]});S.tt=false;S.ui="custom";apply();
+ if(window.SA_undoToast)SA_undoToast("Вид интерфейса применён.",function(){Object.keys(prev).forEach(function(k){S[k]=prev[k]});apply();toast("Прежний вид возвращён")});else toast("Вид интерфейса применён")}
+window.SA_ui={code:uiCode,parse:uiParse,apply:uiApply,reset:uiReset,names:function(o){var N={radius:{soft:"мягкие углы",std:"обычные углы",sharp:"острые углы"},density:{airy:"просторно",std:"обычная плотность",dense:"плотно"},theme:{auto:"тема как в системе",light:"светлая тема",dark:"тёмная тема"},font:{plex:"шрифт Plex",pt:"шрифт PT",system:"системный шрифт",serif:"шрифт с засечками",dys:"шрифт для дислексии"}};
+ var L=[N.theme[o.theme],N.font[o.font],N.radius[o.radius],N.density[o.density],"текст "+o.fs+"%"];if(o.hc)L.push("высокий контраст");if(o.nums==="mono")L.push("моноширинные цифры");if(o.caps)L.push("заглавные заголовки");if(o.accent)L.push("свой акцент "+o.accent);return L.filter(Boolean).join(", ")}};
+window.SA_cmds=function(){return CMDS};
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s45x]");if(!b)return;var k=b.dataset.s45x;
+ if(k==="share"){if(window.SA_copyLink)SA_copyLink("ui",uiCode());return}
+ if(k==="paste"){if(window.SA_goPrompt)SA_goPrompt();return}
+ if(k==="reset"){if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Точно сбросить?";setTimeout(function(){if(b.isConnected){b.dataset.arm="";b.textContent="Сбросить к стандартному"}},4000);return}uiReset();return}
+},true);
 document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s45p],[data-s45k],[data-s45h]");if(!b)return;var d=b.dataset;
  if(d.s45p){usePre(d.s45p);return}
  if(d.s45k){var v=d.v;S[d.s45k]=v==="true"?true:v==="false"?false:v;S.ui="custom";apply();return}
@@ -16859,6 +16910,146 @@ document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.targe
 
 var r0=window.render;window.render=function(){var r=r0.apply(this,arguments);try{if(state.tab==="home")heroPaint();lvlPaint()}catch(x){}return r};
 setTimeout(function(){try{lvlPaint();heroPaint()}catch(x){}},1500);
+})();
+</script>
+<style id="s46-style">
+.s46-ln{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center}
+.s46-ln p{width:100%;margin:0;font-size:13px;color:var(--muted)}
+.s46-ln input{flex:1 1 220px;min-width:0;margin:0;font:13px var(--f-mono,ui-monospace,monospace)}
+.s46-undo{position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);opacity:0;pointer-events:none;z-index:2147470500;display:flex;align-items:center;gap:14px;max-width:min(560px,92vw);padding:10px 10px 10px 16px;border-radius:14px;background:var(--ink,#222);color:var(--bg,#fff);font:600 14px/1.35 var(--f-body,system-ui,sans-serif);box-shadow:0 10px 30px rgba(0,0,0,.3);transition:opacity .18s,transform .18s}
+.s46-undo.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.s46-undo button{border:0;border-radius:10px;padding:7px 14px;font:700 13.5px var(--f-body,system-ui,sans-serif);background:var(--accent);color:var(--accent-ink,#fff);cursor:pointer}
+.s46-off{position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:2147470400;display:flex;align-items:center;gap:10px;max-width:min(640px,94vw);padding:8px 14px;border-radius:12px;background:#7A2E1F;color:#fff;font:600 13.5px/1.4 var(--f-body,system-ui,sans-serif);box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.s46-off b{white-space:nowrap}
+.s46-off button{border:0;background:transparent;color:#fff;font-size:18px;line-height:1;cursor:pointer;padding:0 2px;opacity:.8}
+.s46-k{position:fixed;inset:0;z-index:2147469500;background:rgba(0,0,0,.38);display:flex;justify-content:center;align-items:flex-start;padding:12vh 16px 16px}
+.s46-kp{width:min(620px,100%);background:var(--card,var(--bg,#fff));color:var(--ink);border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.35);overflow:hidden}
+.s46-kp input{width:100%;box-sizing:border-box;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);padding:16px 18px;font:600 17px var(--f-body,system-ui,sans-serif);outline:none}
+.s46-kl{max-height:min(52vh,420px);overflow:auto;padding:6px}
+.s46-kl button{display:flex;width:100%;gap:12px;align-items:baseline;text-align:left;border:0;background:transparent;color:var(--ink);padding:10px 12px;border-radius:12px;font:500 14.5px var(--f-body,system-ui,sans-serif);cursor:pointer}
+.s46-kl button[aria-selected="true"]{background:var(--soft,rgba(127,127,127,.14))}
+.s46-kl code,.s46-kl .k{flex:0 0 auto;min-width:76px;font:700 13.5px var(--f-mono,ui-monospace,monospace);color:var(--accent)}
+.s46-kl small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+.s46-kh{padding:8px 16px 10px;font-size:12px;color:var(--muted);border-top:1px solid var(--line)}
+.s46-kn{padding:14px 16px;color:var(--muted);font-size:14px}
+</style>
+<script>
+/* 3.8.1: ссылки вместо кодов (патруль, приглашение, тренажёр, перенос, вид, обмен), Ctrl+K — поиск поверх любого раздела,
+   плашка «Нет интернета», кнопка «Вернуть» после удаления. Ссылка вида https://senko-assistant.site/go/?p=КОД открывает
+   страницу сайта, а с неё — программу (senko-assistant://) или веб-версию. */
+(function(){
+"use strict";
+var A=window.senkoApp;
+var SITE="https://senko-assistant.site";
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function toast(t){try{if(window.SA_toast)window.SA_toast(t)}catch(x){}}
+function st(){try{return A&&A.state?A.state():null}catch(x){return null}}
+function online(){var s=st();return !!(A&&A.api&&s&&s.user&&!s.user.offline)}
+function modal(t,b){return window.SA_modal?SA_modal(t,b):null}
+function closeM(){if(window.SA_modalClose)SA_modalClose()}
+
+/* ---------- ссылки ---------- */
+var RX={p:/^[A-Z0-9]{6}$/,i:/^SA-[A-Z0-9]{4}-[A-Z0-9]{4}$/,s:/^[A-Za-z0-9]{8}$/,x:/^\d{6}$/,ui:/^[A-Za-z0-9._~-]{3,160}$/};
+function normV(k,v){v=String(v==null?"":v).trim();
+ if(k==="p")return v.replace(/[^A-Za-z0-9]/g,"").toUpperCase();
+ if(k==="i"){var n=v.toUpperCase().replace(/^SA/,"").replace(/[^A-Z0-9]/g,"");return n.length===8?"SA-"+n.slice(0,4)+"-"+n.slice(4):v.toUpperCase()}
+ if(k==="s")return v.replace(/[^A-Za-z0-9]/g,"");
+ if(k==="x")return v.replace(/\D/g,"");
+ return v}
+function link(k,v){return SITE+"/go/?"+k+"="+encodeURIComponent(normV(k,v))}
+function parse(s){s=String(s||"").trim();var k="",v="",m;
+ if((m=/^go\|(p|i|s|x|ui)=(.{1,200})$/.exec(s))){k=m[1];v=m[2]}
+ else if((m=/(?:senko-assistant\.site\/go\/?|senko-assistant:\/\/go\/?)\?(p|i|s|x|ui)=([^&#\s]{1,200})/i.exec(s))){k=m[1].toLowerCase();v=m[2]}
+ if(!k)return null;try{v=decodeURIComponent(v)}catch(x){}
+ v=normV(k,v);return RX[k].test(v)?{k:k,v:v}:null}
+window.SA_link=link;
+window.SA_goParse=parse;
+window.SA_codeOf=function(v,k){var g=parse(v);return g&&(g.k===k||!k)?g.v:String(v||"")};
+function copy(t){try{if(A&&A.copy)A.copy(t);else if(navigator.clipboard)navigator.clipboard.writeText(t)}catch(x){}}
+window.SA_copyLink=function(k,v){if(!v)return;copy(link(k,v));toast("Ссылка скопирована: она откроет программу или сайт")};
+window.SA_linkHtml=function(k,v,label){var u=link(k,v);return '<div class="s46-ln">'+(label?'<p>'+e(label)+'</p>':'')+'<input class="tin" readonly value="'+e(u)+'" aria-label="Ссылка" onfocus="this.select()"><button type="button" class="btn primary" data-s46cp="'+e(u)+'">Скопировать ссылку</button></div>'};
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s46cp]");if(!b)return;copy(b.dataset.s46cp);b.textContent="Скопировано";toast("Ссылка скопирована")});
+
+/* ---------- открытие ссылки ---------- */
+var NEED={p:1,i:1,s:1,x:1};
+function go(str,tries){var g=parse(str);if(!g){toast("Ссылка не распознана");return false}
+ tries=tries||0;
+ if(NEED[g.k]&&!online()){if(tries<20){setTimeout(function(){go(str,tries+1)},700);return true}toast("Чтобы открыть ссылку, войдите в аккаунт и подключитесь к интернету");return false}
+ if(g.k==="s"){if(window.SA_shareGet)SA_shareGet(g.v);return true}
+ if(g.k==="x"){if(window.SA_xferEnter)SA_xferEnter(g.v);return true}
+ if(g.k==="p"){modal("Совместный патруль",'<p>Вас зовут в экипаж <b style="font-family:var(--f-mono,monospace);letter-spacing:1px">'+e(g.v)+'</b>. Задержания и таймеры участников будут видны всему экипажу.</p><p class="sd-note" id="s46m" role="status"></p><div class="sd-acts"><button type="button" class="btn" data-sd="x">Отмена</button><button type="button" class="btn primary" data-s46j="p" data-v="'+e(g.v)+'">Вступить в экипаж</button></div>');return true}
+ if(g.k==="i"){modal("Приглашение в организацию",'<p>Код приглашения <b style="font-family:var(--f-mono,monospace)">'+e(g.v)+'</b>. После вступления программа обновит данные аккаунта и перезагрузится.</p><p class="sd-note" id="s46m" role="status"></p><div class="sd-acts"><button type="button" class="btn" data-sd="x">Отмена</button><button type="button" class="btn primary" data-s46j="i" data-v="'+e(g.v)+'">Вступить</button></div>');return true}
+ if(g.k==="ui"){var o=window.SA_ui&&SA_ui.parse(g.v);if(!o){toast("Ссылка на вид повреждена или от другой версии программы");return false}
+  modal("Вид интерфейса от коллеги",'<p>'+e(SA_ui.names(o))+'.</p><p class="sd-note">Ваш текущий вид можно будет вернуть одной кнопкой.</p><div class="sd-acts"><button type="button" class="btn" data-sd="x">Отмена</button><button type="button" class="btn primary" data-s46j="ui" data-v="'+e(g.v)+'">Применить</button></div>');return true}
+ return false}
+window.SA_go=go;
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s46j]");if(!b)return;var k=b.dataset.s46j,v=b.dataset.v,m=document.getElementById("s46m");
+ if(k==="ui"){var o=SA_ui.parse(v);closeM();if(o)SA_ui.apply(o);return}
+ var f=k==="p"?window.SA_ptJoin:window.SA_orgJoin;if(!f){if(m)m.textContent="Эта функция сейчас недоступна.";return}
+ b.disabled=true;if(m)m.textContent="Подключаем…";
+ Promise.resolve(f(v)).then(function(r){b.disabled=false;r=r||{};
+  if(!r.ok){if(m)m.textContent=r.error||"Не удалось.";return}
+  closeM();if(k==="p"){toast(r.already?"Вы уже в этом экипаже":"Вы в экипаже "+(r.code||v));state.tab="timer";try{render()}catch(x){}window.scrollTo(0,0)}})});
+window.SA_goPrompt=function(){modal("Открыть ссылку",'<p class="sd-note">Вставьте ссылку от коллеги: экипаж, приглашение, тест, вопросы, вид интерфейса или расчёт.</p><input class="tin" id="s46in" maxlength="220" placeholder="https://senko-assistant.site/go/?…" style="width:100%;box-sizing:border-box"><p class="sd-note" id="s46pm" role="status"></p><div class="sd-acts"><button type="button" class="btn" data-sd="x">Отмена</button><button type="button" class="btn primary" data-s46="open">Открыть</button></div>');var i=document.getElementById("s46in");if(i)i.focus()};
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest('[data-s46="open"]');if(!b)return;var i=document.getElementById("s46in"),v=i?i.value:"";
+ if(!parse(v)){var m=document.getElementById("s46pm");if(m)m.textContent="Это не ссылка Senko Assistant. Она начинается с senko-assistant.site/go/";return}closeM();go(v)});
+document.addEventListener("keydown",function(ev){if(ev.key==="Enter"&&ev.target&&ev.target.id==="s46in"){ev.preventDefault();var b=document.querySelector('[data-s46="open"]');if(b)b.click()}});
+if(A&&A.onOpen)A.onOpen(function(t){t=String(t||"");if(/^go\|/.test(t))go(t)});
+/* ссылку можно вставить и в строку поиска (ссылки на расчёт ?s= открывает обработчик обмена) */
+window.addEventListener("input",function(ev){var t=ev.target;if(!t||t.id!=="q")return;var g=parse(t.value);if(!g||g.k==="s")return;
+ ev.stopImmediatePropagation();t.value="";try{state.q=""}catch(x){}go("go|"+g.k+"="+g.v)},true);
+
+/* ---------- «Вернуть» после удаления ---------- */
+var ub=null,ut=0,uf=null;
+window.SA_undoToast=function(msg,fn){
+ if(!ub){ub=document.createElement("div");ub.className="s46-undo noprint";ub.setAttribute("role","status");ub.setAttribute("aria-live","polite");ub.innerHTML='<span></span><button type="button">Вернуть</button>';document.body.appendChild(ub);
+  ub.querySelector("button").addEventListener("click",function(){var f=uf;uf=null;ub.classList.remove("on");if(f)try{f()}catch(x){}})}
+ uf=fn;ub.querySelector("span").textContent=msg;ub.classList.add("on");clearTimeout(ut);ut=setTimeout(function(){ub.classList.remove("on");uf=null},6000)};
+
+/* ---------- нет интернета ---------- */
+var ob=null,odis=false,wasOff=false;
+function offState(){if(navigator.onLine===false)return "net";var s=st();if(s&&s.user&&s.user.offline)return "srv";return ""}
+function offPaint(){var o=offState();
+ if(!o){if(ob){ob.remove();ob=null}if(wasOff){wasOff=false;odis=false;toast("Связь восстановлена")}return}
+ wasOff=true;if(odis)return;
+ var t=o==="net"?"<b>Нет интернета.</b> <span>Кодексы, калькулятор, таймер и заметки работают. ИИ, синхронизация, патруль и ссылки — когда связь вернётся.</span>":"<b>Нет связи с сервером.</b> <span>Всё, что хранится в программе, работает. Данные сохранятся и уйдут на сервер позже.</span>";
+ if(!ob){ob=document.createElement("div");ob.className="s46-off noprint";ob.setAttribute("role","status");document.body.appendChild(ob)}
+ if(ob.dataset.k!==o){ob.dataset.k=o;ob.innerHTML='<span>'+t+'</span><button type="button" aria-label="Скрыть">×</button>';ob.querySelector("button").addEventListener("click",function(){odis=true;if(ob){ob.remove();ob=null}})}}
+window.addEventListener("online",function(){setTimeout(offPaint,300)});
+window.addEventListener("offline",offPaint);
+setInterval(offPaint,5000);setTimeout(offPaint,3000);
+
+/* ---------- Ctrl+K: поиск поверх любого раздела ---------- */
+var K=null,ks=0,kl=[];
+function hkTaken(){try{var H=window.SA_HK;if(!H||!H.get)return false;return ["timer","search","role","home","calc","rp","radio","ref","learn","case","set","char","stream"].some(function(id){return H.get(id)==="Ctrl+K"})}catch(x){return false}}
+function kClose(){if(K){K.remove();K=null}}
+function kItems(v){var L=[];v=String(v||"");var t=v.trim();
+ if(!t)return L;
+ var g=parse(t);if(g)return [{h:'<span class="k">Ссылка</span><span>Открыть ссылку коллеги</span>',run:function(){go(t)}}];
+ if(/^\//.test(t)){var C=window.SA_cmds?SA_cmds():[],n=t.toLowerCase().replace(/ё/g,"е");
+  C.forEach(function(c){var a=c[0].toLowerCase().replace(/ё/g,"е"),b=c[1].toLowerCase().replace(/ё/g,"е");if(a.indexOf(n)===0||(n.length>1&&b.indexOf(n.slice(1))>=0))L.push({h:'<code>'+e(c[0])+'</code><span>'+e(c[1])+'</span>',run:c[2]})});return L}
+ if(t.length<2)return L;
+ var r=null;try{r=window.__senkoVoiceSearch?__senkoVoiceSearch([t]):null}catch(x){}
+ ((r&&r.items)||[]).forEach(function(it){var p=(it.parts&&it.parts[0]&&it.parts[0].text)||"";L.push({h:'<span class="k">'+e(it.kind+" "+it.code)+'</span><span>'+e(it.title)+(p?'<small>'+e(p.slice(0,110))+'</small>':'')+'</span>',run:function(){if(window.SA_ref)SA_ref(it.target)}})});
+ L.push({h:'<span class="k">Все</span><span>Искать «'+e(t)+'» в кодексах</span>',run:function(){var q=document.getElementById("q");state.tab="uk";state.q=t;try{render()}catch(x){}if(q){q.value=t;q.dispatchEvent(new Event("input",{bubbles:true}))}window.scrollTo(0,0)}});
+ return L}
+function kPaint(){if(!K)return;var v=K.querySelector("input").value,box=K.querySelector(".s46-kl");kl=kItems(v);if(ks>=kl.length)ks=0;
+ box.innerHTML=kl.length?kl.map(function(it,i){return '<button type="button" role="option" data-s46k="'+i+'" aria-selected="'+(i===ks)+'">'+it.h+'</button>'}).join(""):(v.trim()?'<div class="s46-kn">Ничего не найдено. Попробуйте номер статьи или другое слово.</div>':'<div class="s46-kn">Номер статьи, слово или «/» для команд. Можно вставить ссылку коллеги.</div>')}
+function kRun(i){var it=kl[i];if(!it)return;kClose();try{if(window.SA_modalClose)SA_modalClose();if(window.SA_closeSheet)SA_closeSheet()}catch(x){}try{it.run()}catch(x){}}
+function kOpen(){if(K){K.querySelector("input").focus();return}
+ K=document.createElement("div");K.className="s46-k noprint";
+ K.innerHTML='<div class="s46-kp" role="dialog" aria-modal="true" aria-label="Быстрый поиск"><input type="text" spellcheck="false" autocomplete="off" placeholder="Статья, слово или / для команд" aria-label="Быстрый поиск"><div class="s46-kl" role="listbox"></div><div class="s46-kh">↑↓ — выбрать · Enter — открыть · Esc — закрыть</div></div>';
+ document.body.appendChild(K);var inp=K.querySelector("input");ks=0;kPaint();inp.focus();
+ inp.addEventListener("input",function(ev){ev.stopPropagation();ks=0;kPaint()});
+ K.addEventListener("keydown",function(ev){ev.stopPropagation();
+  if(ev.key==="Escape"){ev.preventDefault();kClose()}
+  else if(ev.key==="ArrowDown"){ev.preventDefault();ks=(ks+1)%Math.max(1,kl.length);kPaint()}
+  else if(ev.key==="ArrowUp"){ev.preventDefault();ks=(ks-1+kl.length)%Math.max(1,kl.length);kPaint()}
+  else if(ev.key==="Enter"){ev.preventDefault();kRun(ks)}});
+ K.addEventListener("mousedown",function(ev){if(ev.target===K)kClose()});
+ K.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s46k]");if(b)kRun(+b.dataset.s46k)})}
+window.SA_quick=kOpen;
+document.addEventListener("keydown",function(ev){if(!(ev.ctrlKey||ev.metaKey)||ev.altKey||ev.shiftKey)return;if(ev.code!=="KeyK"&&!/^[kл]$/i.test(ev.key))return;if(hkTaken())return;ev.preventDefault();ev.stopPropagation();if(K)kClose();else kOpen()},true);
 })();
 </script>
 <script>
