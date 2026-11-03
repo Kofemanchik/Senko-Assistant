@@ -6,7 +6,7 @@ if(U.nick)P.nick=U.nick;if(U.static)P.st=U.static;localStorage.setItem("bos-prof
 if(U.dept)localStorage.setItem("bos-dept",U.dept);if(U.role)localStorage.setItem("bos-role",U.role);A.seeded()}}catch(e){}})();
 /* Senko Assistant: ранняя установка настроек, чтобы тема и размер не «мигали» при загрузке */
 (function(){
-var D={theme:"auto",style:"senko",fs:100,hc:false,compact:false,noanim:null,sticky:"auto",narrow:"auto",totop:true,remember:true,artview:"list",rail:true,cvd:false,misses:true,favchg:true,accent:"",font:"plex",tt:false,ttFrom:"20:00",ttTo:"07:00",stream:false,lang:"ru"};
+var D={theme:"auto",style:"senko",fs:100,hc:false,compact:false,noanim:null,sticky:"auto",narrow:"auto",totop:true,remember:true,artview:"list",rail:true,cvd:false,misses:true,favchg:true,accent:"",font:"plex",tt:false,ttFrom:"20:00",ttTo:"07:00",stream:false,lang:"ru",ui:"senko",radius:"soft",density:"std",nums:"std",read:"full",caps:false,hero:"brand",lvl:true,cmd:true,hmhide:""};
 var S={},raw=null;
 try{raw=JSON.parse(localStorage.getItem("bos-settings")||"null")}catch(e){}
 if(!raw||typeof raw!=="object")raw={};
@@ -21,6 +21,13 @@ if(["plex","pt","system","serif","dys"].indexOf(S.font)<0)S.font="plex";
 if(!/^#[0-9a-f]{6}$/i.test(S.accent||""))S.accent="";
 if(!/^\d\d:\d\d$/.test(S.ttFrom))S.ttFrom="20:00";if(!/^\d\d:\d\d$/.test(S.ttTo))S.ttTo="07:00";
 if(["ru","en"].indexOf(S.lang)<0)S.lang="ru";
+// 3.8: конструктор интерфейса — форма и вид поверх фирменной палитры
+if(["soft","std","sharp"].indexOf(S.radius)<0)S.radius="soft";
+if(["airy","std","dense"].indexOf(S.density)<0)S.density="std";
+if(["std","mono"].indexOf(S.nums)<0)S.nums="std";
+if(["full","narrow"].indexOf(S.read)<0)S.read="full";
+if(["brand","soft"].indexOf(S.hero)<0)S.hero="brand";
+if(typeof S.hmhide!=="string")S.hmhide="";
 S.fs=Math.min(150,Math.max(80,+S.fs||100));
 window.SA_DEF=D;window.SA_S=S;
 function mq(q){try{return window.matchMedia&&window.matchMedia(q).matches}catch(e){return false}}
@@ -49,6 +56,9 @@ window.SA_apply=function(){
   h.style.setProperty("--zoom",String(S.fs/100));
   h.setAttribute("data-font",S.font);
   h.setAttribute("lang",S.lang);
+  h.setAttribute("data-radius",S.radius);h.setAttribute("data-density",S.density);h.setAttribute("data-nums",S.nums);h.setAttribute("data-read",S.read);h.setAttribute("data-hero",S.hero);
+  h.classList.toggle("caps",!!S.caps);h.classList.toggle("no-lvl",!S.lvl);
+  ["art","q","goal","rc","acts"].forEach(function(k){h.classList.toggle("hm-no-"+k,(","+S.hmhide+",").indexOf(","+k+",")>=0)});
   if(S.accent&&!S.hc){var a=S.accent,L=lum(a);if(dark&&L<.12)a=mixW(a,.45);else if(!dark&&L>.6)a=mixW(a,0);
    h.style.setProperty("--accent",a);h.style.setProperty("--accent-ink",lum(a)>.4?"#111111":"#FFFFFF");
    h.style.setProperty("--soft","color-mix(in srgb, "+a+" "+(dark?"18%":"12%")+", var(--surface))");h.classList.add("own-accent")}
@@ -3820,7 +3830,7 @@ function resHtml(z){
  '<div class="rowbtn" style="justify-content:center">'+(z.mode==="ctrl"?(z.send&&z.send.st==="err"&&ctrlDone().indexOf(z.cid)<0?'<button type="button" class="btn primary" data-x="t_csend" data-v="1">Отправить ещё раз</button>':''):'<button type="button" class="btn primary" data-x="t_again" data-v="1">'+(z.mode==="redo"?'Ещё раз':'Новый раунд')+'</button>')+(z.wrong.length&&z.mode!=="redo"?'<button type="button" class="btn" data-x="t_redo" data-v="1">Работа над ошибками</button>':'')+'<button type="button" class="btn" data-x="t_menu">В меню</button></div></section>';
  if(z.wrong.length)h+='<section class="panel"><h2>Разбор ошибок</h2><p class="sub">Вопросы с неверным ответом и статья, где написано правильно.</p><ul class="basket">'+z.wrong.map(function(w){return '<li><span class="t"><b>'+esc(w.q)+'</b><br>Ваш ответ: '+(w.mine==null?'<i>нет ответа</i>':esc(w.mine))+'<br>Верно: <b>'+esc(w.right)+'</b>'+(w.e?' · '+esc(w.e):'')+'<br>Статья: '+gref(w.ref)+'</span></li>'}).join("")+'</ul></section>';
  return h}
-window.SA_TRX={mkQ:mkQ,rec:rec,addXp:addXp,seedR:seedR,shufR:shufR,pool:function(){return SD.concat(ukDescs()).concat(guessDescs())},today:today,streak:streak};
+window.SA_TRX={lv:function(){return lvInfo()},mkQ:mkQ,rec:rec,addXp:addXp,seedR:seedR,shufR:shufR,pool:function(){return SD.concat(ukDescs()).concat(guessDescs())},today:today,streak:streak};
 P.quiz=function(){
  var z=X.quiz;
  if(X.qv==="run"&&z&&z.exam&&!z.over&&Date.now()>=z.dl)expire(z,true);
@@ -7089,6 +7099,13 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.8.0",d:"03.11.2026",items:[
+  ["🎨","Раздел «Интерфейс»","В настройках новая вкладка: готовые виды Senko, Тактический, Документ, Терминал, Для игры и Контраст. Любую деталь можно поменять отдельно."],
+  ["📐","Форма под себя","Скругление углов, плотность, моноширинные цифры, узкая колонка для чтения статей и заглавные заголовки разделов."],
+  ["🦊","Фирменная главная","Тёплое приветствие в цветах Senko: во время задержания в нём идёт таймер и кнопка «Открыть». Блоки главной можно скрывать."],
+  ["⭐","Уровень в меню","Под разделами видно уровень, звание и сколько опыта до следующего. Можно выключить."],
+  ["⌨️","Команды в поиске","Введите «/» в поиске: /задержание, /калькулятор, /рапорт, /законы, /блокнот, /тёмная и другие. Стрелки и Enter выбирают."]
+ ]},
  {v:"3.7.9",d:"02.11.2026",items:[
   ["📖","Статья и вопрос дня","На главной каждый день статья с наказанием и вопрос из тренажёра: за верный ответ +5 опыта."],
   ["🎯","Цель на день","Поставьте цель, например 20 вопросов в день: прогресс на главной, вечером программа напомнит, если цель не выполнена."],
@@ -13616,6 +13633,11 @@ var TABS=[
   ["Текст",["Шрифт","Масштаб шрифта","Язык интерфейса"]],
   ["Доступность",["Режим высокой контрастности","Палитра для дальтоников","Отключение анимаций"]],
   ["Настроение",["Лиса Senko","Сезонное оформление"]]]],
+ ["ui","Интерфейс","nav","Готовые виды и форма интерфейса: углы, плотность, цифры, главная и команды в поиске.",[
+  ["Готовые виды",["Вид интерфейса"]],
+  ["Форма",["Скругление углов","Плотность","Цифры и номера","Ширина текста статей","Заголовки разделов"]],
+  ["Главная и меню",["Приветствие на главной","Блоки главной","Уровень в меню"]],
+  ["Поиск",["Команды в поиске"]]]],
  ["arts","Статьи и поиск","arts","Как выглядят статьи, свои статьи и законы, озвучка.",[
   ["Списки",["Стиль отображения статей","Компактный режим списков"]],
   ["Свои статьи и законы",["Свои статьи","Свои законы","Свои данные статей"]],
@@ -16362,12 +16384,12 @@ setInterval(function(){try{var g=goal();if(!g)return;var h=new Date().getHours()
 function html(){
  var h='<div class="s42" data-s42="1">';
  var r=artOfDay();
- if(r)h+='<div class="c"><h3>📖 Статья дня <small>'+e(new Date().toLocaleDateString("ru-RU",{day:"numeric",month:"long"}))+'</small></h3><div class="t">'+e((KNM[r.k]||"")+" ст. "+r.code+(r.part&&r.part!=="1"&&r.part!=="0"?" ч."+r.part:""))+' · '+e(strip(r.title))+'</div><div>'+e(punText(r))+'</div>'+(r.note?'<p class="n">'+e(strip(r.note))+'</p>':'')+'<div class="row" style="margin-top:8px"><button type="button" class="btn" data-go2="'+e(r.k+"|"+r.code)+'">Открыть статью</button></div></div>';
+ if(r)h+='<div class="c s42-art"><h3>📖 Статья дня <small>'+e(new Date().toLocaleDateString("ru-RU",{day:"numeric",month:"long"}))+'</small></h3><div class="t">'+e((KNM[r.k]||"")+" ст. "+r.code+(r.part&&r.part!=="1"&&r.part!=="0"?" ч."+r.part:""))+' · '+e(strip(r.title))+'</div><div>'+e(punText(r))+'</div>'+(r.note?'<p class="n">'+e(strip(r.note))+'</p>':'')+'<div class="row" style="margin-top:8px"><button type="button" class="btn" data-go2="'+e(r.k+"|"+r.code)+'">Открыть статью</button></div></div>';
  var q=qOfDay();
  if(q){var ans=QD.d===today()?QD.i:-1;
-  h+='<div class="c"><h3>❓ Вопрос дня <small>'+(ans<0?'+5 XP за верный ответ':ans===q.a?'верно, +5 XP':'ответ дан')+'</small></h3><div class="t">'+e(q.q)+'</div><div class="o">'+q.o.map(function(o,i){var cls=ans<0?"":i===q.a?"ok":i===ans?"no":"";return '<button type="button" data-s42q="'+i+'" class="'+cls+'"'+(ans<0?'':' disabled')+'>'+e(o)+'</button>'}).join("")+'</div>'+(ans>=0&&(q.e||q.ref)?'<p class="n">'+e(q.e||"")+(q.ref?' ('+e(q.ref)+')':'')+'</p>':'')+'</div>'}
+  h+='<div class="c s42-q"><h3>❓ Вопрос дня <small>'+(ans<0?'+5 XP за верный ответ':ans===q.a?'верно, +5 XP':'ответ дан')+'</small></h3><div class="t">'+e(q.q)+'</div><div class="o">'+q.o.map(function(o,i){var cls=ans<0?"":i===q.a?"ok":i===ans?"no":"";return '<button type="button" data-s42q="'+i+'" class="'+cls+'"'+(ans<0?'':' disabled')+'>'+e(o)+'</button>'}).join("")+'</div>'+(ans>=0&&(q.e||q.ref)?'<p class="n">'+e(q.e||"")+(q.ref?' ('+e(q.ref)+')':'')+'</p>':'')+'</div>'}
  var g=goal(),d=goalDone(),sk=T()?T().streak():0;
- h+='<div class="c"><h3>🎯 Цель на день <small>'+(sk?'серия дней: '+sk:'')+'</small></h3>'+(g?'<div class="t">'+Math.min(d,g)+' из '+g+' вопросов'+(d>=g?' — выполнено ✅':'')+'</div><div class="bar"><i style="width:'+Math.min(100,Math.round(d/g*100))+'%"></i></div>':'<p class="n" style="-webkit-line-clamp:4">Поставьте цель — например 20 вопросов в день. Прогресс будет здесь, а вечером программа напомнит, если цель не выполнена.</p>')+
+ h+='<div class="c s42-goal"><h3>🎯 Цель на день <small>'+(sk?'серия дней: '+sk:'')+'</small></h3>'+(g?'<div class="t">'+Math.min(d,g)+' из '+g+' вопросов'+(d>=g?' — выполнено ✅':'')+'</div><div class="bar"><i style="width:'+Math.min(100,Math.round(d/g*100))+'%"></i></div>':'<p class="n" style="-webkit-line-clamp:4">Поставьте цель — например 20 вопросов в день. Прогресс будет здесь, а вечером программа напомнит, если цель не выполнена.</p>')+
   '<div class="row" style="margin-top:8px"><select class="tin" data-s42g="1" aria-label="Цель на день" style="width:auto">'+[[0,"Без цели"],[10,"10 вопросов"],[20,"20 вопросов"],[30,"30 вопросов"],[50,"50 вопросов"]].map(function(o){return '<option value="'+o[0]+'"'+(o[0]===g?' selected':'')+'>'+o[1]+'</option>'}).join("")+'</select><button type="button" class="btn" data-s42t="1">В тренажёр</button></div></div>';
  return h+'</div>'}
 function paint(){try{var hm=document.querySelector("#view .hm");if(!hm)return;var old=hm.querySelector(".s42");var n=document.createElement("div");n.innerHTML=html();n=n.firstChild;if(old){old.replaceWith(n);return}var a=hm.querySelector(".cv-rc")||hm.querySelector(".hm-q");if(a&&a.nextSibling)hm.insertBefore(n,a.nextSibling);else hm.appendChild(n)}catch(x){}}
@@ -16688,6 +16710,155 @@ document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.targe
  if(d.s44qk!=null){var r=A&&A.set?A.set("qcalcHotkey",d.s44qk):null;if(r&&r.ok===false&&r.error)toast(r.error);else toast(d.s44qk?"Мини-калькулятор: "+d.s44qk:"Горячая клавиша мини-калькулятора выключена");if(window.SA_paintSheet)SA_paintSheet();return}
 },true);
 document.addEventListener("change",function(ev){var t=ev.target;if(t&&t.id==="s44st"&&/^\d\d:\d\d$/.test(t.value)){var c=sr();c.time=t.value;js("bos-shiftrem",c)}});
+})();
+</script>
+<style id="s45-style">
+/* 3.8: конструктор интерфейса поверх фирменной палитры Senko */
+html[data-radius="soft"] .panel,html[data-radius="soft"] .art,html[data-radius="soft"] .lwx,html[data-radius="soft"] .card,html[data-radius="soft"] .hm-a,html[data-radius="soft"] .hm-c,html[data-radius="soft"] .s42 .c{border-radius:20px!important}
+html[data-radius="soft"] .hm-hi{border-radius:26px!important}
+html[data-radius="soft"] .btn,html[data-radius="soft"] .tin,html[data-radius="soft"] .search input,html[data-radius="soft"] .sd-i{border-radius:12px!important}
+html[data-radius="sharp"] .panel,html[data-radius="sharp"] .art,html[data-radius="sharp"] .lwx,html[data-radius="sharp"] .card,html[data-radius="sharp"] .hm-a,html[data-radius="sharp"] .hm-c,html[data-radius="sharp"] .hm-hi,html[data-radius="sharp"] .s42 .c,html[data-radius="sharp"] .btn,html[data-radius="sharp"] .tin,html[data-radius="sharp"] .search input,html[data-radius="sharp"] .sd-i,html[data-radius="sharp"] .pill,html[data-radius="sharp"] .chip{border-radius:3px!important}
+html[data-density="dense"] .panel{padding:10px 12px!important;margin-top:8px}
+html[data-density="dense"] .hm-a,html[data-density="dense"] .hm-c{padding:9px 11px!important}
+html[data-density="dense"] .s42 .c{padding:9px 11px!important}
+html[data-density="airy"] .panel{padding:22px 24px!important}
+html[data-density="airy"] body{line-height:1.6}
+html[data-nums="mono"] .num,html[data-nums="mono"] .chip,html[data-nums="mono"] .cnt,html[data-nums="mono"] .tc-clock,html[data-nums="mono"] .clock,html[data-nums="mono"] .xref,html[data-nums="mono"] .s45-hero b,html[data-nums="mono"] .search input{font-family:var(--f-mono)!important;font-variant-numeric:tabular-nums}
+html[data-read="narrow"] #view .art,html[data-read="narrow"] #view .lwx,html[data-read="narrow"] #view .lw-card{max-width:820px;margin-left:auto;margin-right:auto}
+html[data-read="narrow"] #view .part .pb,html[data-read="narrow"] #view .lt-p{line-height:1.65}
+html.caps .panel h2,html.caps .hm-h,html.caps .sgroup,html.caps .cab-h,html.caps .s42 .c h3{text-transform:uppercase;letter-spacing:.06em}
+/* фирменное приветствие: тёмно-коричневая карточка, как на сайте */
+html[data-hero="brand"] .hm-hi{background:#2B1D12!important;border-color:#2B1D12!important;color:#FFF7EF}
+html[data-hero="brand"] .hm-hi h3{color:#FFF7EF}
+html[data-hero="brand"] .hm-hi p{color:#E7CDB4}
+html[data-hero="brand"][data-eff="dark"] .hm-hi{background:#22160D!important;border-color:#3A2716!important}
+.s45-hero{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.s45-hero span{font-size:14px}
+.s45-hero b{font-size:18px}
+.s45-hero .btn{background:var(--accent)!important;color:var(--accent-ink)!important;border-color:var(--accent)!important}
+html[data-hero="soft"] .s45-hero span{color:var(--muted)}
+/* скрытые блоки главной */
+html.hm-no-art .s42 .s42-art,html.hm-no-q .s42 .s42-q,html.hm-no-goal .s42 .s42-goal,html.hm-no-rc .cv-rc,html.hm-no-acts .hm-q,html.hm-no-acts .hm-q+.hm-h{display:none!important}
+/* уровень в меню */
+.s45-lvl{margin:4px 10px 6px;padding:6px 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface);font-size:11.5px;line-height:1.3;color:var(--muted);flex:none}
+.s45-lvl b{color:var(--ink)}
+.s45-lvl i{display:block;height:4px;border-radius:3px;background:var(--chip);margin-top:4px;overflow:hidden}
+.s45-lvl i u{display:block;height:100%;background:var(--accent);text-decoration:none}
+html.no-lvl .s45-lvl{display:none}
+/* команды в поиске */
+.s45-cmd{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:60;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:6px;max-height:340px;overflow:auto}
+.s45-cmd button{display:flex;gap:12px;width:100%;text-align:left;border:0;background:none;color:var(--ink);padding:9px 10px;border-radius:10px;font:inherit;align-items:baseline}
+.s45-cmd button[aria-selected="true"]{background:var(--soft)}
+.s45-cmd code{font-family:var(--f-mono);color:var(--accent);min-width:118px;font-size:13px}
+.s45-cmd small{color:var(--muted);margin-left:auto;font-size:12px}
+/* готовые виды */
+.s45-pre{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;width:100%}
+.s45-pre button{border:2px solid var(--line);background:var(--surface);color:var(--ink);border-radius:14px;padding:8px;text-align:left;font:inherit;cursor:pointer}
+.s45-pre button[aria-pressed="true"]{border-color:var(--accent)}
+.s45-pre .pv{height:54px;border-radius:9px;margin-bottom:6px;display:flex;gap:4px;padding:6px;box-sizing:border-box}
+.s45-pre .pv i{display:block;border-radius:4px}
+.s45-pre b{display:block;font-size:13px}.s45-pre small{display:block;font-size:11.5px;color:var(--muted);line-height:1.3}
+</style>
+<script>
+/* 3.8: конструктор интерфейса. Основа — фирменная палитра Senko; плюшки из других вариантов:
+   тёмный тактический вид и моноширинные цифры (1), документ для чтения (2), команды «/» в поиске (3), блоки главной на выбор (4),
+   терминал с заглавными заголовками (6), компактный вид для игры (7), высокий контраст (9), фирменное приветствие с таймером и уровень в меню (10) */
+(function(){
+"use strict";
+var A=window.senkoApp,S=window.SA_S||{};
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function toast(t){try{if(window.SA_toast)window.SA_toast(t)}catch(x){}}
+function saveS(){try{localStorage.setItem("bos-settings",JSON.stringify(S))}catch(x){}}
+function apply(){saveS();if(window.SA_apply)SA_apply();try{if(window.SA_paintSheet)SA_paintSheet()}catch(x){}try{render()}catch(x){}}
+
+/* ---------- готовые виды ---------- */
+var PRE=[
+ ["senko","Senko","Фирменный: тёплые цвета, мягкие углы, приветствие с таймером.",{theme:"auto",style:"senko",accent:"",font:"plex",hc:false,compact:false,radius:"soft",density:"std",nums:"std",read:"full",caps:false,hero:"brand"},["#FFF7EF","#C2530E","#2B1D12"]],
+ ["tactical","Тактический","Тёмный, плотный, острые углы, цифры моноширинным шрифтом.",{theme:"dark",style:"senko",accent:"",font:"plex",hc:false,compact:false,radius:"sharp",density:"dense",nums:"mono",read:"full",caps:true,hero:"brand"},["#0A0A0B","#FF8A3D","#141416"]],
+ ["doc","Документ","Светлый, шрифт с засечками, удобная ширина для чтения законов.",{theme:"light",style:"senko",accent:"",font:"serif",hc:false,compact:false,radius:"std",density:"airy",nums:"std",read:"narrow",caps:false,hero:"soft"},["#F6F3EE","#7A2E1F","#FFFFFF"]],
+ ["terminal","Терминал","Как бортовой компьютер: синий, тёмный, заглавные заголовки.",{theme:"dark",style:"police",accent:"",font:"plex",hc:false,compact:false,radius:"sharp",density:"dense",nums:"mono",read:"full",caps:true,hero:"soft"},["#090C11","#6EA8FF","#121821"]],
+ ["game","Для игры","Компактные списки и плотная раскладка для узкого окна поверх игры.",{theme:"dark",style:"senko",accent:"",font:"plex",hc:false,compact:true,radius:"std",density:"dense",nums:"mono",read:"full",caps:false,hero:"soft"},["#0A0A0B","#FF8A3D","#1E1E22"]],
+ ["contrast","Контраст","Крупный текст, максимальная контрастность, чёткие рамки.",{hc:true,fs:115,compact:false,radius:"sharp",density:"airy",nums:"std",read:"full",caps:false,hero:"soft"},["#000000","#FFE600","#FFFFFF"]]
+];
+function usePre(id){var p=PRE.filter(function(x){return x[0]===id})[0];if(!p)return;Object.keys(p[3]).forEach(function(k){S[k]=p[3][k]});if(id!=="contrast"&&S.fs>110)S.fs=100;S.ui=id;apply();toast("Вид интерфейса: «"+p[1]+"». Любую деталь можно поменять ниже.")}
+function preHtml(){return '<div class="s45-pre">'+PRE.map(function(p){var c=p[4];return '<button type="button" data-s45p="'+p[0]+'" aria-pressed="'+(S.ui===p[0])+'"><span class="pv" style="background:'+c[0]+'"><i style="width:22%;background:'+c[2]+';border:1px solid rgba(127,127,127,.25)"></i><span style="flex:1;display:flex;flex-direction:column;gap:4px"><i style="height:10px;width:70%;background:'+c[1]+'"></i><i style="height:8px;width:90%;background:'+c[2]+';border:1px solid rgba(127,127,127,.25)"></i><i style="height:8px;width:55%;background:'+c[2]+';border:1px solid rgba(127,127,127,.25)"></i></span></span><b>'+e(p[1])+'</b><small>'+e(p[2])+'</small></button>'}).join("")+'</div>'}
+function seg(k,opts){return '<div class="seg" role="group">'+opts.map(function(o){return '<button type="button" data-s45k="'+k+'" data-v="'+o[0]+'" aria-pressed="'+(String(S[k])===String(o[0]))+'">'+o[1]+'</button>'}).join("")+'</div>'}
+var HMB=[["acts","Быстрые действия"],["rc","Недавние статьи"],["art","Статья дня"],["q","Вопрос дня"],["goal","Цель на день"]];
+var rows0=window.SA_s13Rows;
+window.SA_s13Rows=function(row,sw,seg0){var h=rows0?rows0(row,sw,seg0):"";
+ h+='<div class="sgroup">Интерфейс</div>';
+ h+=row("Вид интерфейса","Готовые наборы: цвета, форма и плотность одним нажатием. Детали ниже можно менять по отдельности.",preHtml());
+ h+=row("Скругление углов","Форма карточек, кнопок и полей.",seg("radius",[["soft","Мягкие"],["std","Обычные"],["sharp","Острые"]]));
+ h+=row("Плотность","Сколько воздуха внутри карточек и панелей.",seg("density",[["airy","Просторно"],["std","Обычно"],["dense","Плотно"]]));
+ h+=row("Цифры и номера","Моноширинный шрифт для номеров статей, таймеров и сумм: цифры не прыгают.",seg("nums",[["std","Обычные"],["mono","Моноширинные"]]));
+ h+=row("Ширина текста статей","«Для чтения» ограничивает ширину строки, длинные статьи читать легче.",seg("read",[["full","Во всю ширину"],["narrow","Для чтения"]]));
+ h+=row("Заголовки разделов","Заглавные буквы, как в служебном терминале.",seg("caps",[["false","Обычные"],["true","ЗАГЛАВНЫЕ"]]));
+ h+=row("Приветствие на главной","Фирменная тёмная карточка с идущим задержанием или спокойная светлая.",seg("hero",[["brand","Фирменное"],["soft","Светлое"]]));
+ h+=row("Блоки главной","Что показывать на главной.",'<div class="seg" role="group">'+HMB.map(function(b){var on=(","+S.hmhide+",").indexOf(","+b[0]+",")<0;return '<button type="button" data-s45h="'+b[0]+'" aria-pressed="'+on+'">'+b[1]+'</button>'}).join("")+'</div>');
+ h+=row("Уровень в меню","Полоска опыта и уровня внизу меню.",seg("lvl",[["true","Показывать"],["false","Скрыть"]]));
+ h+=row("Команды в поиске","Наберите «/» в строке поиска: /задержание, /калькулятор, /рапорт, /ии, /заметки, /тема и другие.",seg("cmd",[["true","Включены"],["false","Выключены"]]));
+ return h};
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s45p],[data-s45k],[data-s45h]");if(!b)return;var d=b.dataset;
+ if(d.s45p){usePre(d.s45p);return}
+ if(d.s45k){var v=d.v;S[d.s45k]=v==="true"?true:v==="false"?false:v;S.ui="custom";apply();return}
+ if(d.s45h){var L=S.hmhide?S.hmhide.split(","):[],i=L.indexOf(d.s45h);if(i>=0)L.splice(i,1);else L.push(d.s45h);S.hmhide=L.filter(Boolean).join(",");apply();return}
+},true);
+
+/* ---------- приветствие с таймером (10) ---------- */
+function activeTm(){var L=(typeof tms!=="undefined"&&Array.isArray(tms))?tms:[];for(var i=0;i<L.length;i++)if(L[i].start&&!L[i].decidedAt)return L[i];return null}
+function mmss(ms){ms=Math.max(0,ms);var s=Math.floor(ms/1000);return Math.floor(s/60)+":"+("0"+s%60).slice(-2)}
+function heroPaint(){var hi=document.querySelector("#view .hm-hi");if(!hi)return;var box=hi.querySelector(".s45-hero"),t=activeTm();
+ if(!t){if(box)box.remove();return}
+ var el=typeof elapsed==="function"?elapsed(t):0,rest=3600000-el,txt='<span>Задержание'+(t.nick?' · '+e(t.nick):'')+'</span><b>'+mmss(el)+'</b><span>осталось '+mmss(rest)+'</span><button type="button" class="btn" data-s45go="timer">Открыть</button>';
+ if(!box){box=document.createElement("div");box.className="s45-hero";var tgt=hi.querySelector("p")||hi.lastChild;(tgt&&tgt.parentNode?tgt.parentNode:hi).appendChild(box)}
+ if(box.innerHTML!==txt)box.innerHTML=txt}
+setInterval(function(){if(state.tab==="home")heroPaint()},1000);
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s45go]");if(!b)return;state.tab=b.dataset.s45go;render();window.scrollTo(0,0)});
+
+/* ---------- уровень в меню (10) ---------- */
+function lvlPaint(){var foot=document.getElementById("sdFoot");if(!foot||!window.SA_TRX||!SA_TRX.lv)return;var li=SA_TRX.lv(),box=document.querySelector(".s45-lvl");
+ var h='<b>Ур. '+li.n+'</b> · '+e(li.name)+(li.top?'':' · '+li.xp+'/'+li.to+' XP')+'<i><u style="width:'+li.pct+'%"></u></i>';
+ if(!box){box=document.createElement("div");box.className="s45-lvl";foot.parentNode.insertBefore(box,foot)}if(box.innerHTML!==h)box.innerHTML=h}
+setInterval(lvlPaint,5000);
+
+/* ---------- команды в поиске (3) ---------- */
+var CMDS=[
+ ["/задержание","Начать задержание",function(){if(typeof startTm==="function"){state.tab="timer";startTm();render()}else go("timer")}],
+ ["/калькулятор","Открыть калькулятор",function(){go("calc")}],
+ ["/рапорт","Написать рапорт",function(){if(window.SA_RP&&SA_RP.open)SA_RP.open();else go("timer")}],
+ ["/ии","Спросить ИИ-помощника",function(){var b=document.getElementById("aiBtn");if(b)b.click()}],
+ ["/законы","Законы штата",function(){go("laws")}],
+ ["/тренажёр","Тренажёр и тесты",function(){go("learn")}],
+ ["/заметки","Мои заметки",function(){if(window.SA_notes41)SA_notes41.open()}],
+ ["/блокнот","Блокнот",function(){if(window.SA_pad)SA_pad.open()}],
+ ["/кабинет","Личный кабинет",function(){if(window.SA_openSheet)SA_openSheet("cab")}],
+ ["/настройки","Настройки",function(){if(window.SA_openSheet)SA_openSheet("set")}],
+ ["/интерфейс","Вид интерфейса",function(){try{localStorage.setItem("bos-settab","ui")}catch(x){}if(window.SA_openSheet)SA_openSheet("set")}],
+ ["/тёмная","Тёмная тема",function(){S.theme="dark";S.tt=false;apply()}],
+ ["/светлая","Светлая тема",function(){S.theme="light";S.tt=false;apply()}],
+ ["/мини","Мини-калькулятор поверх игры",function(){if(A&&A.set&&!A.web)A.set("qcalcOpen",true);else toast("Мини-калькулятор есть только в программе")}]
+];
+function go(t){state.tab=t;render();window.scrollTo(0,0)}
+var box=null,sel=0,list=[];
+function q(){return document.getElementById("q")}
+function norm(s){return String(s||"").toLowerCase().replace(/ё/g,"е")}
+function show(v){var inp=q();if(!inp)return;var wrap=inp.closest(".search")||inp.parentNode;
+ list=CMDS.filter(function(c){return norm(c[0]).indexOf(norm(v))===0||norm(c[1]).indexOf(norm(v.slice(1)))>=0});if(sel>=list.length)sel=0;
+ if(!box){box=document.createElement("div");box.className="s45-cmd";box.setAttribute("role","listbox");box.setAttribute("aria-label","Команды");wrap.appendChild(box)}
+ box.hidden=false;box.innerHTML=list.length?list.map(function(c,i){return '<button type="button" role="option" data-s45c="'+i+'" aria-selected="'+(i===sel)+'"><code>'+e(c[0])+'</code><span>'+e(c[1])+'</span>'+(i===sel?'<small>Enter</small>':'')+'</button>'}).join(""):'<div style="padding:10px;color:var(--muted)">Нет такой команды. Сотрите «/» — и поиск статей снова работает.</div>'}
+function hide(){if(box)box.hidden=true;list=[];sel=0}
+function run(i){var c=list[i];if(!c)return;var inp=q();hide();if(inp){inp.value="";inp.dispatchEvent(new Event("input",{bubbles:true}))}try{c[2]()}catch(x){}}
+document.addEventListener("input",function(ev){var t=ev.target;if(!t||t.id!=="q")return;if(S.cmd===false){hide();return}
+ if(/^\//.test(t.value)){ev.stopImmediatePropagation();show(t.value)}else hide()},true);
+document.addEventListener("keydown",function(ev){var t=ev.target;if(!t||t.id!=="q"||!box||box.hidden||!/^\//.test(t.value))return;
+ if(ev.key==="ArrowDown"){ev.preventDefault();ev.stopImmediatePropagation();sel=(sel+1)%Math.max(1,list.length);show(t.value)}
+ else if(ev.key==="ArrowUp"){ev.preventDefault();ev.stopImmediatePropagation();sel=(sel-1+list.length)%Math.max(1,list.length);show(t.value)}
+ else if(ev.key==="Enter"){ev.preventDefault();ev.stopImmediatePropagation();run(sel)}
+ else if(ev.key==="Escape"){ev.stopImmediatePropagation();hide()}},true);
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s45c]");if(b){ev.preventDefault();run(+b.dataset.s45c);return}if(box&&!box.hidden&&!(ev.target.closest&&ev.target.closest(".search")))hide()},true);
+
+var r0=window.render;window.render=function(){var r=r0.apply(this,arguments);try{if(state.tab==="home")heroPaint();lvlPaint()}catch(x){}return r};
+setTimeout(function(){try{lvlPaint();heroPaint()}catch(x){}},1500);
 })();
 </script>
 <script>
