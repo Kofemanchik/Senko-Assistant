@@ -3830,7 +3830,7 @@ function resHtml(z){
  '<div class="rowbtn" style="justify-content:center">'+(z.mode==="ctrl"?(z.send&&z.send.st==="err"&&ctrlDone().indexOf(z.cid)<0?'<button type="button" class="btn primary" data-x="t_csend" data-v="1">Отправить ещё раз</button>':''):'<button type="button" class="btn primary" data-x="t_again" data-v="1">'+(z.mode==="redo"?'Ещё раз':'Новый раунд')+'</button>')+(z.wrong.length&&z.mode!=="redo"?'<button type="button" class="btn" data-x="t_redo" data-v="1">Работа над ошибками</button>':'')+'<button type="button" class="btn" data-x="t_menu">В меню</button></div></section>';
  if(z.wrong.length)h+='<section class="panel"><h2>Разбор ошибок</h2><p class="sub">Вопросы с неверным ответом и статья, где написано правильно.</p><ul class="basket">'+z.wrong.map(function(w){return '<li><span class="t"><b>'+esc(w.q)+'</b><br>Ваш ответ: '+(w.mine==null?'<i>нет ответа</i>':esc(w.mine))+'<br>Верно: <b>'+esc(w.right)+'</b>'+(w.e?' · '+esc(w.e):'')+'<br>Статья: '+gref(w.ref)+'</span></li>'}).join("")+'</ul></section>';
  return h}
-window.SA_TRX={lv:function(){return lvInfo()},mkQ:mkQ,rec:rec,addXp:addXp,seedR:seedR,shufR:shufR,pool:function(){return SD.concat(ukDescs()).concat(guessDescs())},today:today,streak:streak};
+window.SA_TRX=Object.assign(window.SA_TRX||{},{lv:function(){return lvInfo()},mkQ:mkQ,rec:rec,addXp:addXp,seedR:seedR,shufR:shufR,pool:function(){return SD.concat(ukDescs()).concat(guessDescs())},today:today,streak:streak});
 P.quiz=function(){
  var z=X.quiz;
  if(X.qv==="run"&&z&&z.exam&&!z.over&&Date.now()>=z.dl)expire(z,true);
@@ -7099,6 +7099,11 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.8.2",d:"03.11.2026",items:[
+  ["🤝","Ссылка — сразу вопрос","Открыли ссылку коллеги — программа открывается сама и спрашивает: «Желаете ли вы вступить в совместный патруль с Ник | статик?» Кнопки «Да» и «Нет». Так же для приглашения в организацию и вида интерфейса."],
+  ["🔗","Ссылки внутри программы","Ссылка коллеги, нажатая прямо в программе, открывается сразу, без браузера."],
+  ["🛠","Исправления","После 3.8.1 некоторые кнопки перехода по разделам показывали «Ссылка не распознана» — исправлено. Снова работают карточки «Повторить» и опыт за ситуации в тренажёре."]
+ ]},
  {v:"3.8.1",d:"03.11.2026",items:[
   ["🔗","Ссылки вместо кодов","Совместный патруль, приглашение в организацию, вопросы и тест для стажёра, сравнение, перенос на другой компьютер и расчёты теперь передаются ссылкой. Ссылка открывает программу или веб-версию, код по-прежнему работает."],
   ["⌨️","Ctrl+K — поиск поверх раздела","Статьи, законы и команды «/» в окне поверх любого раздела, даже на калькуляторе и в задержании. Сюда же можно вставить ссылку коллеги."],
@@ -11593,7 +11598,7 @@ function openTarget(v){
  go(t,s&&TABS[t]&&TABS[t][1].some(function(x){return x[0]===s})?s:"")}
 window.SA_open=openTarget;
 if(A&&A.onOpen)A.onOpen(openTarget);
-window.addEventListener("load",function(){setTimeout(function(){var v="";try{v=A&&A.openArg?A.openArg():""}catch(x){}if(v&&/^go\|/.test(v)){if(window.SA_go)SA_go(v)}else if(v)openTarget(v)},150)});
+window.addEventListener("load",function(){setTimeout(function(){var v="";try{v=A&&A.openArg?A.openArg():""}catch(x){}if(v&&/^go\|/.test(v)){if(window.SA_openLink)SA_openLink(v)}else if(v)openTarget(v)},150)});
 function lnkOpen(){
  var o=targets().map(function(t){return '<option value="'+t[0]+'">'+e(t[1])+'</option>'}).join("");
  modal("Ярлык на рабочем столе",'<div id="s12ln"><p class="sd-note">Ярлык запускает программу сразу на выбранном разделе или статье. Если программа уже открыта, она просто перейдёт туда.</p>'+
@@ -16932,6 +16937,8 @@ setTimeout(function(){try{lvlPaint();heroPaint()}catch(x){}},1500);
 .s46-kl small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
 .s46-kh{padding:8px 16px 10px;font-size:12px;color:var(--muted);border-top:1px solid var(--line)}
 .s46-kn{padding:14px 16px;color:var(--muted);font-size:14px}
+.s46-ask{font-size:17px;line-height:1.45;margin:0 0 8px}
+.s46-yn .btn{min-width:96px}
 </style>
 <script>
 /* 3.8.1: ссылки вместо кодов (патруль, приглашение, тренажёр, перенос, вид, обмен), Ctrl+K — поиск поверх любого раздела,
@@ -16977,12 +16984,25 @@ function go(str,tries){var g=parse(str);if(!g){toast("Ссылка не расп
  if(NEED[g.k]&&!online()){if(tries<20){setTimeout(function(){go(str,tries+1)},700);return true}toast("Чтобы открыть ссылку, войдите в аккаунт и подключитесь к интернету");return false}
  if(g.k==="s"){if(window.SA_shareGet)SA_shareGet(g.v);return true}
  if(g.k==="x"){if(window.SA_xferEnter)SA_xferEnter(g.v);return true}
- if(g.k==="p"){modal("Совместный патруль",'<p>Вас зовут в экипаж <b style="font-family:var(--f-mono,monospace);letter-spacing:1px">'+e(g.v)+'</b>. Задержания и таймеры участников будут видны всему экипажу.</p><p class="sd-note" id="s46m" role="status"></p><div class="sd-acts"><button type="button" class="btn" data-sd="x">Отмена</button><button type="button" class="btn primary" data-s46j="p" data-v="'+e(g.v)+'">Вступить в экипаж</button></div>');return true}
- if(g.k==="i"){modal("Приглашение в организацию",'<p>Код приглашения <b style="font-family:var(--f-mono,monospace)">'+e(g.v)+'</b>. После вступления программа обновит данные аккаунта и перезагрузится.</p><p class="sd-note" id="s46m" role="status"></p><div class="sd-acts"><button type="button" class="btn" data-sd="x">Отмена</button><button type="button" class="btn primary" data-s46j="i" data-v="'+e(g.v)+'">Вступить</button></div>');return true}
+ if(g.k==="p"){peek("patrol",g.v,"Совместный патруль",function(r){
+   if(r.already){toast("Вы уже в этом экипаже");state.tab="timer";try{render()}catch(x){}return null}
+   return '<p class="s46-ask">Желаете ли вы вступить в совместный патруль с <b>'+who(r)+'</b>?</p><p class="sd-note">В экипаже '+(+r.members||0)+' из '+(+r.max||6)+'. Задержания и таймеры участников будут видны всему экипажу.</p>'},"p",g.v);return true}
+ if(g.k==="i"){peek("org_join",g.v,"Приглашение в организацию",function(r){
+   if(r.already){toast("Вы уже в "+r.org);return null}
+   return '<p class="s46-ask">Желаете ли вы вступить в <b>'+e(r.org)+'</b>'+(r.server?' ('+e(r.server)+')':'')+'?</p>'+(r.nick||r.label?'<p class="sd-note">Приглашает: <b>'+(r.nick?who(r):e(r.label))+'</b>.</p>':'')+'<p class="sd-note">После вступления программа обновит данные аккаунта и перезагрузится.</p>'},"i",g.v);return true}
  if(g.k==="ui"){var o=window.SA_ui&&SA_ui.parse(g.v);if(!o){toast("Ссылка на вид повреждена или от другой версии программы");return false}
-  modal("Вид интерфейса от коллеги",'<p>'+e(SA_ui.names(o))+'.</p><p class="sd-note">Ваш текущий вид можно будет вернуть одной кнопкой.</p><div class="sd-acts"><button type="button" class="btn" data-sd="x">Отмена</button><button type="button" class="btn primary" data-s46j="ui" data-v="'+e(g.v)+'">Применить</button></div>');return true}
+  modal("Вид интерфейса от коллеги",'<p class="s46-ask">Желаете ли вы применить вид интерфейса коллеги?</p><p class="sd-note">'+e(SA_ui.names(o))+'. Ваш текущий вид можно будет вернуть одной кнопкой.</p>'+yesNo("ui",g.v));return true}
  return false}
-window.SA_go=go;
+function who(r){return e(r.nick||"Без ника")+(r.static?' | '+e(r.static):'')}
+function yesNo(k,v){return '<p class="sd-note" id="s46m" role="status"></p><div class="sd-acts s46-yn"><button type="button" class="btn" data-sd="x">Нет</button><button type="button" class="btn primary" data-s46j="'+k+'" data-v="'+e(v)+'">Да</button></div>'}
+function peek(action,code,title,body,k,v){
+ var o=modal(title,'<p class="sub">Проверяем ссылку…</p>');if(!o)return;
+ Promise.resolve(A.api(action,{op:"peek",code:code})).then(function(r){r=r||{};var b=o.querySelector(".sa-body");if(!b||!o.isConnected)return;
+  if(!r.ok){b.innerHTML='<p>'+e(r.error||"Ссылка не подошла.")+'</p><div class="sd-acts"><button type="button" class="btn primary" data-sd="x">Понятно</button></div>';return}
+  var h=body(r);if(h==null){closeM();return}
+  b.innerHTML=h+yesNo(k,v);var y=b.querySelector('[data-s46j]');if(y)y.focus()},
+ function(){var b=o.querySelector(".sa-body");if(b)b.innerHTML='<p>Нет связи с сервером. Попробуйте открыть ссылку позже.</p>'})}
+window.SA_openLink=go;
 document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s46j]");if(!b)return;var k=b.dataset.s46j,v=b.dataset.v,m=document.getElementById("s46m");
  if(k==="ui"){var o=SA_ui.parse(v);closeM();if(o)SA_ui.apply(o);return}
  var f=k==="p"?window.SA_ptJoin:window.SA_orgJoin;if(!f){if(m)m.textContent="Эта функция сейчас недоступна.";return}

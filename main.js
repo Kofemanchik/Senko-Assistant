@@ -1740,14 +1740,21 @@ function createMainWindow() {
   w.on("closed", () => { if (win === w) win = null; });
 
   // Внешние ссылки открываем в браузере, а не внутри приложения
+  // 3.8.1: ссылка коллеги (senko-assistant.site/go/…) открывается прямо в программе, без браузера
+  const inApp = (url) => {
+    const g = goArg([String(url || "").replace(/^https:\/\/senko-assistant\.site\/go\/?/i, "senko-assistant://go/")]);
+    if (g && win && !win.isDestroyed()) { win.webContents.send("senko:open", g); return true; }
+    return false;
+  };
   w.webContents.setWindowOpenHandler(({ url }) => {
+    if (inApp(url)) return { action: "deny" };
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
   w.webContents.on("will-navigate", (e, url) => {
     if (/^https?:/i.test(url)) {
       e.preventDefault();
-      shell.openExternal(url);
+      if (!inApp(url)) shell.openExternal(url);
     }
   });
 }

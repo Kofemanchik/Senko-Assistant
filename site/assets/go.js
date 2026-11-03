@@ -42,11 +42,20 @@
     t.href = window.SENKO_WEB.api + "?s=" + encodeURIComponent(v);
     t.hidden = false;
   }
-  // нажали «Открыть в программе», а программы нет: через пару секунд подсказываем веб-версию
-  app.addEventListener("click", function () {
+  // программа не открылась (её нет): через пару секунд подсказываем веб-версию
+  function tryApp() {
     var left = false;
     function gone() { left = true; }
     window.addEventListener("blur", gone, { once: true });
     setTimeout(function () { if (!left) $("#go-hint").hidden = false; }, 2200);
-  });
+  }
+  app.addEventListener("click", tryApp);
+  // на компьютере сразу открываем программу: браузер спросит «Открыть Senko Assistant?», вопрос «Вступить?» задаст уже программа
+  var phone = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
+  if (phone) {
+    app.hidden = true;
+    web.className = "btn btn-p btn-lg";
+  } else {
+    setTimeout(function () { tryApp(); location.href = app.href; }, 350);
+  }
 })();

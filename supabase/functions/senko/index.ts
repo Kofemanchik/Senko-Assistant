@@ -2215,6 +2215,14 @@ async function orgJoinApi(b) {
     await audit(p.login, "org_join", p.login, { from: p.org, to: inv.org, via: "invite" });
     return { ok: true, user: pub(np), msg: `Вы вступили в ${inv.org} (${srvName(inv.server)}).` };
   }
+  // 3.8.1: ссылка-приглашение — куда и от кого, до вступления
+  if (op === "peek") {
+    if (!(await hit(`ojp:${p.id}`, 30, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const inv = await inviteFind(b.code);
+    if (!inv) return fail("Приглашение не подходит: оно неверное, истекло или уже использовано.");
+    const [by] = inv.created_by ? await sql`select nick, static_id from profiles where id = ${inv.created_by}` : [];
+    return { ok: true, org: inv.org, server: srvName(inv.server), nick: by ? by.nick : "", static: by ? by.static_id : "", label: inv.created_by_label || "", already: inv.org === p.org && inv.server === srv };
+  }
   if (op === "forms") {
     const forms = await sql`select org, questions from org_forms where server = ${srv} and open and org <> ${p.org} order by org`;
     const mine = await sql`select id, org, status, note, created_at, decided_at from org_apps where user_id = ${p.id} order by id desc limit 10`;
@@ -6254,6 +6262,16 @@ async function patrolApi(b) {
     if (n >= PATROL_MAX && !(m && m.code === code)) return fail(`В экипаже уже ${PATROL_MAX} человек.`);
     await sql`insert into patrol_members (code, user_id) values (${code}, ${p.id}) on conflict do nothing`;
     return state(code);
+  }
+  // 3.8.1: ссылка на экипаж — кто зовёт и сколько людей, до вступления
+  if (op === "peek") {
+    if (!(await hit(`ptp:${p.id}`, 60, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const code = patrolCode(b.code);
+    const [t] = code.length === 6 ? await sql`select t.code, pr.nick, pr.static_id, pr.org from patrols t left join profiles pr on pr.id = t.owner_id where t.code = ${code} and t.expires_at > now()` : [];
+    if (!t) return fail("Экипаж с таким кодом не найден или уже закончил смену.");
+    const [{ n }] = await sql`select count(*)::int n from patrol_members where code = ${code}`;
+    const [me] = await sql`select 1 from patrol_members where code = ${code} and user_id = ${p.id}`;
+    return { ok: true, code, nick: t.nick || "", static: t.static_id || "", org: t.org || "", members: n, max: PATROL_MAX, already: !!me };
   }
   const m = await mine();
   if (!m) return fail("Вы не в экипаже.", { code: "nopatrol" });
