@@ -163,7 +163,26 @@
     if (sess.done) return;
     sess.done = true;
     var text = (sess.ptt ? ((sess.text ? sess.text + " " : "") + (sess.partial || "")) : (sess.text || sess.partial || "")).trim();
+    var pcm = sess.pcm || [], rate = sess.rate;
     cleanup(sess);
+    // 3.9: точное онлайн-распознавание (Whisper): запись чистится от шума и тишины; без сети или при ошибке — текст Vosk
+    if (S.online && api.stt && window.SenkoWav && pcm.length) {
+      var wav = null;
+      try { wav = SenkoWav.encode(pcm, rate); } catch (e) { wav = null; }
+      if (wav && wav.sec >= 0.4) {
+        var tok = S.token;
+        setState("thinking", "Распознаю…", text ? bold("Черновик: ", "«" + text + "»") : null);
+        Promise.race([api.stt(wav.b64), new Promise(function (ok) { setTimeout(function () { ok({ ok: false }); }, 10000); })]).catch(function () { return { ok: false }; }).then(function (r) {
+          if (tok !== S.token) return; // пока ждали, началась новая запись
+          var t = r && r.ok ? SenkoWav.fixNums(String(r.text || "").trim()) : "";
+          if (/^(продолжение следует|субтитры|спасибо за просмотр)/i.test(t)) t = ""; // типичные «галлюцинации» Whisper на тишине
+          if (t) answer(t);
+          else if (text) answer(text);
+          else showMessage("error", "Не расслышал", "Нажмите горячую клавишу и повторите запрос.");
+        });
+        return;
+      }
+    }
     if (!text) { showMessage("error", "Не расслышал", "Нажмите горячую клавишу и повторите запрос."); return; }
     answer(text);
   }
@@ -189,7 +208,7 @@
     var actx = new AudioContext();
     try { await actx.resume(); } catch (e) {}
     var rec = new model.KaldiRecognizer(actx.sampleRate);
-    var sess = { stream: stream, ctx: actx, rec: rec, text: "", partial: "", done: false, timer: null, node: null, src: null, ptt: !!ptt };
+    var sess = { stream: stream, ctx: actx, rec: rec, text: "", partial: "", done: false, timer: null, node: null, src: null, ptt: !!ptt, pcm: [], rate: actx.sampleRate };
     S.sess = sess;
 
     rec.on("result", function (m) {
@@ -210,6 +229,7 @@
       var d = ev.inputBuffer.getChannelData(0), sum = 0;
       for (var i = 0; i < d.length; i++) sum += d[i] * d[i];
       level(Math.sqrt(sum / d.length));
+      if (S.online && api.stt && sess.pcm.length < 400) sess.pcm.push(new Float32Array(d)); // ~35 с при 48 кГц
       try { rec.acceptWaveform(ev.inputBuffer); } catch (e) {}
     };
     sess.src = actx.createMediaStreamSource(stream);
@@ -315,6 +335,7 @@
     }
     if (typeof o.hide === "number") HIDE_AFTER_MS = Math.min(60, Math.max(3, o.hide)) * 1000;
     if (typeof o.mic === "string") S.mic = o.mic;
+    if (typeof o.online === "boolean") S.online = o.online; // 3.9: точное онлайн-распознавание
     if (typeof o.ptt === "boolean") S.ptt = o.ptt;
     if (typeof o.aiOk === "boolean") S.aiOk = o.aiOk;
     if (typeof o.mode === "string") S.mode = o.mode === "ai" ? "ai" : "search";

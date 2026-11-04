@@ -39,6 +39,7 @@ function fileMap() {
     "overlay.js": path.join(dir, "overlay.js"),
     "numbers.js": path.join(dir, "numbers.js"),
     "vosk.js": path.join(dir, "vosk.js"),
+    "wav.js": path.join(dir, "wav.js"), // 3.9: запись для онлайн-распознавания: шумоподавление и обрезка тишины (голосовое окно и рация)
     "radio.html": path.join(__dirname, "app", "radio", "radio.html"), // 2.6: окно рации диспетчера
     "radio.js": path.join(__dirname, "app", "radio", "radio.js"),
     "model.tar.gz": path.join(modelDir, "model.tar.gz")
@@ -126,7 +127,7 @@ function sendOpts() {
   if (overlayReady) overlay.webContents.send("voice:opts", {
     opacity: c.voiceOpacity, hotkey: c.voiceHotkey, enabled: !!c.voiceEnabled, mode: c.voiceMode === "ai" ? "ai" : "search",
     aiOk: !!(typeof ctx.aiAvailable === "function" && ctx.aiAvailable()),
-    hide: c.voiceHide || 10, font: c.voiceFont || 100, ptt: !!c.voicePtt, mic: c.voiceMic || ""
+    hide: c.voiceHide || 10, font: c.voiceFont || 100, ptt: !!c.voicePtt, mic: c.voiceMic || "", online: !!c.radioOnline
   });
 }
 
@@ -340,6 +341,13 @@ function init(c) {
   });
 
   const fromOverlay = (e) => live() && e.sender === overlay.webContents;
+  // 3.9: онлайн-распознавание (Whisper через сервер Senko) и в голосовом окне; без сети или при ошибке — текст Vosk
+  ipcMain.handle("voice:stt", async (e, b64) => {
+    if (!fromOverlay(e) || !ctx.getCfg().radioOnline || typeof ctx.stt !== "function" || typeof b64 !== "string" || b64.length < 2000 || b64.length > 1100000) return { ok: false };
+    const prompt = "Статья 12.8 УК, часть 2. АК 3.6, ДК 29, ПК 17. Код 10-38, 10-99. Задержание, адвокат, прокурор, Миранда, EMS, LSPD, LSCSD, FIB, SANG, Government. Добавь в калькулятор, открой статью, запусти таймер.";
+    try { const r = await ctx.stt({ audio: b64, prompt }); return r && r.ok ? { ok: true, text: String(r.text || "").slice(0, 600) } : { ok: false }; }
+    catch (x) { return { ok: false }; }
+  });
   ipcMain.on("voice:ready", (e) => {
     if (!fromOverlay(e)) return;
     overlayReady = true;

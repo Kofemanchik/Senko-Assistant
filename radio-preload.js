@@ -16,5 +16,6 @@ contextBridge.exposeInMainWorld("senkoRadio", {
   open: (t) => ipcRenderer.send("radio:open", String(t || "")),
   dragStart: () => ipcRenderer.send("radio:drag-start"),
   dragEnd: () => ipcRenderer.send("radio:drag-end"),
-  resetPos: () => ipcRenderer.send("radio:reset-pos")
+  resetPos: () => ipcRenderer.send("radio:reset-pos"),
+  wake: () => ipcRenderer.send("radio:wake") // 3.9: услышано «Сенко» — показать рацию
 });

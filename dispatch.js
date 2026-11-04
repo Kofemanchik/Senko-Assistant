@@ -27,7 +27,8 @@ function send(ch, v) {
 }
 function opts() {
   const c = ctx.getCfg();
-  return { voice: !!c.radioVoice, sfx: !!c.radioSfx, rate: c.radioRate, voiceName: c.radioVoiceName || "", pin: !!c.radioPin, hide: c.radioHide, hotkey: c.radioEnabled ? c.radioHotkey : "", mic: c.voiceMic || "", online: !!c.radioOnline };
+  return { voice: !!c.radioVoice, sfx: !!c.radioSfx, rate: c.radioRate, voiceName: c.radioVoiceName || "", pin: !!c.radioPin, hide: c.radioHide, hotkey: c.radioEnabled ? c.radioHotkey : "", mic: c.voiceMic || "", online: !!c.radioOnline,
+    wake: !!(c.radioWake && c.radioEnabled), vol: c.radioVolume == null ? 100 : +c.radioVolume, call: c.radioCall || "" };
 }
 function clampPos(x, y, near) {
   const a = screen.getDisplayNearestPoint(near || { x, y }).workArea;
@@ -62,7 +63,7 @@ function create() {
   w.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   w.webContents.on("will-navigate", (e) => e.preventDefault());
   w.webContents.on("did-finish-load", () => { try { w.webContents.setZoomFactor(k()); } catch (e) {} });
-  w.once("ready-to-show", () => { if (live()) { w.showInactive(); wake(); } });
+  w.once("ready-to-show", () => { if (live() && !bgOnly) { w.showInactive(); wake(); } bgOnly = false; });
   w.on("closed", () => { if (win === w) { win = null; ready = false; state = "idle"; pttStop(); stopDrag(false); } ctx.changed(); });
   return w;
 }
@@ -104,8 +105,11 @@ function toggle(on) {
   if (on) show(); else hide();
   return { ok: true, open: on };
 }
+// 3.9: слово-активатор: окно рации создаётся скрытым и слушает «Сенко» в фоне
+let bgOnly = false;
 function applyOpts() {
-  if (!live()) return;
+  const c = ctx.getCfg();
+  if (!live()) { if (c.radioWake && c.radioEnabled) { bgOnly = true; create(); } return; }
   const b = win.getBounds();
   if (b.width !== ww() || b.height !== wh()) { win.setBounds({ x: b.x, y: b.y, width: ww(), height: wh() }); try { win.webContents.setZoomFactor(k()); } catch (e) {} }
   send("radio:opts", opts());
@@ -214,6 +218,7 @@ function init(c) {
     hide();
   });
   ipcMain.on("radio:open", (e, t) => { if (own(e)) ctx.openTarget(clip(t, 40) || "radio"); });
+  ipcMain.on("radio:wake", (e) => { if (own(e) && ctx.getCfg().radioWake) show(); });
   ipcMain.on("radio:drag-start", (e) => { if (own(e)) startDrag(); });
   ipcMain.on("radio:drag-end", (e) => { if (own(e)) stopDrag(true); });
   ipcMain.on("radio:reset-pos", (e) => {

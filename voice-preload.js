@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("senkoVoice", {
   status: (s) => ipcRenderer.send("voice:status", String(s)),
   search: (cands) => ipcRenderer.invoke("voice:search", cands),
   ask: (q) => ipcRenderer.invoke("voice:ai", String(q || "")), // вопрос ИИ → {ok, answer, sources, left, error}
+  stt: (b64) => ipcRenderer.invoke("voice:stt", String(b64 || "")), // 3.9: онлайн-распознавание записи (Whisper), {ok, text}
   hide: () => ipcRenderer.send("voice:hide"),
   // управление самим оверлеем
   interactive: (on) => ipcRenderer.send("voice:interactive", !!on),   // ловить ли клики мышью (иначе — насквозь)

@@ -3372,7 +3372,7 @@ try{localStorage.removeItem("bos-flags")}catch(e){} flags={};
 var TABS={
  tools:["Проверки",[["legal","Законность"],["s17","Сверка ст. 17"],["force","Сила"]]],
  field:["На месте",[["f_dk","Нарушения ДК"],["f_seize","Изъятие"],["f_guns","Оружие и предметы"],["f_talk","Формулировки"],["f_law","Адвокат и прокурор"],["f_map","Зоны и места"]]],
- radio:["Рация",[["r_disp","Диспетчер"],["r_phr","Фразы для рации"]]],
+ radio:["Рация",[["r_disp","Диспетчер"],["r_phr","Фразы для рации"],["r_codes","Коды 10-X"],["r_log","Журнал"],["r_train","Тренировка"]]],
  sup:["Надзор",[["sup","Проверка"],["legal","Законность"]]],
  def:["Защита",[["def","Режим защиты"],["legal","Законность"]]],
 
@@ -7130,6 +7130,16 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.9.0",d:"05.11.2026",items:[
+  ["🎙","Точное распознавание голоса","Голосовой поиск теперь тоже распознаёт через Whisper, как рация. Запись перед отправкой очищается от гула и тишины, «12,8» и «двенадцать точка восемь» становятся 12.8. Без интернета — офлайн, как раньше."],
+  ["📟","Позывной и экипаж","В настройках рации: позывной (например, 1-ADAM-12) и экипаж. Диспетчер обращается по позывному, он же подставляется в шаблоны фраз."],
+  ["🔢","Коды 10-X","Рация → «Коды 10-X»: справочник с поиском и своими кодами ведомства. Спросите голосом: «что такое 10-38»."],
+  ["🧮","Голосовой калькулятор","«Посчитай 12.8 и 17.6» — диспетчер называет срок, розыск и штраф, калькулятор при этом не меняется."],
+  ["📒","Журнал рации","Рация → «Журнал»: до 300 команд и ответов с поиском и копированием."],
+  ["🔊","Голос диспетчера","К выбору голоса и скорости добавилась громкость."],
+  ["👂","Слово-активатор","По желанию: скажите «Сенко» или «Диспетчер» — рация начнёт слушать без клавиши. Выключено по умолчанию, слушает только на компьютере."],
+  ["🎯","Тренировка рации","Рация → «Тренировка»: диспетчер даёт учебный вызов, вы отвечаете голосом или текстом, программа оценивает ответ и показывает пример. +2 опыта за ответ по форме."]
+ ]},
  {v:"3.8.6",d:"04.11.2026",items:[
   ["🎯","Точнее подбор статей","Перед ответом ИИ сначала переводит ваш вопрос на язык законов («угнал тачку в маске» → «завладение транспортом», «ношение маски») и ищет статьи по каждому деянию. В ситуациях находится заметно больше нужных статей."],
   ["⚠️","Проверка ссылок","Если ИИ сошлётся на статью, которой не было среди найденных, рядом будет пометка «⚠ проверьте в памятке» — выдуманный номер больше не выглядит как настоящий."],
@@ -7611,7 +7621,7 @@ function dump(){
  var cfg=null;try{var c0=A&&!A.web&&A.state&&A.state().cfg;if(c0){cfg={};CFGK.forEach(function(k){if(c0[k]!==undefined)cfg[k]=c0[k]})}}catch(e){cfg=null}
  return JSON.stringify({app:"Senko Assistant",kind:"export",format:1,version:ver(),savedAt:new Date().toISOString(),data:data,cfg:cfg},null,1);
 }
-var CFGK=["alwaysOnTop","hotkeyEnabled","hotkey","compact","opacity","tray","notify","rememberBounds","ghost","ghostOpacity","ghostBy","strip","snap","watchApps","watchMode","watchOpacity","streamAuto","voiceEnabled","voiceHotkey","voiceOpacity","miniEnabled","miniHotkey","miniOpacity","radioEnabled","radioHotkey","radioPin","radioHide","radioVoice","radioVoiceName","radioRate","radioSfx","radioOnline","radioSize","quiet"];
+var CFGK=["alwaysOnTop","hotkeyEnabled","hotkey","compact","opacity","tray","notify","rememberBounds","ghost","ghostOpacity","ghostBy","strip","snap","watchApps","watchMode","watchOpacity","streamAuto","voiceEnabled","voiceHotkey","voiceOpacity","miniEnabled","miniHotkey","miniOpacity","radioEnabled","radioHotkey","radioPin","radioHide","radioVoice","radioVoiceName","radioRate","radioSfx","radioOnline","radioSize","radioWake","radioVolume","radioCall","radioCrew","quiet"];
 function doExport(){
  var text=dump(), day=new Date().toISOString().slice(0,10);
  if(A&&A.exportData){
@@ -10815,7 +10825,7 @@ function chName(c){return RC.ch[c]||("/"+c)}
 function tpls(){return RT.map(function(t){var d=RC.ed[t[0]];return {id:t[0],n:t[1],c:d&&d.c||t[2],t:d&&d.t||t[3],bi:1,ch:!!d}}).concat(RC.my.map(function(m){return {id:m.id,n:m.n,c:m.c||"f",t:m.t,bi:0}}))}
 function curT(){try{return tms.filter(function(t){return t.id===selId})[0]||tms[tms.length-1]||null}catch(x){return null}}
 function fill(t){var v=RC.v,ct=curT(),arts=ct&&ct.arts?", "+ct.arts:"";
- var M={"ведомство":myOrg(),"позывной":v.call||myNick()||"Позывной","место":v.place||"[место]","детали":v.det||"[детали]","юниты":v.n||"2","подозреваемый":v.sus||(ct&&ct.nick)||"[имя]","статьи":arts?" по "+arts.slice(2):"","ник":myNick()||"[ник]"};
+ var M={"ведомство":myOrg(),"позывной":v.call||(window.SA_radioCall?SA_radioCall():"")||myNick()||"Позывной","экипаж":(window.SA_radioCrew?SA_radioCrew():"")||"[экипаж]","место":v.place||"[место]","детали":v.det||"[детали]","юниты":v.n||"2","подозреваемый":v.sus||(ct&&ct.nick)||"[имя]","статьи":arts?" по "+arts.slice(2):"","ник":myNick()||"[ник]"};
  return String(t).replace(/\{([а-яё]+)\}/gi,function(m,k){k=k.toLowerCase();return M[k]!=null?M[k]:m})}
 function line(tp){return chName(tp.c)+" "+fill(tp.t)}
 function radioCard(tp){
@@ -14246,7 +14256,8 @@ function mins(ms){var m=Math.max(0,Math.round(ms/60000));return m+" "+plural(m,M
 
 /* ---------- журнал и отмена ---------- */
 var LOG=jget("bos-radio-log",[]);if(!Array.isArray(LOG))LOG=[];
-function log(who,text){LOG.push({w:who,t:String(text||"").slice(0,300),at:Date.now()});if(LOG.length>40)LOG=LOG.slice(-40);jset("bos-radio-log",LOG);var el=document.getElementById("r26log");if(el){el.innerHTML=logHtml();el.scrollTop=el.scrollHeight}}
+window.SA_radioLog=function(clear){if(clear){LOG=[];jset("bos-radio-log",LOG)}return LOG}; // 3.9: страница «Журнал рации»
+function log(who,text){LOG.push({w:who,t:String(text||"").slice(0,300),at:Date.now()});if(LOG.length>300)LOG=LOG.slice(-300);jset("bos-radio-log",LOG);var el=document.getElementById("r26log");if(el){el.innerHTML=logHtml();el.scrollTop=el.scrollHeight}}
 var UNDO=null;
 function snap(what){UNDO={what:what,tms:JSON.stringify(tms),sel:selId,idle:JSON.stringify(idleTm),basket:JSON.stringify(basket),drug:JSON.stringify(window.SA_drug?SA_drug.get():null)}}
 function restore(){if(!UNDO)return false;try{tms=JSON.parse(UNDO.tms);selId=UNDO.sel;idleTm=JSON.parse(UNDO.idle);pickTm();saveTm();basket=JSON.parse(UNDO.basket);save();if(typeof updateBadge==="function")updateBadge();var d=JSON.parse(UNDO.drug);if(d&&window.SA_drug)SA_drug.set(d)}catch(x){return false}UNDO=null;return true}
@@ -14397,6 +14408,14 @@ window.SA_radioCmd=function(o){var text=String((o&&o.text)||"").slice(0,400),alt
  try{r=cmd(text);if(r.miss&&alt&&alt!==text){var r2=cmd(alt);if(!r2.miss){r=r2;text=alt}}}catch(x){r=R("Повторите. Ошибка обработки.","Ошибка: "+String(x&&x.message||x).slice(0,80))}
  log("me",text);log("d",r.show||r.say);return r};
 window.SA_radioSel=function(id){if(tms.some(function(t){return t.id===id})){selId=id;pickTm();saveTm();refreshAll()}return true};
+// 3.9: голосовой калькулятор: «посчитай 12.8 и 17.6» — срок, розыск и штраф вслух, калькулятор не меняется
+window.SA_radioCalc=function(text){var low=String(text||"").toLowerCase().replace(/ё/g,"е");
+ if(!/(посчита|подсчита|рассчита|сосчита|сколько (будет|дадут|получит|светит|грозит) (по|за) (стать|\d))/.test(low))return null;
+ var ids=idsOf(refsOf(toks(text),true)).ids||[];if(!ids.length)return R("Назовите статьи. Например: посчитай двенадцать точка восемь и семнадцать точка шесть.","Назовите статьи: «посчитай 12.8 и 17.6»");
+ var items=ids.map(function(id){return BYID[id]}).filter(Boolean),ft=finalTerm(items),fs=0,maxS=0;
+ items.forEach(function(r){fs+=+r.fmax||0;if((r.stars||0)>maxS)maxS=r.stars||0});
+ var say=ids.map(sayLab).join(", ")+". "+(ft.m?"Срок "+ft.m+" "+plural(ft.m,["месяц","месяца","месяцев"])+(ft.cut?", это потолок":"")+". ":"Срока нет. ")+(maxS?"Розыск "+maxS+" "+plural(maxS,["звезда","звезды","звёзд"])+". ":"")+(fs?"Штраф до "+sayMoney(fs)+".":"");
+ return R(say.charAt(0).toUpperCase()+say.slice(1),"Расчёт: "+ids.map(lab).join(", ")+" → "+(ft.m?ft.m+" мес.":"без срока")+(maxS?", ★"+maxS:"")+(fs?", штраф до $"+fs:""))};
 window.SA_radioParse=function(t){return {toks:toks(t),refs:refsOf(toks(t),true),drugs:drugsOf(toks(t)),pass:passOf(toks(t))}}; // для проверки
 
 /* ---------- экран рации: данные ---------- */
@@ -14421,12 +14440,16 @@ function setHtml(){
  var h='<div class="r26-set">';
  h+=row("Рация включена",s.radioError?e(s.radioError):"Говорите, пока держите клавишу.",sw("radioEnabled",c.radioEnabled,"Рация"));
  h+=row("Клавиша рации",REC?"Нажмите сочетание… (Esc — отмена)":"Зажмите и говорите, отпустите — диспетчер ответит.",'<button type="button" class="btn" data-r26="rec">'+(REC?"Ждём сочетание…":'<span class="r26-kbd">'+e(c.radioHotkey||"—")+'</span>')+'</button>');
- h+=row("Точное распознавание (онлайн)","Запись фразы распознаёт Whisper через сервер Senko, записи не сохраняются. Без интернета рация распознаёт офлайн, но хуже.",sw("radioOnline",c.radioOnline,"Точное распознавание"));
+ h+=row("Точное распознавание (онлайн)","Рация и голосовой поиск: запись фразы очищается от шума и распознаётся Whisper через сервер Senko, записи не сохраняются. Без интернета распознавание идёт офлайн, но хуже.",sw("radioOnline",c.radioOnline,"Точное распознавание"));
  h+=row("Всегда на экране","Иначе рация прячется после ответа.",sw("radioPin",c.radioPin,"Всегда на экране"));
  if(!c.radioPin)h+=row("Прятать через",'<output>'+(c.radioHide||20)+' с</output>','<input type="range" min="5" max="120" step="5" value="'+(c.radioHide||20)+'" data-r26in="radioHide" aria-label="Прятать через, секунд">');
  h+=row("Ответ голосом","Диспетчер отвечает по уставу: «Принято», «Так точно», «Никак нет», «Повторите».",sw("radioVoice",c.radioVoice,"Ответ голосом"));
  if(c.radioVoice){h+=row("Голос","Голоса Windows. Новые добавляются в Параметрах Windows → Время и язык → Речь.",voicesSel(c));
   h+=row("Скорость речи",'<output>'+(c.radioRate||105)+'%</output>','<input type="range" min="60" max="180" step="5" value="'+(c.radioRate||105)+'" data-r26in="radioRate" aria-label="Скорость речи">')}
+ if(DESK)h+=row("Громкость","Голос диспетчера и звуки рации.",'<output>'+(c.radioVolume==null?100:c.radioVolume)+'%</output><input type="range" min="0" max="100" step="5" value="'+(c.radioVolume==null?100:c.radioVolume)+'" data-r26in="radioVolume" aria-label="Громкость голоса и звуков рации">');
+ h+=row("Позывной","Подставляется в доклады и шаблоны фраз, диспетчер обращается по нему. Например, 1-ADAM-12.",'<input type="text" maxlength="30" value="'+e(c.radioCall||(window.SA_radioCall?SA_radioCall():""))+'" data-r26tx="radioCall" placeholder="1-ADAM-12" aria-label="Позывной" style="max-width:170px">');
+ h+=row("Экипаж","Напарник или состав экипажа для фраз ({экипаж}).",'<input type="text" maxlength="60" value="'+e(c.radioCrew||(window.SA_radioCrew?SA_radioCrew():""))+'" data-r26tx="radioCrew" placeholder="Hanami Senko, Kit Fox" aria-label="Экипаж" style="max-width:220px">');
+ if(DESK)h+=row("Слово-активатор","Скажите «Сенко» или «Диспетчер» — рация начнёт слушать без клавиши. Микрофон слушает постоянно, но только на этом компьютере: наружу ничего не уходит, пока не прозвучит слово. Работает, когда рация включена.",sw("radioWake",c.radioWake,"Слово-активатор"));
  h+=row("Звуки рации","Шипение и сигнал в конце передачи.",sw("radioSfx",c.radioSfx,"Звуки рации"));
  h+=row("Имена латиницей","«ханами сенко» запишется как «Hanami Senko».",sw("latin",latin(),"Имена латиницей"));
  h+=row("Размер рации","",'<div class="r26-seg">'+[["s","S"],["m","M"],["l","L"]].map(function(x){return '<button type="button" data-r26size="'+x[0]+'" aria-pressed="'+((c.radioSize||"m")===x[0])+'">'+x[1]+'</button>'}).join("")+'</div>');
@@ -14463,10 +14486,12 @@ document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.targe
  if(k==="rec"){REC=!REC;rr();return}
  if(k==="pos"){aset("radioPosReset",1);toast("Рация вернётся в правый нижний угол");return}
  if(k==="latin"){jset("bos-radio-latin",!latin());rr();return}
- if(["radioEnabled","radioPin","radioVoice","radioSfx"].indexOf(k)>=0){aset(k,b.getAttribute("aria-checked")!=="true");setTimeout(rr,60);return}});
+ if(["radioEnabled","radioPin","radioVoice","radioSfx","radioWake","radioOnline"].indexOf(k)>=0){aset(k,b.getAttribute("aria-checked")!=="true");setTimeout(rr,60);return}});
+document.addEventListener("change",function(ev){var t=ev.target;if(!t||!t.dataset||!t.dataset.r26tx)return;aset(t.dataset.r26tx,String(t.value||"").trim());toast(t.dataset.r26tx==="radioCall"?"Позывной сохранён":"Экипаж сохранён")});
 document.addEventListener("input",function(ev){var t=ev.target;if(!t||!t.dataset||!t.dataset.r26in)return;var k=t.dataset.r26in,o=t.closest(".srow")&&t.closest(".srow").querySelector("output");
  if(k==="radioHide"){if(o)o.textContent=t.value+" с";aset(k,+t.value)}
  if(k==="radioRate"){if(o)o.textContent=t.value+"%";aset(k,+t.value)}
+ if(k==="radioVolume"){if(o)o.textContent=t.value+"%";aset(k,+t.value)}
  if(k==="pkg"&&window.SA_drug){SA_drug.pkg(+t.value)}});
 document.addEventListener("change",function(ev){var t=ev.target;if(t&&t.dataset&&t.dataset.r26in==="radioVoiceName")aset("radioVoiceName",t.value)});
 document.addEventListener("keydown",function(ev){if(!REC)return;ev.preventDefault();ev.stopPropagation();
@@ -17396,6 +17421,155 @@ if(typeof C1==="function")window.__senkoAiContext=function(question,o){
  if(CONV)put(LAST,4);
  if(out.length)LAST=out.slice(0,8);
  return out};
+})();
+</script>
+<style id="s50-style">
+.s50-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0 12px}
+.s50-tools input{flex:1 1 220px;min-width:0}
+.s50-codes{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:6px 14px}
+.s50-codes div{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line)}
+.s50-codes b{font:700 14px var(--f-mono,ui-monospace,monospace);color:var(--accent);min-width:58px}
+.s50-codes .my b{color:var(--ink)}
+.s50-codes button{margin-left:auto;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:15px}
+.s50-log{list-style:none;margin:0;padding:0;max-height:60vh;overflow:auto}
+.s50-log li{display:grid;grid-template-columns:52px 82px 1fr;gap:8px;padding:5px 0;border-bottom:1px solid var(--line);font-size:14px}
+.s50-log li small{color:var(--muted);font-family:var(--f-mono,monospace)}
+.s50-log li.me span{color:var(--accent);font-weight:600}
+.s50-log h4{margin:12px 0 2px;font-size:13px;color:var(--muted)}
+.s50-call{font:600 17px/1.45 var(--f-body,system-ui,sans-serif);padding:14px 16px;border-left:4px solid var(--accent);background:var(--soft,rgba(127,127,127,.1));border-radius:10px;margin:8px 0 12px}
+.s50-res{margin-top:10px;padding:12px 14px;border:1px solid var(--line);border-radius:12px}
+.s50-res.ok{border-color:#2e7d32}.s50-res.mid{border-color:#b26a00}.s50-res.bad{border-color:var(--danger,#c33)}
+.s50-res ul{margin:6px 0 0;padding-left:20px}
+</style>
+<script>
+/* 3.9 «Рация и голос»: позывной и экипаж (141), коды 10-X с поиском и голосом (142), журнал рации за смену с поиском и копированием (144),
+   голосовой калькулятор (145, обработчик в модуле рации), тренировка рации с оценкой (149). */
+(function(){
+"use strict";
+var A=window.senkoApp,DESK=!!(A&&!A.web);
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function toast(t){try{if(window.SA_toast)SA_toast(t)}catch(x){}}
+function cfg(){try{var s=A&&A.state?A.state():null;return (s&&s.cfg)||{}}catch(x){return {}}}
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(x){return null}}
+function jg(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
+function js(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(x){}}
+function rr(){try{if(typeof rerender==="function")rerender();else render()}catch(x){}}
+function copy(t){try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).catch(function(){old(t)});return}}catch(x){}old(t)}
+function old(t){var ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();try{document.execCommand("copy")}catch(x){}ta.remove()}
+
+/* ---------- позывной и экипаж (141) ---------- */
+window.SA_radioCall=function(){return String((DESK?cfg().radioCall:ls("bos-radio-call"))||"").trim()};
+window.SA_radioCrew=function(){return String((DESK?cfg().radioCrew:ls("bos-radio-crew"))||"").trim()};
+if(!DESK)document.addEventListener("change",function(ev){var t=ev.target;if(!t||!t.dataset||!t.dataset.r26tx)return;ev.stopImmediatePropagation();
+ ls(t.dataset.r26tx==="radioCall"?"bos-radio-call":"bos-radio-crew",String(t.value||"").trim());toast(t.dataset.r26tx==="radioCall"?"Позывной сохранён":"Экипаж сохранён")},true);
+function withCall(r){var c=SA_radioCall();if(!c||!r)return r;
+ var re=/^(Принято|Так точно|Понял|Никак нет)([.,!]?)(\s|$)/;
+ if(r.say&&re.test(r.say)&&r.say.indexOf(c)<0)r.say=r.say.replace(re,function(m,w,p,sp){return w+", "+c+"."+(sp||" ")});
+ return r}
+
+/* ---------- коды 10-X (142) ---------- */
+var CODES=[["10-1","Плохо слышно, плохая связь"],["10-2","Слышно хорошо"],["10-3","Прекратить передачу, тишина в эфире"],["10-4","Принято, понял"],["10-5","Передайте сообщение"],["10-6","Занят, не могу принять вызов"],
+ ["10-7","Не на службе, вне связи"],["10-8","На службе, свободен для вызовов"],["10-9","Повторите"],["10-10","Драка"],["10-13","Офицер ранен, нужна помощь"],["10-15","Подозреваемый задержан, доставляю"],
+ ["10-19","Возвращаюсь в участок"],["10-20","Местоположение"],["10-22","Отмена, игнорировать"],["10-23","Прибыл на место"],["10-26","Ожидаемое время прибытия"],["10-32","Человек с оружием"],
+ ["10-38","Остановка транспортного средства"],["10-50","ДТП"],["10-52","Нужна скорая помощь (EMS)"],["10-55","Водитель в состоянии опьянения"],["10-66","Подозрительный человек или транспорт"],
+ ["10-70","Пожар"],["10-71","Стрельба"],["10-76","Выдвигаюсь на вызов"],["10-78","Нужно подкрепление"],["10-80","Погоня"],["10-99","Офицер в опасности, экстренно всем"],
+ ["Код 1","Без спецсигналов, в обычном режиме"],["Код 2","Срочно, без сирены"],["Код 3","Экстренно, со спецсигналами"],["Код 4","Ситуация под контролем, помощь не нужна"]];
+function myCodes(){var L=jg("bos-codes",[]);return Array.isArray(L)?L.filter(function(x){return x&&x.c&&x.t}).slice(0,60):[]}
+function allCodes(){var my=myCodes(),seen={};my.forEach(function(x){seen[x.c.toLowerCase()]=1});
+ return my.map(function(x){return [x.c,x.t,1]}).concat(CODES.filter(function(x){return !seen[x[0].toLowerCase()]}))}
+var NUMW={"ноль":0,"один":1,"одна":1,"два":2,"две":2,"три":3,"четыре":4,"пять":5,"шесть":6,"семь":7,"восемь":8,"девять":9,"десять":10,"одиннадцать":11,"двенадцать":12,"тринадцать":13,"четырнадцать":14,"пятнадцать":15,"шестнадцать":16,"семнадцать":17,"восемнадцать":18,"девятнадцать":19,"двадцать":20,"тридцать":30,"сорок":40,"пятьдесят":50,"шестьдесят":60,"семьдесят":70,"восемьдесят":80,"девяносто":90};
+function wordsToNum(s){var w=String(s||"").split(/\s+/),n=0,got=false;for(var i=0;i<w.length&&i<2;i++){var v=NUMW[w[i]];if(v==null)break;n+=v;got=true}return got?n:null}
+function codeQuery(text){var low=String(text||"").toLowerCase().replace(/ё/g,"е").replace(/[–—]/g,"-");
+ var m=/(?:^|\D)10\s*[-.\s]\s*(\d{1,2})(?!\d)/.exec(low),n=m?+m[1]:null;
+ if(n==null){var m2=/десять\s+([а-я]+(?:\s+[а-я]+)?)/.exec(low);if(m2)n=wordsToNum(m2[1])}
+ var m3=/код\s*(\d|один|два|три|четыре)(?![\d-])/.exec(low);
+ if(n==null&&!m3)return null;
+ // только явный вопрос о коде: «что такое 10-38», «код 10-80», «расшифруй десять тридцать восемь»; «статья 10.5» — не код
+ if(/стать|ст\.|част/.test(low)||!/(что (такое|значит|означает)|что за код|какой код|код\s|расшифр|означает|значит)/.test(low))return null;
+ var key=n!=null?"10-"+n:"код "+({"один":1,"два":2,"три":3,"четыре":4}[m3[1]]||m3[1]);
+ var hit=allCodes().filter(function(x){return x[0].toLowerCase()===key})[0];
+ if(!hit)return {say:"Код "+key+" в справочнике не найден. Свой код можно добавить в разделе Рация, Коды.",show:"Код "+key+" не найден в справочнике"};
+ return {say:(/^код/i.test(hit[0])?hit[0]:"Код "+hit[0].replace("10-","десять "))+": "+hit[1]+".",show:hit[0]+" — "+hit[1]}}
+window.SA_radioCode=codeQuery;
+var CQ="";
+SA_P.r_codes=function(){var q=CQ.toLowerCase(),L=allCodes().filter(function(x){return !q||(x[0]+" "+x[1]).toLowerCase().indexOf(q)>=0});
+ return '<section class="panel"><h2>Коды 10-X</h2><p class="sub">Общепринятые радиокоды. В вашем ведомстве коды могут отличаться — сверьтесь с уставом и добавьте свои: они важнее общих. Спросите голосом: «что такое 10-38».</p>'+
+  '<div class="s50-tools"><input type="search" class="tin" id="s50cq" placeholder="Поиск: 10-38, погоня, EMS…" value="'+e(CQ)+'" aria-label="Поиск кода"></div>'+
+  '<div class="s50-codes">'+(L.length?L.map(function(x){return '<div class="'+(x[2]?"my":"")+'"><b>'+e(x[0])+'</b><span>'+e(x[1])+(x[2]?' <small style="color:var(--muted)">(свой)</small>':'')+'</span>'+(x[2]?'<button type="button" data-s50del="'+e(x[0])+'" aria-label="Удалить код">✕</button>':'')+'</div>'}).join(""):'<p class="sub">Ничего не найдено.</p>')+'</div></section>'+
+  '<section class="panel"><h2>Свой код</h2><div class="s50-tools"><input class="tin" id="s50cc" maxlength="12" placeholder="10-11" style="max-width:110px" aria-label="Код"><input class="tin" id="s50ct" maxlength="80" placeholder="Что означает в вашем ведомстве" aria-label="Значение"><button type="button" class="btn primary" data-s50="add">Добавить</button></div></section>'};
+document.addEventListener("input",function(ev){if(ev.target&&ev.target.id==="s50cq"){CQ=ev.target.value;var pos=ev.target.selectionStart;rr();var i=document.getElementById("s50cq");if(i){i.focus();try{i.setSelectionRange(pos,pos)}catch(x){}}}
+ if(ev.target&&ev.target.id==="s50lq"){LQ=ev.target.value;var p2=ev.target.selectionStart;rr();var j=document.getElementById("s50lq");if(j){j.focus();try{j.setSelectionRange(p2,p2)}catch(x){}}}});
+
+/* ---------- журнал рации (144) ---------- */
+var LQ="";
+function logRows(){var L=(window.SA_radioLog?SA_radioLog():[]).slice(),q=LQ.toLowerCase();return L.filter(function(x){return !q||String(x.t).toLowerCase().indexOf(q)>=0})}
+function hm(t){var d=new Date(t+3*3600e3);return ("0"+d.getUTCHours()).slice(-2)+":"+("0"+d.getUTCMinutes()).slice(-2)}
+function dd(t){var d=new Date(t+3*3600e3);return ("0"+d.getUTCDate()).slice(-2)+"."+("0"+(d.getUTCMonth()+1)).slice(-2)}
+SA_P.r_log=function(){var L=logRows(),h='',day="";
+ L.slice().reverse().forEach(function(x){var d=dd(x.at||0);if(d!==day){day=d;h+='<h4>'+e(d)+'</h4>'}
+  h+='<li class="'+(x.w==="me"?"me":"d")+'"><small>'+e(hm(x.at||0))+'</small><span>'+(x.w==="me"?"Вы":"Диспетчер")+'</span><div>'+e(x.t)+'</div></li>'});
+ return '<section class="panel"><h2>Журнал рации</h2><p class="sub">Все команды и ответы диспетчера, до 300 последних, время московское. Хранится только на этом компьютере.</p>'+
+  '<div class="s50-tools"><input type="search" class="tin" id="s50lq" placeholder="Поиск по журналу: имя, статья, слово" value="'+e(LQ)+'" aria-label="Поиск по журналу"><button type="button" class="btn" data-s50="logcopy"'+(L.length?'':' disabled')+'>Скопировать'+(LQ?" найденное":"")+'</button><button type="button" class="btn" data-s50="logclear"'+(L.length?'':' disabled')+'>Очистить</button></div>'+
+  (L.length?'<ul class="s50-log">'+h+'</ul>':'<p class="sub">'+(LQ?"Ничего не найдено.":"Журнал пуст: здесь появятся ваши команды и ответы диспетчера.")+'</p>')+'</section>'};
+
+/* ---------- тренировка рации (149) ---------- */
+var TS=[
+ {c:"Диспетчер всем экипажам: ограбление магазина на Гроув-стрит, двое вооружённых. Кто примет вызов?",n:[["позывн|юнит|экипаж|\\d+-?[a-zа-я]+|adam|lincoln|mary","назовите себя (позывной)"],["прин|10-4|беру|выдвига|10-76|еду|выезжа","подтвердите, что приняли вызов"],["\\d+\\s*мин|минут|10-26|скоро буду","время прибытия"]],m:"1-ADAM-12, 10-4, принял, выдвигаюсь, буду через 3 минуты."},
+ {c:"Диспетчер: поступил вызов о ДТП на шоссе у Палето, есть пострадавшие. Ваши действия?",n:[["прин|10-4|выдвига|10-76|еду","примите вызов"],["ems|скор|медик|10-52|врач","вызовите EMS"],["перекр|оцеп|регулир|безопасн|движени","обеспечьте безопасность на месте"]],m:"10-4, выдвигаюсь к месту ДТП. Запрашиваю EMS, 10-52. Перекрою полосу до прибытия медиков."},
+ {c:"Диспетчер: ваш экипаж преследует чёрный седан, доложите обстановку.",n:[["10-80|погон|преслед","обозначьте погоню (10-80)"],["улиц|район|шоссе|направлен|на север|на юг|на запад|на восток|в сторону","укажите направление или место"],["подкреп|10-78|поддерж|вертол","запросите поддержку"]],m:"10-80, преследую чёрный седан по шоссе 1 на север, прошу подкрепление, 10-78."},
+ {c:"Диспетчер: слышны выстрелы у банка на площади. Кто ближе?",n:[["10-71|стрельб|выстрел","подтвердите стрельбу (10-71)"],["прин|10-4|выдвига|еду|10-76","примите вызов"],["подкреп|10-78|все экипажи|поддерж","запросите подкрепление"]],m:"10-71 у банка, 10-4, выдвигаюсь, прошу подкрепление, 10-78."},
+ {c:"Диспетчер: офицер не выходит на связь последние пять минут. Ваши действия?",n:[["10-20|местополож|где он|координат","запросите местоположение (10-20)"],["выдвига|еду|проверю|10-76","выдвиньтесь на проверку"],["10-99|10-13|экстрен|опасност","будьте готовы объявить 10-99 / 10-13"]],m:"Запрашиваю 10-20 офицера, выдвигаюсь на проверку. При угрозе объявлю 10-99."},
+ {c:"Диспетчер: доложите о задержании.",n:[["задерж|10-15","обозначьте задержание (10-15)"],["граждан|имя|ник|подозрева","назовите задержанного"],["стать|ук|ак|дк|\\d+\\.\\d+","укажите статью"]],m:"10-15, задержан гражданин Hanami Senko по статье 12.8 УК, доставляю в участок."},
+ {c:"Диспетчер: вы остановили автомобиль на трассе. Доложите.",n:[["10-38|останов","обозначьте остановку ТС (10-38)"],["марк|модел|цвет|номер|седан|внедорожник|машин|авто","опишите машину или номер"],["улиц|район|шоссе|трасс|у ","укажите место"]],m:"10-38, остановил белый внедорожник, номер 4ABC123, шоссе 68 у заправки."},
+ {c:"Диспетчер: где вы находитесь?",n:[["10-20|нахожусь|я на|я у|район|улиц|шоссе","назовите местоположение"],["10-8|свобод|патрул|10-6|занят","скажите, свободны ли вы"]],m:"10-20: патрулирую район Вайнвуд, 10-8, свободен."},
+ {c:"Диспетчер: конец смены через десять минут. Доложите статус.",n:[["10-19|возвращ|в участок","скажите, что возвращаетесь в участок"],["10-7|конец смены|сдаю|заканчива","обозначьте окончание смены (10-7)"]],m:"10-19, возвращаюсь в участок, после сдачи оборудования 10-7."},
+ {c:"Диспетчер: на перекрёстке подозрительный человек с оружием. Ваши действия?",n:[["10-32|оруж|вооруж","обозначьте человека с оружием (10-32)"],["прин|10-4|выдвига|еду","примите вызов"],["подкреп|10-78|осторож|код 3","запросите подкрепление или выезжайте экстренно"]],m:"10-32, 10-4, выдвигаюсь Кодом 3, прошу подкрепление."}
+];
+var TR={on:false,i:-1,n:0,sum:0,last:null,order:[]};
+function trNext(){if(!TR.order.length)TR.order=TS.map(function(x,i){return i}).sort(function(){return Math.random()-0.5});TR.i=TR.order.shift();TR.last=null;return TS[TR.i]}
+function trSay(text){var r={say:text,show:text};try{if(DESK&&A.radioSay&&cfg().radioEnabled)A.radioSay(r);else if(window.SA_speak)SA_speak(text)}catch(x){}}
+function trScore(ans){var s=TS[TR.i],low=String(ans||"").toLowerCase().replace(/ё/g,"е"),miss=[],got=0;
+ s.n.forEach(function(x){if(new RegExp(x[0],"i").test(low))got++;else miss.push(x[1])});
+ TR.n++;TR.sum+=got/s.n.length;
+ if(got===s.n.length){try{if(window.SA_TRX&&SA_TRX.xp)SA_TRX.xp(2)}catch(x){}}
+ TR.last={got:got,of:s.n.length,miss:miss,ans:ans,model:s.m};return TR.last}
+window.SA_radioTrain=function(text){if(!TR.on||TR.i<0||TR.last)return null;var r=trScore(text);setTimeout(rr,50);
+ return {say:(r.got===r.of?"Отлично, по форме. ":"Оценка: "+r.got+" из "+r.of+". "+(r.miss.length?"Не хватило: "+r.miss.join("; ")+". ":""))+"Пример: "+r.model,show:"Тренировка: "+r.got+" из "+r.of+(r.miss.length?" · не хватило: "+r.miss.join("; "):"")}};
+SA_P.r_train=function(){var h='<section class="panel"><h2>Тренировка рации</h2><p class="sub">Диспетчер даёт учебный вызов — ответьте по форме голосом через рацию или текстом ниже. Программа проверит, назвали ли вы главное: позывной, приём вызова, место, коды. За ответ по форме +2 опыта.</p>';
+ if(!TR.on)return h+'<div class="rowbtn"><button type="button" class="btn primary" data-s50="tstart">Начать тренировку</button></div>'+(TR.n?'<p class="sub">Прошлая тренировка: '+TR.n+' '+(TR.n===1?"вызов":TR.n<5?"вызова":"вызовов")+', в среднем '+Math.round(TR.sum/TR.n*100)+'%.</p>':'')+'</section>';
+ var s=TS[TR.i];h+='<div class="s50-call">📻 '+e(s.c)+'</div>';
+ if(!TR.last)h+='<div class="s50-tools"><input class="tin" id="s50ta" maxlength="300" placeholder="Ваш ответ, например: 1-ADAM-12, 10-4, выдвигаюсь…" aria-label="Ответ диспетчеру"><button type="button" class="btn primary" data-s50="tans">Ответить</button><button type="button" class="btn" data-s50="tsay">Повторить вызов</button></div>';
+ else{var r=TR.last,cl=r.got===r.of?"ok":r.got?"mid":"bad";
+  h+='<div class="s50-res '+cl+'"><b>'+(r.got===r.of?"Отлично, по форме":"Оценка: "+r.got+" из "+r.of)+'</b><p class="sd-note" style="margin:4px 0 0">Ваш ответ: «'+e(r.ans)+'»</p>'+(r.miss.length?'<ul>'+r.miss.map(function(m){return '<li>Не хватило: '+e(m)+'</li>'}).join("")+'</ul>':'')+'<p style="margin:8px 0 0">Пример: <i>'+e(r.model)+'</i></p></div><div class="rowbtn"><button type="button" class="btn primary" data-s50="tnext">Следующий вызов</button><button type="button" class="btn" data-s50="tstop">Закончить</button></div>'}
+ return h+'<p class="sub" style="margin-top:10px">Вызовов: '+TR.n+(TR.n?' · средний результат '+Math.round(TR.sum/TR.n*100)+'%':'')+'</p></section>'};
+
+/* ---------- обработчики ---------- */
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s50],[data-s50del]");if(!b)return;
+ if(b.dataset.s50del){js("bos-codes",myCodes().filter(function(x){return x.c!==b.dataset.s50del}));rr();return}
+ var k=b.dataset.s50;
+ if(k==="add"){var c=(document.getElementById("s50cc")||{}).value||"",t=(document.getElementById("s50ct")||{}).value||"";c=c.trim().replace(/^10\s+/,"10-");t=t.trim();
+  if(!c||!t){toast("Заполните код и значение");return}var L=myCodes().filter(function(x){return x.c.toLowerCase()!==c.toLowerCase()});L.unshift({c:c.slice(0,12),t:t.slice(0,80)});js("bos-codes",L.slice(0,60));toast("Код "+c+" добавлен");rr();return}
+ if(k==="logcopy"){var L2=logRows();copy(L2.map(function(x){return "["+dd(x.at||0)+" "+hm(x.at||0)+"] "+(x.w==="me"?"Вы":"Диспетчер")+": "+x.t}).join("\n"));toast("Скопировано записей: "+L2.length);return}
+ if(k==="logclear"){if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Точно очистить?";return}if(window.SA_radioLog)SA_radioLog(true);LQ="";rr();return}
+ if(k==="tstart"||k==="tnext"){TR.on=true;if(k==="tstart"){TR.n=0;TR.sum=0}var s=trNext();rr();trSay(s.c);setTimeout(function(){var i=document.getElementById("s50ta");if(i)i.focus()},80);return}
+ if(k==="tsay"){if(TR.i>=0)trSay(TS[TR.i].c);return}
+ if(k==="tstop"){TR.on=false;TR.i=-1;TR.last=null;rr();return}
+ if(k==="tans"){var a=(document.getElementById("s50ta")||{}).value||"";if(a.trim().length<3){toast("Напишите ответ");return}var r=window.SA_radioTrain(a);if(r)trSay(r.say);return}
+});
+document.addEventListener("keydown",function(ev){if(ev.key!=="Enter"||!ev.target)return;
+ if(ev.target.id==="s50ta"){ev.preventDefault();var b=document.querySelector('[data-s50="tans"]');if(b)b.click()}
+ if(ev.target.id==="s50ct"){ev.preventDefault();var b2=document.querySelector('[data-s50="add"]');if(b2)b2.click()}});
+
+/* ---------- диспетчер: тренировка, коды, калькулятор, позывной ---------- */
+var C0=window.SA_radioCmd;
+if(typeof C0==="function")window.SA_radioCmd=function(o){
+ var text=String((o&&o.text)||"").slice(0,400),r=null;
+ try{r=window.SA_radioTrain(text)}catch(x){r=null}
+ if(!r)try{r=codeQuery(text)}catch(x){r=null}
+ if(!r)try{r=window.SA_radioCalc?SA_radioCalc(text):null}catch(x){r=null}
+ if(r){try{var L=SA_radioLog();L.push({w:"me",t:text.slice(0,300),at:Date.now()});L.push({w:"d",t:String(r.show||r.say||"").slice(0,300),at:Date.now()});if(L.length>300)L.splice(0,L.length-300);js("bos-radio-log",L)}catch(x){}
+  return withCall(r)}
+ return withCall(C0.apply(this,arguments))};
 })();
 </script>
 <script>

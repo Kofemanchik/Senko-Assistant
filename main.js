@@ -220,6 +220,10 @@ const DEFAULTS = {
   radioSfx: true,            // щелчки и шипение рации
   radioOnline: true,         // 2.6.1: распознавать речь онлайн (Whisper через ИИ-прокси), без сети — офлайн
   radioSize: "m",            // размер рации s | m | l
+  radioWake: false,          // 3.9: слово-активатор «Сенко» (микрофон слушает постоянно, распознавание только на компьютере)
+  radioVolume: 100,          // 3.9: громкость голоса и звуков рации, %
+  radioCall: "",             // 3.9: позывной (например, 1-ADAM-12)
+  radioCrew: "",             // 3.9: экипаж / напарник
   radioPos: null             // позиция рации {x, y}
 };
 // 2.2: режимы окна (призрак по курсору, полоска, прилипание, профили, реакция на программу, поиск OBS и т. п.)
@@ -234,7 +238,10 @@ const cfgFile = () => path.join(app.getPath("userData"), "app-settings.json");
 function loadCfg() {
   const j = readJson(cfgFile()) || {};
   cfg = { ...DEFAULTS, ...j };
-  for (const k of ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "maximized", "voiceEnabled", "ghost", "voicePtt", "miniEnabled", "betaUpdates", "radioEnabled", "radioPin", "radioVoice", "radioSfx", "radioOnline"]) cfg[k] = !!cfg[k];
+  for (const k of ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "maximized", "voiceEnabled", "ghost", "voicePtt", "miniEnabled", "betaUpdates", "radioEnabled", "radioPin", "radioVoice", "radioSfx", "radioOnline", "radioWake"]) cfg[k] = !!cfg[k];
+  cfg.radioVolume = Math.min(100, Math.max(0, Math.round(cfg.radioVolume == null ? 100 : +cfg.radioVolume || 0)));
+  cfg.radioCall = typeof cfg.radioCall === "string" ? cfg.radioCall.replace(/[\u0000-\u001f]/g, "").trim().slice(0, 30) : "";
+  cfg.radioCrew = typeof cfg.radioCrew === "string" ? cfg.radioCrew.replace(/[\u0000-\u001f]/g, "").trim().slice(0, 60) : "";
   if (!validHotkey(cfg.radioHotkey)) cfg.radioHotkey = DEFAULTS.radioHotkey;
   if (cfg.qcalcHotkey && !validHotkey(cfg.qcalcHotkey)) cfg.qcalcHotkey = "";
   cfg.radioHide = Math.min(120, Math.max(5, Math.round(+cfg.radioHide || DEFAULTS.radioHide)));
@@ -805,7 +812,8 @@ function getState() {
       ghostBy: cfg.ghostBy, strip: cfg.strip, snap: cfg.snap, watchApps: cfg.watchApps.slice(), watchMode: cfg.watchMode, watchOpacity: cfg.watchOpacity, streamAuto: cfg.streamAuto,
       miniEnabled: cfg.miniEnabled, miniHotkey: cfg.miniHotkey, miniOpacity: cfg.miniOpacity, betaUpdates: cfg.betaUpdates, qcalcHotkey: cfg.qcalcHotkey || "", qcalcError: qcalc.hotkeyError(),
       radioEnabled: cfg.radioEnabled, radioHotkey: cfg.radioHotkey, radioPin: cfg.radioPin, radioHide: cfg.radioHide, radioVoice: cfg.radioVoice,
-      radioVoiceName: cfg.radioVoiceName, radioRate: cfg.radioRate, radioSfx: cfg.radioSfx, radioOnline: cfg.radioOnline, radioSize: cfg.radioSize
+      radioVoiceName: cfg.radioVoiceName, radioRate: cfg.radioRate, radioSfx: cfg.radioSfx, radioOnline: cfg.radioOnline, radioSize: cfg.radioSize,
+      radioWake: cfg.radioWake, radioVolume: cfg.radioVolume, radioCall: cfg.radioCall, radioCrew: cfg.radioCrew
     },
     miniOpen: mini.isOpen(),
     radioOpen: radio.isOpen(),
@@ -832,7 +840,7 @@ function pushState() {
 }
 
 function applySet(key, val) {
-  const bools = ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "voiceEnabled", "ghost", "voicePtt", "miniEnabled", "betaUpdates", "radioEnabled", "radioPin", "radioVoice", "radioSfx", "radioOnline"];
+  const bools = ["alwaysOnTop", "hotkeyEnabled", "compact", "rememberBounds", "tray", "notify", "voiceEnabled", "ghost", "voicePtt", "miniEnabled", "betaUpdates", "radioEnabled", "radioPin", "radioVoice", "radioSfx", "radioOnline", "radioWake"];
   let result = { ok: true };
   if (key === "autostart") {
     if (!app.isPackaged) return { ok: false, error: "Автозапуск доступен только в установленной версии." };
@@ -867,7 +875,8 @@ function applySet(key, val) {
       if (!result.ok) { cfg.radioEnabled = false; radio.registerHotkey(); }
       if (!cfg.radioEnabled) radio.toggle(false);
     }
-    if (key === "radioPin" || key === "radioVoice" || key === "radioSfx" || key === "radioOnline") radio.applyOpts();
+    if (key === "radioPin" || key === "radioVoice" || key === "radioSfx" || key === "radioOnline" || key === "radioWake") radio.applyOpts();
+    if (key === "radioOnline") voice.applyOpts(); // 3.9: тот же переключатель для голосового окна
     if (key === "betaUpdates") {
       if (updater) updater.allowPrerelease = val;
       if (val) setTimeout(() => checkForAppUpdate(false), 1500);
@@ -914,6 +923,12 @@ function applySet(key, val) {
     radio.applyOpts();
   } else if (key === "radioVoiceName") {
     cfg.radioVoiceName = typeof val === "string" ? val.slice(0, 200) : "";
+    radio.applyOpts();
+  } else if (key === "radioVolume") {
+    cfg.radioVolume = Math.min(100, Math.max(0, Math.round(+val || 0)));
+    radio.applyOpts();
+  } else if (key === "radioCall" || key === "radioCrew") {
+    cfg[key] = typeof val === "string" ? val.replace(/[\u0000-\u001f]/g, "").trim().slice(0, key === "radioCall" ? 30 : 60) : "";
     radio.applyOpts();
   } else if (key === "radioSize") {
     cfg.radioSize = ["s", "m", "l"].includes(val) ? val : "m";
@@ -1791,6 +1806,7 @@ app.whenReady().then(() => {
   voice.init({
     getWin: () => (win && !win.isDestroyed() ? win : null),
     getCfg: () => cfg,
+    stt: (d) => accounts.act("stt", d, 22000), // 3.9: онлайн-распознавание и в голосовом окне
     isPackaged: app.isPackaged,
     applySet,  // оверлей переключает настройки через общий обработчик (трей и окно памятки обновятся сами)
     saveCfg,   // сохранить конфиг (позиция оверлея)
@@ -1838,6 +1854,7 @@ app.whenReady().then(() => {
       if (OPEN_RE.test(t)) win.webContents.send("senko:open", t);
     }
   });
+  setTimeout(() => { try { radio.applyOpts(); } catch (e) {} }, 6000); // 3.9: слово-активатор — рация слушает в фоне, если включено
   ai.init({
     getWin: () => (win && !win.isDestroyed() ? win : null),
     // вопрос уходит на сервер: он обращается к ИИ, сохраняет вопрос в аккаунте и возвращает номер записи для 👍/👎 (см. Политику, раздел 6)

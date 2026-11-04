@@ -220,7 +220,8 @@
     var actx = new AudioContext(); try { await actx.resume(); } catch (e) {}
     var rec = new model.KaldiRecognizer(actx.sampleRate), recG = null;
     try { recG = new model.KaldiRecognizer(actx.sampleRate, GJSON); } catch (e) { recG = null; }
-    var s = { stream: stream, ctx: actx, rec: rec, recG: recG, text: "", partial: "", gtext: "", gpartial: "", done: false, pcm: [], rate: actx.sampleRate };
+    var s = { stream: stream, ctx: actx, rec: rec, recG: recG, text: "", partial: "", gtext: "", gpartial: "", done: false, pcm: [], rate: actx.sampleRate, auto: !!S.auto, voiced: false, qt: 0 };
+    S.auto = false;
     S.sess = s;
     if (recG) {
       recG.on("result", function (m) { var t = (m && m.result && m.result.text || "").trim(); if (t) s.gtext = (s.gtext ? s.gtext + " " : "") + t; });
@@ -232,13 +233,16 @@
     s.node.onaudioprocess = function (ev) {
       if (s.done) return;
       var d = ev.inputBuffer.getChannelData(0), sum = 0; for (var i = 0; i < d.length; i++) sum += d[i] * d[i];
-      bars(Math.sqrt(sum / d.length));
+      var rms = Math.sqrt(sum / d.length);
+      bars(rms);
+      // 3.9: после слова-активатора клавишу не держат — запись заканчивается сама после паузы 1,3 с
+      if (s.auto) { if (rms > 0.03) { s.voiced = true; s.qt = 0; } else if (s.voiced) { if (!s.qt) s.qt = Date.now(); else if (Date.now() - s.qt > 1300) { setTimeout(stop, 0); } } }
       if (S.opts.online && api.stt) s.pcm.push(new Float32Array(d));
       try { rec.acceptWaveform(ev.inputBuffer); } catch (e) {}
       if (recG) { try { recG.acceptWaveform(ev.inputBuffer); } catch (e) {} }
     };
     s.src = actx.createMediaStreamSource(stream); s.src.connect(s.node); s.node.connect(actx.destination);
-    s.timer = setTimeout(function () { stop(); }, MAX_MS);
+    s.timer = setTimeout(function () { stop(); }, s.auto ? 10000 : MAX_MS);
     setState("listening"); led("tx"); msg("Я", "…"); sfx("open");
   }
   function stop() {
@@ -254,11 +258,13 @@
       var pcm = s.pcm, rate = s.rate; s.pcm = [];
       cleanup(s); setState("thinking"); led("busy");
       if (!S.opts.online || !api.stt || !pcm.length) { send(off || text, text); return; }
-      var wav = wavB64(pcm, rate);
+      var wav = window.SenkoWav ? SenkoWav.encode(pcm, rate) : wavB64(pcm, rate); // 3.9: без шума и тишины по краям
       if (wav.sec < 0.4) { send(off || text, text); return; }
       msg("РАЦИЯ", "Распознаю…");
       online(wav.b64).then(function (r) {
         var t = r && r.ok ? String(r.text || "").trim() : "";
+        if (window.SenkoWav) t = SenkoWav.fixNums(t);
+        if (/^(продолжение следует|субтитры|спасибо за просмотр)/i.test(t)) t = ""; // «галлюцинации» Whisper на тишине
         // онлайн-текст главный, офлайн остаётся запасным вариантом разбора
         if (t) send(t, off || text); else send(off || text, text);
       });
@@ -335,7 +341,50 @@
   body.addEventListener("dblclick", function (e) { if (!(e.target.closest && e.target.closest("button,[data-act]"))) api.resetPos(); });
 
   api.onState(function (d) { S.data = d || {}; renderDets(); });
-  api.onOpts(function (o) { S.opts = Object.assign(S.opts, o || {}); $("tip").textContent = S.opts.hotkey ? "Держите " + S.opts.hotkey + " или PTT" : "Зажмите PTT и говорите"; scheduleHide(); });
+  api.onOpts(function (o) {
+    S.opts = Object.assign(S.opts, o || {});
+    if (typeof S.opts.vol === "number" && S.opts.vol !== S.volSet) { S.volSet = S.opts.vol; vol = Math.max(0, Math.min(100, S.opts.vol)); lset("radio-vol", vol); $("volT").textContent = vol ? "ГР " + vol : "ТИХО"; }
+    $("tip").textContent = (S.opts.wake ? "«Сенко» или «Диспетчер» · " : "") + (S.opts.hotkey ? "Держите " + S.opts.hotkey + " или PTT" : "Зажмите PTT и говорите");
+    if (S.opts.wake) wakeOn(); else wakeOff();
+    scheduleHide();
+  });
+
+  /* ───── 3.9: слово-активатор. Микрофон слушает только на этом компьютере (Vosk), наружу ничего не уходит, пока не прозвучит «Сенко» или «Диспетчер» ───── */
+  var WK = { on: false, busy: false, stream: null, ctx: null, rec: null, node: null, src: null, last: 0 };
+  var WAKE_RE = /(^|\s)(сенко|сенка|сенку|сэнко|синко|сенька|сенько|сен ко|диспетчер\S*)(\s|$)/;
+  async function wakeOn() {
+    if (WK.on || WK.busy) return;
+    WK.busy = true;
+    try {
+      var model = await loadModel();
+      if (!S.opts.wake) return;
+      var st = await openMic(), a = new AudioContext();
+      try { await a.resume(); } catch (e) {}
+      var rec = new model.KaldiRecognizer(a.sampleRate);
+      var hit = function (m) { var t = String((m && m.result && (m.result.text || m.result.partial)) || "").toLowerCase(); if (WAKE_RE.test(t)) heard(); };
+      rec.on("result", hit); rec.on("partialresult", hit);
+      var node = a.createScriptProcessor(4096, 1, 1);
+      node.onaudioprocess = function (ev) { if (S.state !== "idle" || S.speaking || Date.now() - WK.last < 2500) return; try { rec.acceptWaveform(ev.inputBuffer); } catch (e) {} };
+      var src = a.createMediaStreamSource(st); src.connect(node); node.connect(a.destination);
+      WK.stream = st; WK.ctx = a; WK.rec = rec; WK.node = node; WK.src = src; WK.on = true;
+    } catch (e) { wakeOff(); }
+    finally { WK.busy = false; if (!S.opts.wake) wakeOff(); }
+  }
+  function wakeOff() {
+    try { if (WK.node) { WK.node.onaudioprocess = null; WK.node.disconnect(); } } catch (e) {}
+    try { if (WK.src) WK.src.disconnect(); } catch (e) {}
+    try { if (WK.stream) WK.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+    try { if (WK.ctx) WK.ctx.close(); } catch (e) {}
+    try { if (WK.rec) WK.rec.remove(); } catch (e) {}
+    WK.on = false; WK.stream = WK.ctx = WK.rec = WK.node = WK.src = null;
+  }
+  function heard() {
+    if (Date.now() - WK.last < 2500 || S.state !== "idle" || S.speaking) return;
+    WK.last = Date.now();
+    if (api.wake) api.wake();
+    S.auto = true;
+    start();
+  }
   api.onCmd(function (c) {
     if (c === "start") start();
     else if (c === "stop") stop();
