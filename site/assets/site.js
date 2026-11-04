@@ -157,4 +157,12 @@
         ps.hidden = false;
       }).catch(function () {});
   }
+  /* 3.8.3: счётчик скачиваний по дням — только отметка «нажали Скачать», без данных о человеке */
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest("a[data-dl]");
+    if (!a || !navigator.sendBeacon) return;
+    var api = (window.SENKO_WEB && window.SENKO_WEB.api) || "https://wcjspwailippjmyffkei.supabase.co/functions/v1/senko";
+    if (!/^https:\/\//.test(api)) return;
+    try { navigator.sendBeacon(api, JSON.stringify({ action: "dl" })); } catch (x) {}
+  });
 })();

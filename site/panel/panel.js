@@ -326,7 +326,7 @@
 
   // ───── меню
   var NAV = [
-    ["Обзор", [["dash", "i-home", "Сводка", "Цифры и режимы"], ["health", "i-pulse", "Состояние", "Сервисы, версии, поиск"]]],
+    ["Обзор", [["dash", "i-home", "Сводка", "Цифры и режимы"], ["health", "i-pulse", "Состояние", "Сервисы, версии, поиск"], ["month", "i-trophy", "Итоги месяца", "Сводка, ведомства, опрос", null, 1]]],
     ["Люди", [["users", "i-users", "Пользователи", "Поиск и действия"], ["staff", "i-key", "Роли и доступ", "Модераторы и руководство"], ["security", "i-shield", "Безопасность", "Входы, устройства, коды", null, 1], ["queue", "i-inbox", "Заявки и сбросы", "Новички и пароли", "queue"]]],
     ["Работа", [["reports", "i-file", "Рапорты", "Рапорты сотрудников", "reports"], ["rating", "i-trophy", "Рейтинг", "Неделя и контрольные"], ["news", "i-mega", "Рассылки", "Сообщения в программе", null, 1], ["bugs", "i-bug", "Ошибки", "Сообщения пользователей", "bugs", 1], ["ideas", "i-mega", "Идеи", "Предложения пользователей"], ["ai", "i-ai", "ИИ-помощник", "Словарь, плохие ответы, самопроверка", null, 1]]],
     ["Тестирование", [["beta", "i-shield", "Тестеры", "Роль, задания, функции"]]],
@@ -365,6 +365,76 @@
   function ownerOnly(el) { el.appendChild(h("div", { class: "card" }, h("p", { text: "Этот раздел доступен только владельцу." }))); }
 
   var PAGES = {};
+
+  // 3.8.3: итоги месяца для владельца — новые, активные, вопросы к ИИ, скачивания по дням; сравнение ведомств; опрос и голоса за план
+  var MSEL = "";
+  PAGES.month = function (el) {
+    var opts = [];
+    for (var i = 1; i <= 3; i++) { var d = new Date(Date.now() + 3 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - i); var k = d.toISOString().slice(0, 7); opts.push([k, ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"][d.getUTCMonth()] + " " + d.getUTCFullYear()]); }
+    var cur = new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 7);
+    opts.unshift([cur, "текущий месяц (идёт)"]);
+    if (!MSEL) MSEL = opts[1][0];
+    var msel = h("select", { "aria-label": "Месяц", style: "width:auto", on: { change: function () { MSEL = msel.value; route(true); } } }, opts.map(function (o) { return h("option", { value: o[0], text: o[1] }); }));
+    msel.value = MSEL;
+    var dsel = ME.staffServer ? null : h("select", { "aria-label": "Сервер", style: "width:auto", on: { change: function () { DSRV = dsel.value; route(true); } } }, srvOpts().map(function (o) { return h("option", { value: o[0], text: o[1] }); }));
+    if (dsel) dsel.value = DSRV;
+    head(el, "Итоги месяца", "Новые пользователи, активность, вопросы к ИИ, скачивания, ведомства и опрос", h("div", { class: "row" }, msel, dsel));
+    var box = h("div", { class: "load", text: "Собираю итоги…" });
+    el.appendChild(box);
+    return Promise.all([api("month_sum", { month: MSEL, server: DSRV }), api("org_cmp", { server: DSRV })]).then(function (R) {
+      box.remove();
+      var d = R[0], c = R[1];
+      if (!d.ok) return el.appendChild(errMsg(d));
+      var sum = function (L) { return (L || []).reduce(function (s, x) { return s + (x.n || 0); }, 0); };
+      var gh = (d.gh || []).reduce(function (s, x) { return s + x.n; }, 0);
+      var T = [["Новых пользователей", sum(d.fresh), "за " + d.name], ["Активных за месяц", d.actM, "за последние 7 дней месяца: " + d.act7], ["Вопросов к ИИ", sum(d.ai), "за месяц"],
+        ["Скачиваний с сайта", sum(d.dl), "кнопка «Скачать»; считаем с 4 ноября 2026"], ["Скачиваний установщика", gh, (d.gh || []).length ? "выпусков за месяц: " + d.gh.length + " (GitHub)" : "выпусков за месяц не было"]];
+      el.appendChild(h("div", { class: "tiles" }, T.map(function (t) { return h("div", { class: "tile" }, h("small", { text: t[0] }), h("b", { text: String(t[1]) }), h("i", { text: t[2] })); })));
+      var M = d.month.split("-"), days = [], nd = new Date(Date.UTC(+M[0], +M[1], 0)).getUTCDate();
+      for (var i = 1; i <= nd; i++) days.push(("0" + i).slice(-2) + "." + M[1]);
+      function bars(title, sub, L) {
+        var by = {}; (L || []).forEach(function (x) { by[x.d] = x.n; });
+        var mx = Math.max.apply(null, days.map(function (k) { return by[k] || 0; }).concat([1]));
+        var cd = card(title, sub);
+        cd.appendChild(h("div", { class: "bars", role: "img", "aria-label": title }, days.map(function (k) {
+          var n = by[k] || 0;
+          return h("div", { title: k + ": " + n }, n ? h("b", { text: String(n) }) : null, h("span", { style: "height:" + Math.max(3, Math.round((n / mx) * 92)) + "%" }), h("em", { text: k.slice(0, 2) }));
+        })));
+        return cd;
+      }
+      el.appendChild(h("div", { class: "grid g2 sec" }, bars("Новые пользователи", "Регистрации по дням, время московское", d.fresh), bars("Активные за день", "Входили, синхронизировали данные или спрашивали ИИ", d.act)));
+      el.appendChild(h("div", { class: "grid g2 sec" }, bars("Вопросы к ИИ", "Сколько вопросов задали за день", d.ai), bars("Скачивания с сайта", "Нажатия «Скачать» на сайте по дням", d.dl)));
+      if (c && c.ok) {
+        var cc = card("Сравнение ведомств", "Активность, смены, задержания и тесты: за 7 дней / за 30 дней (" + c.server + ")");
+        var f = function (a, b) { return a + " / " + b; };
+        cc.appendChild(h("div", { class: "tbl-wrap", style: "box-shadow:none" }, h("table", { class: "tbl" },
+          h("thead", null, h("tr", null, ["Ведомство", "Людей", "Заходили", "Смены", "Задержания", "Тесты", "Средний балл"].map(function (t) { return h("th", { text: t }); }))),
+          h("tbody", null, c.rows.map(function (r) {
+            return h("tr", null, h("td", { text: r.org }), h("td", { text: String(r.people) }), h("td", { text: f(r.act7, r.act30) }), h("td", { text: f(r.shW, r.shM) }),
+              h("td", { text: f(r.detW, r.detM) }), h("td", { text: f(r.testsW, r.testsM) }), h("td", { text: f(r.avgW == null ? "—" : r.avgW + "%", r.avgM == null ? "—" : r.avgM + "%") }));
+          })))));
+        el.appendChild(h("div", { class: "sec" }, cc));
+      }
+      var sv = d.survey || { n: 0, q1: [], q2: [], free: [] };
+      var s1 = card("Опрос «что улучшить»", "Ответов: " + sv.n + ". Опрос показывается в программе на главной, один раз каждому");
+      var qmax = Math.max.apply(null, sv.q1.map(function (x) { return x.n; }).concat([1]));
+      s1.appendChild(h("p", { class: "sub", text: (sv.qs || [])[0] || "" }));
+      s1.appendChild(h("div", { class: "olist" }, sv.q1.slice().sort(function (a, b) { return b.n - a.n; }).map(function (x) {
+        return h("div", { class: "orow" }, h("span", { text: x.t }), h("span", { class: "track" }, h("span", { style: "width:" + Math.round((x.n / qmax) * 100) + "%" })), h("b", { text: String(x.n) }));
+      })));
+      var tot2 = sv.q2.reduce(function (s, x) { return s + x; }, 0), avg2 = tot2 ? (sv.q2.reduce(function (s, x, i) { return s + x * (i + 1); }, 0) / tot2).toFixed(1) : "—";
+      s1.appendChild(h("p", { class: "sub", text: ((sv.qs || [])[1] || "") + " Средняя оценка: " + avg2 + " из 5 (" + sv.q2.map(function (x, i) { return (i + 1) + "★ — " + x; }).join(", ") + ")" }));
+      var s2 = card("Чего не хватает", "Свободные ответы, новые сверху");
+      s2.appendChild(sv.free.length ? h("ul", { class: "olist", style: "padding-left:18px" }, sv.free.map(function (t) { return h("li", { text: t, style: "margin:0 0 6px" }); })) : h("p", { class: "sub", text: "Пока никто не написал." }));
+      el.appendChild(h("div", { class: "grid g2 sec" }, s1, s2));
+      var pl = card("План на месяц: голоса «Жду»", "Пользователи отмечают в «Что нового», какие выпуски ждут больше всего");
+      var pmax = Math.max.apply(null, (d.plan || []).map(function (x) { return x.n; }).concat([1]));
+      pl.appendChild(h("div", { class: "olist" }, (d.plan || []).map(function (x) {
+        return h("div", { class: "orow" }, h("span", { text: x.d + " · " + x.t }), h("span", { class: "track" }, h("span", { style: "width:" + Math.round((x.n / pmax) * 100) + "%" })), h("b", { text: String(x.n) }));
+      })));
+      el.appendChild(h("div", { class: "sec" }, pl));
+    });
+  };
 
   PAGES.dash = function (el) {
     var dsel = ME.staffServer ? null : h("select", { "aria-label": "Сервер", style: "width:auto", on: { change: function () { DSRV = dsel.value; route(true); } } }, srvOpts().map(function (o) { return h("option", { value: o[0], text: o[1] }); }));

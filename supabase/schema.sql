@@ -640,3 +640,18 @@ create table if not exists public.qr_logins (
   code_hash text primary key, user_id uuid not null references public.profiles(id) on delete cascade, expires_at timestamptz not null);
 alter table public.qr_logins enable row level security;
 revoke all on table public.qr_logins from anon, authenticated;
+
+-- 3.8.3: опрос «что улучшить», голоса за план на месяц, скачивания с сайта по дням
+create table if not exists public.survey_answers (
+  user_id uuid not null references public.profiles(id) on delete cascade, survey text not null, answers jsonb not null, at timestamptz not null default now(),
+  primary key (user_id, survey));
+alter table public.survey_answers enable row level security;
+revoke all on table public.survey_answers from anon, authenticated;
+create table if not exists public.plan_votes (
+  user_id uuid not null references public.profiles(id) on delete cascade, item text not null, at timestamptz not null default now(),
+  primary key (user_id, item));
+alter table public.plan_votes enable row level security;
+revoke all on table public.plan_votes from anon, authenticated;
+create table if not exists public.day_counts (day date not null, k text not null, n integer not null default 0, primary key (day, k));
+alter table public.day_counts enable row level security;
+revoke all on table public.day_counts from anon, authenticated;

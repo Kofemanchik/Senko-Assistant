@@ -1094,6 +1094,10 @@ async function api(req) {
       return J(await bugReport(b));
     case "my_stats":
       return J(await myStats(b));
+    case "month":
+      return J(await monthApi(b));
+    case "dl":
+      return J(await dlHit(ip));
     case "week_board":
       return J(await weekBoardApi(b));
     case "shift":
@@ -5301,7 +5305,7 @@ async function panelApi(b, ip, ua) {
   if (op === "login") return panelLogin(b, ip, ua);
   const owners = ["audit", "security", "gloss_get", "gloss_save", "bugs", "bug_log", "bug_reply", "staff_key", "staff_revoke", "db_tables", "db_rows", "db_save", "db_delete", "db_revert", "ads_list", "ads_save", "ads_toggle", "ads_delete",
     "prog_get", "prog_xp", "prog_ach", "prog_ach_new", "prog_ai",
-    "ai_dict_list", "ai_dict_save", "ai_dict_delete", "ai_bad", "ai_gold_list", "ai_gold_save", "ai_gold_delete", "ai_gold_pin", "ai_gold_run", "srvcfg_get", "srvcfg_set"];
+    "ai_dict_list", "ai_dict_save", "ai_dict_delete", "ai_bad", "ai_gold_list", "ai_gold_save", "ai_gold_delete", "ai_gold_pin", "ai_gold_run", "srvcfg_get", "srvcfg_set", "month_sum", "org_cmp"];
   const { p, a, th, err } = await pwho(b, owners.includes(op));
   if (err) return err;
   const sql = db();
@@ -5314,6 +5318,10 @@ async function panelApi(b, ip, ua) {
       return { ok: true };
     case "dash":
       return panelDash(a, b);
+    case "month_sum":
+      return panelMonth(b, a);
+    case "org_cmp":
+      return panelOrgCmp(b, a);
     case "health":
       return { ok: true, html: await healthText() };
     case "users":
@@ -5699,7 +5707,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 42;
+const SCHEMA_V = 43;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -5916,6 +5924,19 @@ create table if not exists public.qr_logins (
   code_hash text primary key, user_id uuid not null references public.profiles(id) on delete cascade, expires_at timestamptz not null);
 alter table public.qr_logins enable row level security;
 revoke all on table public.qr_logins from anon, authenticated;
+create table if not exists public.survey_answers (
+  user_id uuid not null references public.profiles(id) on delete cascade, survey text not null, answers jsonb not null, at timestamptz not null default now(),
+  primary key (user_id, survey));
+alter table public.survey_answers enable row level security;
+revoke all on table public.survey_answers from anon, authenticated;
+create table if not exists public.plan_votes (
+  user_id uuid not null references public.profiles(id) on delete cascade, item text not null, at timestamptz not null default now(),
+  primary key (user_id, item));
+alter table public.plan_votes enable row level security;
+revoke all on table public.plan_votes from anon, authenticated;
+create table if not exists public.day_counts (day date not null, k text not null, n integer not null default 0, primary key (day, k));
+alter table public.day_counts enable row level security;
+revoke all on table public.day_counts from anon, authenticated;
 `;
 const SCHEMA_37_ONCE = `
 update public.bot_settings set value = (select coalesce(jsonb_object_agg(k, case when v = '"beta"'::jsonb then '"all"'::jsonb else v end), '{}'::jsonb) from jsonb_each(value) e(k, v))
@@ -6213,6 +6234,270 @@ function patrolItem(d) {
     decidedAt: n(d.decidedAt, 864e5), result: clean(d.result, 120),
   };
 }
+// ───────────── 3.8.3: итоги месяца, рекорды, опрос, план на месяц, счётчик скачиваний ─────────────
+const MON_N = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
+const MON_G = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+// месяц по Москве: "2026-10" или пусто — прошлый месяц
+function monthOf(m) {
+  let y, mo;
+  const mm = /^(\d{4})-(\d{2})$/.exec(String(m || ""));
+  if (mm) { y = +mm[1]; mo = +mm[2]; } else {
+    const d = new Date(Date.now() + 3 * 3600e3);
+    y = d.getUTCFullYear(); mo = d.getUTCMonth();
+    if (mo === 0) { y--; mo = 12; }
+  }
+  if (!(mo >= 1 && mo <= 12 && y >= 2025 && y <= 2100)) return null;
+  const start = Date.UTC(y, mo - 1, 1) - 3 * 3600e3, end = Date.UTC(y, mo, 1) - 3 * 3600e3;
+  if (start > Date.now()) return null;
+  return { key: `${y}-${String(mo).padStart(2, "0")}`, y, mo, start, end, name: MON_N[mo - 1], gen: MON_G[mo - 1] };
+}
+// опыт, заработанный за месяц: по отметкам начала недель (xp_week) — от недели, в которую попало 1-е число, до недели после конца месяца
+async function monthXp(people, M) {
+  const ids = people.map((p) => p.id);
+  if (!ids.length) return {};
+  const sql = db();
+  const k0 = mskDay(new Date(M.start + 3 * 3600e3)), k1 = mskDay(new Date(M.end + 3 * 3600e3));
+  const bs = await sql`select user_id, week, base from xp_week where user_id = any(${ids}::uuid[]) order by week`;
+  const xs = await sql`select user_id, coalesce(max(senko_num(data#>>'{}')), 0)::int xp from sync_items where kind = 'xp' and not deleted and user_id = any(${ids}::uuid[]) group by user_id`;
+  const X = {}, B = {}, out = {};
+  xs.forEach((r) => (X[r.user_id] = r.xp));
+  bs.forEach((r) => (B[r.user_id] = B[r.user_id] || []).push(r));
+  for (const p of people) {
+    const L = B[p.id] || [];
+    let b0 = null, b1 = null;
+    for (const r of L) { if (r.week <= k0) b0 = r.base; if (r.week >= k1 && b1 == null) b1 = r.base; }
+    if (b0 == null) {
+      const f = L.find((r) => r.week > k0 && r.week < k1);
+      b0 = f ? f.base : (tsOf(p.created_at) >= M.start && tsOf(p.created_at) < M.end ? 0 : null);
+    }
+    const now = X[p.id] || 0;
+    out[p.id] = b0 == null ? 0 : Math.max(0, (b1 == null ? now : b1) - b0);
+  }
+  return out;
+}
+// задержания, тесты и средний балл за месяц
+async function monthAct(ids, M) {
+  if (!ids.length) return {};
+  const rows = await db()`
+    select user_id,
+           count(*) filter (where kind = 'thist' and coalesce(senko_num(data->>'end'), u) >= ${M.start} and coalesce(senko_num(data->>'end'), u) < ${M.end})::int det,
+           count(*) filter (where kind = 'tests' and senko_num(data->>'t') >= ${M.start} and senko_num(data->>'t') < ${M.end})::int tests,
+           round(avg(senko_num(data->>'p')) filter (where kind = 'tests' and senko_num(data->>'t') >= ${M.start} and senko_num(data->>'t') < ${M.end}))::int avg_p
+    from sync_items where not deleted and kind in ('thist', 'tests') and user_id = any(${ids}::uuid[]) group by user_id`;
+  const o = {};
+  rows.forEach((r) => (o[r.user_id] = r));
+  return o;
+}
+// смены ведомства за месяц и сколько раз каждый был в сети во время смены
+async function monthShifts(M, org = null, server = null) {
+  const sql = db();
+  const rows = await sql`select org, server, summary from shifts where started_at >= to_timestamp(${M.start / 1000}) and started_at < to_timestamp(${M.end / 1000})
+                          ${org ? sql`and org = ${org}` : sql``} ${server ? sql`and server = ${server}` : sql``}`;
+  const by = {};
+  rows.forEach((r) => ((r.summary && Array.isArray(r.summary.online)) ? r.summary.online : []).forEach((x) => { if (x && x.login) by[String(x.login).toLowerCase()] = (by[String(x.login).toLowerCase()] || 0) + 1; }));
+  return { n: rows.length, by, rows };
+}
+const artKey = (s) => String(s || "").trim().replace(/\s+ч\.\s*\S+/, "");
+async function monthMe(p, M) {
+  const sql = db();
+  const [a] = Object.values(await monthAct([p.id], M));
+  const xp = (await monthXp([p], M))[p.id] || 0;
+  const sh = await monthShifts(M, p.org, sv(p));
+  const arts = await sql`select data->>'arts' a from sync_items where user_id = ${p.id} and kind = 'thist' and not deleted
+                         and coalesce(senko_num(data->>'end'), u) >= ${M.start} and coalesce(senko_num(data->>'end'), u) < ${M.end}`;
+  const C = {};
+  arts.forEach((r) => String(r.a || "").split(/,\s*/).map(artKey).filter(Boolean).forEach((k) => (C[k] = (C[k] || 0) + 1)));
+  const fav = Object.keys(C).sort((x, y) => C[y] - C[x])[0] || "";
+  const got = await sql`select code, at from achievements where user_id = ${p.id} and at >= to_timestamp(${M.start / 1000}) and at < to_timestamp(${M.end / 1000}) order by at`;
+  const AX = await getSetting("achx", {});
+  const ach = got.map((r) => { const d = ACH_BY[r.code] || AX[r.code]; return d ? { code: r.code, icon: d.icon, name: d.name, desc: d.desc || "", at: r.at } : null; }).filter(Boolean);
+  const [bt] = await sql`select 1 from beta_results where user_id = ${p.id} and at >= to_timestamp(${M.start / 1000}) and at < to_timestamp(${M.end / 1000}) limit 1`;
+  const [bl] = bt ? [bt] : await sql`select 1 from login_log where user_id = ${p.id} and ver ilike '%beta%' and at >= to_timestamp(${M.start / 1000}) and at < to_timestamp(${M.end / 1000}) limit 1`;
+  const [ai] = await sql`select count(*)::int n from ai_log where user_id = ${p.id} and at >= to_timestamp(${M.start / 1000}) and at < to_timestamp(${M.end / 1000})`;
+  return {
+    ok: true, month: M.key, name: M.name, gen: M.gen, nick: p.nick, org: p.org, server: srvName(sv(p)),
+    det: a ? a.det : 0, tests: a ? a.tests : 0, avg_p: a ? a.avg_p : null, xp, shifts: sh.by[String(p.login).toLowerCase()] || 0,
+    fav, favN: fav ? C[fav] : 0, ai: ai ? ai.n : 0, ach, tester: !!(bt || bl),
+  };
+}
+async function monthOrg(p, b, M) {
+  const org = staffOrg(p, b);
+  if (!org) return fail("Выберите организацию.");
+  const srv = staffSrvOpt(p, b);
+  const sql = db();
+  const people = await sql`select id, login, nick, created_at, last_seen from profiles where org = ${org} and ${srv ? sql`server = ${srv}` : sql`true`} and not banned and approval = 'ok'`;
+  const ids = people.map((x) => x.id);
+  const A = await monthAct(ids, M), X = await monthXp(people, M), sh = await monthShifts(M, org, srv);
+  const L = people.map((x) => ({ nick: x.nick, det: (A[x.id] || {}).det || 0, tests: (A[x.id] || {}).tests || 0, avg_p: (A[x.id] || {}).avg_p, xp: X[x.id] || 0, shifts: sh.by[String(x.login).toLowerCase()] || 0 }));
+  const active = L.filter((x) => x.det || x.tests || x.xp || x.shifts).length;
+  const top = (k, f) => L.filter(f || ((x) => x[k] > 0)).sort((a, c) => c[k] - a[k]).slice(0, 5).map((x) => ({ nick: x.nick, v: x[k] }));
+  return {
+    ok: true, month: M.key, name: M.name, gen: M.gen, org, server: srv ? srvName(srv) : "все серверы",
+    people: people.length, active, fresh: people.filter((x) => tsOf(x.created_at) >= M.start && tsOf(x.created_at) < M.end).length,
+    shifts: sh.n, det: L.reduce((s, x) => s + x.det, 0), tests: L.reduce((s, x) => s + x.tests, 0), xp: L.reduce((s, x) => s + x.xp, 0),
+    topDet: top("det"), topXp: top("xp"), topShifts: top("shifts"), topTests: top("avg_p", (x) => x.tests >= 3 && x.avg_p != null),
+  };
+}
+// рекорды месяца по проекту — только те, кто включил «Рейтинг недели на сайте» (profiles.pub_board)
+async function monthRecords(M) {
+  const cache = await getSetting("records_" + M.key, null);
+  if (cache && cache.at > Date.now() - 3600e3 && Array.isArray(cache.list)) return cache.list;
+  const sql = db();
+  const people = await sql`select id, login, nick, org, server, created_at from profiles where pub_board and not banned and approval = 'ok'`;
+  const ids = people.map((x) => x.id);
+  const A = await monthAct(ids, M), X = await monthXp(people, M), sh = await monthShifts(M);
+  const st = ids.length ? await sql`select user_id, max(senko_num(data->>'n'))::int n from sync_items where kind = 'streak' and not deleted and user_id = any(${ids}::uuid[]) group by user_id` : [];
+  const S = {};
+  st.forEach((r) => (S[r.user_id] = r.n || 0));
+  const val = {
+    det: (x) => (A[x.id] || {}).det || 0, xp: (x) => X[x.id] || 0, shifts: (x) => sh.by[String(x.login).toLowerCase()] || 0,
+    tests: (x) => (A[x.id] || {}).tests || 0, streak: (x) => S[x.id] || 0,
+  };
+  const T = [["det", "🚓", "Больше всего задержаний"], ["shifts", "🕐", "Больше всего смен"], ["xp", "⭐", "Больше всего опыта"], ["tests", "🎓", "Больше всего тестов"], ["streak", "🔥", "Самая длинная серия дней"]];
+  const list = T.map(([k, icon, title]) => {
+    const best = people.map((x) => ({ x, v: val[k](x) })).filter((r) => r.v > 0).sort((a, c) => c.v - a.v)[0];
+    return best ? { k, icon, title, nick: best.x.nick, org: best.x.org, server: srvName(best.x.server || DEFAULT_SERVER), v: best.v } : null;
+  }).filter(Boolean);
+  await setSetting("records_" + M.key, { at: Date.now(), list });
+  return list;
+}
+// опрос «что улучшить»: 3 вопроса, один ответ на человека
+const SURVEY = {
+  id: "2026-11",
+  qs: [
+    { t: "Что улучшить в первую очередь?", o: ["Поиск статей", "Калькулятор и наказания", "Задержание и чек-лист", "Рапорты и документы", "ИИ-помощник", "Тренажёр и обучение", "Скорость и стабильность", "Оформление"] },
+    { t: "Как вам программа в целом?", o: ["1 — плохо", "2", "3", "4", "5 — отлично"] },
+    { t: "Чего не хватает? Напишите своими словами (необязательно)", free: true },
+  ],
+};
+// план на месяц: темы ближайших выпусков, за них голосуют «Жду»
+const PLAN_NEXT = [
+  ["n05", "05.11", "Рация и голос"], ["n06", "06.11", "Калькулятор и наказания"], ["n07", "07.11", "Рапорты и документы"], ["n08", "08.11", "Суд, адвокаты и прокуроры"],
+  ["n09", "09.11", "Карта и выезды"], ["n10", "10.11", "Профиль и мотивация"], ["n12", "12.11", "Доступность и оформление"], ["n13", "13.11", "Скорость и офлайн"],
+  ["n15", "15.11", "Discord-бот"], ["n16", "16.11", "Наставники и стажёры"], ["n17", "17.11", "Ориентировки и розыск"], ["n18", "18.11", "ИИ-помощник: точность"],
+  ["n19", "19.11", "Дорога и транспорт"], ["n20", "20.11", "Работа между ведомствами"], ["n23", "23.11", "Главная под себя"], ["n26", "26.11", "Работа поверх игры"],
+  ["n29", "29.11", "Веб-версия на телефоне"],
+];
+async function planList(uid) {
+  const sql = db();
+  const cnt = await sql`select item, count(*)::int n from plan_votes group by item`;
+  const mine = uid ? await sql`select item from plan_votes where user_id = ${uid}` : [];
+  const N = {}, Mi = {};
+  cnt.forEach((r) => (N[r.item] = r.n));
+  mine.forEach((r) => (Mi[r.item] = true));
+  return PLAN_NEXT.map(([id, d, t]) => ({ id, d, t, n: N[id] || 0, mine: !!Mi[id] }));
+}
+async function monthApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!(await hit(`mo:${p.id}`, 120, 3600))) return fail(RATE_MSG, { code: "rate" });
+  const sql = db();
+  const op = String(b.op || "me");
+  if (op === "survey_get") {
+    const [r] = await sql`select 1 from survey_answers where user_id = ${p.id} and survey = ${SURVEY.id}`;
+    return { ok: true, survey: SURVEY, answered: !!r };
+  }
+  if (op === "survey_send") {
+    const a = Array.isArray(b.a) ? b.a : [];
+    const q1 = parseInt(a[0], 10), q2 = parseInt(a[1], 10), q3 = clean(a[2], 600);
+    if (!(q1 >= 0 && q1 < SURVEY.qs[0].o.length) || !(q2 >= 0 && q2 < 5)) return fail("Ответьте на первые два вопроса.");
+    await sql`insert into survey_answers (user_id, survey, answers) values (${p.id}, ${SURVEY.id}, ${sql.json([q1, q2, q3])})
+              on conflict (user_id, survey) do update set answers = excluded.answers, at = now()`;
+    return { ok: true };
+  }
+  if (op === "plan") return { ok: true, items: await planList(p.id) };
+  if (op === "plan_vote") {
+    const id = String(b.id || "");
+    if (!PLAN_NEXT.some((x) => x[0] === id)) return fail("Нет такого пункта.");
+    if (b.on) await sql`insert into plan_votes (user_id, item) values (${p.id}, ${id}) on conflict do nothing`;
+    else await sql`delete from plan_votes where user_id = ${p.id} and item = ${id}`;
+    return { ok: true, items: await planList(p.id) };
+  }
+  const M = monthOf(b.month);
+  if (!M) return fail("Неверный месяц.");
+  if (op === "me") return monthMe(p, M);
+  if (op === "records") return { ok: true, month: M.key, name: M.name, gen: M.gen, list: await monthRecords(M) };
+  if (op === "org") {
+    if (!["leader", "moderator", "owner"].includes(p.rank)) return fail("Итоги организации видит руководство.");
+    return monthOrg(p, b, M);
+  }
+  return fail("Неизвестное действие.");
+}
+// скачивания с сайта по дням: кнопка «Скачать» шлёт отметку (без данных о человеке)
+async function dlHit(ip) {
+  if (!(await hit(`dl:${ip}`, 10, 3600))) return { ok: true };
+  await db()`insert into day_counts (day, k, n) values (${mskDay()}::date, 'dl', 1) on conflict (day, k) do update set n = day_counts.n + 1`;
+  return { ok: true };
+}
+// панель владельца: сводка месяца (64) и сравнение организаций (29)
+async function ghDownloads() {
+  const c = await getSetting("gh_dl", null);
+  if (c && c.at > Date.now() - 3600e3) return c.list;
+  let list = [];
+  try {
+    const r = await fetch("https://api.github.com/repos/Kofemanchik/Senko-Assistant/releases?per_page=30", { headers: { "user-agent": "senko-assistant", accept: "application/vnd.github+json" } });
+    if (r.ok) list = (await r.json()).map((x) => ({ tag: x.tag_name, at: x.published_at, n: (x.assets || []).filter((a) => /\.exe$/i.test(a.name)).reduce((s, a) => s + (a.download_count || 0), 0) }));
+  } catch (e) {}
+  if (list.length) await setSetting("gh_dl", { at: Date.now(), list });
+  return list.length ? list : (c ? c.list : []);
+}
+async function panelMonth(b, a) {
+  const M = monthOf(b.month);
+  if (!M) return fail("Неверный месяц.");
+  const sql = db();
+  const srv = scopeServer(a) || parseServer(b.server);
+  const s0 = new Date(M.start), s1 = new Date(M.end);
+  const fresh = await sql`select to_char(created_at + interval '3 hours', 'DD.MM') d, count(*)::int n from profiles where created_at >= ${s0} and created_at < ${s1}
+                          ${srv ? sql`and server = ${srv}` : sql``} group by 1 order by 1`;
+  const act = await sql`select d, count(distinct user_id)::int n from (
+      select to_char(at + interval '3 hours', 'DD.MM') d, user_id from login_log where at >= ${s0} and at < ${s1}
+      union all select to_char(at + interval '3 hours', 'DD.MM') d, user_id from ai_log where at >= ${s0} and at < ${s1} and user_id is not null
+      union all select to_char(to_timestamp(u / 1000) + interval '3 hours', 'DD.MM') d, user_id from sync_items where u >= ${M.start} and u < ${M.end}
+    ) z ${srv ? sql`where user_id in (select id from profiles where server = ${srv})` : sql``} group by d order by d`;
+  const [act7] = await sql`select count(distinct user_id)::int n from (
+      select user_id from login_log where at >= ${new Date(M.end - 7 * 864e5)} and at < ${s1}
+      union all select user_id from sync_items where u >= ${M.end - 7 * 864e5} and u < ${M.end}) z`;
+  const [actM] = await sql`select count(distinct user_id)::int n from (
+      select user_id from login_log where at >= ${s0} and at < ${s1}
+      union all select user_id from sync_items where u >= ${M.start} and u < ${M.end}) z`;
+  const ai = await sql`select to_char(at + interval '3 hours', 'DD.MM') d, count(*)::int n from ai_log where at >= ${s0} and at < ${s1}
+                       ${srv ? sql`and user_id in (select id from profiles where server = ${srv})` : sql``} group by 1 order by 1`;
+  const dl = await sql`select to_char(day, 'DD.MM') d, n from day_counts where k = 'dl' and day >= ${mskDay(new Date(M.start + 3 * 3600e3))}::date and day < ${mskDay(new Date(M.end + 3 * 3600e3))}::date order by day`;
+  const sv0 = await sql`select answers from survey_answers where survey = ${SURVEY.id}`;
+  const q1 = SURVEY.qs[0].o.map(() => 0), q2 = [0, 0, 0, 0, 0], free = [];
+  sv0.forEach((r) => { const x = r.answers || []; if (q1[x[0]] != null) q1[x[0]]++; if (q2[x[1]] != null) q2[x[1]]++; if (x[2]) free.push(String(x[2]).slice(0, 300)); });
+  const gh = (await ghDownloads()).filter((x) => { const t = tsOf(x.at); return t >= M.start && t < M.end; });
+  return {
+    ok: true, month: M.key, name: M.name, gen: M.gen, server: srv ? srvName(srv) : "все серверы",
+    fresh, act, ai, dl, act7: act7.n, actM: actM.n, gh,
+    survey: { n: sv0.length, qs: SURVEY.qs.map((q) => q.t), q1: SURVEY.qs[0].o.map((t, i) => ({ t, n: q1[i] })), q2, free: free.slice(-40).reverse() },
+    plan: (await planList(null)).sort((x, y) => y.n - x.n),
+  };
+}
+async function panelOrgCmp(b, a) {
+  const sql = db();
+  const srv = scopeServer(a) || parseServer(b.server);
+  const now = Date.now();
+  const W = { start: now - 7 * 864e5, end: now + 864e5 }, Mo = { start: now - 30 * 864e5, end: now + 864e5 };
+  const people = await sql`select id, login, org, last_seen from profiles where not banned and approval = 'ok' ${srv ? sql`and server = ${srv}` : sql``}`;
+  const ids = people.map((x) => x.id);
+  const AW = await monthAct(ids, W), AM = await monthAct(ids, Mo);
+  const shW = await sql`select org, count(*)::int n from shifts where started_at > now() - interval '7 days' ${srv ? sql`and server = ${srv}` : sql``} group by org`;
+  const shM = await sql`select org, count(*)::int n from shifts where started_at > now() - interval '30 days' ${srv ? sql`and server = ${srv}` : sql``} group by org`;
+  const SW = {}, SM = {};
+  shW.forEach((r) => (SW[r.org] = r.n));
+  shM.forEach((r) => (SM[r.org] = r.n));
+  const rows = DEPTS.map((org) => {
+    const P = people.filter((x) => x.org === org);
+    const sum = (A, k) => P.reduce((s, x) => s + ((A[x.id] || {})[k] || 0), 0);
+    const seen = (ms) => P.filter((x) => tsOf(x.last_seen) > now - ms).length;
+    const tw = sum(AW, "tests"), tm = sum(AM, "tests");
+    const avg = (A) => { const L = P.map((x) => A[x.id]).filter((r) => r && r.tests && r.avg_p != null); return L.length ? Math.round(L.reduce((s, r) => s + r.avg_p, 0) / L.length) : null; };
+    return { org, people: P.length, act7: seen(7 * 864e5), act30: seen(30 * 864e5), shW: SW[org] || 0, shM: SM[org] || 0, detW: sum(AW, "det"), detM: sum(AM, "det"), testsW: tw, testsM: tm, avgW: avg(AW), avgM: avg(AM) };
+  });
+  return { ok: true, server: srv ? srvName(srv) : "все серверы", rows };
+}
+
 async function patrolApi(b) {
   const { p, err } = await who(b);
   if (err) return err;

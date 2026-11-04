@@ -4586,7 +4586,7 @@ function cabHtml(){
       fld("discord","Discord",acc.discord,40,"ник в Discord")+fld("telegram","Telegram",acc.telegram,33,"@name или пусто")+fld("phone","Номер в игре",acc.phone,12,"только цифры или пусто")+
       '<div class="sbtns" style="margin:0"><button type="button" class="btn" data-cab="accsave" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Сохранить</button></div>'+
       '<div id="accMsg" role="status" aria-live="polite" style="font-size:12.5px;color:var(--muted);min-height:1.2em"></div></div></div>';
-    ah+=cabPart(function(){return deptInfo(acc.org||dept)})+cabPart(function(){return window.SA_PROG?window.SA_PROG.html():""})+cabPart(function(){return window.SA_CAB11?window.SA_CAB11(true):""})+cabPart(function(){return window.SA_CAB13?window.SA_CAB13(true):""})+cabPart(function(){return window.SA_CAB24?window.SA_CAB24():""})+cabPart(function(){return window.SA_CAB28?window.SA_CAB28():""})+cabPart(function(){return window.SA_CAB35?window.SA_CAB35():""})+cabPart(dcCabHtml)+cabPart(function(){return window.SA_CAB38?window.SA_CAB38():""})+cabPart(function(){return window.SA_CAB44?window.SA_CAB44():""})+cabPart(function(){return window.SA_RP?window.SA_RP.cabHtml():""})+cabPart(detHtml)+cabPart(testHtml);
+    ah+=cabPart(function(){return deptInfo(acc.org||dept)})+cabPart(function(){return window.SA_PROG?window.SA_PROG.html():""})+cabPart(function(){return window.SA_CAB11?window.SA_CAB11(true):""})+cabPart(function(){return window.SA_CAB13?window.SA_CAB13(true):""})+cabPart(function(){return window.SA_CAB24?window.SA_CAB24():""})+cabPart(function(){return window.SA_CAB47?window.SA_CAB47():""})+cabPart(function(){return window.SA_CAB28?window.SA_CAB28():""})+cabPart(function(){return window.SA_CAB35?window.SA_CAB35():""})+cabPart(dcCabHtml)+cabPart(function(){return window.SA_CAB38?window.SA_CAB38():""})+cabPart(function(){return window.SA_CAB44?window.SA_CAB44():""})+cabPart(function(){return window.SA_RP?window.SA_RP.cabHtml():""})+cabPart(detHtml)+cabPart(testHtml);
     ah+='<p class="cab-foot">Данные кабинета хранятся в вашем аккаунте. После смены ведомства или сервера программу нужно перезапустить: законы и подсказки подстроятся под выбранный сервер.</p>';
     return ah;
   }
@@ -7099,6 +7099,13 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.8.3",d:"04.11.2026",items:[
+  ["📊","Итоги месяца","В личном кабинете итоги октября: задержания, смены, опыт, тесты, вопросы ИИ и любимая статья. Карточку месяца можно сохранить картинкой для Discord."],
+  ["🏅","Полка достижений и значок тестера","Достижения, полученные за месяц, на отдельной полке. Тем, кто тестировал беты в октябре, — значок «Тестер октября»."],
+  ["🏢","Итоги организации","Руководство видит итоги месяца своего ведомства: активность, смены, задержания и лучших сотрудников, с копированием для Discord."],
+  ["🏆","Рекорды и план на ноябрь","В «Что нового» рекорды октября (только у тех, кто включил публичный рейтинг) и план на ноябрь: отмечайте «Жду» у выпусков, которых ждёте."],
+  ["📝","Опрос «что улучшить»","Три коротких вопроса на главной: по ответам выберем, что делать дальше."]
+ ]},
  {v:"3.8.2",d:"03.11.2026",items:[
   ["🤝","Ссылка — сразу вопрос","Открыли ссылку коллеги — программа открывается сама и спрашивает: «Желаете ли вы вступить в совместный патруль с Ник | статик?» Кнопки «Да» и «Нет». Так же для приглашения в организацию и вида интерфейса."],
   ["🔗","Ссылки внутри программы","Ссылка коллеги, нажатая прямо в программе, открывается сразу, без браузера."],
@@ -17070,6 +17077,192 @@ function kOpen(){if(K){K.querySelector("input").focus();return}
  K.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s46k]");if(b)kRun(+b.dataset.s46k)})}
 window.SA_quick=kOpen;
 document.addEventListener("keydown",function(ev){if(!(ev.ctrlKey||ev.metaKey)||ev.altKey||ev.shiftKey)return;if(ev.code!=="KeyK"&&!/^[kл]$/i.test(ev.key))return;if(hkTaken())return;ev.preventDefault();ev.stopPropagation();if(K)kClose();else kOpen()},true);
+})();
+</script>
+<style id="s47-style">
+.s47-sum{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin:6px 0 10px}
+.s47-sum div{background:var(--soft,rgba(127,127,127,.1));border-radius:12px;padding:10px 12px}
+.s47-sum b{display:block;font:700 22px/1.15 var(--f-body,system-ui,sans-serif)}
+.s47-sum small{color:var(--muted);font-size:12.5px}
+.s47-shelf{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 10px}
+.s47-shelf span{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 12px 5px 8px;font-size:13.5px;background:var(--card,transparent)}
+.s47-shelf span i{font-style:normal;font-size:18px}
+.s47-shelf .tester{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);font-weight:600}
+.s47-cv canvas{width:100%;height:auto;border-radius:14px;display:block}
+.s47-box{margin:12px 0 4px;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--card,transparent)}
+.s47-box h3{margin:0 0 4px;font-size:16px}
+.s47-rec{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}
+.s47-rec li{display:flex;gap:10px;align-items:baseline}
+.s47-rec li i{font-style:normal;font-size:18px;flex:0 0 auto}
+.s47-rec li b{font-weight:700}
+.s47-plan{display:grid;gap:6px;margin-top:8px}
+.s47-plan div{display:flex;align-items:center;gap:10px}
+.s47-plan code{flex:0 0 auto;font:600 12.5px var(--f-mono,ui-monospace,monospace);color:var(--muted)}
+.s47-plan span{flex:1}
+.s47-plan small{color:var(--muted);min-width:46px;text-align:right}
+.s47-plan button{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:10px;padding:4px 10px;font:600 13px var(--f-body,system-ui,sans-serif);cursor:pointer}
+.s47-plan button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink,#fff)}
+.s47-q{margin:0 0 14px}
+.s47-q p{margin:0 0 8px;font-weight:600}
+.s47-opts{display:flex;flex-wrap:wrap;gap:6px}
+.s47-opts button{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:10px;padding:7px 12px;font:500 14px var(--f-body,system-ui,sans-serif);cursor:pointer}
+.s47-opts button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink,#fff)}
+.s47-top{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:10px}
+.s47-top ol{margin:4px 0 0;padding-left:20px;font-size:14px}
+.s47-top h4{margin:0;font-size:13.5px;color:var(--muted)}
+</style>
+<script>
+/* 3.8.3: итоги месяца — карточка месяца для каждого (62), полка достижений месяца (137), значок «Тестер месяца» (140),
+   итоги организации для руководства (138), рекорды проекта (139) и план на месяц с голосованием (66) в «Что нового», опрос «что улучшить» (65). */
+(function(){
+"use strict";
+var A=window.senkoApp;
+if(!A||!A.api)return;
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function toast(t){try{if(window.SA_toast)window.SA_toast(t)}catch(x){}}
+function st(){try{return A.state?A.state():null}catch(x){return null}}
+function user(){var s=st();return s&&s.user||null}
+function online(){var u=user();return !!(u&&!u.offline)}
+function lead(){var u=user();return !!(u&&/^(leader|moderator|owner)$/.test(u.rank||""))}
+function api(a,d){return Promise.resolve(A.api(a,d)).then(function(r){return r||{ok:false,error:"Нет ответа сервера."}},function(){return {ok:false,error:"Нет связи с сервером."}})}
+function modal(t,b,w){return window.SA_modal?SA_modal(t,b,w):null}
+function closeM(){if(window.SA_modalClose)SA_modalClose()}
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(x){return null}}
+function repaint(){try{if(window.SA_cabRepaint)SA_cabRepaint()}catch(x){}}
+function pl(n,a,b,c){n=Math.abs(n)%100;var m=n%10;return n>10&&n<20?c:m===1?a:m>=2&&m<=4?b:c}
+function cap(s){s=String(s||"");return s.charAt(0).toUpperCase()+s.slice(1)}
+function mskNow(){return new Date(Date.now()+3*3600e3)}
+function prevName(){var d=mskNow();d.setUTCDate(1);d.setUTCMonth(d.getUTCMonth()-1);return ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"][d.getUTCMonth()]}
+function copyOld(t){var ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();try{document.execCommand("copy")}catch(x){}ta.remove()}
+function copyText(t){try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).catch(function(){copyOld(t)});return}}catch(x){}copyOld(t)}
+
+/* ---------- мои итоги ---------- */
+var MD={d:null,busy:false,err:""};
+function loadMe(cb){if(MD.d){if(cb)cb(MD.d);return}if(MD.busy)return;MD.busy=true;
+ api("month",{op:"me"}).then(function(r){MD.busy=false;if(r.ok){MD.d=r;MD.err=""}else MD.err=r.error||"Не удалось загрузить итоги.";repaint();if(cb)cb(r.ok?r:null)})}
+function tiles(d){var T=[[d.det,pl(d.det,"задержание","задержания","задержаний")],[d.shifts,pl(d.shifts,"смена","смены","смен")],[d.xp,"опыта"],[d.tests,pl(d.tests,"тест","теста","тестов")+(d.avg_p!=null&&d.tests?" · "+d.avg_p+"%":"")]];
+ return '<div class="s47-sum">'+T.map(function(t){return '<div><b>'+e(t[0])+'</b><small>'+e(t[1])+'</small></div>'}).join("")+'</div>'}
+function prep(n){n=String(n||"");return n==="май"?"мае":n.replace(/ь$/,"е").replace(/т$/,"те")}
+function shelf(d){var L=(d.tester?['<span class="tester" title="Тестировал бета-версии в '+e(prep(d.name))+'"><i>🧪</i>Тестер '+e(d.gen)+'</span>']:[]).concat((d.ach||[]).map(function(a){return '<span title="'+e(a.desc||"")+'"><i>'+e(a.icon||"🏅")+'</i>'+e(a.name)+'</span>'}));
+ return L.length?'<div class="s47-shelf">'+L.join("")+'</div>':'<p class="s24-empty" style="margin:2px 0 10px">В '+e(prep(d.name))+' новых достижений не было.</p>'}
+window.SA_CAB47=function(){
+ if(!online())return "";
+ if(!MD.d&&!MD.busy&&!MD.err)setTimeout(function(){loadMe()},0);
+ var d=MD.d,h='<div class="cab-h">Итоги '+e(d?d.gen:prevName())+'<small>карточка месяца и полка достижений</small></div>';
+ if(!d)return h+'<p class="s24-empty">'+(MD.err?e(MD.err):"Собираем итоги…")+'</p>';
+ h+=tiles(d)+'<div class="cab-h" style="margin-top:4px;font-size:14px">Полка '+e(d.gen)+'</div>'+shelf(d);
+ h+='<div class="s13-btns"><button type="button" class="btn primary" data-s47="card">Карточка месяца</button>'+(lead()?'<button type="button" class="btn" data-s47="org">Итоги организации</button>':'')+'</div>';
+ return h};
+
+/* ---------- карточка месяца картинкой (62) ---------- */
+function cssVar(n,d){try{var v=getComputedStyle(document.documentElement).getPropertyValue(n).trim();return v||d}catch(x){return d}}
+function draw(cv,d){
+ var x=cv.getContext("2d"),W=cv.width,H=cv.height,ac=cssVar("--accent","#FF8A3D"),F='"Segoe UI",system-ui,sans-serif';
+ var g=x.createLinearGradient(0,0,W,H);g.addColorStop(0,"#1b120b");g.addColorStop(1,"#2b1d12");x.fillStyle=g;x.fillRect(0,0,W,H);
+ x.fillStyle=ac;x.globalAlpha=.15;x.beginPath();x.arc(W-60,40,250,0,7);x.fill();x.globalAlpha=1;x.fillRect(0,0,W,8);
+ x.textBaseline="alphabetic";x.textAlign="left";
+ x.fillStyle="#e7cdb4";x.font="600 22px "+F;x.fillText("ИТОГИ "+String(d.gen).toUpperCase()+" "+String(d.month).slice(0,4),64,74);
+ x.fillStyle="#fff";x.font="700 50px "+F;x.fillText(String(d.nick||"").slice(0,28),64,134);
+ x.fillStyle="#d9cfc4";x.font="500 22px "+F;x.fillText([d.org,d.server].filter(Boolean).join(" · "),64,170);
+ var T=[[d.det,"Задержаний"],[d.shifts,"Смен"],[d.xp,"Опыта"],[d.tests,"Тестов"+(d.avg_p!=null&&d.tests?" · "+d.avg_p+"%":"")],[d.ai,"Вопросов ИИ"]];
+ T.forEach(function(t,i){var bx=64+i*200,by=210;x.fillStyle="rgba(255,255,255,.07)";x.fillRect(bx,by,184,112);x.fillStyle=i===0?ac:"#fff";x.font="700 40px "+F;x.fillText(String(t[0]),bx+16,by+58);x.fillStyle="#bba998";x.font="500 17px "+F;x.fillText(t[1],bx+16,by+90,160)});
+ x.fillStyle="#e7cdb4";x.font="600 20px "+F;x.fillText("Любимая статья",64,372);
+ x.fillStyle="#fff";x.font="700 30px "+F;x.fillText(d.fav?d.fav+(d.favN>1?"  ×"+d.favN:""):"—",64,410,640);
+ var got=(d.ach||[]);
+ x.fillStyle="#e7cdb4";x.font="600 20px "+F;x.fillText("Достижения месяца: "+got.length+(d.tester?" · значок «Тестер "+d.gen+"»":""),64,462);
+ x.font="36px "+F;(d.tester?[{icon:"🧪"}]:[]).concat(got).slice(0,16).forEach(function(a,i){x.fillText(a.icon||"🏅",64+i*54,514)});
+ x.fillStyle="#8f8377";x.font="500 18px "+F;x.fillText("Senko Assistant · senko-assistant.site",64,H-30);
+ x.textAlign="right";x.fillText("Majestic RP",W-64,H-30)}
+function cardOpen(){
+ var o=modal("Итоги месяца",'<div class="s47-cv" id="s47cv"><p class="sub">Собираем итоги…</p></div><div class="sd-acts"><button type="button" class="btn" data-s47="copy" disabled>Скопировать картинку</button><button type="button" class="btn primary" data-s47="save" disabled>Сохранить картинку</button></div>',true);
+ if(!o)return;
+ loadMe(function(d){var box=document.getElementById("s47cv");if(!box)return;
+  if(!d){box.innerHTML='<p class="s24-msg err">'+e(MD.err||"Не удалось загрузить итоги.")+'</p>';return}
+  var cv=document.createElement("canvas");cv.width=1100;cv.height=600;box.innerHTML="";box.appendChild(cv);draw(cv,d);
+  document.querySelectorAll('[data-s47="copy"],[data-s47="save"]').forEach(function(b){b.disabled=false})})}
+
+/* ---------- итоги организации (138) ---------- */
+var DEPTS=["Government","LSPD","LSCSD","FIB","SANG"];
+function orgOpen(org){
+ var u=user()||{},sel=u.rank==="leader"?"":'<div class="s47-opts" style="margin-bottom:10px">'+DEPTS.map(function(d){return '<button type="button" data-s47org="'+d+'" aria-pressed="'+(d===(org||u.org))+'">'+d+'</button>'}).join("")+'</div>';
+ var o=modal("Итоги месяца организации",sel+'<div id="s47og"><p class="sub">Собираем итоги…</p></div>',true);if(!o)return;
+ api("month",{op:"org",org:org||u.org}).then(function(r){var b=document.getElementById("s47og");if(!b)return;
+  if(!r.ok){b.innerHTML='<p class="s24-msg err">'+e(r.error||"Не удалось.")+'</p>';return}
+  var li=function(L,suf){return L.length?'<ol>'+L.map(function(x){return '<li>'+e(x.nick)+' — '+e(x.v)+(suf||"")+'</li>'}).join("")+'</ol>':'<p class="s24-empty" style="margin:4px 0 0">Нет данных</p>'};
+  b.innerHTML='<p class="sd-note">'+e(r.org)+' · '+e(r.server)+' · '+e(cap(r.name))+'</p>'+
+   '<div class="s47-sum">'+[[r.active+" из "+r.people,"были активны"],[r.fresh,"новых сотрудников"],[r.shifts,pl(r.shifts,"смена","смены","смен")],[r.det,pl(r.det,"задержание","задержания","задержаний")],[r.tests,pl(r.tests,"тест","теста","тестов")],[r.xp,"опыта всего"]].map(function(t){return '<div><b>'+e(t[0])+'</b><small>'+e(t[1])+'</small></div>'}).join("")+'</div>'+
+   '<div class="s47-top"><div><h4>Больше всего задержаний</h4>'+li(r.topDet)+'</div><div><h4>Больше всего смен</h4>'+li(r.topShifts)+'</div><div><h4>Больше всего опыта</h4>'+li(r.topXp," XP")+'</div><div><h4>Лучший средний балл (от 3 тестов)</h4>'+li(r.topTests,"%")+'</div></div>'+
+   '<div class="sd-acts"><button type="button" class="btn primary" data-s47="orgcopy">Скопировать для Discord</button></div>';
+  b._txt="**Итоги "+r.gen+" · "+r.org+"** ("+r.server+")\nАктивны: "+r.active+" из "+r.people+" · новых: "+r.fresh+"\nСмен: "+r.shifts+" · задержаний: "+r.det+" · тестов: "+r.tests+
+   (r.topDet.length?"\n\n🚓 Задержания:\n"+r.topDet.map(function(x,i){return (i+1)+". "+x.nick+" — "+x.v}).join("\n"):"")+
+   (r.topShifts.length?"\n\n🕐 Смены:\n"+r.topShifts.map(function(x,i){return (i+1)+". "+x.nick+" — "+x.v}).join("\n"):"")+
+   (r.topXp.length?"\n\n⭐ Опыт:\n"+r.topXp.map(function(x,i){return (i+1)+". "+x.nick+" — "+x.v}).join("\n"):"")})}
+
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s47],[data-s47org]");if(!b)return;
+ if(b.dataset.s47org){orgOpen(b.dataset.s47org);return}
+ var k=b.dataset.s47;
+ if(k==="card"){cardOpen();return}
+ if(k==="org"){orgOpen();return}
+ if(k==="orgcopy"){var g=document.getElementById("s47og");if(g&&g._txt){copyText(g._txt);toast("Итоги скопированы: вставьте их в Discord")}return}
+ var cv=document.querySelector("#s47cv canvas");
+ if(k==="save"&&cv){var l=document.createElement("a");l.download="senko-itogi-"+(MD.d?MD.d.month:"")+".png";l.href=cv.toDataURL("image/png");document.body.appendChild(l);l.click();l.remove();return}
+ if(k==="copy"&&cv){try{cv.toBlob(function(bl){navigator.clipboard.write([new ClipboardItem({"image/png":bl})]).then(function(){toast("Картинка скопирована: вставьте её в Discord")},function(){toast("Не получилось, сохраните картинку")})})}catch(x){toast("Не получилось, сохраните картинку")}return}
+ if(k==="survey"){surveyOpen();return}
+ if(k==="svlater"){ls("bos-survey-snooze",String(Date.now()));try{render()}catch(x){}return}
+ if(k==="mhide"){ls("bos-month-seen",b.dataset.v||"");try{render()}catch(x){}return}
+ if(k==="mopen"){ls("bos-month-seen",b.dataset.v||"");cardOpen();return}
+});
+
+/* ---------- «Что нового»: рекорды месяца (139) и план с голосованием (66) ---------- */
+var REC=null,PLAN=null;
+function recHtml(){if(!REC||!REC.list||!REC.list.length)return "";
+ return '<div class="s47-box"><h3>🏆 Рекорды '+e(REC.gen)+'</h3><p class="sd-note" style="margin:0">Среди тех, кто включил в кабинете «Рейтинг недели на сайте».</p><ul class="s47-rec">'+
+  REC.list.map(function(r){return '<li><i>'+e(r.icon)+'</i><span>'+e(r.title)+': <b>'+e(r.nick)+'</b> ('+e(r.org)+', '+e(r.server)+') — '+e(r.v)+'</span></li>'}).join("")+'</ul></div>'}
+function planHtml(){if(!PLAN||!PLAN.length)return "";
+ return '<div class="s47-box" id="s47pl"><h3>🗓 План на ноябрь</h3><p class="sd-note" style="margin:0">Отметьте, какие выпуски ждёте больше всего: самые ожидаемые сделаем внимательнее всего.</p><div class="s47-plan">'+
+  PLAN.map(function(p){return '<div><code>'+e(p.d)+'</code><span>'+e(p.t)+'</span><small>'+(p.n?e(p.n)+" ждут":"")+'</small><button type="button" data-s47v="'+e(p.id)+'" aria-pressed="'+!!p.mine+'">'+(p.mine?"Жду ✓":"Жду")+'</button></div>'}).join("")+'</div></div>'}
+function newsBox(box){if(!online())return;
+ var paint=function(){if(box.isConnected)box.innerHTML=recHtml()+planHtml()};
+ paint();
+ if(!REC)api("month",{op:"records"}).then(function(r){if(r.ok)REC=r;paint()});
+ api("month",{op:"plan"}).then(function(r){if(r.ok)PLAN=r.items;paint()})}
+new MutationObserver(function(ms){ms.forEach(function(m){[].forEach.call(m.addedNodes,function(n){
+ if(!n.querySelector||!n.classList||!n.classList.contains("sa-ov"))return;
+ var t=n.querySelector("#sdT");if(!t||t.textContent!=="Что нового")return;
+ var note=n.querySelector(".sd-note");if(!note)return;
+ var box=document.createElement("div");box.className="s47-news";note.insertAdjacentElement("afterend",box);newsBox(box)})})}).observe(document.body,{childList:true});
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s47v]");if(!b)return;var on=b.getAttribute("aria-pressed")!=="true";b.disabled=true;
+ api("month",{op:"plan_vote",id:b.dataset.s47v,on:on}).then(function(r){b.disabled=false;if(!r.ok){toast(r.error||"Не удалось");return}PLAN=r.items;var pl0=document.getElementById("s47pl");if(pl0)pl0.outerHTML=planHtml();if(on)toast("Отмечено: ждём вместе")})});
+
+/* ---------- опрос «что улучшить» (65) ---------- */
+var SV={d:null,busy:false,a:[-1,-1,""]};
+function svLoad(){if(SV.d||SV.busy||!online())return;SV.busy=true;api("month",{op:"survey_get"}).then(function(r){SV.busy=false;if(r.ok){SV.d=r;if(r.answered)ls("bos-survey-done",r.survey.id);try{if(state.tab==="home")render()}catch(x){}}})}
+function svPaint(){var w=document.getElementById("s47sv");if(!w||!SV.d)return;var Q=SV.d.survey.qs;
+ w.innerHTML=Q.map(function(q,i){return '<div class="s47-q"><p>'+(i+1)+'. '+e(q.t)+'</p>'+(q.free?'<textarea class="tin" id="s47sv3" rows="3" maxlength="600" style="width:100%;box-sizing:border-box" placeholder="Например: хочу, чтобы…">'+e(SV.a[2])+'</textarea>':
+  '<div class="s47-opts">'+q.o.map(function(o,j){return '<button type="button" data-s47a="'+i+'" data-v="'+j+'" aria-pressed="'+(SV.a[i]===j)+'">'+e(o)+'</button>'}).join("")+'</div>')+'</div>'}).join("")+
+  '<p class="sd-note" id="s47svm" role="status"></p><div class="sd-acts"><button type="button" class="btn" data-sd="x">Позже</button><button type="button" class="btn primary" data-s47s="send">Отправить</button></div>'}
+function surveyOpen(){if(!SV.d){svLoad();toast("Загружаем опрос…");return}
+ if(!modal("Опрос: что улучшить",'<p class="sd-note">Три коротких вопроса. Ответы видит только владелец программы, по ним выбираем, что делать дальше.</p><div id="s47sv"></div>'))return;svPaint()}
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s47a],[data-s47s]");if(!b)return;
+ if(b.dataset.s47a!=null){var t=document.getElementById("s47sv3");if(t)SV.a[2]=t.value;SV.a[+b.dataset.s47a]=+b.dataset.v;svPaint();return}
+ var t3=document.getElementById("s47sv3"),m=document.getElementById("s47svm");if(t3)SV.a[2]=t3.value;
+ if(SV.a[0]<0||SV.a[1]<0){if(m)m.textContent="Ответьте на первые два вопроса.";return}
+ b.disabled=true;api("month",{op:"survey_send",a:SV.a}).then(function(r){b.disabled=false;if(!r.ok){if(m)m.textContent=r.error||"Не удалось отправить.";return}
+  ls("bos-survey-done",SV.d.survey.id);closeM();toast("Спасибо! Ответы отправлены");try{render()}catch(x){}})});
+
+/* ---------- главная: «Итоги месяца готовы» (первые 10 дней) и приглашение в опрос ---------- */
+var HX=window.SA_homeExtra;
+window.SA_homeExtra=function(){if(HX)try{HX.apply(this,arguments)}catch(x){}
+ try{
+  var view=document.getElementById("view");if(!view||!online())return;
+  var d=mskNow(),key=d.toISOString().slice(0,7);
+  if(d.getUTCDate()<=10&&ls("bos-month-seen")!==key&&!view.querySelector(".s9-hb[data-k=month47]"))
+   view.insertAdjacentHTML("afterbegin",'<div class="s9-hb noprint" data-k="month47"><span class="t"><b>Итоги '+e(prevName())+' готовы</b><small>Задержания, смены, опыт и любимая статья за месяц — картинкой для Discord.</small></span><button type="button" class="btn primary" data-s47="mopen" data-v="'+key+'">Посмотреть</button><button type="button" class="btn" data-s47="mhide" data-v="'+key+'">Скрыть</button></div>');
+  var sn=+ls("bos-survey-snooze")||0;
+  if(!SV.d)svLoad();
+  if(SV.d&&!SV.d.answered&&ls("bos-survey-done")!==SV.d.survey.id&&Date.now()-sn>3*864e5&&!view.querySelector(".s9-hb[data-k=sv47]"))
+   view.insertAdjacentHTML("beforeend",'<div class="s9-hb noprint" data-k="sv47"><span class="t"><b>Опрос: что улучшить?</b><small>Три вопроса, меньше минуты. По ответам выберем, что делать дальше.</small></span><button type="button" class="btn primary" data-s47="survey">Пройти</button><button type="button" class="btn" data-s47="svlater">Не сейчас</button></div>');
+ }catch(x){}};
 })();
 </script>
 <script>
