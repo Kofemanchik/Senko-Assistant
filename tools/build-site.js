@@ -63,6 +63,7 @@ const STABLE_VER = !/-/.test(PKG_VER) ? PKG_VER
 const out = {
   "privacy.html": docPage("privacy", docs.privacy, { file: "terms.html", title: docs.terms.title }, version),
   "terms.html": docPage("terms", docs.terms, { file: "privacy.html", title: docs.privacy.title }, version),
+  "consent.html": docPage("consent", docs.consent, { file: "privacy.html", title: docs.privacy.title }, version),
   "404.html": page("Страница не найдена · Senko Assistant", "Такой страницы нет.",
     '<div class="wrap nf"><div><b>404</b><h1>Такой страницы нет</h1><p>Возможно, ссылка устарела. Всё нужное есть на главной.</p><a class="btn btn-p" href="/">На главную</a></div></div>'),
 };
