@@ -6338,7 +6338,7 @@ render();
    '<div class="ai-head"><b>ИИ-помощник</b><small id="aiLeft"></small><button type="button" class="ai-x" aria-label="Закрыть">✕</button></div>' +
    '<div class="ai-log" id="aiLog" aria-live="polite"></div>' +
    '<div class="ai-warn">ИИ может ошибаться — сверяйтесь с текстом статьи. Ваш вопрос и найденные статьи отправляются на сервер ИИ, а вопрос и оценка ответа сохраняются в вашем аккаунте (см. Политику конфиденциальности).</div>' +
-   '<form class="ai-form" id="aiForm"><textarea id="aiQ" rows="2" maxlength="500" placeholder="Например: что будет за угон автомобиля?" aria-label="Вопрос ИИ"></textarea><button type="submit" id="aiGo">Спросить</button></form>' +
+   '<form class="ai-form" id="aiForm"><textarea id="aiQ" rows="3" maxlength="1500" placeholder="Вопрос, ситуация или «составь рапорт…»" aria-label="Сообщение ИИ"></textarea><button type="submit" id="aiGo">Спросить</button></form>' +
    '</div>';
   document.body.appendChild(ov);
 
@@ -6347,8 +6347,9 @@ render();
 
   function esc2(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
   function add(cls, html){ var d = document.createElement("div"); d.className = "ai-m " + cls; d.innerHTML = html; log.appendChild(d); log.scrollTop = log.scrollHeight; return d; }
-  function hint(){ log.innerHTML = '<p class="ai-hint">Задайте вопрос обычными словами — я найду подходящие статьи и отвечу по ним со ссылками. Например: «что будет за угон», «можно ли задержать без адвоката», «штраф за превышение скорости».</p>'; }
+  function hint(){ log.innerHTML = '<p class="ai-hint">Пишите обычными словами — я найду статьи и отвечу по ним со ссылками. Умею:<br>• отвечать на вопросы: «что будет за угон», «можно ли задержать без адвоката»;<br>• разбирать ситуации: «гражданский в маске угнал авто и стрелял по полиции — что вменять?»;<br>• составлять тексты: «составь рапорт о задержании», «напиши ходатайство о мере пресечения».<br>Я помню разговор: можно уточнять «а если с оружием?». Начать заново — кнопка «Новый диалог».</p>'; }
   hint();
+  window.SA_aiUI = { add: add, render: render, esc: esc2, hint: hint, log: log, box: box }; // 3.9: диалог с памятью (блок «ИИ: диалог»)
 
   var KIND = {"УК":"uk","АК":"ak","ДК":"dk","ПК":"pk"};
   function render(answer, sources){
@@ -6429,7 +6430,8 @@ render();
     };
     // 2.7: ответ на встречный вопрос ИИ уходит вместе с исходным вопросом (window.SA_aiPrep), история и быстрые вопросы — в блоке 2.7
     var q2 = q; try { if(typeof window.SA_aiPrep === "function") q2 = window.SA_aiPrep(q) || q; } catch(e) {}
-    A.ask(q2).then(done, function(){ done({ok:false, error:"Ошибка связи с программой."}); });
+    var opts = null; try { if(typeof window.SA_aiOpts === "function") opts = window.SA_aiOpts(q2); } catch(e) {}
+    A.ask(q2, opts || undefined).then(done, function(){ done({ok:false, error:"Ошибка связи с программой."}); });
   });
 
   // Кнопка отдельной строкой под поиском. Пока ИИ ни разу не открывали (и не прошло 7 дней с первого показа) — мягко пульсирует.
@@ -7128,6 +7130,12 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"3.8.5",d:"04.11.2026",items:[
+  ["💬","ИИ помнит разговор","Можно уточнять: «а если с оружием?», «составь рапорт по этому». Диалог сохраняется и после перезапуска, кнопка «Новый диалог» начинает с чистого листа."],
+  ["🧩","Разбор ситуаций","Опишите, что произошло, — ИИ разберёт каждое деяние: статья, наказание, что влияет на квалификацию и что делать по процессу. Длинное описание ищется по частям, статей находится больше."],
+  ["📝","Составление текстов","Рапорт, протокол, обвинение, заявление, ходатайство, жалоба: ИИ пишет готовый текст со ссылками на статьи, а неизвестные данные оставляет в [скобках]. Кнопка «Скопировать ответ»."],
+  ["🛠","Исправление","ИИ теперь знает ваш сервер: раньше он считал, что все играют на Boston. Сообщение можно писать до 1500 знаков, вопросов к ИИ в день — 25."]
+ ]},
  {v:"3.8.4",d:"04.11.2026",items:[
   ["📄","Согласие на обработку данных — отдельным документом","Как требует закон, согласие на обработку персональных данных теперь короткий отдельный документ: что хранится, зачем, кто видит и как отозвать. При регистрации — одна галочка, Условия и Политика принимаются кнопкой."],
   ["✅","Один раз подтвердить","При следующем входе программа попросит один раз отметить галочку согласия. Показ ваших данных на сайте по-прежнему включается только вами в кабинете."]
@@ -15038,12 +15046,12 @@ function paint(){
 function setPend(base){
  PEND=base;if(!els())return;
  var lg=ov.querySelector("#aiLog"),old=lg.querySelector(".ai27-cl");if(old)old.remove();
- qa.placeholder=base?"Ответьте на уточнение: я учту исходный вопрос":"Например: что будет за угон автомобиля?";
+ qa.placeholder=base?"Ответьте на уточнение: я учту исходный вопрос":"Вопрос, ситуация или «составь рапорт…»";
  if(base){lg.insertAdjacentHTML("beforeend",'<div class="ai27-cl" role="status"><span>↪ Ваш ответ уйдёт вместе с исходным вопросом.</span><button type="button" class="ai27-hb" data-ai27="new">Задать новый вопрос</button></div>');lg.scrollTop=lg.scrollHeight}}
 window.SA_aiPrep=function(q){
  if(!PEND||!on("ai27clar")){CUR=q;return q}
  var base=PEND;setPend(null);
- CUR=(base+" (уточнение: "+q+")").slice(0,500);return CUR};
+ CUR=(base+" (уточнение: "+q+")").slice(0,1500);return CUR};
 window.SA_aiDone=function(q,r){
  HIST=null;
  if(!on("ai27clar")||!r||!r.ok)return;
@@ -17296,6 +17304,71 @@ window.SA_homeExtra=function(){if(HX)try{HX.apply(this,arguments)}catch(x){}
   if(SV.d&&!SV.d.answered&&ls("bos-survey-done")!==SV.d.survey.id&&Date.now()-sn>3*864e5&&!view.querySelector(".s9-hb[data-k=sv47]"))
    view.insertAdjacentHTML("beforeend",'<div class="s9-hb noprint" data-k="sv47"><span class="t"><b>Опрос: что улучшить?</b><small>Три вопроса, меньше минуты. По ответам выберем, что делать дальше.</small></span><button type="button" class="btn primary" data-s47="survey">Пройти</button><button type="button" class="btn" data-s47="svlater">Не сейчас</button></div>');
  }catch(x){}};
+})();
+</script>
+<style id="s48-style">
+.s48-new{font:600 12.5px var(--f-body,system-ui,sans-serif);color:inherit;cursor:pointer;border:1px solid var(--line,#D3D9E0);background:var(--surface,#fff);border-radius:6px;padding:5px 10px}
+.s48-new:focus-visible{outline:2px solid var(--accent,#1D4E89);outline-offset:2px}
+.s48-cp{margin-top:8px;display:flex;gap:6px}
+.s48-cp button{font:600 12.5px var(--f-body,system-ui,sans-serif);cursor:pointer;border:1px solid var(--line,#D3D9E0);background:var(--surface,#fff);color:var(--ink,#172230);border-radius:999px;padding:2px 12px}
+.s48-sep{align-self:center;color:var(--muted,#5B6877);font-size:12px;margin:2px 0}
+</style>
+<script>
+/* 3.9: ИИ-помощник ведёт диалог — помнит прошлые сообщения (до 6 в запросе, до 20 на экране, хранится на этом устройстве),
+   разбирает ситуации и составляет тексты; длинное описание ситуации ищется по частям; кнопки «Новый диалог» и «Скопировать». */
+(function(){
+"use strict";
+var UI=window.SA_aiUI;if(!UI)return;
+var KEY="bos-ai-chat",MAXT=20,SEND=6;
+function jget(){try{var o=JSON.parse(localStorage.getItem(KEY)||"null");return o&&Array.isArray(o.t)?o:{t:[]}}catch(x){return {t:[]}}}
+function jset(){try{localStorage.setItem(KEY,JSON.stringify(CH))}catch(x){}}
+var CH=jget(),PENDQ="",CONV=false,LAST=[];
+function toast(t){try{if(window.SA_toast)SA_toast(t)}catch(x){}}
+function copy(t){try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).catch(function(){old(t)});return}}catch(x){}old(t)}
+function old(t){var ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();try{document.execCommand("copy")}catch(x){}ta.remove()}
+function cpBtn(am,text){if(!am||am.querySelector(".s48-cp"))return;var d=document.createElement("div");d.className="s48-cp";var b=document.createElement("button");b.type="button";b.textContent="Скопировать ответ";b.addEventListener("click",function(){copy(text);b.textContent="Скопировано"});d.appendChild(b);am.appendChild(d)}
+
+/* восстановить диалог в окне */
+function restore(){if(!CH.t.length)return;UI.log.innerHTML="";
+ CH.t.forEach(function(t){UI.add("u",UI.esc(t.q));var am=UI.add("a",UI.render(t.a,t.src||[]));cpBtn(am,t.a)});
+ UI.add("s48-sep",'↑ прошлый разговор: я его помню. «Новый диалог» — начать с чистого листа.').className="s48-sep"}
+restore();
+/* кнопка «Новый диалог» */
+var head=UI.box.querySelector(".ai-head"),x=head&&head.querySelector(".ai-x");
+if(head&&x){var nb=document.createElement("button");nb.type="button";nb.className="s48-new";nb.textContent="Новый диалог";nb.title="Забыть разговор и начать заново";
+ nb.addEventListener("click",function(){CH={t:[]};jset();LAST=[];UI.hint();try{var q=document.getElementById("aiQ");if(q)q.focus()}catch(e){}toast("Начат новый диалог")});
+ head.insertBefore(nb,x)}
+
+/* история уходит вместе с сообщением */
+window.SA_aiOpts=function(q){PENDQ=q;CONV=CH.t.length>0;
+ return {hist:CH.t.slice(-SEND).map(function(t){return {q:t.q,a:String(t.a).slice(0,2500)}})}};
+var D0=window.SA_aiDone;
+window.SA_aiDone=function(q,r,am){
+ try{if(D0)D0.apply(this,arguments)}catch(x){}
+ CONV=false;
+ if(!r||!r.ok)return;
+ var a=String(r.answer||"");
+ cpBtn(am,a);
+ // локальные ответы памятки и ответы о создателе тоже в истории: они короткие и не мешают
+ CH.t.push({q:String(PENDQ||q).slice(0,1500),a:a.slice(0,4000),src:(r.sources||[]).slice(0,14),at:Date.now()});
+ if(CH.t.length>MAXT)CH.t=CH.t.slice(-MAXT);
+ jset()};
+
+/* поиск статей: длинное описание — по частям; в диалоге — ещё статьи прошлого шага */
+var C1=window.__senkoAiContext;
+if(typeof C1==="function")window.__senkoAiContext=function(question){
+ var base=[];try{base=C1.apply(this,arguments)||[]}catch(x){base=[]}
+ var s=String(question||""),have={},out=[];
+ function put(L,n){(L||[]).slice(0,n).forEach(function(x){if(x&&x.ref&&!have[x.ref]&&out.length<14){have[x.ref]=1;out.push(x)}})}
+ put(base,6);
+ if(s.length>140){
+  s.split(/[.!?;\n]+|,\s*(?=(?:потом|затем|после|а также|и ещё|при этом)\s)/i).map(function(t){return t.trim()}).filter(function(t){return t.length>=12}).slice(0,6)
+   .forEach(function(part){try{put(C1(part),3)}catch(x){}});
+ }
+ put(base.slice(6),14);
+ if(CONV)put(LAST,4);
+ if(out.length)LAST=out.slice(0,8);
+ return out};
 })();
 </script>
 <script>

@@ -187,7 +187,7 @@
   }
   var aiBusy = false, aiLast = 0, creatorTurn = 0, aiLogs = {}, aiSeq = 0;
   function aiAsk(question, opts) {
-    question = String(question || "").replace(/\s+/g, " ").trim().slice(0, 500);
+    question = String(question || "").replace(/\s+/g, " ").trim().slice(0, 1500);
     if (question.length < 3) return Promise.resolve({ ok: false, error: "Напишите вопрос подробнее." });
     if (aboutCreator(question)) return Promise.resolve({ ok: true, answer: CREATOR_ANSWERS[creatorTurn++ % CREATOR_ANSWERS.length], left: null, cached: false, sources: [], fid: "" });
     // 2.3: номер статьи без кодекса и «какие законы знаешь» — ответ из памятки, без ИИ и без лимита
@@ -201,9 +201,10 @@
     var found = [];
     try { found = typeof window.__senkoAiContext === "function" ? window.__senkoAiContext(question) || [] : []; } catch (e) { found = []; }
     return Promise.resolve(found).then(function (f) {
-      found = (Array.isArray(f) ? f : []).slice(0, 10);
+      found = (Array.isArray(f) ? f : []).slice(0, 14);
       var sources = found.map(function (x) { return { ref: x.ref, go: x.go || "", lw: x.lw || "" }; });
-      return W.call({ action: "ai_ask", token: (W.session() || {}).token, q: question, short: !!(opts && opts.short), ctx: found.map(function (x) { return { ref: String(x.ref || ""), text: String(x.text || "") }; }) }, 45000).then(function (r) {
+      var hist = (opts && Array.isArray(opts.hist) ? opts.hist : []).slice(-6).map(function (t) { return { q: String((t && t.q) || "").slice(0, 1500), a: String((t && t.a) || "").slice(0, 2500) }; });
+      return W.call({ action: "ai_ask", token: (W.session() || {}).token, q: question, hist: hist, short: !!(opts && opts.short), ctx: found.map(function (x) { return { ref: String(x.ref || ""), text: String(x.text || "") }; }) }, 45000).then(function (r) {
         aiBusy = false;
         if (!r || !r.ok) return { ok: false, error: (r && r.error) || "ИИ-сервис вернул ошибку.", limit: !!(r && r.limit), sources: sources };
         var fid = "";

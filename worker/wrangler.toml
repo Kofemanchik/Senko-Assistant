@@ -20,7 +20,7 @@ id = "14350645f5c243118b63ec5d4fa9f3ad"
 binding = "AI"
 
 [vars]
-DAILY_PER_USER = "15"
+DAILY_PER_USER = "25"
 # GEMINI_MODEL = "gemini-flash-latest"
 # GROQ_MODEL = "openai/gpt-oss-120b"
 # CF_MODEL = "@cf/meta/llama-3.1-8b-instruct"   # модель Cloudflare: полегче и «дешевле» по суточному лимиту

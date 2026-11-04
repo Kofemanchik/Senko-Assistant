@@ -1045,7 +1045,7 @@ async function api(req) {
     return J(fail("Некорректный запрос."), 400);
   }
   if (!b || typeof b !== "object") return J(fail("Некорректный запрос."), 400);
-  if (b.action !== "sync" && b.action !== "xfer" && !((b.action === "ai_ask" || b.action === "panel") && raw.length <= 40000) && !(b.action === "panel" && b.op === "ads_save" && raw.length <= 700000) && !(b.action === "bug_report" && raw.length <= 700000) && !(b.action === "stt" && raw.length <= 1200000) && !(b.action === "share" && raw.length <= 40000) && !(b.action === "colleagues" && raw.length <= 40000) && !(b.action === "handoff" && raw.length <= 70000) && raw.length > 8192) return J(fail("Слишком большой запрос."), 413);
+  if (b.action !== "sync" && b.action !== "xfer" && !(b.action === "panel" && raw.length <= 40000) && !(b.action === "ai_ask" && raw.length <= 80000) && !(b.action === "panel" && b.op === "ads_save" && raw.length <= 700000) && !(b.action === "bug_report" && raw.length <= 700000) && !(b.action === "stt" && raw.length <= 1200000) && !(b.action === "share" && raw.length <= 40000) && !(b.action === "colleagues" && raw.length <= 40000) && !(b.action === "handoff" && raw.length <= 70000) && raw.length > 8192) return J(fail("Слишком большой запрос."), 413);
   const ip = req.headers.get("cf-connecting-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
   switch (b.action) {
     case "register":
@@ -2499,11 +2499,11 @@ async function aiLog(b) {
   const { p, err } = await who(b);
   if (err) return err;
   if (!(await hit(`ai:${p.id}`, 80, 3600))) return fail(RATE_MSG, { code: "rate" });
-  const q = String(b.q == null ? "" : b.q).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 500);
+  const q = String(b.q == null ? "" : b.q).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 1500);
   if (!q) return fail("Пустой вопрос.");
-  const refs = (Array.isArray(b.refs) ? b.refs : []).slice(0, 10).map((r) => clean(r, 120)).filter(Boolean); // 2.6.4: до 120 знаков, иначе номер статьи закона обрезался
+  const refs = (Array.isArray(b.refs) ? b.refs : []).slice(0, 14).map((r) => clean(r, 120)).filter(Boolean); // 2.6.4: до 120 знаков, иначе номер статьи закона обрезался
   const ok = b.ok !== false;
-  const ans = String(b.ans == null ? "" : b.ans).slice(0, 4000); // 2.7: ответ ИИ нужен для разбора плохих ответов в панели
+  const ans = String(b.ans == null ? "" : b.ans).slice(0, 6000); // 2.7: ответ ИИ нужен для разбора плохих ответов в панели
   const [r] = await db()`insert into ai_log (user_id, q, refs, ok, ans) values (${p.id}, ${q}, ${refs}, ${ok}, ${ans}) returning id`;
   const chat = await aiChat();
   if (chat)
@@ -7171,9 +7171,11 @@ async function aiAsk(b) {
     console.error("ai_bonus", e);
   }
   if (!(await hit(`aiweb:${p.id}`, 60, 86400)) && bonus <= 0) return fail("Дневной лимит вопросов к ИИ исчерпан. Он обновится завтра.", { limit: true });
-  const q = String(b.q == null ? "" : b.q).replace(/\s+/g, " ").trim().slice(0, 500);
+  // 3.9: длинные описания ситуаций (до 1500 знаков), до 14 статей и история диалога
+  const q = String(b.q == null ? "" : b.q).replace(/\s+/g, " ").trim().slice(0, 1500);
   if (q.length < 3) return fail("Напишите вопрос подробнее.");
-  const ctx = (Array.isArray(b.ctx) ? b.ctx : []).slice(0, 10).map((c) => ({ ref: clean(c && c.ref, 80), text: String((c && c.text) || "").slice(0, 2000) })).filter((c) => c.ref && c.text);
+  const hist = (Array.isArray(b.hist) ? b.hist : []).slice(-6).map((t) => ({ q: String((t && t.q) || "").replace(/\s+/g, " ").trim().slice(0, 1500), a: String((t && t.a) || "").trim().slice(0, 2500) })).filter((t) => t.q && t.a);
+  const ctx = (Array.isArray(b.ctx) ? b.ctx : []).slice(0, 14).map((c) => ({ ref: clean(c && c.ref, 80), text: String((c && c.text) || "").slice(0, 2000) })).filter((c) => c.ref && c.text);
   // 3.8: термины глоссария, которые встречаются в вопросе, ИИ получает как пояснение (не больше трёх)
   try {
     const ql = q.toLowerCase().replace(/ё/g, "е");
@@ -7193,7 +7195,7 @@ async function aiAsk(b) {
         "content-type": "application/json", "x-senko-cid": cid, "x-senko-ts": ts, "x-senko-sig": await hmacHex(AI_KEY, cid + "." + ts),
         ...(bonus > 0 ? { "x-senko-bsig": await hmacHex(AI_KEY, cid + "." + ts + ".b") } : {}),
       },
-      body: JSON.stringify({ short: !!b.short, clar: clar, q, ctx }),
+      body: JSON.stringify({ short: !!b.short, clar: clar, q, ctx, hist, srv: sv(p) }),
       signal: AbortSignal.timeout(35000),
     });
     status = r.status;
