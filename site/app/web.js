@@ -166,9 +166,8 @@
 
   /* ───── ИИ ───── */
   var CREATOR_ANSWERS = [
-    "Прости, о своём создателе я говорить не могу. 🦊 Давай лучше вернёмся к законам Majestic RP.",
-    "Это тайна, которую я хранить обязана: о своём создателе не рассказываю. Спроси меня лучше про статьи или штрафы.",
-    "О моём создателе ничего не скажу, даже не уговаривай. 🦊 Чем помочь по законам?"
+    "Мой создатель и владелец программы — Hanami Senko. Связаться можно в Discord: hanamis1. 🦊 Чем помочь?",
+    "Senko Assistant создаёт и развивает Hanami Senko — связь в Discord: hanamis1. Подробностей о создателе не рассказываю, а с законами и программой помогу. 🦊"
   ];
   var LOOKALIKE = { a: "а", c: "с", e: "е", o: "о", p: "р", x: "х", y: "у", k: "к", m: "м", t: "т", b: "в", h: "н" };
   var CREATOR_RE = [
@@ -198,13 +197,19 @@
     if (aiBusy) return Promise.resolve({ ok: false, error: "Предыдущий вопрос ещё обрабатывается." });
     if (Date.now() - aiLast < 2500) return Promise.resolve({ ok: false, error: "Подождите пару секунд перед следующим вопросом." });
     aiBusy = true; aiLast = Date.now();
-    var found = [];
-    try { found = typeof window.__senkoAiContext === "function" ? window.__senkoAiContext(question) || [] : []; } catch (e) { found = []; }
-    return Promise.resolve(found).then(function (f) {
+    var found = [], plan = { topic: "", terms: [] };
+    var hist0 = (opts && Array.isArray(opts.hist) ? opts.hist : []);
+    // 3.9: шаг 1 — быстрая модель переводит сообщение на язык законов (поисковые фразы и тема); не вышло — ищем как раньше
+    var planP = (opts && opts.short) ? Promise.resolve(null) : W.call({ action: "ai_plan", token: (W.session() || {}).token, q: question, prev: hist0.length ? String(hist0[hist0.length - 1].q || "").slice(0, 500) : "" }, 10000).catch(function () { return null; });
+    return planP.then(function (p) {
+      if (p && p.ok) plan = { topic: String(p.topic || ""), terms: (Array.isArray(p.terms) ? p.terms : []).slice(0, 6).map(function (x) { return String(x).slice(0, 80); }) };
+      try { found = typeof window.__senkoAiContext === "function" ? window.__senkoAiContext(question, plan) || [] : []; } catch (e) { found = []; }
+      return found;
+    }).then(function (f) {
       found = (Array.isArray(f) ? f : []).slice(0, 14);
       var sources = found.map(function (x) { return { ref: x.ref, go: x.go || "", lw: x.lw || "" }; });
       var hist = (opts && Array.isArray(opts.hist) ? opts.hist : []).slice(-6).map(function (t) { return { q: String((t && t.q) || "").slice(0, 1500), a: String((t && t.a) || "").slice(0, 2500) }; });
-      return W.call({ action: "ai_ask", token: (W.session() || {}).token, q: question, hist: hist, short: !!(opts && opts.short), ctx: found.map(function (x) { return { ref: String(x.ref || ""), text: String(x.text || "") }; }) }, 45000).then(function (r) {
+      return W.call({ action: "ai_ask", token: (W.session() || {}).token, q: question, hist: hist, topic: plan.topic, short: !!(opts && opts.short), ctx: found.map(function (x) { return { ref: String(x.ref || ""), text: String(x.text || "") }; }) }, 45000).then(function (r) {
         aiBusy = false;
         if (!r || !r.ok) return { ok: false, error: (r && r.error) || "ИИ-сервис вернул ошибку.", limit: !!(r && r.limit), sources: sources };
         var fid = "";

@@ -1842,6 +1842,7 @@ app.whenReady().then(() => {
     getWin: () => (win && !win.isDestroyed() ? win : null),
     // вопрос уходит на сервер: он обращается к ИИ, сохраняет вопрос в аккаунте и возвращает номер записи для 👍/👎 (см. Политику, раздел 6)
     ask: (d, ms) => accounts.act("ai_ask", d, ms),
+    plan: (d, ms) => accounts.act("ai_plan", d, ms), // 3.9: шаг 1 — поисковые фразы для статей
     vote: (id, v) => accounts.act("ai_vote", { id, vote: v })
   });
   initUpdater();

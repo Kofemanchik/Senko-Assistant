@@ -1086,6 +1086,8 @@ async function api(req) {
       return J(await pubBoardOpt(b));
     case "ai_ask":
       return J(await aiAsk(b));
+    case "ai_plan":
+      return J(await aiPlan(b));
     case "stt":
       return J(await sttApi(b));
     case "panel":
@@ -7158,6 +7160,58 @@ async function glossApi(b) {
   return { ok: true, items: await glossRows() };
 }
 
+// 3.9: шаг 1 ИИ — перевод сообщения на язык законов для поиска статей (быстрая бесплатная модель в ИИ-прокси)
+async function aiPlan(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!AI_KEY) return fail("ИИ не подключён.", { code: "ai_off" });
+  if (!(await hit(`aiplan:${p.id}`, 200, 86400))) return { ok: false, topic: "law", terms: [] };
+  const q = String(b.q == null ? "" : b.q).replace(/\s+/g, " ").trim().slice(0, 1500);
+  if (q.length < 3) return fail("Пусто.");
+  const prev = String(b.prev == null ? "" : b.prev).replace(/\s+/g, " ").trim().slice(0, 500);
+  const cid = (await sha256("web:" + p.id)).slice(0, 32);
+  const ts = String(Date.now());
+  try {
+    const r = await fetch(AI_URL + "/plan", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-senko-cid": cid, "x-senko-ts": ts, "x-senko-sig": await hmacHex(AI_KEY, cid + "." + ts) },
+      body: JSON.stringify({ q, prev }),
+      signal: AbortSignal.timeout(9000),
+    });
+    const j = await r.json().catch(() => null);
+    if (!j || !j.ok) return { ok: false, topic: "law", terms: [] };
+    return { ok: true, topic: String(j.topic || "law"), terms: (Array.isArray(j.terms) ? j.terms : []).map((x) => clean(x, 80)).filter(Boolean).slice(0, 6) };
+  } catch (e) {
+    return { ok: false, topic: "law", terms: [] };
+  }
+}
+// 3.9: «Данные проекта» для ИИ — только то, что человек и так видит: владелец, модераторы, руководство ведомств своего сервера
+// (ник и должность), сотрудники своего ведомства (ник, должность, звание), сколько людей в ведомствах. Без статиков и контактов.
+const PEOPLE_RE = /руковод|лидер|начальник|модератор|админ|владел|создател|разработчик|коллег|сослуживц|состав (ведомств|организац|отдел|lspd|lscsd|fib|sang|government)|сколько (человек|людей|сотрудник)|кто (сейчас |у нас |в |из )?(глава|шериф|директор|начальник|губернатор|прокурор|руковод)/i;
+async function aiPeople(p) {
+  const sql = db();
+  const srv = sv(p);
+  const L = ["Владелец и разработчик программы Senko Assistant — Hanami Senko (связь: Discord hanamis1)."];
+  const mods = await sql`select nick, staff_server from profiles where rank = 'moderator' and not banned order by lower(nick) limit 40`;
+  const modsHere = mods.filter((m) => !m.staff_server || m.staff_server === srv);
+  L.push("Модераторы программы (" + srvName(srv) + "): " + (modsHere.length ? modsHere.map((m) => m.nick).join(", ") : "не назначены") + ".");
+  const leaders = await sql`select nick, org, post from profiles where rank = 'leader' and server = ${srv} and not banned and approval = 'ok' order by org, lower(nick) limit 80`;
+  const byOrg = {};
+  leaders.forEach((x) => (byOrg[x.org] = byOrg[x.org] || []).push(x.nick + (x.post ? " (" + x.post + ")" : "")));
+  const cnt = await sql`select org, count(*)::int n from profiles where server = ${srv} and not banned and approval = 'ok' group by org`;
+  const C = Object.fromEntries(cnt.map((r) => [r.org, r.n]));
+  L.push("Руководство ведомств на сервере " + srvName(srv) + " (роль «Руководство» в программе):");
+  DEPTS.forEach((d) => L.push("• " + d + ": " + (byOrg[d] ? byOrg[d].join(", ") : "в программе не назначено") + "; аккаунтов в программе: " + (C[d] || 0) + "."));
+  if (!colLocked(p)) {
+    const people = await sql`select id, nick, post, rank, org_at, created_at from profiles where org = ${p.org} and server = ${srv} and not banned and approval = 'ok' order by lower(nick) limit 120`;
+    const vis = people.filter((x) => x.id === p.id || !colLocked(x));
+    const st = await statsOf(vis.map((x) => x.id));
+    L.push("Сотрудники ведомства пользователя (" + p.org + "), ник — должность — звание в программе:");
+    vis.forEach((x) => L.push("• " + x.nick + (x.post ? " — " + x.post : "") + " — " + lvOf((st[x.id] || { xp: 0 }).xp).name + (x.rank === "leader" ? " — руководство" : x.rank === "moderator" ? " — модератор" : "")));
+  }
+  L.push("Программные роли: пользователь, руководство (видит сотрудников своего ведомства), модератор программы, владелец. Роли руководства и модератора выдаёт только владелец.");
+  return L.join("\n").slice(0, 6000);
+}
 async function aiAsk(b) {
   const { p, err } = await who(b);
   if (err) return err;
@@ -7182,6 +7236,12 @@ async function aiAsk(b) {
     for (const g of (await glossRows()).filter((g) => ql.includes(g.t.toLowerCase().replace(/ё/g, "е").slice(0, Math.max(4, g.t.length - 2)))).slice(0, 3))
       ctx.push({ ref: "Глоссарий: " + g.t, text: g.d + (g.refs ? " (" + g.refs + ")" : "") });
   } catch (e) {}
+  // 3.9: вопрос о людях и организациях — добавляем «Данные проекта»
+  try {
+    if (b.topic === "people" || PEOPLE_RE.test(q + " " + hist.map((t) => t.q).slice(-1).join(" "))) ctx.unshift({ ref: "Данные проекта", text: await aiPeople(p) });
+  } catch (e) {
+    console.error("aiPeople", e);
+  }
   const refs = ctx.map((c) => c.ref);
   const cid = (await sha256("web:" + p.id)).slice(0, 32);
   const ts = String(Date.now());

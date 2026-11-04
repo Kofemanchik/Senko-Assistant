@@ -18,12 +18,12 @@ let fseq = 0;
 
 const configured = () => true;
 
-async function retrieve(question) {
+async function retrieve(question, plan) {
   const w = ctx.getWin();
   if (!w || w.isDestroyed()) return [];
   try {
     const r = await w.webContents.executeJavaScript(
-      `(typeof window.__senkoAiContext==="function")?window.__senkoAiContext(${JSON.stringify(question)}):[]`, false);
+      `(typeof window.__senkoAiContext==="function")?window.__senkoAiContext(${JSON.stringify(question)},${JSON.stringify(plan || {})}):[]`, false);
     return Array.isArray(r) ? r.slice(0, 14) : [];
   } catch (e) {
     return [];
@@ -63,9 +63,8 @@ async function vote(fid, v) {
 // Вопросы о создателе (Hanami Senko, Ханами, Kofemanchik и т. п.) не уходят в ИИ: на них свой ответ.
 // Проверка идёт в приложении, поэтому работает и в окне ИИ, и в голосовом помощнике, без сервера и без лимита.
 const CREATOR_ANSWERS = [
-  "Прости, о своём создателе я говорить не могу. 🦊 Давай лучше вернёмся к законам Majestic RP.",
-  "Это тайна, которую я хранить обязана: о своём создателе не рассказываю. Спроси меня лучше про статьи или штрафы.",
-  "О моём создателе ничего не скажу, даже не уговаривай. 🦊 Чем помочь по законам?"
+  "Мой создатель и владелец программы — Hanami Senko. Связаться можно в Discord: hanamis1. 🦊 Чем помочь?",
+  "Senko Assistant создаёт и развивает Hanami Senko — связь в Discord: hanamis1. Подробностей о создателе не рассказываю, а с законами и программой помогу. 🦊"
 ];
 // латинские буквы, похожие на русские, приводим к русским (xaнaми → ханами)
 const LOOKALIKE = { a: "а", c: "с", e: "е", o: "о", p: "р", x: "х", y: "у", k: "к", m: "м", t: "т", b: "в", h: "н" };
@@ -100,10 +99,19 @@ async function ask(question, opts) {
   if (Date.now() - lastAt < MIN_GAP_MS) return { ok: false, error: "Подождите пару секунд перед следующим вопросом." };
   busy = true; lastAt = Date.now();
   try {
-    const found = await retrieve(question);
+    // 3.9: шаг 1 — быстрая модель переводит сообщение на язык законов (поисковые фразы и тема); не вышло — ищем как раньше
+    let plan = { topic: "", terms: [] };
+    if (!(opts && opts.short) && typeof ctx.plan === "function") {
+      try {
+        const hist = opts && Array.isArray(opts.hist) ? opts.hist : [];
+        const p = await ctx.plan({ q: question, prev: hist.length ? String(hist[hist.length - 1].q || "").slice(0, 500) : "" }, 10000);
+        if (p && p.ok) plan = { topic: String(p.topic || ""), terms: Array.isArray(p.terms) ? p.terms.slice(0, 6).map((x) => String(x).slice(0, 80)) : [] };
+      } catch (e) {}
+    }
+    const found = await retrieve(question, plan);
     const sources = found.map((f) => ({ ref: f.ref, go: f.go || "", lw: f.lw || "" }));
     const hist = opts && Array.isArray(opts.hist) ? opts.hist.slice(-6) : [];
-    const j = await ctx.ask({ short: !!(opts && opts.short), hist, q: question, ctx: found.map((f) => ({ ref: String(f.ref || ""), text: String(f.text || "") })) }, TIMEOUT_MS);
+    const j = await ctx.ask({ short: !!(opts && opts.short), hist, topic: plan.topic, q: question, ctx: found.map((f) => ({ ref: String(f.ref || ""), text: String(f.text || "") })) }, TIMEOUT_MS);
     if (!j || !j.ok) {
       const error = j && j.code === "auth" ? "Войдите в аккаунт, чтобы задавать вопросы ИИ." : (j && j.error) || "ИИ-сервис не ответил. Попробуйте позже.";
       return { ok: false, error, limit: !!(j && j.limit), sources };
