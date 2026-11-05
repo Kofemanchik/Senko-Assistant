@@ -2464,7 +2464,7 @@ function renderCalc(){
     var cw=conflictWarns(items).concat(window.SA_jurWarns?SA_jurWarns(items):[]); // 2.8: подсказка по юрисдикции
     if(cw.length) h+='<div class="verdict" role="alert" style="border-left:4px solid #e0a400;margin-top:10px"><b>⚠ '+(cw.length&&window.SA_jurWarns&&SA_jurWarns(items).length===cw.length?'Проверьте юрисдикцию':'Проверьте сочетание статей')+'</b><br>'+cw.map(esc).join("<br>")+'</div>';
     if(maxS) h+='<p class="hint">КПЗ: не более '+hm(maxS*10)+' (10 мин за ★).</p>';
-    h+='<p style="margin:12px 0 0"><button class="btn primary" id="saveCalc" type="button">Сохранить расчёт</button> <button class="btn" id="clearBasket" type="button">Очистить</button></p>';
+    h+='<p style="margin:12px 0 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center"><input class="tin" id="calcName" maxlength="60" placeholder="Название, например «ограбление магазина»" aria-label="Название расчёта" style="flex:1 1 220px;min-width:0;margin:0"><button class="btn primary" id="saveCalc" type="button">Сохранить расчёт</button> <button class="btn" id="clearBasket" type="button">Очистить</button></p>';
   }
   h+='</section>';
   h+=bailHtml(items);
@@ -2474,7 +2474,7 @@ function renderCalc(){
       '<textarea class="repbox" id="rpT" aria-label="Текст для рации" style="min-height:72px"></textarea>'+
       '<p class="rowbtn" style="margin:10px 0 0"><button class="btn primary" type="button" data-rpopen="calc">📝 Оформить рапорт</button><button class="btn" type="button" data-copy="rep">Скопировать для рации</button></p></section>';
   }
-  if(chist.length) h+='<section class="panel"><h2>История расчётов</h2><p class="sub">Откройте прошлый расчёт, чтобы повторить его: набор статей вернётся в калькулятор.</p><ul class="basket">'+chist.map(function(e,i){return '<li><span class="t"><b>'+esc(e.d)+'</b>'+(e.s?esc(e.s)+" · ":"")+e.ids.length+' п.: '+esc(e.l)+'</span><button class="btn" type="button" data-chopen="'+i+'">Открыть</button><button class="ic" data-chdel="'+i+'" aria-label="Удалить">×</button></li>'}).join("")+'</ul><p style="margin:10px 0 0"><button class="btn" type="button" id="chClear">Очистить историю</button></p></section>';
+  if(chist.length) h+='<section class="panel"><h2>История расчётов</h2><p class="sub">Откройте прошлый расчёт, чтобы повторить его: набор статей вернётся в калькулятор.</p><ul class="basket">'+chist.map(function(e,i){return '<li><span class="t"><b>'+(e.n?esc(e.n)+'</b><small style="color:var(--muted)"> · '+esc(e.d)+'</small> ':esc(e.d)+'</b>')+(e.s?esc(e.s)+" · ":"")+e.ids.length+' п.: '+esc(e.l)+'</span><button class="btn" type="button" data-chopen="'+i+'">Открыть</button><button class="ic" data-chdel="'+i+'" aria-label="Удалить">×</button></li>'}).join("")+'</ul><p style="margin:10px 0 0"><button class="btn" type="button" id="chClear">Очистить историю</button></p></section>';
   h+='<section class="panel"><h2>Вес наркотиков</h2><p class="sub">Один куст Green равен 5 г, одно семечко 2 г (ст. 5.13), один пакетик '+String(DRUG_PKG).replace(".",",")+' г (меняется в «Рация» → «Диспетчер»).</p>'+
     '<div class="fields"><label for="dg">Граммы<input id="dg" type="number" min="0" inputmode="numeric" value="'+DRUG.g+'"></label>'+
     '<label for="db">Кусты<input id="db" type="number" min="0" inputmode="numeric" value="'+DRUG.b+'"></label>'+
@@ -3053,8 +3053,8 @@ view.addEventListener("click",function(e){
     return;
   }
   if(t.dataset.rm){ delete basket[t.dataset.rm]; save(); render(); return; }
-  if(t.id==="saveCalc"){var ids0=Object.keys(basket).filter(function(i){return BYID[i]});if(ids0.length){chist.unshift({d:new Date().toLocaleString("ru-RU"),s:rep.s||"",ids:ids0,l:ids0.slice(0,4).map(function(i){return BYID[i].code}).join(", ")+(ids0.length>4?"…":"")});saveChist();render()}return}
-  if(t.dataset.chopen){var e0=chist[+t.dataset.chopen];if(e0){basket={};e0.ids.forEach(function(i){if(BYID[i])basket[i]=1});save();render()}return}
+  if(t.id==="saveCalc"){var ids0=Object.keys(basket).filter(function(i){return BYID[i]}),cn=(($("#calcName")||{}).value||"").trim().slice(0,60),ma0=null;try{ma0=window.SA_X&&SA_X.ma?JSON.parse(JSON.stringify(SA_X.ma)):null}catch(x){}if(ids0.length){chist.unshift({n:cn,ma:ma0,d:new Date().toLocaleString("ru-RU"),s:rep.s||"",ids:ids0,l:ids0.slice(0,4).map(function(i){return BYID[i].code}).join(", ")+(ids0.length>4?"…":"")});saveChist();render()}return}
+  if(t.dataset.chopen){var e0=chist[+t.dataset.chopen];if(e0){basket={};e0.ids.forEach(function(i){if(BYID[i])basket[i]=1});try{if(e0.ma&&window.SA_X&&SA_X.ma){SA_X.ma.m=e0.ma.m||{};SA_X.ma.a=e0.ma.a||{}}}catch(x){}save();render()}return}
   if(t.dataset.chdel){chist.splice(+t.dataset.chdel,1);saveChist();render();return}
   if(t.id==="chClear"){if(t.dataset.arm){chist=[];saveChist();render()}else{t.dataset.arm=1;t.textContent="Нажмите ещё раз";setTimeout(function(){t.dataset.arm="";t.textContent="Очистить историю"},3000)}return}
   if(t.id==="clearBasket"){ basket={}; save(); render(); return; }
@@ -7130,6 +7130,17 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"4.1.0",d:"06.11.2026",items:[
+  ["🧾","Почему такой срок","В калькуляторе — разбор по шагам: какие статьи со сроком, по какой берётся итог, потолок 50 месяцев, штрафы, розыск и обстоятельства."],
+  ["💾","Расчёты с названием","Назовите расчёт («ограбление магазина») и сохраните: в «Истории расчётов» он повторяется в один клик вместе со смягчающими и отягчающими."],
+  ["⚖️","Сравнение квалификаций","Два набора рядом: текущий расчёт и набор, история или статьи вручную — с разницей в сроке, розыске и штрафе."],
+  ["⚠️","Одно деяние дважды","Калькулятор предупреждает, если взяты статья и её частный случай (10.5 и 10.5.1) или похожие статьи УК и АК."],
+  ["❓","Подбор части","Кнопка «ч.?» у статьи: короткие вопросы вроде «было ли оружие?» подсвечивают подходящую часть, выбор — в одно нажатие."],
+  ["🔁","Повторное нарушение","Если задержанный уже был у вас по той же статье, калькулятор напомнит и подскажет часть о повторности, если она есть."],
+  ["🏛","Для прокурора","Требование наказания «от и до» по статьям и обстоятельствам — готовый текст с копированием. Для роли «Прокурор» раскрыто сразу."],
+  ["🖼","Расчёт картинкой","Итог расчёта — картинкой для Discord: скопировать или сохранить."],
+  ["🖍","Подсветка наказания и похожие статьи","Срок, штраф и розыск в тексте статей и законов выделены цветом. Под статьёй — три похожие из других кодексов."]
+ ]},
  {v:"3.9.0",d:"05.11.2026",items:[
   ["🎙","Точное распознавание голоса","Голосовой поиск теперь тоже распознаёт через Whisper, как рация. Запись перед отправкой очищается от гула и тишины, «12,8» и «двенадцать точка восемь» становятся 12.8. Без интернета — офлайн, как раньше."],
   ["📟","Позывной и экипаж","В настройках рации: позывной (например, 1-ADAM-12) и экипаж. Диспетчер обращается по позывному, он же подставляется в шаблоны фраз."],
@@ -9420,6 +9431,7 @@ function maData(){
 X.ma=X.ma||{m:{},a:{}};
 function maPick(){var d=maData(),o={m:[],a:[]};["m","a"].forEach(function(k){d[k].forEach(function(t,i){if(X.ma[k][i])o[k].push(t)})});return o}
 function maText(){var o=maPick(),s=[];if(o.m.length)s.push("Смягчающие: "+o.m.join("; ").toLowerCase());if(o.a.length)s.push("Отягчающие: "+o.a.join("; ").toLowerCase());return s.join(". ")+(s.length?".":"")}
+window.SA_ma={pick:function(){return maPick()},verdict:function(){return maVerdict()},text:function(){return maText()}}; // 4.1: калькулятор прокурора и разбор расчёта
 function maVerdict(){var o=maPick();if(!o.m.length&&!o.a.length)return "";var d=o.a.length-o.m.length;return d>0?"Отягчающих больше: наказание ближе к верхней границе статьи.":d<0?"Смягчающих больше: наказание ближе к нижней границе или штраф вместо срока, если статья это допускает.":"Смягчающих и отягчающих поровну."}
 function maPanel(){
  var d=maData(),col=function(k,t){return '<div><h3>'+t+'</h3>'+d[k].map(function(x,i){return '<label class="chk"><input type="checkbox" data-s9ma="'+k+':'+i+'"'+(X.ma[k][i]?' checked':'')+'><span><b>'+e(x)+'</b></span></label>'}).join("")+'</div>'};
@@ -17570,6 +17582,197 @@ if(typeof C0==="function")window.SA_radioCmd=function(o){
  if(r){try{var L=SA_radioLog();L.push({w:"me",t:text.slice(0,300),at:Date.now()});L.push({w:"d",t:String(r.show||r.say||"").slice(0,300),at:Date.now()});if(L.length>300)L.splice(0,L.length-300);js("bos-radio-log",L)}catch(x){}
   return withCall(r)}
  return withCall(C0.apply(this,arguments))};
+})();
+</script>
+<style id="s51-style">
+.s51-steps{margin:6px 0 0;padding-left:22px}
+.s51-steps li{margin:4px 0}
+.s51-steps b{font-variant-numeric:tabular-nums}
+.s51-cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
+.s51-cmp>div{border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.s51-cmp h3{margin:0 0 6px;font-size:14px}
+.s51-cmp ul{margin:0;padding-left:18px;font-size:13.5px}
+.s51-cmp .tot{margin-top:8px;font-weight:600}
+.s51-diff{margin-top:10px;padding:10px 14px;border-radius:12px;background:var(--soft,rgba(127,127,127,.1));font-weight:600}
+@media (max-width:640px){.s51-cmp{grid-template-columns:1fr}}
+.s51-part{margin-left:6px;font:600 12px var(--f-body,system-ui,sans-serif);border:1px solid var(--line);background:var(--card,transparent);color:var(--accent);border-radius:999px;padding:2px 9px;cursor:pointer;white-space:nowrap}
+.s51-q{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin:6px 0}
+.s51-q span{min-width:220px}
+.s51-q .seg button{padding:4px 10px}
+.s51-pl{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}
+.s51-pl li{border:1px solid var(--line);border-radius:10px;padding:8px 12px;display:flex;gap:10px;align-items:flex-start}
+.s51-pl li.off{opacity:.45}
+.s51-pl li div{flex:1;font-size:13.5px}
+.s51-pros textarea{width:100%;box-sizing:border-box;min-height:110px}
+.s51-pn{background:color-mix(in srgb,#e0a400 26%,transparent);border-radius:4px;padding:0 2px}
+.s51-fn{background:color-mix(in srgb,#2f7d6d 22%,transparent);border-radius:4px;padding:0 2px}
+.s51-wn{background:color-mix(in srgb,#c33 20%,transparent);border-radius:4px;padding:0 2px}
+.s51-sim{margin-top:8px;font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.s51-sim button{font:inherit;font-size:12.5px;border:1px solid var(--line);background:var(--card,transparent);color:var(--ink);border-radius:999px;padding:2px 10px;cursor:pointer}
+.s51-cv canvas{width:100%;height:auto;border-radius:14px;display:block}
+</style>
+<script>
+/* 4.1 «Калькулятор и наказания»: разбор расчёта (150), сравнение квалификаций (152), несовместимые статьи (153), подбор части (154),
+   повторное нарушение (155), калькулятор прокурора (156), расчёт картинкой (157), подсветка наказания в тексте (91), похожие статьи (94).
+   Сохранённые расчёты с названием (151) — в самом калькуляторе. */
+(function(){
+"use strict";
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function toast(t){try{if(window.SA_toast)SA_toast(t)}catch(x){}}
+function modal(t,b,w){return window.SA_modal?SA_modal(t,b,w):null}
+function closeM(){if(window.SA_modalClose)SA_modalClose()}
+function rr(){try{if(typeof rerender==="function")rerender();else render()}catch(x){}}
+function copy(t){try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).catch(function(){old(t)});return}}catch(x){}old(t)}
+function old(t){var ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();try{document.execCommand("copy")}catch(x){}ta.remove()}
+function M(n){return typeof money==="function"?money(n):"$"+n}
+function KNm(k){return {uk:"УК",ak:"АК",dk:"ДК",pk:"ПК"}[k]||""}
+function lb(r){return KNm(r.k)+" ст. "+r.code+(r.part?" ч."+r.part:"")}
+function items0(){try{return basketItems()}catch(x){return []}}
+function pl(n,a,b,c){n=Math.abs(n)%100;var m=n%10;return n>10&&n<20?c:m===1?a:m>=2&&m<=4?b:c}
+function calcOfItems(L){var uk=L.filter(function(r){return r.k==="uk"}),ft=finalTerm(L),maxS=0,fmin=0,fmax=0,rec=false;
+ uk.forEach(function(r){if((r.stars||0)>maxS)maxS=r.stars||0;if(r.rec)rec=true});L.forEach(function(r){fmin+=+r.fmin||0;fmax+=+r.fmax||0});
+ return {ft:ft,maxS:maxS,fmin:fmin,fmax:fmax,rec:rec}}
+function stem(w){return w.slice(0,Math.max(4,Math.min(6,w.length-2)))}
+function stems(s){var out={};String(s||"").toLowerCase().replace(/ё/g,"е").replace(/[^а-яa-z0-9\s]/g," ").split(/\s+/).forEach(function(w){if(w.length>=4&&!/^(лица|лицом|совершени|деяни|иного|иных|либо|также|которы|настоящ|статьи|кодекс|части|сотрудник)/.test(w))out[stem(w)]=1});return out}
+function sim(a,b){var A=Object.keys(a),n=0;if(!A.length)return 0;A.forEach(function(k){if(b[k])n++});var u=A.length+Object.keys(b).length-n;return u?n/u:0}
+
+/* ---------- разбор расчёта (150) ---------- */
+function stepsHtml(L){var c=calcOfItems(L),uk=L.filter(function(r){return r.k==="uk"&&r.m}),S=[];
+ if(uk.length){
+  S.push("Статьи УК со сроком: "+uk.map(function(r){return r.code+(r.part?" ч."+r.part:"")+" — ★"+(r.stars||0)+", до "+r.m+" мес."}).join("; "));
+  S.push("Сроки не складываются: берётся статья с наибольшим розыском (★"+c.maxS+")"+(uk.filter(function(r){return (r.stars||0)===c.maxS}).length>1?", из равных по розыску — с бо́льшим сроком":"")+": <b>"+e(c.ft.top.code+(c.ft.top.part?" ч."+c.ft.top.part:""))+"</b>, до "+c.ft.top.m+" мес.");
+  S.push(c.ft.cut?"Срок выше потолка "+TERM_CAP+" мес., поэтому итог — <b>"+TERM_CAP+" мес.</b>":"Потолок "+TERM_CAP+" мес. не превышен: итог — <b>до "+c.ft.m+" мес.</b>");
+ } else S.push("В расчёте нет статей УК со сроком: лишения свободы нет.");
+ if(c.fmax)S.push("Штрафы складываются по всем статьям: "+(c.fmin&&c.fmin!==c.fmax?M(c.fmin)+" – ":"до ")+"<b>"+M(c.fmax)+"</b>.");
+ if(c.maxS)S.push("Розыск — наибольший из статей: <b>★"+c.maxS+"</b>; КПЗ не больше "+(c.maxS*10)+" минут (10 минут за звезду).");
+ if(c.rec)S.push("Есть статья с судимостью: <b>будет судимость</b>.");
+ var ma=null;try{ma=window.SA_ma?SA_ma.pick():null}catch(x){}
+ if(ma&&(ma.m.length||ma.a.length))S.push("Обстоятельства: смягчающих "+ma.m.length+", отягчающих "+ma.a.length+". "+e(SA_ma.verdict()));
+ return '<ol class="s51-steps">'+S.map(function(s){return '<li>'+s+'</li>'}).join("")+'</ol>'}
+
+/* ---------- несовместимые статьи (153) ---------- */
+function compatWarns(L){var W=[],seen={};
+ L.forEach(function(a){L.forEach(function(b){if(a===b||a.k!==b.k)return;
+  if(b.code.indexOf(a.code+".")===0){var k=a.code+">"+b.code;if(!seen[k]){seen[k]=1;W.push(lb(b)+" — частный случай "+lb(a)+": за одно деяние обычно вменяют одну из них.")}}})});
+ for(var i=0;i<L.length;i++)for(var j=i+1;j<L.length;j++){var a=L[i],b=L[j];if(a.k===b.k||a.k==="pk"||b.k==="pk")continue;
+  var s=sim(stems(a.title),stems(b.title));if(s>=0.5)W.push(lb(a)+" («"+a.title+"») и "+lb(b)+" («"+b.title+"») похожи на одно и то же деяние в разных кодексах: проверьте, не посчитано ли оно дважды.")}
+ return W}
+
+/* ---------- повторное нарушение (155) ---------- */
+function thistAll(){try{var L=JSON.parse(localStorage.getItem("bos-thist")||"[]");return Array.isArray(L)?L:[]}catch(x){return []}}
+function curNick(){var n="";try{n=(rep&&rep.s)||""}catch(x){}if(!n){try{var t=(window.tms||[]).filter(function(x){return x.id===window.selId})[0];n=t&&t.nick||""}catch(x){}}return String(n||"").trim()}
+function repeatWarns(L){var nick=curNick().toLowerCase();if(nick.length<3)return [];var W=[];
+ var past=thistAll().filter(function(h){return h&&h.nick&&String(h.nick).toLowerCase()===nick&&h.end&&Date.now()-h.end>60000});
+ if(!past.length)return [];
+ L.forEach(function(r){var hit=past.filter(function(h){return new RegExp("ст\\. "+r.code.replace(/\./g,"\\.")+"(?![\\d.])").test(String(h.arts||""))})[0];if(!hit)return;
+  var parts=(DATA[r.k]||[]).filter(function(x){return x.code===r.code&&/повторн/i.test(x.note||x.title||"")});
+  W.push(curNick()+" уже задерживался по "+lb(r).replace(/ ч\.\S+/,"")+" ("+new Date(hit.end).toLocaleDateString("ru-RU")+")."+(parts.length?" В статье есть часть о повторном нарушении: "+parts.map(function(p){return "ч."+(p.part||"1")}).join(", ")+" — проверьте, подходит ли она.":" Отдельной части о повторности в статье нет."))});
+ if(!W.length&&past.length)W.push(curNick()+" уже задерживался раньше ("+past.length+" "+pl(past.length,"раз","раза","раз")+"), но по другим статьям.");
+ return W}
+
+/* ---------- подбор части (154) ---------- */
+var FEAT=[["оруж|огнестрел|пистолет|автомат|нож","Было оружие?"],["групп|сговор|соучаст|совместно","Действовали группой?"],["маск|скрыв\\S* лиц|скрыт\\S* лиц","Лицо было скрыто (маска)?"],
+ ["сотрудник|должност|служащ|при исполнении","Против сотрудника или должностным лицом?"],["повторн","Повторно?"],["смерт|гибел|убийств","Наступила смерть?"],["тяжк|тяжел\\S* вред|увечь","Причинён тяжкий вред здоровью?"],
+ ["несовершеннолет|ребен|детей","Касается несовершеннолетнего?"],["особо крупн|крупн","Крупный размер?"],["транспорт|автомобил|машин","С использованием транспорта?"],["государствен\\S* (транспорт|имуществ|тайн)","Государственное имущество?"]];
+function partsOf(r){return (DATA[r.k]||[]).filter(function(x){return x.code===r.code})}
+var PK={id:null,ans:{}};
+function pickerHtml(){var r=BYID[PK.id];if(!r)return "";var P=partsOf(r),txt=function(x){return (x.title+" "+(x.note||"")).toLowerCase().replace(/ё/g,"е")};
+ var Q=FEAT.filter(function(f){var re=new RegExp(f[0]);var n=P.filter(function(x){return re.test(txt(x))}).length;return n>0&&n<P.length});
+ var ok=function(x){return Q.every(function(f,i){var a=PK.ans[i];if(a==null)return true;return new RegExp(f[0]).test(txt(x))===a})};
+ return (Q.length?'<p class="sd-note">Ответьте на вопросы — подходящие части останутся яркими.</p>'+Q.map(function(f,i){var a=PK.ans[i];return '<div class="s51-q"><span>'+e(f[1])+'</span><div class="seg" role="group"><button type="button" data-s51a="'+i+'" data-v="1" aria-pressed="'+(a===true)+'">Да</button><button type="button" data-s51a="'+i+'" data-v="0" aria-pressed="'+(a===false)+'">Нет</button><button type="button" data-s51a="'+i+'" data-v="" aria-pressed="'+(a==null)+'">Не знаю</button></div></div>'}).join(""):'<p class="sd-note">У частей нет явных отличий по признакам — выберите по тексту.</p>')+
+  '<ul class="s51-pl">'+P.map(function(x){var on=ok(x);return '<li class="'+(on?"":"off")+'"><div><b>'+e(lb(x))+'</b> · '+e(typeof sancShort==="function"?"":"")+(x.k==="uk"?(x.stars?"★"+x.stars+", ":"")+(x.m?"до "+x.m+" мес., ":""):"")+(x.fmax?"штраф до "+M(x.fmax):"")+'<br>'+e(String(x.note||x.title).slice(0,260))+'</div><button type="button" class="btn'+(on?" primary":"")+'" data-s51pick="'+e(x.id)+'">Выбрать</button></li>'}).join("")+'</ul>'}
+function pickerOpen(id){PK={id:id,ans:{}};var o=modal("Подбор части: "+e(lb(BYID[id]).replace(/ ч\.\S+/,"")),'<div id="s51pk">'+pickerHtml()+'</div>',true);return o}
+
+/* ---------- калькулятор прокурора (156) ---------- */
+function prosText(L){var c=calcOfItems(L);if(!L.length)return "";var v=0;try{var ma=SA_ma.pick();v=ma.a.length-ma.m.length}catch(x){}
+ var lo=0,hi=0;if(c.ft.m){hi=c.ft.m;lo=v>0?Math.ceil(hi*2/3):v<0?Math.max(1,Math.ceil(hi/3)):Math.ceil(hi/2);if(v<0)hi=Math.max(lo,Math.ceil(hi*2/3))}
+ var t="Сторона обвинения просит признать обвиняемого"+(curNick()?" "+curNick():"")+" виновным по "+L.map(lb).join(", ")+" и назначить наказание: "+
+  (c.ft.m?"лишение свободы на срок от "+lo+" до "+hi+" "+pl(hi,"месяца","месяцев","месяцев"):"без лишения свободы")+(c.fmax?", штраф "+(c.fmin&&c.fmin!==c.fmax?"от "+M(c.fmin)+" до "+M(c.fmax):"до "+M(c.fmax)):"")+
+  (c.rec?", с судимостью":"")+".";
+ try{var mt=SA_ma.text();if(mt)t+=" "+mt}catch(x){}
+ return {t:t,lo:lo,hi:hi,v:v}}
+
+/* ---------- расчёт картинкой (157) ---------- */
+function cssVar(n,d){try{var v=getComputedStyle(document.documentElement).getPropertyValue(n).trim();return v||d}catch(x){return d}}
+function drawCalc(cv,L){var x=cv.getContext("2d"),W=cv.width,H=cv.height,ac=cssVar("--accent","#FF8A3D"),F='"Segoe UI",system-ui,sans-serif',c=calcOfItems(L);
+ var g=x.createLinearGradient(0,0,W,H);g.addColorStop(0,"#16110c");g.addColorStop(1,"#2b1d12");x.fillStyle=g;x.fillRect(0,0,W,H);x.fillStyle=ac;x.fillRect(0,0,W,8);
+ x.textBaseline="alphabetic";x.fillStyle="#e7cdb4";x.font="600 22px "+F;x.fillText("РАСЧЁТ НАКАЗАНИЯ"+(curNick()?" · "+curNick():""),56,62);
+ var T=[[c.maxS?"★".repeat(c.maxS):"—","Розыск"],[c.ft.m?"до "+c.ft.m+" мес.":"—","Итоговый срок"],[c.fmax?(c.fmin&&c.fmin!==c.fmax?M(c.fmin)+"–":"до ")+M(c.fmax):"—","Штрафы"],[c.rec?"Да":"Нет","Судимость"]];
+ T.forEach(function(t,i){var bx=56+i*250,by=90;x.fillStyle="rgba(255,255,255,.07)";x.fillRect(bx,by,232,104);x.fillStyle=i===1?ac:"#fff";x.font="700 30px "+F;x.fillText(t[0],bx+16,by+50,200);x.fillStyle="#bba998";x.font="500 17px "+F;x.fillText(t[1],bx+16,by+84)});
+ x.fillStyle="#fff";x.font="600 20px "+F;var y=240;
+ L.slice(0,9).forEach(function(r){x.fillStyle=ac;x.fillText(lb(r),56,y);x.fillStyle="#e9dfd5";x.font="500 19px "+F;x.fillText(String(r.title).slice(0,70),250,y,W-300);x.font="600 20px "+F;y+=34});
+ if(L.length>9){x.fillStyle="#bba998";x.fillText("и ещё "+(L.length-9),56,y)}
+ x.fillStyle="#8f8377";x.font="500 17px "+F;x.fillText("Сроки не суммируются: по статье с наибольшим розыском"+(c.ft.top?" ("+c.ft.top.code+")":"")+", не больше "+TERM_CAP+" мес.",56,H-56);
+ x.fillText("Senko Assistant · senko-assistant.site · "+new Date().toLocaleDateString("ru-RU"),56,H-28)}
+function imgOpen(){var L=items0();if(!L.length){toast("Калькулятор пуст");return}
+ if(!modal("Расчёт картинкой",'<div class="s51-cv" id="s51cv"></div><div class="sd-acts"><button type="button" class="btn" data-s51="imgcopy">Скопировать картинку</button><button type="button" class="btn primary" data-s51="imgsave">Сохранить картинку</button></div>',true))return;
+ var cv=document.createElement("canvas");cv.width=1100;cv.height=Math.max(460,300+Math.min(L.length,10)*34);document.getElementById("s51cv").appendChild(cv);drawCalc(cv,L)}
+
+/* ---------- панели в калькуляторе ---------- */
+var CMP={src:"",txt:""};
+function setsList(){var L=[];try{(window.SA_sets&&SA_sets.list?SA_sets.list():[]).forEach(function(s){L.push(["set:"+s.id,"Набор: "+s.n,s.ids])})}catch(x){}
+ try{(typeof chist!=="undefined"?chist:[]).slice(0,10).forEach(function(c,i){L.push(["hist:"+i,"История: "+(c.n||c.d)+" ("+c.l+")",c.ids])})}catch(x){}return L}
+function parseArts(t){var out=[],s=String(t||"");s.split(/[,;\n]+/).forEach(function(p){var m=/(ук|ак|дк)?\s*(?:ст\.?\s*)?(\d{1,3}(?:\.\d{1,3}){0,3})\s*(?:ч\.?\s*(\d+))?\s*(ук|ак|дк)?/i.exec(p);if(!m)return;
+ var k={"ук":"uk","ак":"ak","дк":"dk"}[(m[1]||m[4]||"ук").toLowerCase()],R=(DATA[k]||[]).filter(function(r){return r.code===m[2]});if(!R.length)return;
+ var r=m[3]?R.filter(function(x){return x.part===m[3]})[0]||R[0]:R.filter(function(x){return !x.part||x.part==="1"})[0]||R[0];if(out.indexOf(r)<0)out.push(r)});return out}
+function cmpB(){if(CMP.src==="txt")return parseArts(CMP.txt);var s=setsList().filter(function(x){return x[0]===CMP.src})[0];return s?(s[2]||[]).map(function(i){return BYID[i]}).filter(function(r){return r&&r.k!=="pk"}):[]}
+function colHtml(t,L){var c=calcOfItems(L);return '<div><h3>'+e(t)+'</h3>'+(L.length?'<ul>'+L.map(function(r){return '<li>'+e(lb(r))+' '+e(r.title)+'</li>'}).join("")+'</ul><div class="tot">'+(c.maxS?"★"+c.maxS+" · ":"")+(c.ft.m?"до "+c.ft.m+" мес.":"без срока")+(c.fmax?" · штраф до "+M(c.fmax):"")+(c.rec?" · судимость":"")+'</div>':'<p class="sub">Пусто</p>')+'</div>'}
+function cmpHtml(A){var B=cmpB(),a=calcOfItems(A),b=calcOfItems(B),d=[];
+ if(B.length){if(a.ft.m!==b.ft.m)d.push("срок "+(b.ft.m>a.ft.m?"больше":"меньше")+" на "+Math.abs(b.ft.m-a.ft.m)+" мес.");if(a.maxS!==b.maxS)d.push("розыск "+(b.maxS>a.maxS?"выше":"ниже")+" на "+Math.abs(b.maxS-a.maxS)+"★");if(a.fmax!==b.fmax)d.push("штраф "+(b.fmax>a.fmax?"больше":"меньше")+" на "+M(Math.abs(b.fmax-a.fmax)));if(a.rec!==b.rec)d.push(b.rec?"появляется судимость":"нет судимости")}
+ return '<div class="s50-tools" style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0"><select class="tin" id="s51src" aria-label="С чем сравнить" style="flex:1 1 220px"><option value="">Выберите набор или историю…</option>'+setsList().map(function(s){return '<option value="'+e(s[0])+'"'+(CMP.src===s[0]?" selected":"")+'>'+e(s[1])+'</option>'}).join("")+'<option value="txt"'+(CMP.src==="txt"?" selected":"")+'>Ввести статьи вручную</option></select>'+
+  (CMP.src==="txt"?'<input class="tin" id="s51txt" placeholder="12.8, 17.6, ак 3.6" value="'+e(CMP.txt)+'" style="flex:1 1 200px" aria-label="Статьи для сравнения">':'')+'</div>'+
+  (CMP.src?'<div class="s51-cmp">'+colHtml("Сейчас в калькуляторе",A)+colHtml("Другая квалификация",B)+'</div>'+(B.length?'<div class="s51-diff">'+(d.length?"Во второй квалификации: "+d.join(", ")+".":"Разницы в наказании нет.")+'</div>':''):'')}
+
+function calcPanels(){var view=document.getElementById("view");if(!view||view.querySelector("#s51box"))return;
+ var tb=view.querySelector("#termBox");if(!tb)return;var sec=tb.closest(".panel");if(!sec)return;var L=items0();if(!L.length)return;
+ // кнопки у статей: подбор части
+ sec.querySelectorAll("[data-rm]").forEach(function(b){var r=BYID[b.dataset.rm];if(!r||partsOf(r).length<2||b.parentNode.querySelector(".s51-part"))return;b.insertAdjacentHTML("beforebegin",'<button type="button" class="s51-part" data-s51part="'+e(r.id)+'" title="Подобрать часть статьи">ч.?</button>')});
+ var W=compatWarns(L),R=repeatWarns(L),pros=prosText(L),role="";try{role=SA_X.role}catch(x){}
+ var h='<div id="s51box">';
+ if(W.length)h+='<div class="verdict" role="alert" style="border-left:4px solid #e0a400;margin-top:10px"><b>⚠ Проверьте, не посчитано ли деяние дважды</b><ul style="margin:6px 0 0;padding-left:20px">'+W.map(function(w){return '<li>'+e(w)+'</li>'}).join("")+'</ul></div>';
+ if(R.length)h+='<div class="verdict" style="border-left:4px solid var(--accent);margin-top:10px"><b>🔁 Повторное нарушение?</b><ul style="margin:6px 0 0;padding-left:20px">'+R.map(function(w){return '<li>'+e(w)+'</li>'}).join("")+'</ul></div>';
+ h+='<details style="margin-top:12px"><summary><b>Почему такой срок</b> — разбор по шагам</summary>'+stepsHtml(L)+'</details>';
+ h+='<details style="margin-top:8px"'+(CMP.src?" open":"")+'><summary><b>Сравнить квалификации</b> — два набора рядом</summary><div id="s51cmp">'+cmpHtml(L)+'</div></details>';
+ h+='<details class="s51-pros" style="margin-top:8px"'+(role==="pros"?" open":"")+'><summary><b>Для прокурора</b> — требование наказания «от и до»</summary><p class="sd-note" style="margin:6px 0">Диапазон — ориентир программы по санкции и отмеченным обстоятельствам ('+(pros.v>0?"отягчающих больше — ближе к верхней границе":pros.v<0?"смягчающих больше — ближе к нижней":"поровну или не отмечены — середина и выше")+'), а не норма закона. Отредактируйте под дело.</p><textarea class="tin" id="s51pt">'+e(pros.t)+'</textarea><div class="rowbtn"><button type="button" class="btn" data-s51="proscopy">Скопировать требование</button></div></details>';
+ h+='<p class="rowbtn" style="margin:10px 0 0"><button type="button" class="btn" data-s51="img">🖼 Расчёт картинкой</button></p></div>';
+ tb.closest(".sumgrid").parentNode.querySelector("#saveCalc").closest("p").insertAdjacentHTML("beforebegin",h)}
+
+/* ---------- текст статьи: подсветка наказания (91) и похожие статьи (94) ---------- */
+var PN_RE=/((?:лишени[а-яё]*\s+свобод[а-яё]*\s+(?:на\s+срок\s+)?)?(?:от\s*\d+\s*)?до\s*\d+\s*(?:мес|месяц|лет|год)[а-яё]*\.?|\d+\s*(?:мес\.|месяц[а-яё]*))|(штраф[а-яё]*(?:\s+в\s+размере)?(?:\s*(?:от|до))?\s*\$\s?\d[\d\s]*\d|\$\s?\d[\d\s]*\d)|(\d\s*★|\d\s*звезд[а-яё]*|уров[а-яё]*\s+розыск[а-яё]*\s*\d|розыск[а-яё]*\s+\d★?)/gi;
+function hiNode(root){var tw=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null),list=[],n;while((n=tw.nextNode()))if(!(n.parentNode&&n.parentNode.closest&&n.parentNode.closest("button,.s51-pn,.s51-fn,.s51-wn")))list.push(n);
+ list.forEach(function(t){var s=t.nodeValue;PN_RE.lastIndex=0;if(!PN_RE.test(s))return;PN_RE.lastIndex=0;var f=document.createDocumentFragment(),last=0,m;
+  while((m=PN_RE.exec(s))){f.appendChild(document.createTextNode(s.slice(last,m.index)));var sp=document.createElement("span");sp.className=m[1]?"s51-pn":m[2]?"s51-fn":"s51-wn";sp.textContent=m[0];f.appendChild(sp);last=m.index+m[0].length}
+  f.appendChild(document.createTextNode(s.slice(last)));t.parentNode.replaceChild(f,t)})}
+var SIMC={};
+function similar(k,code){var key=k+"|"+code;if(SIMC[key])return SIMC[key];var r=(DATA[k]||[]).filter(function(x){return x.code===code})[0];if(!r)return [];var me=stems(r.title+" "+(r.note||"").slice(0,200)),seen={},out=[];
+ ["uk","ak","dk"].forEach(function(kk){(DATA[kk]||[]).forEach(function(x){if(kk===k&&x.code===code)return;var id=kk+"|"+x.code;if(seen[id])return;seen[id]=1;var s=sim(me,stems(x.title+" "+(x.note||"").slice(0,200)))+(kk!==k?0.05:0);if(s>=0.18)out.push({k:kk,code:x.code,title:x.title,s:s})})});
+ out.sort(function(a,b){return b.s-a.s});SIMC[key]=out.slice(0,3);return SIMC[key]}
+function artExtras(){var view=document.getElementById("view");if(!view)return;
+ view.querySelectorAll(".lw-card:not([data-s51])").forEach(function(c){c.dataset.s51="1";hiNode(c)}); // «Законы»: полные тексты статей
+ if(!/^(uk|ak|dk|pk)$/.test(state.tab))return;var A=view.querySelectorAll("article.art");
+ A.forEach(function(a){if(a.dataset.s51)return;a.dataset.s51="1";a.querySelectorAll(".note").forEach(hiNode)});
+ if(A.length>0&&A.length<=3&&state.tab!=="pk")A.forEach(function(a){if(a.querySelector(".s51-sim"))return;var L=similar(a.dataset.k,a.dataset.c);if(!L.length)return;
+  a.insertAdjacentHTML("beforeend",'<div class="s51-sim">Похожие статьи:'+L.map(function(x){return '<button type="button" data-go="'+x.k+"|"+e(x.code)+'" title="'+e(x.title)+'">'+e(KNm(x.k)+" "+x.code+" · "+x.title.slice(0,40))+'</button>'}).join("")+'</div>')})}
+
+var r0=window.render;window.render=function(){var r=r0.apply(this,arguments);try{if(state.tab==="calc")calcPanels();else artExtras()}catch(x){console.error(x)}return r};
+var rr0=window.rerender;if(typeof rr0==="function")window.rerender=function(){var r=rr0.apply(this,arguments);try{if(state.tab==="calc")calcPanels();else artExtras()}catch(x){console.error(x)}return r};
+// «Законы» дорисовываются после открытия закона — подсвечиваем и их
+var moT=0;try{new MutationObserver(function(){if(state.tab==="calc")return;clearTimeout(moT);moT=setTimeout(function(){try{artExtras()}catch(x){}},150)}).observe(document.getElementById("view"),{childList:true,subtree:true})}catch(x){}
+window.SA_calc41={steps:stepsHtml,compat:compatWarns,repeat:repeatWarns,pros:prosText,similar:similar,parse:parseArts};
+
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s51],[data-s51part],[data-s51a],[data-s51pick]");if(!b)return;var d=b.dataset;
+ if(d.s51part){pickerOpen(d.s51part);return}
+ if(d.s51a!=null){PK.ans[+d.s51a]=d.v===""?null:d.v==="1";var w=document.getElementById("s51pk");if(w)w.innerHTML=pickerHtml();return}
+ if(d.s51pick){var nr=BYID[d.s51pick];if(!nr)return;Object.keys(basket).forEach(function(id){var r=BYID[id];if(r&&r.k===nr.k&&r.code===nr.code)delete basket[id]});basket[nr.id]=1;save();closeM();if(typeof updateBadge==="function")updateBadge();render();toast("Выбрана "+lb(nr));return}
+ var k=d.s51;
+ if(k==="img"){imgOpen();return}
+ if(k==="proscopy"){var t=document.getElementById("s51pt");copy(t?t.value:"");toast("Требование скопировано");return}
+ var cv=document.querySelector("#s51cv canvas");
+ if(k==="imgsave"&&cv){var l=document.createElement("a");l.download="senko-raschet.png";l.href=cv.toDataURL("image/png");document.body.appendChild(l);l.click();l.remove();return}
+ if(k==="imgcopy"&&cv){try{cv.toBlob(function(bl){navigator.clipboard.write([new ClipboardItem({"image/png":bl})]).then(function(){toast("Картинка скопирована: вставьте её в Discord")},function(){toast("Не получилось, сохраните картинку")})})}catch(x){toast("Не получилось, сохраните картинку")}return}
+});
+document.addEventListener("change",function(ev){if(ev.target&&ev.target.id==="s51src"){CMP.src=ev.target.value;var w=document.getElementById("s51cmp");if(w)w.innerHTML=cmpHtml(items0())}});
+document.addEventListener("input",function(ev){if(ev.target&&ev.target.id==="s51txt"){CMP.txt=ev.target.value;var pos=ev.target.selectionStart,w=document.getElementById("s51cmp");if(w){w.innerHTML=cmpHtml(items0());var i=document.getElementById("s51txt");if(i){i.focus();try{i.setSelectionRange(pos,pos)}catch(x){}}}}});
 })();
 </script>
 <script>
