@@ -3,7 +3,7 @@
 (function () {
   "use strict";
   var W = window.SenkoWeb;
-  var ROLES = { off: "Сотрудник", pros: "Прокурор", adv: "Адвокат" };
+  var ROLES = { off: "Сотрудник", pros: "Прокурор", adv: "Адвокат", judge: "Судья" };
   var DEPTS = ["Government", "LSPD", "LSCSD", "FIB", "SANG"];
   var SERVERS = [{ id: 12, name: "Boston" }, { id: 7, name: "Los Angeles" }, { id: 16, name: "Denver" }]; // как SERVERS в серверной функции
   var dcRun = 0; // 3.5.3: номер текущей попытки входа через Discord

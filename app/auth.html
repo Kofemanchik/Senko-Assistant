@@ -133,6 +133,7 @@ body:not(.framed) .tbar{display:none}
       <label><span>Организация <span class="req">обязательно</span></span><select id="rOrg"></select></label>
       <label id="rOrgOtherW" hidden><span>Название организации <span class="req">обязательно</span></span><input id="rOrgOther" maxlength="60" autocomplete="off"></label>
       <label><span>Роль в игре <span class="req">обязательно</span></span><select id="rRole"></select></label>
+      <p class="hint" id="rRoleHint" hidden style="margin:-4px 0 8px;font-size:12.5px;opacity:.8">Судья входит в программу после одобрения Председателем Верховного суда: он подтвердит заявку и назначит должность.</p>
       <label><span>Discord <span class="req">обязательно</span></span><input id="rDiscord" maxlength="40" autocomplete="off" placeholder="ник пользователя"></label>
       <label><span>Telegram <span class="opt">необязательно</span></span><input id="rTg" maxlength="40" autocomplete="off" placeholder="@name"></label>
       <label><span>Номер телефона в игре <span class="opt">необязательно</span></span><input id="rPhone" maxlength="16" inputmode="numeric" autocomplete="off" placeholder="только цифры"></label>
@@ -499,6 +500,8 @@ body:not(.framed) .tbar{display:none}
     var sel=$("rRole"), cur=sel.value, gov=$("rOrg").value===GOV;
     fill(sel,Object.keys(ROLES_ALL).filter(function(k){return gov||k==="off"}).map(function(k){return [k,ROLES_ALL[k]]}));
     sel.value=gov&&ROLES_ALL[cur]?cur:"off"; sel.disabled=!gov;
+    var hn=$("rRoleHint"); if(hn) hn.hidden=sel.value!=="judge";
+    if(!sel.dataset.j){sel.dataset.j="1";sel.addEventListener("change",function(){var x=$("rRoleHint");if(x)x.hidden=sel.value!=="judge"})}
   }
 
   function show(id){

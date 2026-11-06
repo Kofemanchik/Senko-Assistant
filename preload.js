@@ -117,7 +117,7 @@ contextBridge.exposeInMainWorld("senkoApp", {
   // ИИ-помощник: ask(вопрос) → {ok, answer, sources, left, error}; available() — подключён ли сервис
   ai: {
     // 3.9: вторым параметром — история диалога { hist: [{ q, a }] }
-    ask: (q, o) => ipcRenderer.invoke("ai:ask", String(q || "").slice(0, 1500), o && typeof o === "object" ? { hist: (Array.isArray(o.hist) ? o.hist : []).slice(-6).map((t) => ({ q: String((t && t.q) || "").slice(0, 1500), a: String((t && t.a) || "").slice(0, 2500) })) } : null),
+    ask: (q, o) => ipcRenderer.invoke("ai:ask", String(q || "").slice(0, 1500), o && typeof o === "object" ? { hist: (Array.isArray(o.hist) ? o.hist : []).slice(-6).map((t) => ({ q: String((t && t.q) || "").slice(0, 1500), a: String((t && t.a) || "").slice(0, 2500) })), mode: o.mode === "court" || o.mode === "judge" ? o.mode : "" } : null),
     available: () => ipcRenderer.sendSync("ai:available"),
     vote: (fid, v) => ipcRenderer.invoke("ai:vote", String(fid || ""), v === 1 ? 1 : v === -1 ? -1 : 0) // 👍 1 / 👎 -1
   },

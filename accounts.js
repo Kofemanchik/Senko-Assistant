@@ -7,7 +7,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const ROLES = { off: "Сотрудник", pros: "Прокурор", adv: "Адвокат" };
+const ROLES = { off: "Сотрудник", pros: "Прокурор", adv: "Адвокат", judge: "Судья" };
 const DEPTS = ["Government", "LSPD", "LSCSD", "FIB", "SANG"]; // должен совпадать с DEPTS в supabase/functions/senko/index.ts
 // 2.9: серверы Majestic RP; должен совпадать с SERVERS в supabase/functions/senko/index.ts и scripts/servers.js
 const SERVERS = [

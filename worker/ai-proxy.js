@@ -82,14 +82,20 @@ function cleanBody(b) {
     hTotal += hq.length + ha.length;
     hist.unshift({ q: hq, a: ha });
   }
-  return { q, ctx, short: !!b.short, clar: !!b.clar && !b.short, srv, hist };
+  const mode = MODES[b.mode] ? b.mode : "";
+  return { q, ctx, short: !!b.short && !mode, clar: !!b.clar && !b.short && !mode, srv, hist, mode };
 }
 
 const SHORT = "\nФорматирование: ответ ОЧЕНЬ короткий — не более 3 предложений (до 450 символов), без списков и заголовков; первым предложением сам ответ; ссылки на статьи сохрани.";
 // 2.7: встречный вопрос. Сервер включает его по флагу ai27 (сначала только тестерам) и не включает в голосовом помощнике
 const CLAR = "\nУточнение: если это короткий вопрос о законе и от недостающей детали зависит, какая статья или какое наказание (кто действовал — гражданский или сотрудник при исполнении; было ли оружие; где это было; умышленно или нет), не гадай: ответь одной строкой, которая начинается словом «Уточните:», и задай один-два коротких вопроса. Если это разбор ситуации или просьба составить текст — не останавливайся: дай ответ с вариантами и в конце одной строкой спроси недостающее. Если деталь на ответ не влияет или в сообщении уже есть «уточнение:», отвечай сразу.";
 // m — режим: { short, clar } (раньше передавался только short)
-const sys = (m) => SYSTEM.replace("{SRV}", SRV_NAMES[m.srv] || "Boston") + "\nОтвечай по законам именно этого сервера: выдержки взяты из его законодательной базы, законы других серверов могут отличаться." + (m.short ? SHORT : "") + (m.clar ? CLAR : "");
+// 4.3: режимы для суда — доводы сторон (174) и разбор решения в тренажёре судьи (228)
+const MODES = {
+  court: "\n\nРЕЖИМ «ДОВОДЫ СТОРОН». Игрок описывает дело. Ответь строго разделами: «Квалификация» (какие статьи применимы и почему, со ссылками на выдержки); «Доводы обвинения» (3–6 пунктов, каждый со статьёй); «Доводы защиты» (3–6 пунктов: процессуальные нарушения, недоказанность, смягчающие обстоятельства, неприкосновенность — каждый со статьёй); «Слабые места» (что стоит проверить или запросить: доказательства, сроки, ордер). Не выноси решение за суд. Если в выдержках нет нужной статьи, скажи об этом прямо.",
+  judge: "\n\nРЕЖИМ «ТРЕНАЖЁР СУДЬИ». Игрок — судья-стажёр: дано учебное дело и его решение (статьи и мера). Сначала одной строкой вердикт: «Верно», «Частично верно» или «Неверно». Затем коротко: какие статьи применены правильно, какие лишние или пропущены, верна ли мера наказания — со ссылками на выдержки. В конце один совет. Не больше 900 знаков.",
+};
+const sys = (m) => SYSTEM.replace("{SRV}", SRV_NAMES[m.srv] || "Boston") + "\nОтвечай по законам именно этого сервера: выдержки взяты из его законодательной базы, законы других серверов могут отличаться." + (MODES[m.mode] || (m.short ? SHORT : "") + (m.clar ? CLAR : ""));
 
 function buildUserPrompt(q, ctx) {
   const blocks = ctx.length
@@ -341,7 +347,7 @@ async function handle(request, env, ctxW) {
   if (!list.length) return json({ ok: false, error: "ИИ-сервис не настроен." }, 503);
 
   // кэш одинаковых вопросов (бесплатный Cache API; не тратит ни квоту ИИ, ни лимит игрока)
-  const cacheKey = new Request("https://cache.senko.local/" + (await sha256Hex("v24|" + body.srv + "|" + (body.short ? "s|" : "") + (body.clar ? "c|" : "") + body.q.toLowerCase() + "|" + body.ctx.map((c) => c.ref + ":" + c.text.length + ":" + c.text.slice(0, 40)).join(","))));
+  const cacheKey = new Request("https://cache.senko.local/" + (await sha256Hex("v24|" + body.mode + "|" + body.srv + "|" + (body.short ? "s|" : "") + (body.clar ? "c|" : "") + body.q.toLowerCase() + "|" + body.ctx.map((c) => c.ref + ":" + c.text.length + ":" + c.text.slice(0, 40)).join(","))));
   // 3.9: ответ в диалоге зависит от истории — такие не кэшируем
   const cache = typeof caches !== "undefined" && !body.hist.length ? caches.default : null;
   if (cache) {
@@ -361,7 +367,7 @@ async function handle(request, env, ctxW) {
     let ctxTry = body.ctx;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const answer = checkRefs(await fn(env, body.q, ctxTry, { short: body.short, clar: body.clar, srv: body.srv, hist: attempt ? body.hist.slice(-2) : body.hist }), body.ctx);
+        const answer = checkRefs(await fn(env, body.q, ctxTry, { short: body.short, clar: body.clar, srv: body.srv, mode: body.mode, hist: attempt ? body.hist.slice(-2) : body.hist }), body.ctx);
         if (cache) ctxW.waitUntil(cache.put(cacheKey, new Response(JSON.stringify({ answer }), { headers: { "content-type": "application/json", "cache-control": "max-age=21600" } })));
         if (!quota.ok) return json({ ok: true, answer, provider: name, left: 0, bonus: true });
         return json({ ok: true, answer, provider: name, left: await commitQuota(env, uid, quota) });

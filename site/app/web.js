@@ -65,7 +65,7 @@
       cfg: cfg(), win: { stream: [], profiles: [], profile: "" }, platform: "web", web: true, autostart: false,
       sync: sync.status(), hotkeyError: "", packaged: true, version: shownVer(u), dataVersion: CFG.ver || "",
       depts: DEPTS.slice(), servers: SERVERS.slice(), shareUrl: CFG.api, sys: sys,
-      user: u ? { login: u.login, nick: u.nick, static: u.static, discord: u.discord, telegram: u.telegram, phone: u.phone, role: u.role, roleName: u.roleName, org: u.org, server: parseInt(u.server, 10) || 12, serverName: u.serverName || "", staffServer: u.staffServer || 0, rank: u.rank, rankName: u.rankName, offline: !!u.offline } : null // 3.7.3: без server веб-версия всегда показывала Boston
+      user: u ? { login: u.login, nick: u.nick, static: u.static, discord: u.discord, telegram: u.telegram, phone: u.phone, role: u.role, roleName: u.roleName, org: u.org, server: parseInt(u.server, 10) || 12, serverName: u.serverName || "", staffServer: u.staffServer || 0, rank: u.rank, rankName: u.rankName, judgePos: u.judgePos || "", pvs: !!u.pvs, offline: !!u.offline } : null // 3.7.3: без server веб-версия всегда показывала Boston
     };
   }
   function pushState() { var s = getState(); listeners.slice().forEach(function (f) { try { f(s); } catch (e) {} }); }
@@ -209,7 +209,7 @@
       found = (Array.isArray(f) ? f : []).slice(0, 14);
       var sources = found.map(function (x) { return { ref: x.ref, go: x.go || "", lw: x.lw || "" }; });
       var hist = (opts && Array.isArray(opts.hist) ? opts.hist : []).slice(-6).map(function (t) { return { q: String((t && t.q) || "").slice(0, 1500), a: String((t && t.a) || "").slice(0, 2500) }; });
-      return W.call({ action: "ai_ask", token: (W.session() || {}).token, q: question, hist: hist, topic: plan.topic, short: !!(opts && opts.short), ctx: found.map(function (x) { return { ref: String(x.ref || ""), text: String(x.text || "") }; }) }, 45000).then(function (r) {
+      return W.call({ action: "ai_ask", token: (W.session() || {}).token, q: question, hist: hist, topic: plan.topic, mode: opts && (opts.mode === "court" || opts.mode === "judge") ? opts.mode : "", short: !!(opts && opts.short), ctx: found.map(function (x) { return { ref: String(x.ref || ""), text: String(x.text || "") }; }) }, 45000).then(function (r) {
         aiBusy = false;
         if (!r || !r.ok) return { ok: false, error: (r && r.error) || "ИИ-сервис вернул ошибку.", limit: !!(r && r.limit), sources: sources };
         var fid = "";
@@ -267,7 +267,7 @@
     del.forEach(function (k) { W.ls(k, null); });
   }
 
-  var PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password", "ads", "status", "beta", "hooks", "events", "ideas", "patrol", "ai_dict", "ai_hist", "ai_check", "colleagues", "handoff", "svc", "lead_log", "org_week", "pub_board_opt", "dc_auth_start", "dc_auth_poll", "dc_unlink", "srv_cfg", "org_news", "notice_read", "totp", "org_join", "org_join_admin", "glossary", "stt", "qr_login", "month", "vac", "tabel"]; // 2.7: словарь ИИ, история вопросов, самопроверка; 2.8: коллеги, передача задержанного
+  var PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password", "ads", "status", "beta", "hooks", "events", "ideas", "patrol", "ai_dict", "ai_hist", "ai_check", "colleagues", "handoff", "svc", "lead_log", "org_week", "pub_board_opt", "dc_auth_start", "dc_auth_poll", "dc_unlink", "srv_cfg", "org_news", "notice_read", "totp", "org_join", "org_join_admin", "glossary", "stt", "qr_login", "month", "vac", "court", "tabel"]; // 2.7: словарь ИИ, история вопросов, самопроверка; 2.8: коллеги, передача задержанного
   function act(action, data) {
     return W.call(Object.assign({}, W.client(), data && typeof data === "object" ? data : {}, { action: action, token: (W.session() || {}).token })).then(function (r) {
       if (r && (r.code === "auth" || r.code === "banned")) setTimeout(function () { lost(r.code === "banned" ? r.error : ""); }, 0);

@@ -21,7 +21,7 @@ create table if not exists public.profiles (
   static_id      text not null,
   org            text not null,
   dept           text not null default '',
-  game_role      text not null check (game_role in ('off','pros','adv')),
+  game_role      text not null check (game_role in ('off','pros','adv','judge')),
   discord        text not null,
   telegram       text not null default '',
   phone          text not null,                        -- номер телефона в игре
@@ -672,3 +672,30 @@ alter table public.vacations add column if not exists decided_at timestamptz;
 create index if not exists vacations_user on public.vacations (user_id, end_at);
 alter table public.vacations enable row level security;
 revoke all on table public.vacations from anon, authenticated;
+
+-- 4.3: суд — должности судей, Председатель Верховного суда, дела, решения, ордера
+
+alter table public.profiles add column if not exists judge_pos text not null default '';
+alter table public.profiles add column if not exists pvs boolean not null default false;
+create table if not exists public.court_cases (
+  id bigserial primary key, server integer not null default 12, no integer not null default 0, title text not null, kind text not null default 'crim',
+  status text not null default 'open' check (status in ('open','closed')), parties jsonb not null default '[]', arts text not null default '',
+  evidence jsonb not null default '[]', hearings jsonb not null default '[]', notes text not null default '', judge text not null default '', judge_login text not null default '',
+  draw jsonb, author_id uuid references public.profiles(id) on delete set null, author text not null default '', author_login text not null default '',
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+create index if not exists court_cases_srv on public.court_cases (server, status, updated_at desc);
+create table if not exists public.court_decisions (
+  id bigserial primary key, server integer not null default 12, title text not null, case_no text not null default '', dt date not null default current_date,
+  arts text not null default '', tags text not null default '', text text not null, author text not null default '', created_at timestamptz not null default now());
+create index if not exists court_decisions_srv on public.court_decisions (server, dt desc);
+create table if not exists public.warrants (
+  id bigserial primary key, server integer not null default 12, kind text not null, target text not null, reason text not null, case_no text not null default '',
+  status text not null default 'req' check (status in ('req','ok','no')), valid_until timestamptz, issued_by text not null default '', answer text not null default '',
+  author_id uuid references public.profiles(id) on delete set null, author text not null default '', org text not null default '',
+  created_at timestamptz not null default now(), decided_at timestamptz);
+create index if not exists warrants_srv on public.warrants (server, created_at desc);
+alter table public.court_cases enable row level security;
+alter table public.court_decisions enable row level security;
+alter table public.warrants enable row level security;
+revoke all on table public.court_cases, public.court_decisions, public.warrants from anon, authenticated;
+
