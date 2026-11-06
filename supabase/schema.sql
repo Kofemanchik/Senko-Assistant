@@ -665,5 +665,10 @@ create table if not exists public.vacations (
   id bigserial primary key, user_id uuid not null references public.profiles(id) on delete cascade, org text not null, server integer not null default 12,
   kind text not null check (kind in ('ic','ooc')), start_at timestamptz not null, end_at timestamptz not null, note text not null default '', created_at timestamptz not null default now());
 create index if not exists vacations_org on public.vacations (org, server, end_at);
+alter table public.vacations add column if not exists status text not null default 'wait' check (status in ('wait','ok','no'));
+alter table public.vacations add column if not exists answer text not null default '';
+alter table public.vacations add column if not exists decided_by text not null default '';
+alter table public.vacations add column if not exists decided_at timestamptz;
+create index if not exists vacations_user on public.vacations (user_id, end_at);
 alter table public.vacations enable row level security;
 revoke all on table public.vacations from anon, authenticated;

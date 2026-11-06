@@ -3431,7 +3431,7 @@ function buildNav(){nav2.innerHTML="";[tbT,tbC].forEach(function(b){b.hidden=tru
 // раздел, который можно открыть в роли: кодексы, главная и руководство есть всегда
 function tabOk(r,t){return t==="home"||t==="boss"||BASE.indexOf(t)>=0||visible(r).indexOf(t)>=0}
 function firstTab(r){var L=ROLES[r][1];return L.length?L[0]:"home"}
-function remember(t){if(!t||t==="boss"||t==="ideas"||t==="tester"||t==="colleagues")return;if(RC.last[X.role]!==t){RC.last[X.role]=t;saveRC()}}
+function remember(t){if(!t||t==="boss"||t==="ideas"||t==="tester"||t==="colleagues"||t==="vac")return;if(RC.last[X.role]!==t){RC.last[X.role]=t;saveRC()}}
 function setRole(r){if(ALLOW.indexOf(r)<0)r="off";remember(state.tab);X.role=r;try{localStorage.setItem("bos-role",r)}catch(e){}buildNav();
  var t=RC.last[r];
  if(t&&tabOk(r,t))state.tab=t; else if(!tabOk(r,state.tab))state.tab=firstTab(r);
@@ -4587,7 +4587,7 @@ function cabHtml(){
       fld("discord","Discord",acc.discord,40,"ник в Discord")+fld("telegram","Telegram",acc.telegram,33,"@name или пусто")+fld("phone","Номер в игре",acc.phone,12,"только цифры или пусто")+
       '<div class="sbtns" style="margin:0"><button type="button" class="btn" data-cab="accsave" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Сохранить</button></div>'+
       '<div id="accMsg" role="status" aria-live="polite" style="font-size:12.5px;color:var(--muted);min-height:1.2em"></div></div></div>';
-    ah+=cabPart(function(){return deptInfo(acc.org||dept)})+cabPart(function(){return window.SA_PROG?window.SA_PROG.html():""})+cabPart(function(){return window.SA_CAB11?window.SA_CAB11(true):""})+cabPart(function(){return window.SA_CAB13?window.SA_CAB13(true):""})+cabPart(function(){return window.SA_CAB24?window.SA_CAB24():""})+cabPart(function(){return window.SA_CAB47?window.SA_CAB47():""})+cabPart(function(){return window.SA_CAB52?window.SA_CAB52():""})+cabPart(function(){return window.SA_CAB28?window.SA_CAB28():""})+cabPart(function(){return window.SA_CAB35?window.SA_CAB35():""})+cabPart(dcCabHtml)+cabPart(function(){return window.SA_CAB38?window.SA_CAB38():""})+cabPart(function(){return window.SA_CAB44?window.SA_CAB44():""})+cabPart(function(){return window.SA_RP?window.SA_RP.cabHtml():""})+cabPart(detHtml)+cabPart(testHtml);
+    ah+=cabPart(function(){return deptInfo(acc.org||dept)})+cabPart(function(){return window.SA_PROG?window.SA_PROG.html():""})+cabPart(function(){return window.SA_CAB11?window.SA_CAB11(true):""})+cabPart(function(){return window.SA_CAB13?window.SA_CAB13(true):""})+cabPart(function(){return window.SA_CAB24?window.SA_CAB24():""})+cabPart(function(){return window.SA_CAB47?window.SA_CAB47():""})+cabPart(function(){return window.SA_CAB28?window.SA_CAB28():""})+cabPart(function(){return window.SA_CAB35?window.SA_CAB35():""})+cabPart(dcCabHtml)+cabPart(function(){return window.SA_CAB38?window.SA_CAB38():""})+cabPart(function(){return window.SA_CAB44?window.SA_CAB44():""})+cabPart(function(){return window.SA_RP?window.SA_RP.cabHtml():""})+cabPart(detHtml)+cabPart(testHtml);
     ah+='<p class="cab-foot">Данные кабинета хранятся в вашем аккаунте. После смены ведомства или сервера программу нужно перезапустить: законы и подсказки подстроятся под выбранный сервер.</p>';
     return ah;
   }
@@ -7130,6 +7130,15 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"4.2.1",d:"06.11.2026",items:[
+  ["🗓","Отпуска — отдельный раздел с календарём","В меню слева, сразу под «Главной», появился раздел «Отпуска». Это календарь вашего ведомства на месяц: листайте месяцы стрелками."],
+  ["👆","Даты и часы выбираются в календаре","OOC-отпуск: нажмите первый и последний день (до 12 дней, не дальше 2 месяцев вперёд). IC-отпуск: нажмите день и выберите часы «с» и «до» (до 12 часов). Причину можно указать по желанию."],
+  ["📨","Заявка уходит руководителю","Кнопка «Отправить заявку руководителю». Руководитель получает уведомление в программе, а в Discord организации приходит сообщение. Пока заявка на рассмотрении, ваши даты обведены пунктиром, заявку можно отозвать."],
+  ["🟥","Одобренный отпуск виден всем","Когда руководитель одобряет заявку, ваш ник пишется на этих датах, а сами даты становятся красными — их видит всё ведомство. Вам приходит уведомление с решением и комментарием."],
+  ["✅","Решение руководства","Руководитель одобряет или отклоняет заявки прямо в календаре (блок «Заявки сотрудников») или в панели руководителя → «Отпуска», можно оставить комментарий. Свою заявку руководитель сам не одобряет."],
+  ["🏠","На главной","Карточка «Отпуска» на главной показывает ваш ближайший отпуск или заявку, а руководителю — сколько заявок ждут решения."],
+  ["🔁","Из кабинета убрано","Оформление отпусков из личного кабинета перенесено в новый раздел. В табеле теперь отмечаются только одобренные отпуска."]
+ ]},
  {v:"4.2.0",d:"06.11.2026",items:[
   ["🔢","Номера рапортов","У каждого рапорта теперь свой номер внутри ведомства: № 0001, № 0002 и дальше. Номер виден в списке, в окне рапорта и в PDF."],
   ["↩","На доработку","Руководство может вернуть рапорт с комментарием. Сотрудник нажимает «Исправить и отправить снова» — рапорт уходит повторно под тем же номером."],
@@ -14799,6 +14808,7 @@ var I={
  menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
  tester:'<path d="M9 3h6M10 3v6L4.5 18.5A2 2 0 0 0 6.2 21.5h11.6a2 2 0 0 0 1.7-3L14 9V3"/><path d="M7.5 15h9"/>',
  ideas:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.9V16h5v-.2c0-.8.4-1.5 1-1.9A6 6 0 0 0 12 3z"/>',
+ vac:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 14h3v3H8z"/>',
  colleagues:'<circle cx="8" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.5"/><path d="M2.5 19c.6-3.200 2.800-5 5.500-5s4.900 1.800 5.500 5"/><path d="M14.500 14.300c.6-.2 1.300-.3 2-.3 2.300 0 4.100 1.500 4.600 4.500"/>'
 };
 function ic(k){return '<svg viewBox="0 0 24 24" aria-hidden="true">'+(I[k]||"")+'</svg>'}
@@ -14827,6 +14837,7 @@ var D={
  ref:["Справочник","Шпаргалка, неприкосновенные","Справочник","Шпаргалка, неприкосновенные лица, охраняемые места и регламент передачи дел."],
  boss:["Руководство","Панель руководителя","Панель руководителя","Сотрудники организации, рейтинг недели, смены и контрольные тесты."],
  ideas:["Идеи","Предложить и проголосовать","Идеи","Предложите, что добавить в программу, и голосуйте за идеи других. Самые популярные разработчик берёт в работу."],
+ vac:["Отпуска","Календарь и заявки","Отпуска","Календарь отпусков ведомства: выберите даты или часы и отправьте заявку руководителю. Одобренные отпуска видны всем — ник на дате, дата красная."],
  colleagues:["Коллеги","Профили своего ведомства","Коллеги","Сотрудники вашего ведомства: должность, уровень, задержания, тесты и достижения. Свою должность и «о себе» укажите в личном кабинете."],
  tester:["Панель тестера","Задания и бета-версии","Панель тестера","Задания от разработчика, экспериментальные функции и ранние версии программы."]
 };
@@ -14895,7 +14906,7 @@ function navHtml(){
  var V=vis(), h="", has=function(t){return V.indexOf(t)>=0};
  var O=window.SA_tabOrder?window.SA_tabOrder():null; // 2.2: свой порядок разделов для роли
  var grp=function(name,L){L=L.filter(has);if(O)L.sort(function(a,b){var x=O.indexOf(a),y=O.indexOf(b);return (x<0?99:x)-(y<0?99:y)});if(L.length)h+='<div class="sd-g">'+name+'</div>'+L.map(item).join("")};
- h+='<div class="sd-g">Начало</div>'+item("home");
+ h+='<div class="sd-g">Начало</div>'+item("home")+(window.SA_VAC&&SA_VAC.ok()?item("vac"):"");
  grp("Кодексы и законы",CODES); grp("Работа",WORKS); grp("Развитие",DEV);
  if(bossOk()) h+='<div class="sd-g">Руководство</div>'+item("boss");
  var S24=window.SA_S24;
@@ -17893,36 +17904,10 @@ function repaint(){try{if(window.SA_cabRepaint)SA_cabRepaint()}catch(x){}}
 function mskDay(t){return new Date((t||Date.now())+3*3600e3).toISOString().slice(0,10)}
 function dtm(t){return new Date(t).toLocaleString("ru-RU",{timeZone:"Europe/Moscow",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}
 function dd(t){return new Date(t).toLocaleDateString("ru-RU",{timeZone:"Europe/Moscow",day:"2-digit",month:"2-digit"})}
-function vacTxt(v){return (v.kind==="ic"?"🌙 IC ":"🏖 OOC ")+(v.kind==="ic"?dtm(v.start)+" — "+new Date(v.end).toLocaleTimeString("ru-RU",{timeZone:"Europe/Moscow",hour:"2-digit",minute:"2-digit"}):dd(v.start)+" — "+dd(Date.parse(v.end)-1))}
-
-/* ---------- отпуска в личном кабинете ---------- */
-var VC={list:null,busy:false,kind:"ic",msg:"",err:false};
-function vload(){if(VC.busy||!online())return;VC.busy=true;api("vac",{op:"mine"}).then(function(r){VC.busy=false;VC.list=r.ok?r.list:[];if(!r.ok){VC.msg=r.error;VC.err=true}repaint()})}
-window.SA_CAB52=function(){if(!online())return "";if(!VC.list&&!VC.busy)setTimeout(vload,0);
- var today=mskDay(),max=mskDay(Date.now()+60*864e5),h='<div class="cab-h">Отпуска<small>IC — до 12 часов в пределах дня, OOC — до 12 дней</small></div>';
- h+='<div class="seg" role="group" style="margin:4px 0 6px"><button type="button" data-s52k="ic" aria-pressed="'+(VC.kind==="ic")+'">IC (в игре)</button><button type="button" data-s52k="ooc" aria-pressed="'+(VC.kind==="ooc")+'">OOC (вне игры)</button></div>';
- if(VC.kind==="ic")h+='<div class="s52-form"><label>День<input type="date" class="tin" id="s52d" min="'+today+'" max="'+max+'" value="'+today+'"></label><label>С<input type="time" class="tin" id="s52t1" value="18:00"></label><label>До<input type="time" class="tin" id="s52t2" value="23:00"></label>';
- else h+='<div class="s52-form"><label>С<input type="date" class="tin" id="s52d1" min="'+today+'" max="'+max+'" value="'+today+'"></label><label>По (включительно)<input type="date" class="tin" id="s52d2" min="'+today+'" max="'+max+'" value="'+mskDay(Date.now()+2*864e5)+'"></label>';
- h+='<label style="flex:1 1 160px">Причина (необязательно)<input class="tin" id="s52n" maxlength="120" placeholder="Например: учёба"></label><button type="button" class="btn primary" data-s52="add">Оформить</button></div>';
- if(VC.msg)h+='<p class="s24-msg'+(VC.err?" err":"")+'" role="status">'+e(VC.msg)+'</p>';
- var L=VC.list||[];
- h+=L.length?'<ul class="s52-vl">'+L.map(function(v){var now=Date.parse(v.start)<=Date.now()&&Date.parse(v.end)>Date.now(),past=Date.parse(v.end)<=Date.now();return '<li class="'+(now?"now":"")+'"'+(past?' style="opacity:.55"':'')+'><span>'+e(vacTxt(v))+(v.note?' · '+e(v.note):'')+(now?' · <b>сейчас</b>':'')+'</span>'+(past?'':'<button type="button" class="btn" data-s52del="'+e(v.id)+'">Отменить</button>')+'</li>'}).join("")+'</ul>':'<p class="s24-empty">'+(VC.list?"Отпусков нет. Руководство видит ваши отпуска в панели и в табеле.":"Загружаем…")+'</p>';
- return h};
-function msk(dateStr,timeStr){return Date.parse(dateStr+"T"+(timeStr||"00:00")+":00+03:00")}
-document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s52k],[data-s52],[data-s52del]");if(!b)return;
- if(b.dataset.s52k){VC.kind=b.dataset.s52k;VC.msg="";repaint();return}
- if(b.dataset.s52del){b.disabled=true;api("vac",{op:"del",id:b.dataset.s52del}).then(function(r){VC.list=r.ok?r.list:VC.list;VC.msg=r.ok?"Отпуск отменён.":r.error;VC.err=!r.ok;repaint()});return}
- if(b.dataset.s52==="add"){var g=function(id){return (document.getElementById(id)||{}).value||""},s,en;
-  if(VC.kind==="ic"){s=msk(g("s52d"),g("s52t1"));en=msk(g("s52d"),g("s52t2"));if(en<=s){VC.msg="Конец должен быть позже начала.";VC.err=true;repaint();return}}
-  else{s=msk(g("s52d1"));en=msk(g("s52d2"))+864e5;if(en<=s){VC.msg="Дата окончания раньше начала.";VC.err=true;repaint();return}}
-  if(!s||!en){VC.msg="Заполните даты.";VC.err=true;repaint();return}
-  b.disabled=true;api("vac",{op:"add",kind:VC.kind,start:new Date(s).toISOString(),end:new Date(en).toISOString(),note:g("s52n")}).then(function(r){b.disabled=false;if(r.ok){VC.list=r.list;VC.msg="Отпуск оформлен. Руководство увидит его в панели.";VC.err=false}else{VC.msg=r.error||"Не удалось.";VC.err=true}repaint()});return}
-},true);
 
 /* ---------- панель руководителя: табель и отпуска ---------- */
-var TB={days:7,from:"",data:null,busy:false,err:"",msg:"",org:null},VO={data:null,busy:false,err:"",org:null};
+var TB={days:7,from:"",data:null,busy:false,err:"",msg:"",org:null};
 function tload(org,redraw){if(TB.busy)return;TB.busy=true;TB.err="";api("tabel",{op:"get",org:org||"",server:window.SA_STAFF_SRV||"",days:TB.days,from:TB.from}).then(function(r){TB.busy=false;if(r.ok)TB.data=r;else TB.err=r.error||"Не удалось загрузить табель.";redraw()})}
-function vorgLoad(org,redraw){if(VO.busy)return;VO.busy=true;VO.err="";api("vac",{op:"org",org:org||"",server:window.SA_STAFF_SRV||""}).then(function(r){VO.busy=false;if(r.ok)VO.data=r;else VO.err=r.error||"Не удалось загрузить отпуска.";redraw()})}
 function csv(d){var q=function(s){s=String(s==null?"":s);return /[;"\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
  var L=[["Сотрудник","Должность"].concat(d.days).concat(["Итого, ч","Дней со сменами"]).map(q).join(";")];
  d.rows.forEach(function(r){L.push([r.nick,r.post].concat(r.h.map(function(h,i){return r.v[i]?(r.v[i]==="ic"?"IC-отпуск":"OOC-отпуск")+(h?" / "+String(h).replace(".",","):""):h?String(h).replace(".",","):""})).concat([String(r.total).replace(".",","),r.days]).map(q).join(";"))});
@@ -17932,7 +17917,7 @@ window.SA_B42={
  subs:function(subs){subs.push(["tabel","Табель"],["vac","Отпуска"])},
  html:function(sub,org,redraw){org=org||"";
   if(sub==="tabel"){if(TB.org!==org){TB.org=org;TB.data=null}if(!TB.data&&!TB.busy&&!TB.err)setTimeout(function(){tload(org,redraw)},0);
-   var d=TB.data,h='<p class="sub">Сотрудник × день: часы смен ведомства, во время которых сотрудник был в сети (по сводкам смен). 🌙 — IC-отпуск, 🏖 — OOC-отпуск.</p>';
+   var d=TB.data,h='<p class="sub">Сотрудник × день: часы смен ведомства, во время которых сотрудник был в сети (по сводкам смен). 🌙 — IC-отпуск, 🏖 — OOC-отпуск (только одобренные).</p>';
    h+='<div class="s52-form"><label>Период<select class="tin" id="s52tp">'+[[7,"7 дней"],[14,"14 дней"],[31,"31 день"]].map(function(x){return '<option value="'+x[0]+'"'+(TB.days===x[0]?" selected":"")+'>'+x[1]+'</option>'}).join("")+'</select></label><label>С даты<input type="date" class="tin" id="s52tf" value="'+e(TB.from||(d?d.days[0]:""))+'"></label>'+
     '<button type="button" class="btn" data-s52b="csv"'+(d?"":" disabled")+'>Выгрузить в Excel</button><button type="button" class="btn" data-s52b="send"'+(d?"":" disabled")+'>Отправить в Discord</button></div>';
    if(TB.msg)h+='<p class="s24-msg" role="status">'+e(TB.msg)+'</p>';
@@ -17943,14 +17928,9 @@ window.SA_B42={
     d.rows.map(function(r){return '<tr><td>'+e(r.nick)+(r.post?' <small style="color:var(--muted)">'+e(r.post)+'</small>':'')+'</td>'+r.h.map(function(x,i){var v=r.v[i];return '<td class="'+(x?"h":v?"v":"")+'">'+(v?(v==="ic"?"🌙":"🏖"):"")+(x?String(x).replace(".",","):v?"":"·")+'</td>'}).join("")+'<td><b>'+String(r.total).replace(".",",")+'</b></td></tr>'}).join("")+
     '</tbody><tfoot><tr><td>Итого '+e(d.org)+'</td>'+tot.map(function(x){return '<td>'+(x?String(x).replace(".",","):"·")+'</td>'}).join("")+'<td>'+String(d.total).replace(".",",")+'</td></tr></tfoot></table></div>';
    return h}
-  if(sub==="vac"){if(VO.org!==org){VO.org=org;VO.data=null}if(!VO.data&&!VO.busy&&!VO.err)setTimeout(function(){vorgLoad(org,redraw)},0);
-   var h2='<p class="sub">Отпуска сотрудников: текущие, будущие и закончившиеся за последнюю неделю. Сотрудники оформляют их в личном кабинете.</p>';
-   if(VO.err)return h2+'<div class="banner bp-err" role="alert">'+e(VO.err)+'</div>';
-   if(!VO.data)return h2+'<p class="bp-empty">Загружаем…</p>';
-   var L=VO.data.list||[];if(!L.length)return h2+'<p class="bp-empty">Отпусков нет.</p>';
-   return h2+'<ul class="s52-vl">'+L.map(function(v){var now=Date.parse(v.start)<=Date.now()&&Date.parse(v.end)>Date.now(),past=Date.parse(v.end)<=Date.now();return '<li class="'+(now?"now":"")+'"'+(past?' style="opacity:.55"':'')+'><span><b>'+e(v.nick)+'</b> · '+e(vacTxt(v))+(v.note?' · '+e(v.note):'')+(now?' · <b>сейчас</b>':'')+'</span></li>'}).join("")+'</ul>'}
+  if(sub==="vac")return window.SA_VAC?window.SA_VAC.boss(org,redraw):"";
   return ""},
- reload:function(){TB.data=null;TB.err="";VO.data=null;VO.err=""}
+ reload:function(){TB.data=null;TB.err="";if(window.SA_VAC)SA_VAC.reload()}
 };
 document.addEventListener("change",function(ev){var t=ev.target;if(!t||(t.id!=="s52tp"&&t.id!=="s52tf"))return;ev.stopPropagation();if(t.id==="s52tp")TB.days=+t.value;else TB.from=t.value;TB.data=null;TB.msg="";try{render()}catch(x){}},true);
 document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s52b]");if(!b||!TB.data)return;
@@ -17974,6 +17954,168 @@ document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.targe
 document.addEventListener("keydown",function(ev){if(ev.key==="Escape"&&document.documentElement.classList.contains("s52-read")){ev.stopPropagation();readOff()}},true);
 var r0=window.render;window.render=function(){var r=r0.apply(this,arguments);try{if(state.tab!=="laws"&&document.documentElement.classList.contains("s52-read"))readOff();if(state.tab==="laws")tocWire()}catch(x){}return r};
 var mt=0;try{new MutationObserver(function(){if(state.tab!=="laws")return;clearTimeout(mt);mt=setTimeout(function(){try{tocWire()}catch(x){}},120)}).observe(document.getElementById("view"),{childList:true,subtree:true})}catch(x){}
+})();
+</script>
+<style id="s53-style">
+.v53-top{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+.v53-top h2{margin:0;flex:1 1 auto;font-size:20px}
+.v53-mon{display:flex;align-items:center;gap:6px}
+.v53-mon b{min-width:150px;text-align:center;font-size:16px}
+.v53-cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.v53-wd{font-size:12px;color:var(--muted);text-align:center;padding:2px 0;font-weight:600}
+.v53-d{position:relative;min-height:84px;border:1px solid var(--line);border-radius:10px;padding:4px 6px;background:var(--surface,transparent);text-align:left;font:inherit;color:inherit;cursor:pointer;display:flex;flex-direction:column;gap:2px;overflow:hidden}
+.v53-d:disabled{cursor:default;opacity:.45}
+.v53-d.out{opacity:.35}
+.v53-d .n{font-weight:700;font-size:13px}
+.v53-d.today .n{color:var(--accent)}
+.v53-d.today{box-shadow:inset 0 0 0 1px var(--accent)}
+.v53-d.red{background:color-mix(in srgb,#e53935 20%,transparent);border-color:#e53935}
+.v53-d.red .n{color:#e53935}
+.v53-d.wait{border-style:dashed;border-color:#f9a825}
+.v53-d.sel{background:color-mix(in srgb,var(--accent) 26%,transparent);border-color:var(--accent);border-width:2px}
+.v53-d i{font-style:normal;font-size:11.5px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v53-d i.ok{color:#c62828;font-weight:600}
+html[data-theme=dark] .v53-d i.ok,.dark .v53-d i.ok{color:#ff8a80}
+.v53-d i.w{color:var(--muted)}
+.v53-leg{display:flex;flex-wrap:wrap;gap:12px;font-size:12.5px;color:var(--muted);margin:8px 0 0}
+.v53-leg span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px;border:1px solid var(--line)}
+.v53-leg .l1::before{background:color-mix(in srgb,#e53935 30%,transparent);border-color:#e53935}
+.v53-leg .l2::before{border:1px dashed #f9a825}
+.v53-leg .l3::before{background:color-mix(in srgb,var(--accent) 30%,transparent);border-color:var(--accent)}
+.v53-box{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-top:12px}
+.v53-box h3{margin:0 0 8px;font-size:16px}
+.v53-f{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.v53-f label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted)}
+.v53-l{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.v53-l li{display:flex;flex-wrap:wrap;gap:8px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:14px}
+.v53-l li>span{flex:1 1 240px}
+.v53-l li small{display:block;color:var(--muted);font-size:12.5px}
+.v53-st{font-size:12px;font-weight:700;border-radius:999px;padding:2px 9px;border:1px solid}
+.v53-st.wait{color:#b77c00;border-color:#f9a825}
+.v53-st.ok{color:#2e7d32;border-color:#2e7d32}
+.v53-st.no{color:#c62828;border-color:#c62828}
+.v53-msg{margin:8px 0 0;font-size:14px}
+.v53-msg.err{color:#c62828}
+@media (max-width:640px){.v53-d{min-height:58px;padding:3px}.v53-d i{font-size:10px}.v53-wd{font-size:11px}}
+</style>
+<script>
+/* 4.2.1: раздел «Отпуска» — календарь ведомства. Сотрудник выбирает даты (OOC) или часы (IC) прямо в календаре
+   и отправляет заявку руководителю. После одобрения ник сотрудника пишется на этих датах, а даты выделяются красным. */
+(function(){
+"use strict";
+var A=window.senkoApp;
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function st(){try{return A&&A.state?A.state():null}catch(x){return null}}
+function user(){var s=st();return s&&s.user}
+function online(){var u=user();return !!(A&&A.api&&u&&!u.offline)}
+function staff(){var u=user();return !!(u&&/^(leader|moderator|owner)$/.test(u.rank||""))}
+function api(a,d){return Promise.resolve(A&&A.api?A.api(a,d):{ok:false,error:"Нужен вход в аккаунт."}).then(function(r){return r||{ok:false,error:"Нет ответа сервера."}},function(){return {ok:false,error:"Нет связи с сервером."}})}
+function toast(t){try{if(window.SA_toast)SA_toast(t)}catch(x){}}
+var DAY=864e5;
+function mskKey(t){return new Date(t+3*3600e3).toISOString().slice(0,10)}
+function d0(k){return Date.parse(k+"T00:00:00+03:00")}
+function hm(k,t){if(t==="24:00")return d0(k)+DAY;return Date.parse(k+"T"+t+":00+03:00")}
+function ddmm(k){return k.slice(8,10)+"."+k.slice(5,7)}
+function tm(t){return new Date(t).toLocaleTimeString("ru-RU",{timeZone:"Europe/Moscow",hour:"2-digit",minute:"2-digit"})}
+function addMonth(m,n){var y=+m.slice(0,4),mo=+m.slice(5,7)-1+n;y+=Math.floor(mo/12);mo=((mo%12)+12)%12;return y+"-"+String(mo+1).padStart(2,"0")}
+var MN=["январь","февраль","март","апрель","май","июнь","июль","август","сентябрь","октябрь","ноябрь","декабрь"];
+var ST={wait:"На рассмотрении",ok:"Одобрен",no:"Отклонён"};
+function when(v){var s=Date.parse(v.start),en=Date.parse(v.end);return v.kind==="ic"?ddmm(mskKey(s))+", "+tm(s)+" — "+(tm(en)==="00:00"?"24:00":tm(en)):ddmm(mskKey(s))+" — "+ddmm(mskKey(en-1))+" ("+Math.round((en-s)/DAY)+" дн.)"}
+var V={month:mskKey(Date.now()).slice(0,7),data:null,busy:false,err:"",kind:"ooc",a:null,b:null,t1:"18:00",t2:"23:00",note:"",msg:"",bad:false,org:"",sending:false,ans:{}};
+function repaint(){if(state.tab==="vac")try{render()}catch(x){}if(BX.redraw&&state.tab==="boss")try{BX.redraw()}catch(x){}}
+function load(){if(V.busy||!online())return;V.busy=true;V.err="";
+ api("vac",{op:"cal",month:V.month,org:V.org,server:window.SA_STAFF_SRV||""}).then(function(r){V.busy=false;if(r.ok){V.data=r;if(!V.org)V.org=r.org}else V.err=r.error||"Не удалось загрузить календарь.";repaint();homeBadge()})}
+function reload(){V.data=null;load()}
+function ok(){return online()}
+function onDay(list,k){var s=d0(k),en=s+DAY;return list.filter(function(v){return Date.parse(v.start)<en&&Date.parse(v.end)>s})}
+function selRange(){if(!V.a)return null;var a=V.a,b=V.b||V.a;if(b<a){var t=a;a=b;b=t}return [a,b]}
+function inSel(k){var r=selRange();return r&&k>=r[0]&&k<=r[1]}
+function calHtml(){
+ var d=V.data,L=(d&&d.list)||[],m=V.month,first=d0(m+"-01"),wd=(new Date(first+3*3600e3).getUTCDay()+6)%7,start=first-wd*DAY,today=mskKey(Date.now()),max=mskKey(Date.now()+61*DAY);
+ var h='<div class="v53-cal" role="grid" aria-label="Календарь отпусков">'+["Пн","Вт","Ср","Чт","Пт","Сб","Вс"].map(function(x){return '<div class="v53-wd" role="columnheader">'+x+'</div>'}).join("");
+ var n=Math.ceil((wd+new Date(Date.UTC(+m.slice(0,4),+m.slice(5,7),0)).getUTCDate())/7)*7;
+ for(var i=0;i<n;i++){var k=mskKey(start+i*DAY+3600e3),dl=onDay(L,k),okL=dl.filter(function(v){return v.status==="ok"}),wL=dl.filter(function(v){return v.status==="wait"}),cls=["v53-d"];
+  if(k.slice(0,7)!==m)cls.push("out");if(k===today)cls.push("today");if(okL.length)cls.push("red");if(wL.length)cls.push("wait");if(inSel(k))cls.push("sel");
+  var dis=k<today||k>max,tip=okL.map(function(v){return v.nick+(v.kind==="ic"?" ("+tm(Date.parse(v.start))+"–"+tm(Date.parse(v.end))+")":"")}).concat(wL.map(function(v){return "⏳ "+(v.mine?"ваша заявка":v.nick)})).join(", ");
+  h+='<button type="button" class="'+cls.join(" ")+'" data-v53d="'+k+'"'+(dis?' disabled':'')+' aria-label="'+e(ddmm(k)+(tip?": "+tip:""))+'" title="'+e(tip)+'"><span class="n">'+(+k.slice(8,10))+'</span>'+
+   okL.slice(0,3).map(function(v){return '<i class="ok">'+e(v.nick)+(v.kind==="ic"?" "+tm(Date.parse(v.start)).slice(0,2)+"–"+(tm(Date.parse(v.end))==="00:00"?"24":tm(Date.parse(v.end)).slice(0,2)):"")+'</i>'}).join("")+(okL.length>3?'<i class="ok">+ ещё '+(okL.length-3)+'</i>':'')+
+   wL.slice(0,2).map(function(v){return '<i class="w">⏳ '+(v.mine?"ваша заявка":e(v.nick))+'</i>'}).join("")+'</button>'}
+ return h+'</div><div class="v53-leg"><span class="l1">одобренный отпуск — ник на дате</span><span class="l2">заявка на рассмотрении</span><span class="l3">выбранные вами даты</span><span>время московское</span></div>'}
+function times(sel,end){var o="";for(var i=end?1:0;i<=(end?48:47);i++){var t=String(Math.floor(i/2)).padStart(2,"0")+":"+(i%2?"30":"00");o+='<option'+(t===sel?' selected':'')+'>'+t+'</option>'}return o}
+function formHtml(){
+ var r=selRange(),h='<div class="v53-box"><h3>Новая заявка</h3><div class="seg" role="group" style="margin:0 0 8px"><button type="button" data-v53k="ooc" aria-pressed="'+(V.kind==="ooc")+'">🏖 OOC — дни (до 12)</button><button type="button" data-v53k="ic" aria-pressed="'+(V.kind==="ic")+'">🌙 IC — часы (до 12 ч)</button></div>';
+ if(!r)h+='<p class="sub" style="margin:0">'+(V.kind==="ooc"?"Нажмите в календаре на первый и последний день отпуска.":"Нажмите в календаре на день, затем выберите часы.")+'</p>';
+ else{var days=Math.round((d0(r[1])-d0(r[0]))/DAY)+1;
+  h+='<p style="margin:0 0 8px"><b>'+(V.kind==="ooc"?(r[0]===r[1]?ddmm(r[0])+" (1 день)"+(V.b?"":" — нажмите последний день, если нужно больше"):ddmm(r[0])+" — "+ddmm(r[1])+" ("+days+" дн.)"):ddmm(r[0]))+'</b>'+(V.kind==="ooc"&&days>12?' <span class="v53-msg err">— больше 12 дней</span>':'')+'</p>';
+  h+='<div class="v53-f">'+(V.kind==="ic"?'<label>С<select class="tin" id="v53t1">'+times(V.t1)+'</select></label><label>До<select class="tin" id="v53t2">'+times(V.t2,1)+'</select></label>':'')+
+   '<label style="flex:1 1 200px">Причина (необязательно)<input class="tin" id="v53n" maxlength="120" value="'+e(V.note)+'" placeholder="Например: учёба, поездка"></label>'+
+   '<button type="button" class="btn primary" data-v53="send"'+(V.sending?' disabled':'')+'>'+(V.sending?"Отправляем…":"Отправить заявку руководителю")+'</button><button type="button" class="btn" data-v53="clr">Сбросить выбор</button></div>'}
+ return h+(V.msg?'<p class="v53-msg'+(V.bad?" err":"")+'" role="status">'+e(V.msg)+'</p>':'')+'</div>'}
+function mineHtml(){var L=((V.data&&V.data.list)||[]).filter(function(v){return v.mine});
+ L.sort(function(a,b){return Date.parse(b.start)-Date.parse(a.start)});
+ return '<div class="v53-box"><h3>Мои заявки</h3>'+(L.length?'<ul class="v53-l">'+L.map(function(v){var past=Date.parse(v.end)<=Date.now();return '<li'+(past?' style="opacity:.6"':'')+'><span>'+(v.kind==="ic"?"🌙 IC ":"🏖 OOC ")+e(when(v))+(v.note?' · '+e(v.note):'')+
+  (v.status!=="wait"&&(v.by||v.answer)?'<small>'+(v.by?(v.status==="ok"?"Одобрил: ":"Решение: ")+e(v.by):"")+(v.answer?" · «"+e(v.answer)+"»":"")+'</small>':'')+'</span><b class="v53-st '+v.status+'">'+ST[v.status]+'</b>'+
+  (!past||v.status==="wait"?'<button type="button" class="btn" data-v53del="'+e(v.id)+'">'+(v.status==="wait"?"Отозвать":"Отменить")+'</button>':'')+'</li>'}).join("")+'</ul>':'<p class="sub" style="margin:0">Заявок пока нет. Заявки и отпуска за этот месяц и соседние недели.</p>')+'</div>'}
+function reqHtml(L){var W=L.filter(function(v){return v.status==="wait"&&!v.mine||v.status==="wait"&&staff()&&user().rank!=="leader"});
+ return '<div class="v53-box"><h3>Заявки сотрудников'+(W.length?' · '+W.length:'')+'</h3>'+(W.length?'<ul class="v53-l">'+W.map(function(v){return '<li><span><b>'+e(v.nick)+'</b> · '+(v.kind==="ic"?"🌙 IC ":"🏖 OOC ")+e(when(v))+(v.note?'<small>Причина: '+e(v.note)+'</small>':'')+'</span>'+
+  '<input class="tin" data-v53ans="'+e(v.id)+'" maxlength="200" placeholder="Комментарий (необязательно)" value="'+e(V.ans[v.id]||"")+'" style="flex:1 1 180px"><button type="button" class="btn primary" data-v53rv="1" data-id="'+e(v.id)+'">Одобрить</button><button type="button" class="btn" data-v53rv="0" data-id="'+e(v.id)+'">Отклонить</button></li>'}).join("")+'</ul>':'<p class="sub" style="margin:0">Новых заявок нет. Когда сотрудник отправит заявку, она появится здесь и в уведомлениях.</p>')+'</div>'}
+function orgSel(){var u=user();if(!u||!/^(moderator|owner)$/.test(u.rank||""))return "";var D=(st()&&st().depts)||["Government","LSPD","LSCSD","FIB","SANG"];if(D.indexOf("Government")<0)D=["Government"].concat(D);
+ return '<select class="tin" id="v53org" aria-label="Ведомство">'+D.map(function(o){return '<option'+(o===V.org?' selected':'')+'>'+e(o)+'</option>'}).join("")+'</select>'}
+function pageHtml(){
+ if(!V.data&&!V.busy&&!V.err)setTimeout(load,0);
+ var m=V.month,h='<section class="panel"><div class="v53-top"><h2>Календарь отпусков'+(V.data?' · '+e(V.data.org):'')+'</h2>'+orgSel()+'<div class="v53-mon"><button type="button" class="btn" data-v53m="-1" aria-label="Предыдущий месяц">‹</button><b>'+MN[+m.slice(5,7)-1]+' '+m.slice(0,4)+'</b><button type="button" class="btn" data-v53m="1" aria-label="Следующий месяц">›</button></div></div>';
+ h+='<p class="sub" style="margin:0 0 10px">Выберите даты в календаре и отправьте заявку руководителю. Когда отпуск одобрят, ваш ник появится на этих датах, а даты станут красными — их видит всё ведомство.</p>';
+ if(V.err)return h+'<div class="banner bp-err" role="alert">'+e(V.err)+' <button type="button" class="btn" data-v53="re">Повторить</button></div></section>';
+ if(!V.data)return h+'<p class="bp-empty">Загружаем календарь…</p></section>';
+ h+=calHtml()+formHtml()+mineHtml();
+ if(V.data.staff)h+=reqHtml(V.data.list||[]);
+ return h+'</section>'}
+window.SA_pages=window.SA_pages||{};
+window.SA_pages.vac={ok:ok,html:pageHtml};
+/* панель руководителя: вкладка «Отпуска» — те же заявки */
+var BX={redraw:null};
+window.SA_VAC={ok:ok,open:function(){if(window.SA_go)SA_go("vac");else{state.tab="vac";render()}},
+ boss:function(org,redraw){BX.redraw=redraw;if(org&&V.org!==org&&/^(moderator|owner)$/.test((user()||{}).rank||"")){V.org=org;V.data=null}
+  if(!V.data&&!V.busy&&!V.err)setTimeout(load,0);
+  if(V.err)return '<div class="banner bp-err" role="alert">'+e(V.err)+'</div>';if(!V.data)return '<p class="bp-empty">Загружаем…</p>';
+  var L=V.data.list||[],F=L.filter(function(v){return v.status==="ok"&&Date.parse(v.end)>Date.now()}).sort(function(a,b){return Date.parse(a.start)-Date.parse(b.start)});
+  return '<p class="sub">Заявки на отпуск и одобренные отпуска '+e(V.data.org)+'. Календарь целиком — в разделе <button type="button" class="btn" data-v53="open">🗓 Отпуска</button></p>'+reqHtml(L)+
+   '<div class="v53-box"><h3>Одобренные отпуска</h3>'+(F.length?'<ul class="v53-l">'+F.map(function(v){var now=Date.parse(v.start)<=Date.now();return '<li><span><b>'+e(v.nick)+'</b> · '+(v.kind==="ic"?"🌙 IC ":"🏖 OOC ")+e(when(v))+(now?' · <b>сейчас</b>':'')+(v.by?'<small>Одобрил: '+e(v.by)+'</small>':'')+'</span></li>'}).join("")+'</ul>':'<p class="sub" style="margin:0">Ближайших отпусков нет.</p>')+'</div>'},
+ reload:reload,cnt:function(){return V.data&&V.data.staff?(V.data.list||[]).filter(function(v){return v.status==="wait"&&!v.mine}).length:0}};
+/* главная: карточка раздела */
+function homeBadge(){var b=document.querySelector('.s9-hb[data-k="vac53"] small');if(b)b.textContent=homeTxt()}
+function homeTxt(){if(!V.data)return "Календарь отпусков ведомства: выберите даты и отправьте заявку руководителю.";var L=V.data.list||[],now=Date.now();
+ var mine=L.filter(function(v){return v.mine&&Date.parse(v.end)>now&&v.status!=="no"}).sort(function(a,b){return Date.parse(a.start)-Date.parse(b.start)})[0],w=window.SA_VAC.cnt(),t=[];
+ if(w)t.push("Ждут решения: "+w);
+ if(mine)t.push((mine.status==="ok"?"Ваш отпуск: ":"Ваша заявка: ")+when(mine)+(mine.status==="wait"?" (на рассмотрении)":""));
+ var off=L.filter(function(v){return v.status==="ok"&&Date.parse(v.start)<=now&&Date.parse(v.end)>now}).length;if(off)t.push("Сейчас в отпуске: "+off);
+ return t.length?t.join(" · "):"Календарь отпусков ведомства: выберите даты и отправьте заявку руководителю."}
+var HX=window.SA_homeExtra;
+window.SA_homeExtra=function(){if(HX)HX.apply(this,arguments);try{if(!ok()||state.tab!=="home"||view.querySelector('.s9-hb[data-k="vac53"]'))return;if(!V.data&&!V.busy&&!V.err)load();
+ var anchor=view.querySelector(".s9-hb:last-of-type");var html='<div class="s9-hb noprint" data-k="vac53"><span class="t"><b>🗓 Отпуска</b><small>'+e(homeTxt())+'</small></span><button type="button" class="btn primary" data-v53="open">Открыть календарь</button></div>';
+ if(anchor)anchor.insertAdjacentHTML("afterend",html);else view.insertAdjacentHTML("afterbegin",html)}catch(x){}};
+/* события */
+document.addEventListener("click",function(ev){var t=ev.target.closest&&ev.target.closest("[data-v53d],[data-v53k],[data-v53m],[data-v53],[data-v53del],[data-v53rv]");if(!t)return;
+ if(t.dataset.v53==="open"){window.SA_VAC.open();window.scrollTo(0,0);return}
+ if(t.dataset.v53==="re"){V.err="";reload();return}
+ if(t.dataset.v53==="clr"){V.a=V.b=null;V.msg="";repaint();return}
+ if(t.dataset.v53m){V.month=addMonth(V.month,+t.dataset.v53m);reload();repaint();return}
+ if(t.dataset.v53k){V.kind=t.dataset.v53k;if(V.kind==="ic")V.b=null;V.msg="";repaint();return}
+ if(t.dataset.v53d){var k=t.dataset.v53d;V.msg="";
+  if(V.kind==="ic"||!V.a||V.b){V.a=k;V.b=null}else{V.b=k;var r=selRange();if(Math.round((d0(r[1])-d0(r[0]))/DAY)+1>12){V.msg="OOC-отпуск — не больше 12 дней подряд. Выберите даты заново.";V.bad=true;V.a=k;V.b=null}}
+  repaint();return}
+ if(t.dataset.v53del){t.disabled=true;api("vac",{op:"del",id:t.dataset.v53del}).then(function(r){if(r.ok)toast("Заявка отменена");else{V.msg=r.error;V.bad=true}reload()});return}
+ if(t.dataset.v53rv){var id=t.dataset.id,okv=t.dataset.v53rv==="1";t.disabled=true;
+  api("vac",{op:"review",id:id,ok:okv,note:V.ans[id]||"",org:V.org||(V.data&&V.data.org)||"",server:window.SA_STAFF_SRV||""}).then(function(r){if(r.ok){delete V.ans[id];toast(okv?"Отпуск одобрен: ник появится в календаре":"Заявка отклонена")}else{toast(r.error||"Не удалось");t.disabled=false}reload()});return}
+ if(t.dataset.v53==="send"){var r2=selRange();if(!r2)return;var s,en;
+  if(V.kind==="ic"){s=hm(r2[0],V.t1);en=hm(r2[0],V.t2);if(en<=s){V.msg="Конец должен быть позже начала.";V.bad=true;repaint();return}if(en-s>12*3600e3){V.msg="IC-отпуск — не больше 12 часов.";V.bad=true;repaint();return}if(en<=Date.now()){V.msg="Это время уже прошло.";V.bad=true;repaint();return}}
+  else{s=d0(r2[0]);en=d0(r2[1])+DAY;if(Math.round((en-s)/DAY)>12){V.msg="OOC-отпуск — не больше 12 дней подряд.";V.bad=true;repaint();return}}
+  V.sending=true;repaint();
+  api("vac",{op:"add",kind:V.kind,start:new Date(s).toISOString(),end:new Date(en).toISOString(),note:V.note}).then(function(r){V.sending=false;
+   if(r.ok){V.a=V.b=null;V.note="";V.msg="Заявка отправлена руководителю. Когда её одобрят, ваш ник появится в календаре, а даты станут красными.";V.bad=false;reload()}else{V.msg=r.error||"Не удалось отправить.";V.bad=true;repaint()}})}
+});
+document.addEventListener("input",function(ev){var t=ev.target;if(!t)return;if(t.id==="v53n")V.note=t.value;else if(t.dataset&&t.dataset.v53ans)V.ans[t.dataset.v53ans]=t.value},true);
+document.addEventListener("change",function(ev){var t=ev.target;if(!t)return;if(t.id==="v53t1")V.t1=t.value;else if(t.id==="v53t2")V.t2=t.value;else if(t.id==="v53org"){V.org=t.value;reload();repaint()}},true);
 })();
 </script>
 <script>

@@ -2122,42 +2122,93 @@ function rpfClean(list) {
   return out;
 }
 const mskDate = (d) => mskDay(new Date(d));
+// 4.2.1: отпуска — заявка сотрудника → решение руководства → в календаре ведомства (ник на датах, дата красная)
+const VAC_ST = { wait: "на рассмотрении", ok: "одобрен", no: "отклонён" };
+const vacWhen = (kind, s, e) => {
+  const o = { timeZone: "Europe/Moscow" };
+  if (kind === "ic") return `${new Date(s).toLocaleDateString("ru-RU", o)} с ${new Date(s).toLocaleTimeString("ru-RU", { ...o, hour: "2-digit", minute: "2-digit" })} до ${new Date(e).toLocaleTimeString("ru-RU", { ...o, hour: "2-digit", minute: "2-digit" })}`;
+  return `с ${new Date(s).toLocaleDateString("ru-RU", o)} по ${new Date(e - 1).toLocaleDateString("ru-RU", o)}`;
+};
 async function vacApi(b) {
   const { p, err } = await who(b);
   if (err) return err;
   const sql = db();
   const op = String(b.op || "mine");
   const srv = sv(p);
-  const out = (r) => ({ id: String(r.id), kind: r.kind, start: r.start_at, end: r.end_at, note: r.note || "", nick: r.nick || "", org: r.org });
+  const staff = ["leader", "moderator", "owner"].includes(p.rank);
+  const out = (r, full = true) => ({ id: String(r.id), kind: r.kind, start: r.start_at, end: r.end_at, nick: r.nick || "", org: r.org, status: r.status || "ok",
+    mine: r.user_id === p.id, ...(full ? { note: r.note || "", answer: r.answer || "", by: r.decided_by || "", created: r.created_at } : {}) });
+  const mine = async () => (await sql`select v.*, pr.nick from vacations v join profiles pr on pr.id = v.user_id where v.user_id = ${p.id} and v.end_at > now() - interval '30 days' order by v.start_at desc limit 40`).map((r) => out(r));
   if (op === "add") {
+    if (!p.org) return fail("Отпуск оформляется в ведомстве: сначала вступите в организацию.");
     if (!(await hit(`vac:${p.id}`, 20, 3600))) return fail(RATE_MSG, { code: "rate" });
     const kind = b.kind === "ooc" ? "ooc" : "ic";
     const s = Date.parse(b.start), e = Date.parse(b.end);
     if (!s || !e || e <= s) return fail("Проверьте начало и конец отпуска.");
-    if (e < Date.now()) return fail("Отпуск уже закончился.");
+    if (e < Date.now()) return fail("Эти даты уже прошли.");
+    if (s > Date.now() + 61 * 864e5) return fail("Отпуск можно запросить не дальше чем на 2 месяца вперёд.");
     if (kind === "ic") {
       if (e - s > 12 * 3600e3) return fail("IC-отпуск — не больше 12 часов подряд.");
       if (mskDate(s) !== mskDate(e - 1)) return fail("IC-отпуск — в пределах одного дня (по Москве).");
-      if (s > Date.now() + 61 * 864e5) return fail("Отпуск можно взять не дальше чем на 2 месяца вперёд.");
-    } else {
-      if (e - s > 12 * 864e5 + 3600e3) return fail("OOC-отпуск — не больше 12 дней подряд.");
-      if (s > Date.now() + 61 * 864e5) return fail("Отпуск можно взять не дальше чем на 2 месяца вперёд.");
-    }
-    const [{ n }] = await sql`select count(*)::int n from vacations where user_id = ${p.id} and end_at > now()`;
-    if (n >= 10) return fail("У вас уже 10 будущих отпусков. Удалите лишние.");
-    await sql`insert into vacations (user_id, org, server, kind, start_at, end_at, note) values (${p.id}, ${p.org}, ${srv}, ${kind}, ${new Date(s)}, ${new Date(e)}, ${clean(b.note, 120)})`;
-    try { await postHook(p.org, srv, "join", (kind === "ic" ? "🌙 IC-отпуск" : "🏖 OOC-отпуск") + ": " + (p.nick || p.login), `${new Date(s).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })} — ${new Date(e).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })}${b.note ? "\n" + clean(b.note, 120) : ""}`); } catch (e) {}
-  } else if (op === "del") {
-    await sql`delete from vacations where id = ${parseInt(b.id, 10) || 0} and user_id = ${p.id}`;
-  } else if (op === "org") {
-    if (!["leader", "moderator", "owner"].includes(p.rank)) return fail("Отпуска сотрудников видит руководство.");
+    } else if (e - s > 12 * 864e5 + 3600e3) return fail("OOC-отпуск — не больше 12 дней подряд.");
+    const [{ n }] = await sql`select count(*)::int n from vacations where user_id = ${p.id} and end_at > now() and status <> 'no'`;
+    if (n >= 10) return fail("У вас уже 10 будущих отпусков и заявок. Отмените лишние.");
+    const [{ x }] = await sql`select count(*)::int x from vacations where user_id = ${p.id} and status <> 'no' and start_at < ${new Date(e)} and end_at > ${new Date(s)}`;
+    if (x) return fail("На эти даты у вас уже есть отпуск или заявка.");
+    const note = clean(b.note, 120);
+    const [r] = await sql`insert into vacations (user_id, org, server, kind, start_at, end_at, note, status) values (${p.id}, ${p.org}, ${srv}, ${kind}, ${new Date(s)}, ${new Date(e)}, ${note}, 'wait') returning id`;
+    // руководству ведомства — уведомление в программе
+    try {
+      const leads = await sql`select id from profiles where org = ${p.org} and server = ${srv} and rank = 'leader' and not banned limit 20`;
+      for (const l of leads)
+        await sql`insert into broadcasts (user_id, title, author, text, expires_at) values (${l.id}, ${"🗓 Заявка на отпуск"}, ${"Отпуска"},
+                  ${`${p.nick || p.login} просит ${kind === "ic" ? "IC" : "OOC"}-отпуск ${vacWhen(kind, s, e)}${note ? ". Причина: " + note : ""}. Решение — в разделе «Отпуска».`}, now() + interval '3 days')`;
+    } catch (e2) {}
+    try { await postHook(p.org, srv, "join", "🗓 Заявка на отпуск: " + (p.nick || p.login), `${kind === "ic" ? "IC" : "OOC"} ${vacWhen(kind, s, e)}${note ? "\n" + note : ""}\nЗаявка #${r.id} ждёт решения руководства.`); } catch (e2) {}
+    return { ok: true, list: await mine() };
+  }
+  if (op === "del") {
+    const [r] = await sql`delete from vacations where id = ${parseInt(b.id, 10) || 0} and user_id = ${p.id} and (status = 'wait' or end_at > now()) returning *`;
+    if (r && r.status === "ok") try { await postHook(r.org, r.server, "join", "🗓 Отпуск отменён: " + (p.nick || p.login), `${r.kind === "ic" ? "IC" : "OOC"} ${vacWhen(r.kind, tsOf(r.start_at), tsOf(r.end_at))}`); } catch (e2) {}
+    return { ok: true, list: await mine() };
+  }
+  if (op === "cal") {
+    // календарь ведомства на месяц: одобренные отпуска всех + свои заявки; руководство видит и заявки сотрудников
+    const org = staff && p.rank !== "leader" ? staffOrg(p, b) || p.org : p.org;
+    const s2 = staff ? staffSrvOpt(p, b) || srv : srv;
+    if (!org) return fail("Календарь отпусков — для сотрудников ведомства. Вступите в организацию.");
+    const m = /^(\d{4})-(\d{2})$/.exec(String(b.month || "")) ? String(b.month) : mskDay(new Date()).slice(0, 7);
+    const from = Date.parse(m + "-01T00:00:00+03:00") - 7 * 864e5, to = from + 52 * 864e5;
+    const rows = await sql`select v.*, pr.nick from vacations v join profiles pr on pr.id = v.user_id
+                           where v.org = ${org} and v.server = ${s2} and v.start_at < ${new Date(to)} and v.end_at > ${new Date(from)}
+                             and (v.status = 'ok' or v.user_id = ${p.id} or (${staff} and v.status = 'wait')) order by v.start_at limit 500`;
+    const can = staff && (p.rank !== "leader" || p.org === org);
+    return { ok: true, org, month: m, staff: can, list: rows.map((r) => out(r, can || r.user_id === p.id)) };
+  }
+  if (op === "org" || op === "review") {
+    if (!staff) return fail("Решение по отпускам принимает руководство.");
     const org = staffOrg(p, b), s2 = staffSrvOpt(p, b) || srv;
     if (!org) return fail("Выберите организацию.");
-    const rows = await sql`select v.*, pr.nick from vacations v join profiles pr on pr.id = v.user_id where v.org = ${org} and v.server = ${s2} and v.end_at > now() - interval '7 days' order by v.start_at limit 200`;
-    return { ok: true, org, list: rows.map(out) };
-  } else if (op !== "mine") return fail("Неизвестное действие.");
-  const rows = await sql`select * from vacations where user_id = ${p.id} and end_at > now() - interval '30 days' order by start_at desc limit 30`;
-  return { ok: true, list: rows.map(out) };
+    if (op === "review") {
+      const ok = !!b.ok, ans = clean(b.note, 200);
+      const [own] = await sql`select user_id from vacations where id = ${parseInt(b.id, 10) || 0}`;
+      if (own && own.user_id === p.id && p.rank === "leader") return fail("Свою заявку руководитель не одобряет сам: это сделает другой руководитель, модератор или владелец.");
+      const [r] = await sql`update vacations set status = ${ok ? "ok" : "no"}, answer = ${ans}, decided_by = ${p.nick || p.login}, decided_at = now()
+                            where id = ${parseInt(b.id, 10) || 0} and org = ${org} and server = ${s2} returning *`;
+      if (!r) return fail("Заявка не найдена: возможно, сотрудник её отменил.");
+      await audit(p.login, "vac_review", "", { id: String(r.id), org, status: r.status });
+      const [u] = await sql`select nick, login from profiles where id = ${r.user_id}`;
+      const when = vacWhen(r.kind, tsOf(r.start_at), tsOf(r.end_at));
+      await sql`insert into broadcasts (user_id, title, author, text, expires_at) values (${r.user_id}, ${ok ? "✅ Отпуск одобрен" : "❌ Отпуск не одобрен"}, ${p.nick || p.login},
+                ${`${r.kind === "ic" ? "IC" : "OOC"}-отпуск ${when}: ${VAC_ST[r.status]} (${p.nick || p.login}).${ans ? " Комментарий: " + ans : ""}${ok ? " Ваш ник появился в календаре отпусков ведомства." : ""}`}, now() + interval '7 days')`;
+      if (ok) try { await postHook(org, s2, "join", "🌴 Отпуск одобрен: " + ((u && (u.nick || u.login)) || ""), `${r.kind === "ic" ? "IC" : "OOC"} ${when}\nОдобрил: ${p.nick || p.login}${ans ? "\n" + ans : ""}`, 0x2e7d32); } catch (e2) {}
+    }
+    const rows = await sql`select v.*, pr.nick from vacations v join profiles pr on pr.id = v.user_id where v.org = ${org} and v.server = ${s2}
+                           and (v.status = 'wait' and v.end_at > now() or v.end_at > now() - interval '7 days') order by (v.status = 'wait') desc, v.start_at limit 200`;
+    return { ok: true, org, list: rows.map((r) => out(r)) };
+  }
+  if (op !== "mine") return fail("Неизвестное действие.");
+  return { ok: true, list: await mine() };
 }
 // табель: сотрудник × день. Часы — длительность смен ведомства, во время которых сотрудник был в сети (по сводке смены)
 async function tabelApi(b) {
@@ -2172,7 +2223,7 @@ async function tabelApi(b) {
   const sql = db();
   const people = await sql`select id, login, nick, post from profiles where org = ${org} and server = ${srv} and not banned and approval = 'ok' order by lower(nick) limit 300`;
   const shifts = await sql`select started_at, ended_at, summary from shifts where org = ${org} and server = ${srv} and started_at < ${new Date(end)} and coalesce(ended_at, now()) > ${new Date(start)}`;
-  const vac = await sql`select user_id, kind, start_at, end_at from vacations where org = ${org} and server = ${srv} and start_at < ${new Date(end)} and end_at > ${new Date(start)}`;
+  const vac = await sql`select user_id, kind, start_at, end_at from vacations where status = 'ok' and org = ${org} and server = ${srv} and start_at < ${new Date(end)} and end_at > ${new Date(start)}`;
   const D = Array.from({ length: days }, (_, i) => mskDay(new Date(start + i * 864e5 + 3 * 3600e3)));
   const H = {}, V = {};
   for (const sh of shifts) {
@@ -5864,7 +5915,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 44;
+const SCHEMA_V = 45;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -6102,6 +6153,14 @@ create table if not exists public.vacations (
   id bigserial primary key, user_id uuid not null references public.profiles(id) on delete cascade, org text not null, server integer not null default 12,
   kind text not null check (kind in ('ic','ooc')), start_at timestamptz not null, end_at timestamptz not null, note text not null default '', created_at timestamptz not null default now());
 create index if not exists vacations_org on public.vacations (org, server, end_at);
+alter table public.vacations add column if not exists status text not null default 'ok';
+alter table public.vacations alter column status set default 'wait';
+alter table public.vacations add column if not exists answer text not null default '';
+alter table public.vacations add column if not exists decided_by text not null default '';
+alter table public.vacations add column if not exists decided_at timestamptz;
+alter table public.vacations drop constraint if exists vacations_status_check;
+alter table public.vacations add constraint vacations_status_check check (status in ('wait','ok','no'));
+create index if not exists vacations_user on public.vacations (user_id, end_at);
 alter table public.vacations enable row level security;
 revoke all on table public.vacations from anon, authenticated;
 `;
