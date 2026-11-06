@@ -4587,7 +4587,7 @@ function cabHtml(){
       fld("discord","Discord",acc.discord,40,"ник в Discord")+fld("telegram","Telegram",acc.telegram,33,"@name или пусто")+fld("phone","Номер в игре",acc.phone,12,"только цифры или пусто")+
       '<div class="sbtns" style="margin:0"><button type="button" class="btn" data-cab="accsave" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">Сохранить</button></div>'+
       '<div id="accMsg" role="status" aria-live="polite" style="font-size:12.5px;color:var(--muted);min-height:1.2em"></div></div></div>';
-    ah+=cabPart(function(){return deptInfo(acc.org||dept)})+cabPart(function(){return window.SA_PROG?window.SA_PROG.html():""})+cabPart(function(){return window.SA_CAB11?window.SA_CAB11(true):""})+cabPart(function(){return window.SA_CAB13?window.SA_CAB13(true):""})+cabPart(function(){return window.SA_CAB24?window.SA_CAB24():""})+cabPart(function(){return window.SA_CAB47?window.SA_CAB47():""})+cabPart(function(){return window.SA_CAB28?window.SA_CAB28():""})+cabPart(function(){return window.SA_CAB35?window.SA_CAB35():""})+cabPart(dcCabHtml)+cabPart(function(){return window.SA_CAB38?window.SA_CAB38():""})+cabPart(function(){return window.SA_CAB44?window.SA_CAB44():""})+cabPart(function(){return window.SA_RP?window.SA_RP.cabHtml():""})+cabPart(detHtml)+cabPart(testHtml);
+    ah+=cabPart(function(){return deptInfo(acc.org||dept)})+cabPart(function(){return window.SA_PROG?window.SA_PROG.html():""})+cabPart(function(){return window.SA_CAB11?window.SA_CAB11(true):""})+cabPart(function(){return window.SA_CAB13?window.SA_CAB13(true):""})+cabPart(function(){return window.SA_CAB24?window.SA_CAB24():""})+cabPart(function(){return window.SA_CAB47?window.SA_CAB47():""})+cabPart(function(){return window.SA_CAB52?window.SA_CAB52():""})+cabPart(function(){return window.SA_CAB28?window.SA_CAB28():""})+cabPart(function(){return window.SA_CAB35?window.SA_CAB35():""})+cabPart(dcCabHtml)+cabPart(function(){return window.SA_CAB38?window.SA_CAB38():""})+cabPart(function(){return window.SA_CAB44?window.SA_CAB44():""})+cabPart(function(){return window.SA_RP?window.SA_RP.cabHtml():""})+cabPart(detHtml)+cabPart(testHtml);
     ah+='<p class="cab-foot">Данные кабинета хранятся в вашем аккаунте. После смены ведомства или сервера программу нужно перезапустить: законы и подсказки подстроятся под выбранный сервер.</p>';
     return ah;
   }
@@ -6722,7 +6722,7 @@ function pCtrl(){
 
 function draw(){
  var rn=window.SA_RP?window.SA_RP.bossNew():0;
- var subs=[["sum","Обзор"],["staff","Сотрудники"],["rate","Рейтинг"],["shift","Смены"],["ctrl","Контрольные тесты"]]; subs.push(["news","Объявления"]);subs.push(["join","Вступление"]);if(lead35())subs.push(["log","Журнал"]); if(window.SA_RP)subs.push(["rep","Рапорты"+(rn?" · "+rn:"")]); if(window.SA_B24)window.SA_B24.subs(subs); if(!B.scope)subs.push(["orgs","Организации"]);
+ var subs=[["sum","Обзор"],["staff","Сотрудники"],["rate","Рейтинг"],["shift","Смены"],["ctrl","Контрольные тесты"]]; subs.push(["news","Объявления"]);subs.push(["join","Вступление"]);if(lead35())subs.push(["log","Журнал"]); if(window.SA_RP)subs.push(["rep","Рапорты"+(rn?" · "+rn:"")]); if(window.SA_B24)window.SA_B24.subs(subs); if(window.SA_B42)window.SA_B42.subs(subs); if(!B.scope)subs.push(["orgs","Организации"]);
  if(!subs.some(function(s){return s[0]===B.sub}))B.sub="sum";
  var title=B.scope?"Панель руководителя · "+esc(B.scope):"Панель руководителя";
  var h='<div class="subnav noprint">'+subs.map(function(s){return '<button class="pill" data-bpsub="'+s[0]+'" aria-pressed="'+(s[0]===B.sub)+'">'+s[1]+'</button>'}).join("")+'</div>';
@@ -6733,7 +6733,7 @@ function draw(){
  if(B.viewer)h+='<p class="sub">Вы видите данные как: '+(RANKS[B.viewer]||B.viewer)+(B.scope?". Доступна только ваша организация.":".")+'</p>';
  if(B.err)h+='<div class="banner bp-err" role="alert">'+esc(B.err)+'</div>';
  if(!B.data)h+='<p class="bp-empty">'+(B.loading?"Загружаем данные…":"Данные недоступны.")+'</p>';
- else h+=(B.sub==="hooks"||B.sub==="events")?window.SA_B24.html(B.sub,curOrg(),draw):B.sub==="rep"?window.SA_RP.boss(curOrg(),draw):B.sub==="staff"?pStaff():B.sub==="orgs"?pOrgs():B.sub==="rate"?pRate():B.sub==="shift"?pShift():B.sub==="ctrl"?pCtrl():B.sub==="log"?pLog():B.sub==="news"?pNews():B.sub==="join"?pJoin():pSum();
+ else h+=(B.sub==="tabel"||B.sub==="vac")&&window.SA_B42?window.SA_B42.html(B.sub,curOrg(),draw):(B.sub==="hooks"||B.sub==="events")?window.SA_B24.html(B.sub,curOrg(),draw):B.sub==="rep"?window.SA_RP.boss(curOrg(),draw):B.sub==="staff"?pStaff():B.sub==="orgs"?pOrgs():B.sub==="rate"?pRate():B.sub==="shift"?pShift():B.sub==="ctrl"?pCtrl():B.sub==="log"?pLog():B.sub==="news"?pNews():B.sub==="join"?pJoin():pSum();
  view.innerHTML=h+'</section>';
 }
 
@@ -6760,7 +6760,7 @@ view.addEventListener("click",function(e){
  if(t.dataset.bp==="jform"){var jq=$("#jQs"),jo=$("#jOpen");JF.q=jq?jq.value:"";JF.open=!!(jo&&jo.checked);eload("join","form_save",{questions:JF.q.split("\n"),open:JF.open});draw();return}
  if(t.dataset.bp==="jok"||t.dataset.bp==="jno"){var ok=t.dataset.bp==="jok";if(!ok&&!t.dataset.arm){t.dataset.arm="1";t.textContent="Точно отклонить?";return}var jn=document.getElementById("jN"+t.dataset.id);eload("join","app_decide",{id:t.dataset.id,ok:ok,note:jn?jn.value:""});draw();return}
  if(t.dataset.bp==="nwdel"){if(!confirm("Снять объявление? Сотрудники перестанут его видеть."))return;eload("news","delete",{id:t.dataset.id},function(e){e.msg="Объявление снято."});return}
- if(t.dataset.bp==="reload"){load();if(E[B.sub]){E[B.sub].key=null;E[B.sub].data=null}if(B.sub==="rep")window.SA_RP.bossReload();if((B.sub==="hooks"||B.sub==="events")&&window.SA_B24)window.SA_B24.reload(B.sub);return}
+ if(t.dataset.bp==="reload"){load();if(E[B.sub]){E[B.sub].key=null;E[B.sub].data=null}if(B.sub==="rep")window.SA_RP.bossReload();if((B.sub==="hooks"||B.sub==="events")&&window.SA_B24)window.SA_B24.reload(B.sub);if(window.SA_B42)window.SA_B42.reload();return}
  if(t.dataset.bp==="win"){if(A.staff)A.staff();return}
  if(t.dataset.bps){var k=t.dataset.bps;B.touched=1;B.sort=B.sort.k===k?{k:k,dir:-B.sort.dir}:{k:k,dir:1};draw();return}
  if(t.dataset.cp!=null){A.copy(t.dataset.cp);t.style.outline="2px solid var(--accent)";setTimeout(function(){t.style.outline=""},500)}
@@ -7130,6 +7130,18 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"4.2.0",d:"06.11.2026",items:[
+  ["🔢","Номера рапортов","У каждого рапорта теперь свой номер внутри ведомства: № 0001, № 0002 и дальше. Номер виден в списке, в окне рапорта и в PDF."],
+  ["↩","На доработку","Руководство может вернуть рапорт с комментарием. Сотрудник нажимает «Исправить и отправить снова» — рапорт уходит повторно под тем же номером."],
+  ["🗂","Черновики и поиск","В «Моих рапортах» видны несохранённые черновики, есть поиск по статье, имени или номеру и фильтры по статусу и дате."],
+  ["📄","PDF и подпись","Любой рапорт можно сохранить в PDF. Во вкладке «Подпись» загрузите картинку подписи — она появится в конце ваших рапортов и в PDF (хранится только на вашем компьютере)."],
+  ["🏛","Бланк ведомства","Руководитель задаёт дополнительные поля рапорта для всего ведомства: строка, абзац или выбор из вариантов, можно сделать обязательными."],
+  ["📊","Статистика рапортов","В панели руководителя: сколько рапортов ждут проверки, самый старый, среднее время проверки и доля отклонённых и возвращённых за 30 дней."],
+  ["🗓","Табель","В панели руководителя — таблица «сотрудник × день» с часами смен за 7, 14 или 31 день. Выгрузка в Excel и отправка в Discord организации."],
+  ["🌙","Отпуска","В личном кабинете можно оформить IC-отпуск (до 12 часов в пределах дня) или OOC-отпуск (до 12 дней). Руководство видит отпуска в панели и в табеле."],
+  ["📑","Оглавление и режим чтения","В длинных законах оглавление теперь сбоку и подсвечивает текущую статью. Кнопка «Режим чтения» убирает всё лишнее и увеличивает шрифт, выход — Esc."],
+  ["🛠","Исправлено","Не работали «Итоги месяца», рекорды, голосование за план и опрос (из 3.8.3): программа не пропускала эти запросы к серверу. Теперь всё работает."]
+ ]},
  {v:"4.1.0",d:"06.11.2026",items:[
   ["🧾","Почему такой срок","В калькуляторе — разбор по шагам: какие статьи со сроком, по какой берётся итог, потолок 50 месяцев, штрафы, розыск и обстоятельства."],
   ["💾","Расчёты с названием","Назовите расчёт («ограбление магазина») и сохраните: в «Истории расчётов» он повторяется в один клик вместе со смягчающими и отягчающими."],
@@ -7869,7 +7881,10 @@ function fresh(kind){var u=me(),f={to:KINDS[kind]&&KINDS[kind].to||"Руково
 function useKind(kind,f){R.kind=kind;var d=loadDraft();R.f=f||d[kind]||fresh(kind);if(!R.f.to)R.f.to=fresh(kind).to;R.bad={};saveDraft()}
 
 /* ---------- текст рапорта ---------- */
-function bodyOf(kind,f){
+// 4.2: поля бланка ведомства дописываются в конец текста рапорта
+function orgFields(kind){return (R.orgF||[]).filter(function(x){return !x.kinds||!x.kinds.length||x.kinds.indexOf(kind)>=0})}
+function bodyOf(kind,f){var b=bodyOf0(kind,f),L=orgFields(kind).filter(function(x){return trim(f[x.id])}).map(function(x){return x.l+": "+dot(f[x.id])});return L.length?b+"\n"+L.join("\n"):b}
+function bodyOf0(kind,f){
  var P=[], ch=function(list){return (list||[]).map(function(k){var c=(CHK[kind]||[]).filter(function(x){return x[0]===k})[0];return c?c[2]:""}).filter(Boolean).map(dot).join(" ")};
  var where=(f.dt?" "+f.dt:"")+(f.place?" в районе "+f.place:"");
  if(kind==="arrest"){
@@ -7916,29 +7931,30 @@ function bodyOf(kind,f){
 function subOf(kind,f){return kind==="service"?(SUBO(f.subj)[1]||"служебный"):KINDS[kind].sub}
 function titleOf(kind,f){if(KINDS[kind]&&KINDS[kind].title)return KINDS[kind].title;var s=subOf(kind,f);return s==="служебный"?"Служебный рапорт":"Рапорт "+s}
 function headOf(kind){return KINDS[kind]&&KINDS[kind].head||"РАПОРТ"}
-function missing(kind,f){var bad={};F[kind].forEach(function(x){if(!x[4])return;var v=f[x[0]];if(Array.isArray(v)?!v.length:!trim(v))bad[x[0]]=1});return bad}
+function missing(kind,f){var bad={};F[kind].forEach(function(x){if(!x[4])return;var v=f[x[0]];if(Array.isArray(v)?!v.length:!trim(v))bad[x[0]]=1});orgFields(kind).forEach(function(x){if(x.req&&!trim(f[x.id]))bad[x.id]=1});return bad}
 
 /* ---------- бумажка ---------- */
 var ORGN={Government:"Правительство штата Сан-Андреас",LSPD:"Los Santos Police Department",LSCSD:"Los Santos County Sheriff's Department",FIB:"Federal Investigation Bureau",SANG:"San Andreas National Guard"};
 function paper(r){
  // r: {org, to, pos, author, static, dept, kind, sub, body, id, created, status, reviewer, note, reviewed}
  var org=r.org||"", head="Штат Сан-Андреас"+(org?" · "+(ORGN[org]||org):"");
- var stamp=r.status&&r.id?'<div class="rp-stamp '+r.status+'">'+({ok:"Принят",no:"Отклонён",new:"На рассмотрении"})[r.status]+(r.status!=="new"&&r.reviewed?'<small>'+esc(r.reviewer||"")+' · '+dayStr(r.reviewed)+'</small>':'')+'</div>':'';
+ var stamp=r.status&&r.id?'<div class="rp-stamp '+r.status+'">'+({ok:"Принят",no:"Отклонён",new:"На рассмотрении",rev:"На доработке"})[r.status]+(r.status!=="new"&&r.reviewed?'<small>'+esc(r.reviewer||"")+' · '+dayStr(r.reviewed)+'</small>':'')+'</div>':'';
  var from=[r.pos,r.author].filter(Boolean).join(", ");
  return '<div class="rp-paper"><div class="rp-org">'+esc(head)+'</div>'+
   '<div class="rp-to"><div>Кому: '+esc(r.to||"Руководству "+org)+'</div><div>От: '+(from?esc(from):'<span class="gap">________</span>')+'</div><div>Статик: '+esc(r.static||"—")+(r.dept&&r.dept!==org?' · '+esc(r.dept):'')+'</div></div>'+
-  '<div class="rp-h">'+headOf(r.kind)+(r.id?' № '+esc(r.id):'')+'</div><div class="rp-hs">'+esc(r.sub||"")+'</div>'+
+  '<div class="rp-h">'+headOf(r.kind)+(r.id?' № '+esc(r.no||r.id):'')+'</div><div class="rp-hs">'+esc(r.sub||"")+'</div>'+
   '<div class="rp-b">'+String(r.body||"").split("\n").filter(function(p){return trim(p)}).map(function(p){return '<p>'+esc(p).replace(/_{4,}/g,'<span class="gap">$&</span>')+'</p>'}).join("")+'</div>'+
-  '<div class="rp-f"><div>'+esc(r.created?nowStr(r.created):nowStr())+'</div><div class="rp-sign"><b>'+esc(r.author||"")+'</b><small>подпись</small></div></div>'+stamp+
+  '<div class="rp-f"><div>'+esc(r.created?nowStr(r.created):nowStr())+'</div><div class="rp-sign">'+(r.sig?'<img class="rp-sig" src="'+r.sig+'" alt="Подпись">':'')+'<b>'+esc(r.author||"")+'</b><small>подпись</small></div></div>'+stamp+
   (r.note?'<div class="rp-note'+(r.status==="ok"?" ok":"")+'"><b>Комментарий руководства:</b> '+esc(r.note)+'</div>':'')+
  '</div>';
 }
 function plain(r){
  var from=[r.pos,r.author].filter(Boolean).join(", ");
- return "Кому: "+(r.to||"Руководству "+(r.org||""))+"\nОт: "+from+"\nСтатик: "+(r.static||"—")+"\n\n"+headOf(r.kind)+(r.id?" № "+r.id:"")+"\n"+(r.sub||"")+"\n\n"+r.body+"\n\n"+(r.created?nowStr(r.created):nowStr())+"    "+(r.author||"");
+ return "Кому: "+(r.to||"Руководству "+(r.org||""))+"\nОт: "+from+"\nСтатик: "+(r.static||"—")+"\n\n"+headOf(r.kind)+(r.id?" № "+(r.no||r.id):"")+"\n"+(r.sub||"")+"\n\n"+r.body+"\n\n"+(r.created?nowStr(r.created):nowStr())+"    "+(r.author||"");
 }
-function fromServer(x){var f=x.fields||{};return {id:x.id,org:x.org,to:f.to,pos:f.pos,author:x.author,static:x.static,dept:x.dept,kind:x.kind,sub:f.sub||KINDS[x.kind]&&KINDS[x.kind].sub||"",body:x.body,created:x.created,status:x.status,reviewer:x.reviewer,note:x.note,reviewed:x.reviewed,login:x.login,title:x.title}}
-function draftPaper(){var u=me()||{};return {org:u.org||"",to:R.f.to,pos:R.f.pos,author:u.nick||u.login||"",static:u.static||"",dept:u.dept||"",kind:R.kind,sub:subOf(R.kind,R.f),body:bodyOf(R.kind,R.f)}}
+function fromServer(x){var f=x.fields||{};return {id:x.id,no:x.no||"",org:x.org,to:f.to,pos:f.pos,author:x.author,static:x.static,dept:x.dept,kind:x.kind,sub:f.sub||KINDS[x.kind]&&KINDS[x.kind].sub||"",body:x.body,created:x.created,status:x.status,reviewer:x.reviewer,note:x.note,reviewed:x.reviewed,login:x.login,title:x.title}}
+function signImg(){var s=ls("bos-rp-sign")||"";return /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/.test(s)&&s.length<90000?s:""}
+function draftPaper(){var u=me()||{};return {sig:signImg(),org:u.org||"",to:R.f.to,pos:R.f.pos,author:u.nick||u.login||"",static:u.static||"",dept:u.dept||"",kind:R.kind,sub:subOf(R.kind,R.f),body:bodyOf(R.kind,R.f)}}
 
 /* ---------- окно ---------- */
 var ov=null;
@@ -7956,8 +7972,9 @@ function open(o){
  if(!R.f||!R.kind||!F[R.kind]){var d2=loadDraft();useKind(F[d2._k]&&kindsNow().indexOf(d2._k)>=0?d2._k:kindsNow()[0])}
  else if(!Object.keys(R.f).length)useKind(R.kind);
  R.msg="";R.msgErr=false;
+ if(online()&&!R.orgF)A.api("reports",{op:"form_get"}).then(function(r){if(r&&r.ok){R.orgF=r.fields||[];if(R.tab==="new")paint()}});
  if(!window.SA_modal)return;
- ov=window.SA_modal(o.view&&o.view.id?"Рапорт № "+esc(o.view.id):"Рапорты",'<div id="rpBox"></div>',true);
+ ov=window.SA_modal(o.view&&o.view.id?"Рапорт № "+esc(o.view.no||o.view.id):"Рапорты",'<div id="rpBox"></div>',true);
  ov.querySelector(".sa-sheet").classList.add("rp-sheet");
  ov.addEventListener("click",onClick); ov.addEventListener("input",onInput); ov.addEventListener("change",onInput);
  paint();
@@ -7966,8 +7983,11 @@ function open(o){
 function tabsHtml(){
  if(R.tab==="view"&&R.view&&R.view.staff)return "";
  var n=R.mine?R.mine.length:0;
+ var u0=me(),lead=!!(u0&&/^(leader|moderator|owner)$/.test(u0.rank||""));
  return '<div class="rp-tabs"><button type="button" class="pill" data-rp="tab" data-v="new" aria-pressed="'+(R.tab==="new")+'">Новый рапорт</button>'+
-  (online()?'<button type="button" class="pill" data-rp="tab" data-v="mine" aria-pressed="'+(R.tab!=="new")+'">Мои рапорты'+(n?' · '+n:'')+'</button>':'')+'</div>';
+  (online()?'<button type="button" class="pill" data-rp="tab" data-v="mine" aria-pressed="'+(R.tab==="mine"||R.tab==="view")+'">Мои рапорты'+(n?' · '+n:'')+'</button>':'')+
+  (online()&&lead?'<button type="button" class="pill" data-rp="tab" data-v="form" aria-pressed="'+(R.tab==="form")+'">Бланк ведомства</button>':'')+
+  '<button type="button" class="pill" data-rp="tab" data-v="sign" aria-pressed="'+(R.tab==="sign")+'">Подпись</button></div>';
 }
 function fieldHtml(x){
  var k=x[0],v=R.f[k],bad=R.bad[k]?' class="rp-bad"':'', lab='<span>'+x[1]+(x[4]?' <em>*</em>':'')+'</span>';
@@ -7988,6 +8008,11 @@ function formHtml(){
   if(x[2]==="text"&&y&&y[2]==="text"&&x[0]!=="evidence"&&y[0]!=="evidence"){h+='<div class="rp-two">'+fieldHtml(x)+fieldHtml(y)+'</div>';i++}
   else h+=fieldHtml(x);
  }
+ var OF=orgFields(R.kind);
+ if(OF.length)h+='<div class="rp-orgf"><p class="rp-cap"><span>Поля вашего ведомства</span></p>'+OF.map(function(x){var v=R.f[x.id]||"",bad=R.bad[x.id]?' class="rp-bad"':'',lab='<span>'+esc(x.l)+(x.req?' *':'')+'</span>';
+  if(x.t==="select")return '<label'+bad+'>'+lab+'<select data-rf="'+x.id+'"><option value="">—</option>'+x.o.map(function(o){return '<option'+(o===v?' selected':'')+'>'+esc(o)+'</option>'}).join("")+'</select></label>';
+  if(x.t==="area")return '<label'+bad+'>'+lab+'<textarea data-rf="'+x.id+'" rows="3" maxlength="1500">'+esc(v)+'</textarea></label>';
+  return '<label'+bad+'>'+lab+'<input data-rf="'+x.id+'" maxlength="200" value="'+esc(v)+'"></label>'}).join("")+'</div>';
  return h+'</div>';
 }
 function newHtml(){
@@ -7996,27 +8021,41 @@ function newHtml(){
  if(KL.indexOf(R.kind)<0){if(R.f&&R.f._src)KL=[R.kind].concat(KL);else useKind(KL[0])} // данные из таймера оставляем
  var h='<div class="rp-kinds">'+KL.map(function(k){var K=KINDS[k];return '<button type="button" class="rp-k" data-rp="kind" data-v="'+k+'" aria-pressed="'+(R.kind===k)+'"><i aria-hidden="true">'+K.i+'</i><span><b>'+K.t+'</b><small>'+K.d+'</small></span></button>'}).join("")+'</div>';
  h+='<div class="rp-grid"><div>'+formHtml()+'</div><div class="rp-side"><p class="rp-cap"><span>Так рапорт увидит руководство</span><span>* обязательные поля</span></p><div id="rpPaper">'+paper(draftPaper())+'</div></div></div>';
- h+='<div class="rp-acts"><button type="button" class="btn grow" data-rp="clear">Очистить форму</button><button type="button" class="btn" data-rp="copy">Скопировать текст</button>'+
+ h+=(R.f&&R.f._resub?'<div class="rp-msg" style="margin:8px 0">↩ Вы исправляете рапорт № '+esc(R.f._resubNo||R.f._resub)+', вернувшийся на доработку. «Отправить руководству» отправит его снова под тем же номером.</div>':'');
+ h+='<div class="rp-acts"><button type="button" class="btn grow" data-rp="clear">Очистить форму</button><button type="button" class="btn" data-rp="copy">Скопировать текст</button><button type="button" class="btn" data-rp="pdfnew">PDF</button>'+
   (online()?'<button type="button" class="btn primary" data-rp="send"'+(R.sending?' disabled':'')+'>'+(R.sending?'Отправляем…':'Отправить руководству')+'</button>':'')+'</div>';
  h+='<div class="rp-msg'+(R.msgErr?' err':'')+'" role="status" aria-live="polite">'+esc(R.msg||(online()?"":(u?"":"Отправить рапорт можно в программе после входа в аккаунт. Здесь его можно составить и скопировать.")))+'</div>';
  return h;
 }
 function rowHtml(r,staff){
- var S={new:"На рассмотрении",ok:"Принят",no:"Отклонён"};
- return '<button type="button" class="rp-row" data-rp="open" data-id="'+esc(r.id)+'"><span><b>№ '+esc(r.id)+' · '+esc(r.title)+'</b><small>'+nowStr(r.created)+(staff?' · '+esc(r.author)+' ('+esc(r.login)+')'+(staff==="all"?' · '+esc(r.org):''):'')+(r.note?' · есть комментарий':'')+'</small></span><span class="rp-st '+r.status+'">'+S[r.status]+'</span></button>';
+ var S={new:"На рассмотрении",ok:"Принят",no:"Отклонён",rev:"На доработке"};
+ return '<button type="button" class="rp-row" data-rp="open" data-id="'+esc(r.id)+'"><span><b>№ '+esc(r.no||r.id)+' · '+esc(r.title)+'</b><small>'+nowStr(r.created)+(staff?' · '+esc(r.author)+' ('+esc(r.login)+')'+(staff==="all"?' · '+esc(r.org):''):'')+(r.note?' · есть комментарий':'')+'</small></span><span class="rp-st '+r.status+'">'+S[r.status]+'</span></button>';
 }
+var RF={q:"",st:"",from:""};
+function draftsHtml(){var d=loadDraft(),L=Object.keys(d).filter(function(k){if(k.charAt(0)==="_"||!KINDS[k]||!d[k])return false;var f=d[k];return Object.keys(f).some(function(x){return x!=="to"&&x!=="pos"&&x!=="dt"&&x.charAt(0)!=="_"&&(Array.isArray(f[x])?f[x].length:trim(f[x]))})});
+ if(!L.length)return "";return '<p class="rp-cap"><span>Черновики</span><span>сохраняются сами</span></p><div class="rp-list" style="margin-bottom:10px">'+L.map(function(k){var f=d[k];return '<button type="button" class="rp-row" data-rp="draft" data-v="'+k+'"><span><b>Черновик · '+esc(titleOf(k,f))+'</b><small>'+esc(trim(f.suspect||f.subj||f.place||"")||"не отправлен")+(f._resub?' · исправление № '+esc(f._resubNo||f._resub):'')+'</small></span><span class="rp-st new">Продолжить</span></button>'}).join("")+'</div>'}
 function mineHtml(){
- if(!R.mine)return '<p class="rp-empty">'+(R.err?esc(R.err)+' <button type="button" class="btn" data-rp="reload">Повторить</button>':'Загружаем…')+'</p>';
- if(!R.mine.length)return '<p class="rp-empty">Вы ещё не отправляли рапортов. Откройте «Новый рапорт», заполните поля и нажмите «Отправить руководству».</p>';
- return (R.err?'<p class="rp-msg err">'+esc(R.err)+'</p>':'')+'<div class="rp-list">'+R.mine.map(function(r){return rowHtml(r)}).join("")+'</div><p class="rp-msg">Удалить рапорт можно, пока руководство его не рассмотрело. Решение приходит уведомлением в программе.</p>';
+ var dh=draftsHtml();
+ if(!R.mine)return dh+'<p class="rp-empty">'+(R.err?esc(R.err)+' <button type="button" class="btn" data-rp="reload">Повторить</button>':'Загружаем…')+'</p>';
+ if(!R.mine.length)return dh+'<p class="rp-empty">Вы ещё не отправляли рапортов. Откройте «Новый рапорт», заполните поля и нажмите «Отправить руководству».</p>';
+ var q=RF.q.toLowerCase().replace(/ё/g,"е"),fr=RF.from?Date.parse(RF.from+"T00:00:00+03:00"):0;
+ var L=R.mine.filter(function(r){if(RF.st&&r.status!==RF.st)return false;if(fr&&Date.parse(r.created)<fr)return false;if(!q)return true;
+  return (String(r.no||"")+" "+r.id+" "+r.title+" "+(r.body||"")+" "+JSON.stringify(r.fields||{})).toLowerCase().replace(/ё/g,"е").indexOf(q)>=0});
+ var S=[["","Все"],["new","На рассмотрении"],["rev","На доработке"],["ok","Принятые"],["no","Отклонённые"]];
+ return dh+(R.err?'<p class="rp-msg err">'+esc(R.err)+'</p>':'')+
+  '<div class="rp-filters" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px"><input id="rpMQ" type="search" placeholder="Поиск: статья, имя, номер, слово" value="'+esc(RF.q)+'" aria-label="Поиск по рапортам" style="flex:1 1 200px">'+
+  '<select id="rpMS" aria-label="Статус">'+S.map(function(s){return '<option value="'+s[0]+'"'+(RF.st===s[0]?' selected':'')+'>'+s[1]+'</option>'}).join("")+'</select><label style="display:flex;gap:6px;align-items:center;font-size:13px">с<input id="rpMF" type="date" value="'+esc(RF.from)+'" aria-label="С даты"></label></div>'+
+  (L.length?'<div class="rp-list">'+L.map(function(r){return rowHtml(r)}).join("")+'</div>':'<p class="rp-empty">Под фильтр ничего не подходит.</p>')+'<p class="rp-msg">Удалить рапорт можно, пока руководство его не рассмотрело. Вернули на доработку — откройте рапорт и нажмите «Исправить».</p>';
 }
 function viewHtml(){
  var v=R.view, p=fromServer(v), u=me(), mine=u&&u.login===v.login;
- var h='<div class="rp-view">'+paper(p)+'<div class="rp-acts">'+(v.staff?'':'<button type="button" class="btn grow" data-rp="tab" data-v="mine">← Мои рапорты</button>')+'<button type="button" class="btn" data-rp="copyv">Скопировать текст</button>'+
-  (mine&&v.status==="new"&&!v.staff?'<button type="button" class="btn" data-rp="del">Удалить</button>':'')+'</div>';
+ if(mine&&!v.staff)p.sig=signImg();
+ var h='<div class="rp-view">'+paper(p)+'<div class="rp-acts">'+(v.staff?'':'<button type="button" class="btn grow" data-rp="tab" data-v="mine">← Мои рапорты</button>')+'<button type="button" class="btn" data-rp="copyv">Скопировать текст</button><button type="button" class="btn" data-rp="pdfv">PDF</button>'+
+  (mine&&v.status==="rev"&&!v.staff?'<button type="button" class="btn primary" data-rp="fix">Исправить и отправить снова</button>':'')+
+  (mine&&(v.status==="new"||v.status==="rev")&&!v.staff?'<button type="button" class="btn" data-rp="del">Удалить</button>':'')+'</div>';
  if(v.staff){
   h+='<div class="rp-rev"><b>'+(v.status==="new"?"Решение по рапорту":"Изменить решение")+'</b><textarea id="rpNote" maxlength="300" placeholder="Комментарий для сотрудника (необязательно)">'+esc(v.status==="new"?"":v.note||"")+'</textarea>'+
-   '<div class="rp-acts" style="margin-top:8px"><button type="button" class="btn" data-rp="rev" data-v="no"'+(R.sending?' disabled':'')+'>Отклонить</button><button type="button" class="btn primary" data-rp="rev" data-v="ok"'+(R.sending?' disabled':'')+'>Принять</button></div>'+
+   '<div class="rp-acts" style="margin-top:8px"><button type="button" class="btn" data-rp="rev" data-v="rev"'+(R.sending?' disabled':'')+' title="Комментарий обязателен">На доработку</button><button type="button" class="btn" data-rp="rev" data-v="no"'+(R.sending?' disabled':'')+'>Отклонить</button><button type="button" class="btn primary" data-rp="rev" data-v="ok"'+(R.sending?' disabled':'')+'>Принять</button></div>'+
    '<p class="rp-msg" style="margin:6px 0 0">Сотрудник увидит решение и комментарий в программе. Рапорт также можно открыть в Telegram: /report '+esc(v.id)+'</p></div>';
  }
  return h+'<div class="rp-msg'+(R.msgErr?' err':'')+'" role="status" aria-live="polite">'+esc(R.msg||"")+'</div></div>';
@@ -8024,14 +8063,16 @@ function viewHtml(){
 function paint(){
  var o=sheet(); if(!o)return; var box=o.querySelector("#rpBox"); if(!box)return;
  var ae=document.activeElement, key=ae&&ae.dataset?ae.dataset.rf:null, pos=null; try{pos=key?ae.selectionStart:null}catch(e){}
- box.innerHTML=tabsHtml()+(R.tab==="new"?newHtml():R.tab==="view"&&R.view?viewHtml():mineHtml());
- var t=o.querySelector("#sdT"); if(t)t.textContent=R.tab==="view"&&R.view?"Рапорт № "+R.view.id:"Рапорты";
+ box.innerHTML=tabsHtml()+(R.tab==="new"?newHtml():R.tab==="view"&&R.view?viewHtml():R.tab==="form"?formEdHtml():R.tab==="sign"?signHtml():mineHtml());
+ var t=o.querySelector("#sdT"); if(t)t.textContent=R.tab==="view"&&R.view?"Рапорт № "+(R.view.no||R.view.id):R.tab==="form"?"Бланк рапорта ведомства":"Рапорты";
  if(key){var el=box.querySelector('[data-rf="'+key+'"]');if(el){el.focus();try{if(pos!=null)el.setSelectionRange(pos,pos)}catch(e){}}}
 }
 function tabsPaint(){var o=sheet();if(!o)return;if(R.tab==="mine"){paint();return}var t=o.querySelector(".rp-tabs");if(t)t.outerHTML=tabsHtml()}
 function paintPaper(){var p=sheet()&&sheet().querySelector("#rpPaper");if(p)p.innerHTML=paper(draftPaper())}
 function onInput(e){
- var t=e.target, k=t.dataset&&t.dataset.rf; if(!k)return;
+ var t=e.target, k=t.dataset&&t.dataset.rf;
+ if(t&&(t.id==="rpMQ"||t.id==="rpMS"||t.id==="rpMF")){if(t.id==="rpMQ")RF.q=t.value;else if(t.id==="rpMS")RF.st=t.value;else RF.from=t.value;var id=t.id,pos=null;try{pos=t.selectionStart}catch(x){}paint();var el=sheet()&&sheet().querySelector("#"+id);if(el){el.focus();try{if(pos!=null&&id==="rpMQ")el.setSelectionRange(pos,pos)}catch(x){}}return}
+ if(!k)return;
  R.f[k]=t.value; if(k==="pos")ls("bos-rp-pos",t.value);
  if(R.bad[k]&&trim(t.value)){delete R.bad[k];var l=t.closest(".rp-bad");if(l)l.classList.remove("rp-bad")}
  saveDraft();
@@ -8048,7 +8089,13 @@ function say(m,err){R.msg=m;R.msgErr=!!err;paint()}
 function onClick(e){
  var b=e.target.closest("[data-rp]"); if(!b)return;
  var a=b.dataset.rp, v=b.dataset.v;
- if(a==="tab"){R.tab=v;R.view=null;R.msg="";paint();if(v==="mine")loadMine(Date.now()-R.mineAt>5000);return}
+ if(a==="tab"){R.tab=v;R.view=null;R.msg="";if(v==="form"&&!R.formEd)loadFormEd();paint();if(v==="mine")loadMine(Date.now()-R.mineAt>5000);return}
+ if(a==="draft"){useKind(v);R.tab="new";R.view=null;R.msg="";paint();return}
+ if(a==="pdfnew"){var bad0=missing(R.kind,R.f);if(Object.keys(bad0).length){R.bad=bad0;paint();say("Заполните поля, отмеченные красным.",true);return}pdf(paper(draftPaper()),titleOf(R.kind,R.f));return}
+ if(a==="pdfv"&&R.view){var pv=fromServer(R.view),uu=me();if(uu&&uu.login===R.view.login&&!R.view.staff)pv.sig=signImg();pdf(paper(pv),"Рапорт "+(R.view.no||R.view.id));return}
+ if(a==="fix"&&R.view){var fx=Object.assign({},R.view.fields||{});delete fx.sub;fx._resub=R.view.id;fx._resubNo=R.view.no||R.view.id;var KK=KINDS[R.view.kind]?R.view.kind:"service";R.kind=KK;R.f=fx;R.bad={};saveDraft();R.tab="new";R.view=null;R.msg="Исправьте рапорт по комментарию руководства и отправьте снова.";R.msgErr=false;paint();return}
+ if(a==="sigdel"){ls("bos-rp-sign",null);paint();return}
+ if(a==="formsave"){saveFormEd();return}
  if(a==="kind"){useKind(v);R.msg="";paint();return}
  if(a==="chk"){var k=b.dataset.k,L=(R.f[k]||[]).slice(),i=L.indexOf(v);if(i<0)L.push(v);else L.splice(i,1);R.f[k]=L;if(L.length)delete R.bad[k];saveDraft();b.setAttribute("aria-pressed",String(i<0));var w=b.closest(".rp-bad");if(w&&L.length)w.classList.remove("rp-bad");paintPaper();return}
  if(a==="clear"){if(!b.dataset.arm){b.dataset.arm="1";b.textContent="Точно очистить?";return}useKind(R.kind,fresh(R.kind));R.msg="";paint();return}
@@ -8062,7 +8109,7 @@ function onClick(e){
   b.disabled=true;
   A.api("reports",{op:"del",id:R.view.id}).then(function(r){if(r&&r.ok){R.mine=r.list;R.mineAt=Date.now();R.view=null;R.tab="mine";paint();cabPaint()}else say((r&&r.error)||"Не удалось удалить.",true)},function(){say("Ошибка связи с программой.",true)});
   return}
- if(a==="rev"&&R.view&&R.view.staff){review(v==="ok");return}
+ if(a==="rev"&&R.view&&R.view.staff){review(v);return}
 }
 function send(){
  if(R.sending||!online())return;
@@ -8074,16 +8121,40 @@ function send(){
   if(w.length&&R._warn!==sig){R._warn=sig;R.msg="Проверьте рапорт: "+w.join(", ")+". Если всё верно, нажмите «Отправить руководству» ещё раз.";R.msgErr=true;paint();return}}
  var f2={};Object.keys(R.f).forEach(function(k){if(k.charAt(0)!=="_")f2[k]=R.f[k]});f2.sub=subOf(R.kind,R.f);
  R.sending=true;R.msg="";paint();
- A.api("reports",{op:"create",kind:R.kind,title:titleOf(R.kind,R.f),body:bodyOf(R.kind,R.f),fields:f2}).then(function(r){
+ var resub=R.f._resub||"";
+ A.api("reports",resub?{op:"resubmit",id:resub,title:titleOf(R.kind,R.f),body:bodyOf(R.kind,R.f),fields:f2}:{op:"create",kind:R.kind,title:titleOf(R.kind,R.f),body:bodyOf(R.kind,R.f),fields:f2}).then(function(r){
   R.sending=false;
-  if(r&&r.ok){
+  if(r&&r.ok){if(r.list)R.mine=r.list.filter(function(x){return x.id!==r.report.id});
    var d=loadDraft();delete d[R.kind];ls("bos-rp-draft",JSON.stringify(d));R.f=fresh(R.kind);
    R.mine=[r.report].concat(R.mine||[]);R.view=r.report;R.tab="view";
-   R.msg="Рапорт № "+r.report.id+" отправлен руководству "+r.report.org+". Решение придёт уведомлением в программе.";R.msgErr=false;
+   R.msg="Рапорт № "+(r.report.no||r.report.id)+(resub?" исправлен и отправлен снова":" отправлен")+" руководству "+r.report.org+". Решение придёт уведомлением в программе.";R.msgErr=false;
    paint();cabPaint();loadMine(true);
   } else {R.msg=(r&&r.error)||"Не удалось отправить рапорт.";R.msgErr=true;paint()}
  },function(){R.sending=false;R.msg="Ошибка связи с программой. Рапорт сохранён как черновик.";R.msgErr=true;paint()});
 }
+/* 4.2: PDF — печать бумаги рапорта (в окне печати выберите «Сохранить как PDF») */
+function pdf(html,name){var fr=document.createElement("iframe");fr.style.cssText="position:fixed;right:0;bottom:0;width:0;height:0;border:0";document.body.appendChild(fr);
+ var css='body{font:14px/1.5 "Times New Roman",serif;color:#000;margin:18mm}.rp-paper{max-width:720px;margin:0 auto}.rp-org{text-align:center;font-weight:700;text-transform:uppercase;margin-bottom:14px}.rp-to{margin-left:auto;width:60%;margin-bottom:18px}.rp-h{text-align:center;font-weight:700;font-size:17px}.rp-hs{text-align:center;margin-bottom:14px}.rp-b p{margin:0 0 8px;text-indent:2em;text-align:justify}.rp-f{display:flex;justify-content:space-between;margin-top:26px}.rp-sign{text-align:center}.rp-sign b{display:block}.rp-sign small{display:block;border-top:1px solid #000;font-size:11px}.rp-sig{display:block;max-height:60px;max-width:200px;margin:0 auto}.rp-stamp{margin-top:14px;border:2px solid #555;display:inline-block;padding:4px 10px;font-weight:700}.rp-stamp small{display:block;font-weight:400}.rp-note{margin-top:12px;font-style:italic}.gap{border-bottom:1px solid #000}';
+ var d=fr.contentDocument;d.open();d.write('<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>'+esc(name||"Рапорт")+'</title><style>'+css+'</style></head><body>'+html+'</body></html>');d.close();
+ setTimeout(function(){try{fr.contentWindow.focus();fr.contentWindow.print()}catch(e){toastRp("Не удалось открыть печать")}setTimeout(function(){fr.remove()},60000)},250)}
+function toastRp(t){try{if(window.SA_toast)SA_toast(t)}catch(e){}}
+/* 4.2: подпись картинкой — хранится только на этом компьютере, подставляется в бумагу и PDF своих рапортов */
+function signHtml(){var s=signImg();return '<div class="rp-view"><p class="rp-msg">Загрузите картинку подписи (PNG или JPG до 60 КБ, лучше на прозрачном фоне). Она хранится только на этом компьютере и появляется в конце ваших рапортов и в PDF. Руководство видит текст рапорта, а подпись — в вашем PDF.</p>'+
+ (s?'<div class="rp-paper" style="max-width:340px"><div class="rp-sign"><img class="rp-sig" src="'+s+'" alt="Подпись"><b>'+esc((me()||{}).nick||"")+'</b><small>подпись</small></div></div>':'<p class="rp-empty">Подпись не загружена.</p>')+
+ '<div class="rp-acts"><label class="btn primary" style="cursor:pointer">Выбрать картинку<input type="file" accept="image/png,image/jpeg,image/webp" data-rp="sigfile" hidden></label>'+(s?'<button type="button" class="btn" data-rp="sigdel">Убрать подпись</button>':'')+'</div><div class="rp-msg'+(R.msgErr?' err':'')+'" role="status">'+esc(R.msg||"")+'</div></div>'}
+document.addEventListener("change",function(e){var t=e.target;if(!t||t.dataset.rp!=="sigfile"||!t.files||!t.files[0])return;var f=t.files[0];
+ if(f.size>60000){say("Картинка больше 60 КБ: уменьшите её.",true);return}var rd=new FileReader();rd.onload=function(){var s=String(rd.result||"");if(!/^data:image\/(png|jpeg|webp);base64,/.test(s)){say("Нужна картинка PNG, JPG или WebP.",true);return}ls("bos-rp-sign",s);R.msg="Подпись сохранена.";R.msgErr=false;paint()};rd.readAsDataURL(f)});
+/* 4.2: бланк ведомства — руководство задаёт дополнительные поля рапорта */
+var FT={text:"строка",area:"абзац",select:"выбор"};
+function loadFormEd(){R.formEd={loading:true,list:[]};A.api("reports",{op:"form_staff",org:BQ.org||((me()||{}).org)||"",server:window.SA_STAFF_SRV||""}).then(function(r){R.formEd={list:(r&&r.ok&&r.fields)||[],err:r&&!r.ok?r.error:""};if(R.tab==="form")paint()})}
+function formEdHtml(){var E0=R.formEd||{list:[]};if(E0.loading)return '<p class="rp-empty">Загружаем бланк…</p>';
+ var txt=(E0.list||[]).map(function(x){return [x.l,FT[x.t]||"строка",(x.o||[]).join("; "),x.req?"обязательное":""].join(" | ").replace(/( \| )+$/,"")}).join("\n");
+ return '<div class="rp-view"><p class="rp-msg">Дополнительные поля рапорта для всех сотрудников вашего ведомства. Одно поле — одна строка: <b>Название | тип | варианты | обязательное</b>. Тип: строка, абзац или выбор (тогда варианты через «;»). До 12 полей. Поля появятся в «Новом рапорте» и попадут в конец текста.</p>'+
+ '<textarea id="rpFE" rows="9" style="width:100%;box-sizing:border-box;font:13px/1.5 var(--f-mono,monospace)" placeholder="Номер патрульной машины | строка | | обязательное&#10;Участок | выбор | Davis; Mission Row; Vespucci&#10;Что изъято дополнительно | абзац">'+esc(txt)+'</textarea>'+
+ '<div class="rp-acts"><button type="button" class="btn primary" data-rp="formsave">Сохранить бланк</button></div><div class="rp-msg'+(R.msgErr?' err':'')+'" role="status">'+esc(R.msg||E0.err||"")+'</div></div>'}
+function saveFormEd(){var ta=sheet()&&sheet().querySelector("#rpFE");if(!ta)return;var RT={"строка":"text","абзац":"area","выбор":"select"};
+ var L=ta.value.split("\n").map(function(l){var p=l.split("|").map(trim);if(!p[0])return null;return {l:p[0],t:RT[(p[1]||"").toLowerCase()]||"text",o:(p[2]||"").split(";").map(trim).filter(Boolean),req:/обяз/i.test(p[3]||p[2]||"")}}).filter(Boolean);
+ R.sending=true;A.api("reports",{op:"form_save",fields:L,org:BQ.org||((me()||{}).org)||"",server:window.SA_STAFF_SRV||""}).then(function(r){R.sending=false;if(r&&r.ok){R.formEd={list:r.fields};R.orgF=null;R.msg="Бланк сохранён: полей "+r.fields.length+". Сотрудники увидят их при следующем открытии рапортов.";R.msgErr=false}else{R.msg=(r&&r.error)||"Не удалось сохранить.";R.msgErr=true}paint()})}
 function loadMine(force){
  if(!online()||R.loading)return; if(!force&&R.mine&&Date.now()-R.mineAt<30000){paint();return}
  R.loading=true;
@@ -8155,8 +8226,10 @@ function bossHtml(org,redraw){
  BQ.redraw=redraw; org=org||"";
  if(BQ.org!==org){BQ.org=org;BQ.data=null}
  if(!BQ.data&&!BQ.loading&&!BQ.err)setTimeout(bload,0);
- var d=BQ.data, S=[["","Все"],["new","На рассмотрении"],["ok","Принятые"],["no","Отклонённые"]];
+ var d=BQ.data, S=[["","Все"],["new","На рассмотрении"],["rev","На доработке"],["ok","Принятые"],["no","Отклонённые"]];
  var h='<p class="sub">Рапорты сотрудников'+(org?' '+esc(org):' всех организаций')+'. Нажмите на рапорт, чтобы открыть его, принять или отклонить. В Telegram: /reports и /report &lt;номер&gt;.</p>';
+ if(d&&d.stats){var s=d.stats,pc=function(a){return s.n30?Math.round(a/s.n30*100)+"%":"—"},mm=function(m){return m==null?"—":m<60?m+" мин":Math.round(m/6)/10+" ч"};
+  h+='<div class="bp-tiles" style="margin:6px 0 12px">'+[[s.wait,"ждут проверки"+(s.oldestH?" · старейший "+s.oldestH+" ч":"")],[mm(s.avgMin),"среднее время проверки"],[pc(s.no),"отклонено за 30 дней"],[pc(s.rev),"на доработку за 30 дней"],[s.n30,"рапортов за 30 дней"]].map(function(t){return '<div class="bp-tile"><b>'+esc(String(t[0]))+'</b><span>'+esc(t[1])+'</span></div>'}).join("")+'</div>'}
  h+='<div class="rp-filters">'+S.map(function(s){return '<button type="button" class="pill" data-rpb="st" data-v="'+s[0]+'" aria-pressed="'+(BQ.status===s[0])+'">'+s[1]+(s[0]==="new"&&d&&d.newN?' · '+d.newN:'')+'</button>'}).join("")+
   '<select id="rpbK" aria-label="Вид рапорта"><option value="">Все виды</option>'+Object.keys(KINDS).map(function(k){return '<option value="'+k+'"'+(BQ.kind===k?' selected':'')+'>'+(k==="service"?"Служебные":"Рапорт "+KINDS[k].sub)+'</option>'}).join("")+'</select>'+
   '<input id="rpbQ" type="search" placeholder="Ник, логин, статик или номер" value="'+esc(BQ.q)+'" aria-label="Поиск рапортов"></div>';
@@ -8176,12 +8249,13 @@ document.addEventListener("input",function(e){
  if(e.target.id!=="rpbQ"||state.tab!=="boss")return; e.stopPropagation();
  BQ.q=e.target.value; clearTimeout(BQ.t); BQ.t=setTimeout(function(){bload()},350);
 },true);
-function review(ok){
- var v=R.view, n=sheet()&&sheet().querySelector("#rpNote");
+function review(dec){
+ var v=R.view, n=sheet()&&sheet().querySelector("#rpNote"), ok=dec==="ok"||dec===true, rv=dec==="rev";
+ if(rv&&!(n&&trim(n.value))){R.msg="Напишите в комментарии, что исправить, и нажмите «На доработку».";R.msgErr=true;paint();var n2=sheet()&&sheet().querySelector("#rpNote");if(n2)n2.focus();return}
  R.sending=true; R.msg=""; paint();
- A.api("reports",{op:"review",id:v.id,ok:ok,note:n?n.value:"",org:BQ.org||"",server:window.SA_STAFF_SRV||""}).then(function(r){
+ A.api("reports",{op:"review",id:v.id,ok:ok,rev:rv,note:n?n.value:"",org:BQ.org||"",server:window.SA_STAFF_SRV||""}).then(function(r){
   R.sending=false;
-  if(r&&r.ok){BQ.data=r;var x=(r.list||[]).filter(function(y){return y.id===v.id})[0];R.view=Object.assign({},x||v,{staff:true});R.msg=ok?"Рапорт принят.":"Рапорт отклонён.";R.msgErr=false;paint();bredraw()}
+  if(r&&r.ok){BQ.data=r;var x=(r.list||[]).filter(function(y){return y.id===v.id})[0];R.view=Object.assign({},x||v,{staff:true});R.msg=rv?"Рапорт возвращён на доработку: сотрудник получит комментарий.":ok?"Рапорт принят.":"Рапорт отклонён.";R.msgErr=false;paint();bredraw()}
   else{R.msg=(r&&r.error)||"Не удалось сохранить решение.";R.msgErr=true;paint()}
  },function(){R.sending=false;R.msg="Ошибка связи с программой.";R.msgErr=true;paint()});
 }
@@ -17773,6 +17847,133 @@ document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.targe
 });
 document.addEventListener("change",function(ev){if(ev.target&&ev.target.id==="s51src"){CMP.src=ev.target.value;var w=document.getElementById("s51cmp");if(w)w.innerHTML=cmpHtml(items0())}});
 document.addEventListener("input",function(ev){if(ev.target&&ev.target.id==="s51txt"){CMP.txt=ev.target.value;var pos=ev.target.selectionStart,w=document.getElementById("s51cmp");if(w){w.innerHTML=cmpHtml(items0());var i=document.getElementById("s51txt");if(i){i.focus();try{i.setSelectionRange(pos,pos)}catch(x){}}}}});
+})();
+</script>
+<style id="s52-style">
+.s52-tab{overflow:auto;border:1px solid var(--line);border-radius:10px;max-height:65vh}
+.s52-tab table{border-collapse:collapse;font-size:13px;min-width:100%}
+.s52-tab th,.s52-tab td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:center;white-space:nowrap}
+.s52-tab th:first-child,.s52-tab td:first-child{text-align:left;position:sticky;left:0;background:var(--surface,var(--bg));z-index:1}
+.s52-tab thead th{position:sticky;top:0;background:var(--side,var(--surface));z-index:2}
+.s52-tab td.h{background:color-mix(in srgb,var(--accent) 16%,transparent);font-weight:600}
+.s52-tab td.v{color:var(--muted)}
+.s52-tab tfoot td{font-weight:700}
+.s52-vl{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}
+.s52-vl li{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:14px}
+.s52-vl li span{flex:1}
+.s52-vl li.now{border-color:var(--accent)}
+.s52-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin:8px 0}
+.s52-form label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted)}
+.lw-text.s52-side{display:grid;grid-template-columns:minmax(180px,250px) minmax(0,1fr);gap:16px;align-items:start}
+.lw-text.s52-side>.lt-toc{position:sticky;top:70px;max-height:calc(100vh - 90px);overflow:auto;border-right:1px solid var(--line);padding-right:8px}
+.lw-text.s52-side>.lt-toc>summary{font-weight:700;cursor:pointer;margin-bottom:6px}
+.lw-text.s52-side .lt-tl button{display:block;width:100%;text-align:left}
+.lw-text .lt-tl button[aria-current="true"]{background:color-mix(in srgb,var(--accent) 18%,transparent);border-radius:6px;font-weight:700;color:var(--ink)}
+@media (max-width:820px){.lw-text.s52-side{display:block}.lw-text.s52-side>.lt-toc{position:static;max-height:none;border:0}}
+html.s52-read #side,html.s52-read .sd,html.s52-read header,html.s52-read .search,html.s52-read .aibtn,html.s52-read .sitefoot,html.s52-read .s9-hb,html.s52-read .lw-tools,html.s52-read .subnav,html.s52-read .s24-fox{display:none!important}
+html.s52-read #view{max-width:820px;margin:0 auto}
+html.s52-read .lw-card:not(.s52-rd){display:none}
+html.s52-read .lw-text{max-height:none!important;overflow:visible!important}
+html.s52-read .lt,html.s52-read .lt-p,html.s52-read .lt-pt,html.s52-read .lt-sub{font-size:18px!important;line-height:1.7!important}
+.s52-rx{position:fixed;top:12px;right:16px;z-index:2147470000;display:none}
+html.s52-read .s52-rx{display:inline-flex}
+</style>
+<script>
+/* 4.2: табель смен (24) и отпуска (26) в панели руководителя, отпуска IC/OOC в личном кабинете,
+   оглавление сбоку с текущей главой (92) и режим чтения (93) для длинных законов. */
+(function(){
+"use strict";
+var A=window.senkoApp;
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function toast(t){try{if(window.SA_toast)SA_toast(t)}catch(x){}}
+function api(a,d){return Promise.resolve(A&&A.api?A.api(a,d):{ok:false,error:"Нужен вход в аккаунт."}).then(function(r){return r||{ok:false,error:"Нет ответа сервера."}},function(){return {ok:false,error:"Нет связи с сервером."}})}
+function st(){try{return A&&A.state?A.state():null}catch(x){return null}}
+function online(){var s=st();return !!(A&&A.api&&s&&s.user&&!s.user.offline)}
+function repaint(){try{if(window.SA_cabRepaint)SA_cabRepaint()}catch(x){}}
+function mskDay(t){return new Date((t||Date.now())+3*3600e3).toISOString().slice(0,10)}
+function dtm(t){return new Date(t).toLocaleString("ru-RU",{timeZone:"Europe/Moscow",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}
+function dd(t){return new Date(t).toLocaleDateString("ru-RU",{timeZone:"Europe/Moscow",day:"2-digit",month:"2-digit"})}
+function vacTxt(v){return (v.kind==="ic"?"🌙 IC ":"🏖 OOC ")+(v.kind==="ic"?dtm(v.start)+" — "+new Date(v.end).toLocaleTimeString("ru-RU",{timeZone:"Europe/Moscow",hour:"2-digit",minute:"2-digit"}):dd(v.start)+" — "+dd(Date.parse(v.end)-1))}
+
+/* ---------- отпуска в личном кабинете ---------- */
+var VC={list:null,busy:false,kind:"ic",msg:"",err:false};
+function vload(){if(VC.busy||!online())return;VC.busy=true;api("vac",{op:"mine"}).then(function(r){VC.busy=false;VC.list=r.ok?r.list:[];if(!r.ok){VC.msg=r.error;VC.err=true}repaint()})}
+window.SA_CAB52=function(){if(!online())return "";if(!VC.list&&!VC.busy)setTimeout(vload,0);
+ var today=mskDay(),max=mskDay(Date.now()+60*864e5),h='<div class="cab-h">Отпуска<small>IC — до 12 часов в пределах дня, OOC — до 12 дней</small></div>';
+ h+='<div class="seg" role="group" style="margin:4px 0 6px"><button type="button" data-s52k="ic" aria-pressed="'+(VC.kind==="ic")+'">IC (в игре)</button><button type="button" data-s52k="ooc" aria-pressed="'+(VC.kind==="ooc")+'">OOC (вне игры)</button></div>';
+ if(VC.kind==="ic")h+='<div class="s52-form"><label>День<input type="date" class="tin" id="s52d" min="'+today+'" max="'+max+'" value="'+today+'"></label><label>С<input type="time" class="tin" id="s52t1" value="18:00"></label><label>До<input type="time" class="tin" id="s52t2" value="23:00"></label>';
+ else h+='<div class="s52-form"><label>С<input type="date" class="tin" id="s52d1" min="'+today+'" max="'+max+'" value="'+today+'"></label><label>По (включительно)<input type="date" class="tin" id="s52d2" min="'+today+'" max="'+max+'" value="'+mskDay(Date.now()+2*864e5)+'"></label>';
+ h+='<label style="flex:1 1 160px">Причина (необязательно)<input class="tin" id="s52n" maxlength="120" placeholder="Например: учёба"></label><button type="button" class="btn primary" data-s52="add">Оформить</button></div>';
+ if(VC.msg)h+='<p class="s24-msg'+(VC.err?" err":"")+'" role="status">'+e(VC.msg)+'</p>';
+ var L=VC.list||[];
+ h+=L.length?'<ul class="s52-vl">'+L.map(function(v){var now=Date.parse(v.start)<=Date.now()&&Date.parse(v.end)>Date.now(),past=Date.parse(v.end)<=Date.now();return '<li class="'+(now?"now":"")+'"'+(past?' style="opacity:.55"':'')+'><span>'+e(vacTxt(v))+(v.note?' · '+e(v.note):'')+(now?' · <b>сейчас</b>':'')+'</span>'+(past?'':'<button type="button" class="btn" data-s52del="'+e(v.id)+'">Отменить</button>')+'</li>'}).join("")+'</ul>':'<p class="s24-empty">'+(VC.list?"Отпусков нет. Руководство видит ваши отпуска в панели и в табеле.":"Загружаем…")+'</p>';
+ return h};
+function msk(dateStr,timeStr){return Date.parse(dateStr+"T"+(timeStr||"00:00")+":00+03:00")}
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s52k],[data-s52],[data-s52del]");if(!b)return;
+ if(b.dataset.s52k){VC.kind=b.dataset.s52k;VC.msg="";repaint();return}
+ if(b.dataset.s52del){b.disabled=true;api("vac",{op:"del",id:b.dataset.s52del}).then(function(r){VC.list=r.ok?r.list:VC.list;VC.msg=r.ok?"Отпуск отменён.":r.error;VC.err=!r.ok;repaint()});return}
+ if(b.dataset.s52==="add"){var g=function(id){return (document.getElementById(id)||{}).value||""},s,en;
+  if(VC.kind==="ic"){s=msk(g("s52d"),g("s52t1"));en=msk(g("s52d"),g("s52t2"));if(en<=s){VC.msg="Конец должен быть позже начала.";VC.err=true;repaint();return}}
+  else{s=msk(g("s52d1"));en=msk(g("s52d2"))+864e5;if(en<=s){VC.msg="Дата окончания раньше начала.";VC.err=true;repaint();return}}
+  if(!s||!en){VC.msg="Заполните даты.";VC.err=true;repaint();return}
+  b.disabled=true;api("vac",{op:"add",kind:VC.kind,start:new Date(s).toISOString(),end:new Date(en).toISOString(),note:g("s52n")}).then(function(r){b.disabled=false;if(r.ok){VC.list=r.list;VC.msg="Отпуск оформлен. Руководство увидит его в панели.";VC.err=false}else{VC.msg=r.error||"Не удалось.";VC.err=true}repaint()});return}
+},true);
+
+/* ---------- панель руководителя: табель и отпуска ---------- */
+var TB={days:7,from:"",data:null,busy:false,err:"",msg:"",org:null},VO={data:null,busy:false,err:"",org:null};
+function tload(org,redraw){if(TB.busy)return;TB.busy=true;TB.err="";api("tabel",{op:"get",org:org||"",server:window.SA_STAFF_SRV||"",days:TB.days,from:TB.from}).then(function(r){TB.busy=false;if(r.ok)TB.data=r;else TB.err=r.error||"Не удалось загрузить табель.";redraw()})}
+function vorgLoad(org,redraw){if(VO.busy)return;VO.busy=true;VO.err="";api("vac",{op:"org",org:org||"",server:window.SA_STAFF_SRV||""}).then(function(r){VO.busy=false;if(r.ok)VO.data=r;else VO.err=r.error||"Не удалось загрузить отпуска.";redraw()})}
+function csv(d){var q=function(s){s=String(s==null?"":s);return /[;"\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
+ var L=[["Сотрудник","Должность"].concat(d.days).concat(["Итого, ч","Дней со сменами"]).map(q).join(";")];
+ d.rows.forEach(function(r){L.push([r.nick,r.post].concat(r.h.map(function(h,i){return r.v[i]?(r.v[i]==="ic"?"IC-отпуск":"OOC-отпуск")+(h?" / "+String(h).replace(".",","):""):h?String(h).replace(".",","):""})).concat([String(r.total).replace(".",","),r.days]).map(q).join(";"))});
+ L.push(["Итого по организации",""].concat(d.days.map(function(_,i){return String(Math.round(d.rows.reduce(function(s,r){return s+r.h[i]},0)*10)/10).replace(".",",")})).concat([String(d.total).replace(".",","),""]).map(q).join(";"));
+ return "﻿"+L.join("\r\n")}
+window.SA_B42={
+ subs:function(subs){subs.push(["tabel","Табель"],["vac","Отпуска"])},
+ html:function(sub,org,redraw){org=org||"";
+  if(sub==="tabel"){if(TB.org!==org){TB.org=org;TB.data=null}if(!TB.data&&!TB.busy&&!TB.err)setTimeout(function(){tload(org,redraw)},0);
+   var d=TB.data,h='<p class="sub">Сотрудник × день: часы смен ведомства, во время которых сотрудник был в сети (по сводкам смен). 🌙 — IC-отпуск, 🏖 — OOC-отпуск.</p>';
+   h+='<div class="s52-form"><label>Период<select class="tin" id="s52tp">'+[[7,"7 дней"],[14,"14 дней"],[31,"31 день"]].map(function(x){return '<option value="'+x[0]+'"'+(TB.days===x[0]?" selected":"")+'>'+x[1]+'</option>'}).join("")+'</select></label><label>С даты<input type="date" class="tin" id="s52tf" value="'+e(TB.from||(d?d.days[0]:""))+'"></label>'+
+    '<button type="button" class="btn" data-s52b="csv"'+(d?"":" disabled")+'>Выгрузить в Excel</button><button type="button" class="btn" data-s52b="send"'+(d?"":" disabled")+'>Отправить в Discord</button></div>';
+   if(TB.msg)h+='<p class="s24-msg" role="status">'+e(TB.msg)+'</p>';
+   if(TB.err)return h+'<div class="banner bp-err" role="alert">'+e(TB.err)+'</div>';
+   if(!d)return h+'<p class="bp-empty">Загружаем табель…</p>';
+   var tot=d.days.map(function(_,i){return Math.round(d.rows.reduce(function(s,r){return s+r.h[i]},0)*10)/10});
+   h+='<div class="s52-tab"><table><thead><tr><th>Сотрудник</th>'+d.days.map(function(x){return '<th>'+e(x.slice(8,10)+"."+x.slice(5,7))+'</th>'}).join("")+'<th>Итого</th></tr></thead><tbody>'+
+    d.rows.map(function(r){return '<tr><td>'+e(r.nick)+(r.post?' <small style="color:var(--muted)">'+e(r.post)+'</small>':'')+'</td>'+r.h.map(function(x,i){var v=r.v[i];return '<td class="'+(x?"h":v?"v":"")+'">'+(v?(v==="ic"?"🌙":"🏖"):"")+(x?String(x).replace(".",","):v?"":"·")+'</td>'}).join("")+'<td><b>'+String(r.total).replace(".",",")+'</b></td></tr>'}).join("")+
+    '</tbody><tfoot><tr><td>Итого '+e(d.org)+'</td>'+tot.map(function(x){return '<td>'+(x?String(x).replace(".",","):"·")+'</td>'}).join("")+'<td>'+String(d.total).replace(".",",")+'</td></tr></tfoot></table></div>';
+   return h}
+  if(sub==="vac"){if(VO.org!==org){VO.org=org;VO.data=null}if(!VO.data&&!VO.busy&&!VO.err)setTimeout(function(){vorgLoad(org,redraw)},0);
+   var h2='<p class="sub">Отпуска сотрудников: текущие, будущие и закончившиеся за последнюю неделю. Сотрудники оформляют их в личном кабинете.</p>';
+   if(VO.err)return h2+'<div class="banner bp-err" role="alert">'+e(VO.err)+'</div>';
+   if(!VO.data)return h2+'<p class="bp-empty">Загружаем…</p>';
+   var L=VO.data.list||[];if(!L.length)return h2+'<p class="bp-empty">Отпусков нет.</p>';
+   return h2+'<ul class="s52-vl">'+L.map(function(v){var now=Date.parse(v.start)<=Date.now()&&Date.parse(v.end)>Date.now(),past=Date.parse(v.end)<=Date.now();return '<li class="'+(now?"now":"")+'"'+(past?' style="opacity:.55"':'')+'><span><b>'+e(v.nick)+'</b> · '+e(vacTxt(v))+(v.note?' · '+e(v.note):'')+(now?' · <b>сейчас</b>':'')+'</span></li>'}).join("")+'</ul>'}
+  return ""},
+ reload:function(){TB.data=null;TB.err="";VO.data=null;VO.err=""}
+};
+document.addEventListener("change",function(ev){var t=ev.target;if(!t||(t.id!=="s52tp"&&t.id!=="s52tf"))return;ev.stopPropagation();if(t.id==="s52tp")TB.days=+t.value;else TB.from=t.value;TB.data=null;TB.msg="";try{render()}catch(x){}},true);
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s52b]");if(!b||!TB.data)return;
+ if(b.dataset.s52b==="csv"){var bl=new Blob([csv(TB.data)],{type:"text/csv;charset=utf-8"}),a=document.createElement("a");a.href=URL.createObjectURL(bl);a.download="tabel-"+TB.data.org+"-"+TB.data.days[0]+".csv";document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},5000);toast("Табель сохранён: файл откроется в Excel");return}
+ if(b.dataset.s52b==="send"){b.disabled=true;api("tabel",{op:"send",org:TB.org||"",server:window.SA_STAFF_SRV||"",days:TB.days,from:TB.from||TB.data.days[0]}).then(function(r){b.disabled=false;TB.msg=r.ok?"Табель отправлен в Discord организации.":(r.error||"Не удалось отправить.");try{render()}catch(x){}})}});
+
+/* ---------- законы: оглавление сбоку (92) и режим чтения (93) ---------- */
+function tocWire(){var view=document.getElementById("view");if(!view)return;
+ view.querySelectorAll(".lw-text").forEach(function(tx){if(tx.dataset.s52)return;var toc=tx.querySelector(":scope > .lt-toc");tx.dataset.s52="1";
+  if(toc){tx.classList.add("s52-side");toc.open=true;var btns=[].slice.call(toc.querySelectorAll("[data-t]"));
+   var upd=function(){var top=Math.max(tx.getBoundingClientRect().top,0)+90,cur=null;btns.forEach(function(b){var el=document.getElementById(b.dataset.t);if(el&&el.getBoundingClientRect().top<=top+40)cur=b});if(!cur)cur=btns[0];
+    btns.forEach(function(b){b.setAttribute("aria-current",String(b===cur))});if(cur&&toc.scrollHeight>toc.clientHeight){var r=cur.getBoundingClientRect(),q=toc.getBoundingClientRect();if(r.top<q.top||r.bottom>q.bottom)cur.scrollIntoView({block:"nearest"})}};
+   tx.addEventListener("scroll",upd,{passive:true});window.addEventListener("scroll",function(){if(tx.isConnected)upd()},{passive:true});setTimeout(upd,50)}
+  var card=tx.closest(".lw-card"),row=card&&card.querySelector(".lw-row");
+  if(row&&!row.querySelector("[data-s52read]"))row.insertAdjacentHTML("afterbegin",'<button type="button" class="btn" data-s52read="1">Режим чтения</button>')})}
+function readOn(card){document.querySelectorAll(".lw-card.s52-rd").forEach(function(c){c.classList.remove("s52-rd")});if(card)card.classList.add("s52-rd");document.documentElement.classList.add("s52-read");
+ if(!document.querySelector(".s52-rx"))document.body.insertAdjacentHTML("beforeend",'<button type="button" class="btn primary s52-rx noprint" data-s52read="0">Выйти из режима чтения (Esc)</button>');window.scrollTo(0,card?card.getBoundingClientRect().top+window.pageYOffset-12:0)}
+function readOff(){document.documentElement.classList.remove("s52-read");document.querySelectorAll(".lw-card.s52-rd").forEach(function(c){c.classList.remove("s52-rd")})}
+window.SA_read=function(on){if(on)readOn(document.querySelector(".lw-card"));else readOff()};
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s52read]");if(!b)return;if(b.dataset.s52read==="1")readOn(b.closest(".lw-card"));else readOff()});
+document.addEventListener("keydown",function(ev){if(ev.key==="Escape"&&document.documentElement.classList.contains("s52-read")){ev.stopPropagation();readOff()}},true);
+var r0=window.render;window.render=function(){var r=r0.apply(this,arguments);try{if(state.tab!=="laws"&&document.documentElement.classList.contains("s52-read"))readOff();if(state.tab==="laws")tocWire()}catch(x){}return r};
+var mt=0;try{new MutationObserver(function(){if(state.tab!=="laws")return;clearTimeout(mt);mt=setTimeout(function(){try{tocWire()}catch(x){}},120)}).observe(document.getElementById("view"),{childList:true,subtree:true})}catch(x){}
 })();
 </script>
 <script>

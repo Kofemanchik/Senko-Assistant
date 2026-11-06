@@ -1108,6 +1108,10 @@ async function api(req) {
       return J(await ctrlApi(b));
     case "reports":
       return J(await reportsApi(b));
+    case "vac":
+      return J(await vacApi(b));
+    case "tabel":
+      return J(await tabelApi(b));
     case "share":
       return J(await shareApi(b));
     case "xfer":
@@ -2040,8 +2044,8 @@ const RP_KINDS = {
   sup: "Заключение прокурора",
   def: "Жалоба адвоката",
 };
-const RP_STATUS = { new: "на рассмотрении", ok: "принят", no: "отклонён" };
-const RP_ICON = { new: "⏳", ok: "✅", no: "❌" };
+const RP_STATUS = { new: "на рассмотрении", ok: "принят", no: "отклонён", rev: "на доработке" };
+const RP_ICON = { new: "⏳", ok: "✅", no: "❌", rev: "↩️" };
 // Многострочный текст: управляющие символы убираются, переносы строк остаются
 const cleanText = (s, max) =>
   String(s == null ? "" : s).replace(/\r\n?/g, "\n").replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, " ")
@@ -2060,6 +2064,7 @@ function rpFields(f) {
 const rpOut = (r, full = true) => ({
   id: String(r.id), org: r.org, kind: r.kind, title: r.title, author: r.author, login: r.login, static: r.static_id, dept: r.dept,
   status: r.status, reviewer: r.reviewer || "", note: r.review_note || "", reviewed: r.reviewed_at, created: r.created_at,
+  no: r.org_no ? String(r.org_no).padStart(4, "0") : "", resubmits: r.resubmits || 0, // 4.2: номер по организации, повторные отправки
   ...(full ? { fields: r.fields || {}, body: r.body } : {}),
 });
 // Текст рапорта для Telegram
@@ -2084,26 +2089,158 @@ async function rpNotify(r) {
   await postHook(r.org, r.server || DEFAULT_SERVER, "rep", `📝 Рапорт №${r.id}: ${r.title}`, rpText(r, 1500), 0xc2530e);
 }
 // Решение по рапорту. who: { label, name, org (null — любая организация) }
-async function rpReview(by, id, ok, note) {
+async function rpReview(by, id, ok, note, rev = false) {
   const sql = db();
   const [r0] = id ? await sql`select * from reports where id = ${id}` : [];
   if (!r0 || (by.org && r0.org !== by.org) || (by.server && (r0.server || DEFAULT_SERVER) !== by.server)) return { err: "Рапорт не найден." };
-  const [r] = await sql`update reports set status = ${ok ? "ok" : "no"}, reviewer = ${by.name}, review_note = ${note || ""}, reviewed_at = now()
+  const stNew = rev ? "rev" : ok ? "ok" : "no";
+  if (rev && !note) return { err: "Напишите, что исправить: комментарий обязателен при возврате на доработку." };
+  const [r] = await sql`update reports set status = ${stNew}, reviewer = ${by.name}, review_note = ${note || ""}, reviewed_at = now()
                         where id = ${r0.id} returning *`;
   await audit(by.label, "report_review", r.login, { id: String(r.id), org: r.org, status: r.status });
   if (r.user_id && r0.status !== r.status)
     await sql`insert into broadcasts (user_id, title, author, text, expires_at)
-              values (${r.user_id}, ${`${ok ? "✅" : "❌"} Рапорт №${r.id} ${ok ? "принят" : "отклонён"}`}, ${by.label},
-                      ${`${r.title} от ${new Date(r.created_at).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" })}: ${ok ? "принят" : "отклонён"} (${by.name}).${note ? " Комментарий: " + note.replace(/[.!?]?$/, (m) => m || ".") : ""} Рапорт есть в личном кабинете, раздел «Мои рапорты».`},
+              values (${r.user_id}, ${`${RP_ICON[r.status]} Рапорт №${r.org_no ? String(r.org_no).padStart(4, "0") : r.id} ${RP_STATUS[r.status]}`}, ${by.label},
+                      ${`${r.title} от ${new Date(r.created_at).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" })}: ${RP_STATUS[r.status]} (${by.name}).${note ? " Комментарий: " + note : ""}${r.status === "rev" ? " Откройте «Мои рапорты», исправьте и отправьте снова." : ""}`},
                       now() + interval '7 days')`;
   return { r };
 }
+// ───────────── 4.2: бланки организации (158), отпуска (26), табель смен (24) ─────────────
+const RPF_TYPES = ["text", "area", "select"];
+const RPF_IDS = "abcdefghijkl".split("").map((c) => "xf_" + c);
+function rpfClean(list) {
+  const out = [];
+  for (const f of (Array.isArray(list) ? list : []).slice(0, 12)) {
+    const l = clean(f && f.l, 60);
+    if (!l) continue;
+    const t = RPF_TYPES.includes(f.t) ? f.t : "text";
+    const o = t === "select" ? (Array.isArray(f.o) ? f.o : []).map((x) => clean(x, 40)).filter(Boolean).slice(0, 10) : [];
+    if (t === "select" && o.length < 2) continue;
+    const kinds = (Array.isArray(f.kinds) ? f.kinds : []).filter((k) => RP_KINDS[k]).slice(0, 8);
+    out.push({ id: RPF_IDS[out.length], l, t, o, req: !!f.req, kinds });
+  }
+  return out;
+}
+const mskDate = (d) => mskDay(new Date(d));
+async function vacApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const sql = db();
+  const op = String(b.op || "mine");
+  const srv = sv(p);
+  const out = (r) => ({ id: String(r.id), kind: r.kind, start: r.start_at, end: r.end_at, note: r.note || "", nick: r.nick || "", org: r.org });
+  if (op === "add") {
+    if (!(await hit(`vac:${p.id}`, 20, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const kind = b.kind === "ooc" ? "ooc" : "ic";
+    const s = Date.parse(b.start), e = Date.parse(b.end);
+    if (!s || !e || e <= s) return fail("Проверьте начало и конец отпуска.");
+    if (e < Date.now()) return fail("Отпуск уже закончился.");
+    if (kind === "ic") {
+      if (e - s > 12 * 3600e3) return fail("IC-отпуск — не больше 12 часов подряд.");
+      if (mskDate(s) !== mskDate(e - 1)) return fail("IC-отпуск — в пределах одного дня (по Москве).");
+      if (s > Date.now() + 61 * 864e5) return fail("Отпуск можно взять не дальше чем на 2 месяца вперёд.");
+    } else {
+      if (e - s > 12 * 864e5 + 3600e3) return fail("OOC-отпуск — не больше 12 дней подряд.");
+      if (s > Date.now() + 61 * 864e5) return fail("Отпуск можно взять не дальше чем на 2 месяца вперёд.");
+    }
+    const [{ n }] = await sql`select count(*)::int n from vacations where user_id = ${p.id} and end_at > now()`;
+    if (n >= 10) return fail("У вас уже 10 будущих отпусков. Удалите лишние.");
+    await sql`insert into vacations (user_id, org, server, kind, start_at, end_at, note) values (${p.id}, ${p.org}, ${srv}, ${kind}, ${new Date(s)}, ${new Date(e)}, ${clean(b.note, 120)})`;
+    try { await postHook(p.org, srv, "join", (kind === "ic" ? "🌙 IC-отпуск" : "🏖 OOC-отпуск") + ": " + (p.nick || p.login), `${new Date(s).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })} — ${new Date(e).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })}${b.note ? "\n" + clean(b.note, 120) : ""}`); } catch (e) {}
+  } else if (op === "del") {
+    await sql`delete from vacations where id = ${parseInt(b.id, 10) || 0} and user_id = ${p.id}`;
+  } else if (op === "org") {
+    if (!["leader", "moderator", "owner"].includes(p.rank)) return fail("Отпуска сотрудников видит руководство.");
+    const org = staffOrg(p, b), s2 = staffSrvOpt(p, b) || srv;
+    if (!org) return fail("Выберите организацию.");
+    const rows = await sql`select v.*, pr.nick from vacations v join profiles pr on pr.id = v.user_id where v.org = ${org} and v.server = ${s2} and v.end_at > now() - interval '7 days' order by v.start_at limit 200`;
+    return { ok: true, org, list: rows.map(out) };
+  } else if (op !== "mine") return fail("Неизвестное действие.");
+  const rows = await sql`select * from vacations where user_id = ${p.id} and end_at > now() - interval '30 days' order by start_at desc limit 30`;
+  return { ok: true, list: rows.map(out) };
+}
+// табель: сотрудник × день. Часы — длительность смен ведомства, во время которых сотрудник был в сети (по сводке смены)
+async function tabelApi(b) {
+  const { p, err } = await who(b, ["leader", "moderator", "owner"]);
+  if (err) return err;
+  const org = staffOrg(p, b);
+  if (!org) return fail("Выберите организацию.");
+  const srv = staffSrvOpt(p, b) || sv(p);
+  const days = Math.min(31, Math.max(1, parseInt(b.days, 10) || 7));
+  const from0 = /^\d{4}-\d{2}-\d{2}$/.test(String(b.from || "")) ? String(b.from) : mskDay(new Date(Date.now() - (days - 1) * 864e5));
+  const start = Date.parse(from0 + "T00:00:00+03:00"), end = start + days * 864e5;
+  const sql = db();
+  const people = await sql`select id, login, nick, post from profiles where org = ${org} and server = ${srv} and not banned and approval = 'ok' order by lower(nick) limit 300`;
+  const shifts = await sql`select started_at, ended_at, summary from shifts where org = ${org} and server = ${srv} and started_at < ${new Date(end)} and coalesce(ended_at, now()) > ${new Date(start)}`;
+  const vac = await sql`select user_id, kind, start_at, end_at from vacations where org = ${org} and server = ${srv} and start_at < ${new Date(end)} and end_at > ${new Date(start)}`;
+  const D = Array.from({ length: days }, (_, i) => mskDay(new Date(start + i * 864e5 + 3 * 3600e3)));
+  const H = {}, V = {};
+  for (const sh of shifts) {
+    const s = Math.max(tsOf(sh.started_at), start), e = Math.min(tsOf(sh.ended_at) || Date.now(), end);
+    if (e <= s) continue;
+    const day = mskDate(s), hrs = (e - s) / 3600e3;
+    for (const x of ((sh.summary && sh.summary.online) || [])) {
+      const k = String(x.login || "").toLowerCase();
+      if (!k) continue;
+      H[k] = H[k] || {};
+      H[k][day] = (H[k][day] || 0) + hrs;
+    }
+  }
+  const byId = Object.fromEntries(people.map((x) => [x.id, x]));
+  for (const v of vac) {
+    const x = byId[v.user_id];
+    if (!x) continue;
+    for (let t = Math.max(tsOf(v.start_at), start); t < Math.min(tsOf(v.end_at), end); t += 864e5) {
+      const k = x.login.toLowerCase();
+      V[k] = V[k] || {};
+      V[k][mskDate(t)] = v.kind;
+    }
+    const k = x.login.toLowerCase(), last = mskDate(Math.min(tsOf(v.end_at), end) - 1);
+    if (last >= D[0] && last <= D[D.length - 1]) { V[k] = V[k] || {}; V[k][last] = v.kind; }
+  }
+  const rows = people.map((x) => {
+    const k = x.login.toLowerCase(), h = D.map((d) => Math.round(((H[k] || {})[d] || 0) * 10) / 10), v = D.map((d) => (V[k] || {})[d] || "");
+    return { nick: x.nick, post: x.post || "", h, v, total: Math.round(h.reduce((s, n) => s + n, 0) * 10) / 10, days: h.filter((n) => n > 0).length };
+  });
+  const res = { ok: true, org, server: srvName(srv), days: D, rows, total: Math.round(rows.reduce((s, r) => s + r.total, 0) * 10) / 10 };
+  if (b.op === "send") {
+    if (!(await hit(`tab:${p.id}`, 10, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const [h] = await sql`select * from org_hooks where org = ${org} and server = ${srv}`;
+    if (!h) return fail("У организации не подключён Discord-вебхук. Его подключает руководство в панели руководителя.");
+    const top = rows.filter((r) => r.total > 0).sort((a, c) => c.total - a.total);
+    const txt = `Период: ${D[0]} — ${D[D.length - 1]}\nВсего часов по сменам: **${res.total}**, сотрудников со сменами: **${top.length}** из ${rows.length}\n\n` +
+      (top.length ? top.slice(0, 40).map((r, i) => `${i + 1}. ${r.nick} — ${r.total} ч, дней: ${r.days}`).join("\n") : "Смен за период нет.") +
+      (rows.some((r) => r.v.some(Boolean)) ? "\n\nВ отпуске: " + rows.filter((r) => r.v.some(Boolean)).map((r) => r.nick).join(", ") : "");
+    const ok = await hookSend(h, `📋 Табель смен ${org}`, txt, 0x2e7d4f);
+    if (!ok) return fail("Discord не принял табель. Проверьте вебхук в панели руководителя.");
+    await audit(p.login, "tabel_send", org, { from: D[0], days });
+    return { ...res, sent: true };
+  }
+  return res;
+}
+
 async function reportsApi(b) {
   const op = String(b.op || "mine");
   const sql = db();
-  if (op === "create" || op === "mine" || op === "del") {
+  if (op === "create" || op === "mine" || op === "del" || op === "resubmit" || op === "form_get") {
     const { p, err } = await who(b);
     if (err) return err;
+    // 4.2: бланк организации — дополнительные поля, которые задало руководство
+    if (op === "form_get") return { ok: true, org: p.org, fields: ((await getSetting(`rpf:${p.org}:${sv(p)}`, null)) || { fields: [] }).fields || [] };
+    // 4.2: исправленный рапорт после возврата на доработку
+    if (op === "resubmit") {
+      const id = parseInt(b.id, 10) || 0;
+      const body = cleanText(b.body, 5000);
+      if (body.length < 20) return fail("Рапорт слишком короткий: заполните поля.");
+      if (!(await hit(`rp:${p.id}`, 15, 3600))) return fail(RATE_MSG, { code: "rate" });
+      const [r] = await sql`update reports set status = 'new', body = ${body}, fields = ${sql.json(rpFields(b.fields))}, title = ${clean(b.title, 120) || "Рапорт"},
+                            resubmits = resubmits + 1, reviewed_at = null where id = ${id} and user_id = ${p.id} and status = 'rev' returning *`;
+      if (!r) return fail("Исправить можно только свой рапорт, который вернули на доработку.");
+      await audit(p.login, "report_resubmit", r.org, { id: String(r.id) });
+      try { await rpNotify(r); } catch (e) { console.error("report notify", e); }
+      const rows0 = await sql`select * from reports where user_id = ${p.id} order by created_at desc limit 200`;
+      return { ok: true, report: rpOut(r), list: rows0.map((x) => rpOut(x)) };
+    }
     if (op === "create") {
       const kind = String(b.kind || "");
       if (!RP_KINDS[kind]) return fail("Неизвестный вид рапорта.");
@@ -2113,9 +2250,10 @@ async function reportsApi(b) {
       if (body.length < 20) return fail("Рапорт слишком короткий: заполните поля.");
       if (!(await hit(`rp:${p.id}`, 15, 3600))) return fail(RATE_MSG, { code: "rate" });
       const title = clean(b.title, 120) || RP_KINDS[kind];
-      const [r] = await sql`insert into reports (user_id, org, server, author, login, static_id, dept, kind, title, fields, body)
+      const [r] = await sql`insert into reports (user_id, org, server, author, login, static_id, dept, kind, title, fields, body, org_no)
                             values (${p.id}, ${p.org}, ${sv(p)}, ${p.nick || p.login}, ${p.login}, ${p.static_id}, ${p.dept || ""}, ${kind}, ${title},
-                                    ${sql.json(rpFields(b.fields))}, ${body}) returning *`;
+                                    ${sql.json(rpFields(b.fields))}, ${body},
+                                    (select coalesce(max(org_no), 0) + 1 from reports where org = ${p.org} and server = ${sv(p)})) returning *`;
       await audit(p.login, "report_create", r.org, { id: String(r.id), kind });
       try {
         await rpNotify(r);
@@ -2126,18 +2264,30 @@ async function reportsApi(b) {
     }
     if (op === "del") {
       const id = parseInt(b.id, 10);
-      const r = id ? await sql`delete from reports where id = ${id} and user_id = ${p.id} and status = 'new' returning id` : [];
+      const r = id ? await sql`delete from reports where id = ${id} and user_id = ${p.id} and status in ('new', 'rev') returning id` : [];
       if (!r.length) return fail("Удалить можно только свой рапорт, пока его не рассмотрели.");
       await audit(p.login, "report_delete", p.org, { id: String(id) });
     }
-    const rows = await sql`select * from reports where user_id = ${p.id} order by created_at desc limit 50`;
+    const rows = await sql`select * from reports where user_id = ${p.id} order by created_at desc limit 200`;
     return { ok: true, list: rows.map((r) => rpOut(r)) };
   }
   const { p, err } = await who(b, ["leader", "moderator", "owner"]);
   if (err) return err;
   const org = staffOrg(p, b);
+  if (op === "form_save") {
+    if (!org) return fail("Выберите организацию.");
+    const srvF = staffSrv(p, b);
+    const fields = rpfClean(b.fields);
+    await setSetting(`rpf:${org}:${srvF}`, { fields, by: p.nick || p.login, at: Date.now() });
+    await audit(p.login, "report_form", org, { n: fields.length });
+    return { ok: true, org, fields };
+  }
+  if (op === "form_staff") {
+    if (!org) return fail("Выберите организацию.");
+    return { ok: true, org, fields: ((await getSetting(`rpf:${org}:${staffSrv(p, b)}`, null)) || { fields: [] }).fields || [] };
+  }
   if (op === "review") {
-    const x = await rpReview({ label: p.login, name: p.nick || p.login, org: p.rank === "leader" ? p.org : null, server: staffSrvOpt(p, b) || 0 }, parseInt(b.id, 10), !!b.ok, clean(b.note, 300));
+    const x = await rpReview({ label: p.login, name: p.nick || p.login, org: p.rank === "leader" ? p.org : null, server: staffSrvOpt(p, b) || 0 }, parseInt(b.id, 10), !!b.ok, clean(b.note, 300), !!b.rev);
     if (x.err) return fail(x.err);
   } else if (op !== "list") return fail("Неизвестное действие.");
   const st = RP_STATUS[b.status] ? String(b.status) : null;
@@ -2150,7 +2300,12 @@ async function reportsApi(b) {
       and (${like}::text is null or lower(author) like ${like} or lower(login) like ${like} or lower(title) like ${like} or static_id like ${like} or id::text = ${q})
     order by created_at desc limit 100`;
   const [{ n }] = await sql`select count(*)::int n from reports where status = 'new' and (${org}::text is null or org = ${org}) and (${staffSrvOpt(p, b)}::int is null or server = ${staffSrvOpt(p, b)})`;
-  return { ok: true, org, kinds: RP_KINDS, newN: n, list: rows.map((r) => rpOut(r)) };
+  // 4.2: статистика проверки за 30 дней (166)
+  const [s30] = await sql`select count(*)::int n, count(*) filter (where status = 'no')::int no, count(*) filter (where status = 'rev')::int rev,
+      round(avg(extract(epoch from (reviewed_at - created_at)) / 60) filter (where reviewed_at is not null))::int avg_min,
+      round(extract(epoch from (now() - min(created_at) filter (where status = 'new'))) / 3600)::int oldest_h
+    from reports where created_at > now() - interval '30 days' and (${org}::text is null or org = ${org}) and (${staffSrvOpt(p, b)}::int is null or server = ${staffSrvOpt(p, b)})`;
+  return { ok: true, org, kinds: RP_KINDS, newN: n, stats: { wait: n, n30: s30.n, no: s30.no, rev: s30.rev, avgMin: s30.avg_min, oldestH: s30.oldest_h }, list: rows.map((r) => rpOut(r)) };
 }
 
 // ───────────── Приём новичков ─────────────
@@ -5709,7 +5864,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 43;
+const SCHEMA_V = 44;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -5939,6 +6094,16 @@ revoke all on table public.plan_votes from anon, authenticated;
 create table if not exists public.day_counts (day date not null, k text not null, n integer not null default 0, primary key (day, k));
 alter table public.day_counts enable row level security;
 revoke all on table public.day_counts from anon, authenticated;
+alter table public.reports add column if not exists org_no integer;
+alter table public.reports add column if not exists resubmits integer not null default 0;
+alter table public.reports drop constraint if exists reports_status_check;
+alter table public.reports add constraint reports_status_check check (status in ('new','ok','no','rev'));
+create table if not exists public.vacations (
+  id bigserial primary key, user_id uuid not null references public.profiles(id) on delete cascade, org text not null, server integer not null default 12,
+  kind text not null check (kind in ('ic','ooc')), start_at timestamptz not null, end_at timestamptz not null, note text not null default '', created_at timestamptz not null default now());
+create index if not exists vacations_org on public.vacations (org, server, end_at);
+alter table public.vacations enable row level security;
+revoke all on table public.vacations from anon, authenticated;
 `;
 const SCHEMA_37_ONCE = `
 update public.bot_settings set value = (select coalesce(jsonb_object_agg(k, case when v = '"beta"'::jsonb then '"all"'::jsonb else v end), '{}'::jsonb) from jsonb_each(value) e(k, v))

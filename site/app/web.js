@@ -267,7 +267,7 @@
     del.forEach(function (k) { W.ls(k, null); });
   }
 
-  var PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password", "ads", "status", "beta", "hooks", "events", "ideas", "patrol", "ai_dict", "ai_hist", "ai_check", "colleagues", "handoff", "svc", "lead_log", "org_week", "pub_board_opt", "dc_auth_start", "dc_auth_poll", "dc_unlink", "srv_cfg", "org_news", "notice_read", "totp", "org_join", "org_join_admin", "glossary", "stt", "qr_login"]; // 2.7: словарь ИИ, история вопросов, самопроверка; 2.8: коллеги, передача задержанного
+  var PAGE_ACTIONS = ["my_stats", "week_board", "shift", "ctrl", "reports", "share", "xfer", "misses", "contacts", "logins", "change_password", "verify_password", "ads", "status", "beta", "hooks", "events", "ideas", "patrol", "ai_dict", "ai_hist", "ai_check", "colleagues", "handoff", "svc", "lead_log", "org_week", "pub_board_opt", "dc_auth_start", "dc_auth_poll", "dc_unlink", "srv_cfg", "org_news", "notice_read", "totp", "org_join", "org_join_admin", "glossary", "stt", "qr_login", "month", "vac", "tabel"]; // 2.7: словарь ИИ, история вопросов, самопроверка; 2.8: коллеги, передача задержанного
   function act(action, data) {
     return W.call(Object.assign({}, W.client(), data && typeof data === "object" ? data : {}, { action: action, token: (W.session() || {}).token })).then(function (r) {
       if (r && (r.code === "auth" || r.code === "banned")) setTimeout(function () { lost(r.code === "banned" ? r.error : ""); }, 0);
