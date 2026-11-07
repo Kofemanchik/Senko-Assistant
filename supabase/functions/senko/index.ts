@@ -5934,7 +5934,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 46;
+const SCHEMA_V = 47;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -6146,6 +6146,20 @@ alter table public.share_results enable row level security;
 revoke all on table public.share_results from anon, authenticated;
 `;
 // 3.8: одноразовые коды входа в веб-версию по QR
+const SCHEMA_44 = `
+alter table public.court_cases add column if not exists panel jsonb not null default '[]';
+alter table public.court_decisions add column if not exists panel text not null default '';
+create table if not exists public.court_sessions (
+  code text primary key, server integer not null default 12, owner_id uuid references public.profiles(id) on delete set null, case_id bigint references public.court_cases(id) on delete set null,
+  case_no text not null default '', title text not null default '', state jsonb not null default '{}', created_at timestamptz not null default now(), expires_at timestamptz not null);
+create table if not exists public.court_session_members (
+  code text not null references public.court_sessions(code) on delete cascade, user_id uuid not null references public.profiles(id) on delete cascade,
+  role text not null default 'part', sig text not null default '', joined_at timestamptz not null default now(), seen_at timestamptz not null default now(), primary key (code, user_id));
+create index if not exists court_session_members_user on public.court_session_members (user_id);
+alter table public.court_sessions enable row level security;
+alter table public.court_session_members enable row level security;
+revoke all on table public.court_sessions, public.court_session_members from anon, authenticated;
+`;
 const SCHEMA_43 = `
 alter table public.profiles add column if not exists judge_pos text not null default '';
 alter table public.profiles add column if not exists pvs boolean not null default false;
@@ -6223,7 +6237,7 @@ function ensureSchema() {
         if (+v >= SCHEMA_V) return;
         // база уже на 2.4: повторно 2.4 не выполняем (иначе вернулись бы удалённые баннеры по умолчанию)
         // 3.5: SCHEMA_30 и SCHEMA_35 повторяемы (create/alter … if not exists), их добавляем всем, кто ниже 35
-        await db().unsafe((+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35) + (+v < 37 ? SCHEMA_37_ONCE : "") + SCHEMA_38 + SCHEMA_39 + SCHEMA_40 + SCHEMA_41 + SCHEMA_42 + SCHEMA_43);
+        await db().unsafe((+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35) + (+v < 37 ? SCHEMA_37_ONCE : "") + SCHEMA_38 + SCHEMA_39 + SCHEMA_40 + SCHEMA_41 + SCHEMA_42 + SCHEMA_43 + SCHEMA_44);
         adsReady = true;
         await setSetting("schema_v", SCHEMA_V);
       } catch (e) {
@@ -7123,7 +7137,7 @@ function caseOut(r) {
   return {
     id: String(r.id), no: String(r.no || r.id).padStart(4, "0"), title: r.title, kind: r.kind, kindName: CASE_KIND[r.kind] || r.kind, status: r.status,
     parties: r.parties || [], arts: r.arts || "", evidence: r.evidence || [], hearings: r.hearings || [], notes: r.notes || "",
-    judge: r.judge || "", judgeLogin: r.judge_login || "", draw: r.draw || null, author: r.author || "", authorLogin: r.author_login || "",
+    judge: r.judge || "", judgeLogin: r.judge_login || "", draw: r.draw || null, panel: r.panel || [], author: r.author || "", authorLogin: r.author_login || "",
     created: r.created_at, updated: r.updated_at,
   };
 }
@@ -7137,7 +7151,8 @@ async function courtApi(b) {
   const op = String(b.op || "me");
   const srv = isStaff(p) ? parseServer(b.server) || sv(p) : sv(p);
   const me = { judgePos: p.judge_pos || "", judgeName: JUDGE_POS[p.judge_pos] || "", pvs: !!p.pvs, gov: isGov(p), lead: govLead(p), judge: isJudge(p) };
-  if (op === "me") return { ok: true, ...me, positions: JUDGE_POS, kinds: CASE_KIND, warKinds: WAR_KIND };
+  if (op === "me") return { ok: true, ...me, positions: JUDGE_POS, kinds: CASE_KIND, warKinds: WAR_KIND, sesRoles: SES_ROLE };
+  if (op.startsWith("ses_")) return await sesApi(p, b, op, srv);
   // ── ордера: список видят все сотрудники сервера (полиции важно знать, какие ордера действуют) ──
   if (op === "war_list") {
     const rows = await sql`select * from warrants where server = ${srv} and (status <> 'no' or created_at > now() - interval '3 days')
@@ -7254,11 +7269,11 @@ async function courtApi(b) {
   }
   // ── 173: ближайшие заседания ──
   if (op === "hearings") {
-    const rows = await sql`select id, no, title, judge, hearings from court_cases where server = ${srv} and status = 'open' and jsonb_array_length(hearings) > 0 limit 300`;
+    const rows = await sql`select id, no, title, judge, panel, hearings from court_cases where server = ${srv} and status = 'open' and jsonb_array_length(hearings) > 0 limit 300`;
     const now = Date.now(), until = now + Math.min(31, Math.max(1, parseInt(b.days, 10) || 14)) * 864e5, out = [];
     for (const r of rows) for (const h of r.hearings || []) {
       const t = Date.parse(h.at);
-      if (t > now - 3 * 3600e3 && t < until) out.push({ case: String(r.id), no: String(r.no || r.id).padStart(4, "0"), title: r.title, judge: r.judge || "", at: h.at, place: h.place || "", note: h.note || "" });
+      if (t > now - 3 * 3600e3 && t < until) out.push({ case: String(r.id), no: String(r.no || r.id).padStart(4, "0"), title: r.title, judge: r.judge || "", panel: (r.panel || []).filter((x) => x.role !== "secretary").map((x) => x.nick), at: h.at, place: h.place || "", note: h.note || "" });
     }
     out.sort((a, c) => Date.parse(a.at) - Date.parse(c.at));
     return { ok: true, ...me, list: out.slice(0, 50) };
@@ -7268,7 +7283,7 @@ async function courtApi(b) {
     const q = clean(b.q, 80).toLowerCase().replace(/ё/g, "е");
     const rows = await sql`select * from court_decisions where server = ${srv} and (${q} = '' or replace(lower(title || ' ' || case_no || ' ' || arts || ' ' || tags || ' ' || text), 'ё', 'е') like ${"%" + q + "%"})
                            order by dt desc, id desc limit 100`;
-    return { ok: true, ...me, canAdd: govLead(p) || !!p.pvs || isJudge(p), list: rows.map((r) => ({ id: String(r.id), title: r.title, caseNo: r.case_no, dt: r.dt, arts: r.arts, tags: r.tags, text: r.text, author: r.author })) };
+    return { ok: true, ...me, canAdd: govLead(p) || !!p.pvs || isJudge(p), list: rows.map((r) => ({ id: String(r.id), title: r.title, caseNo: r.case_no, dt: r.dt, arts: r.arts, tags: r.tags, text: r.text, author: r.author, panel: r.panel || "" })) };
   }
   if (op === "dec_save" || op === "dec_del") {
     if (!(govLead(p) || p.pvs || isJudge(p))) return fail("Справочник решений пополняет руководство Government и судьи.");
@@ -7279,9 +7294,10 @@ async function courtApi(b) {
     const title = clean(b.title, 150), text = String(b.text == null ? "" : b.text).trim().slice(0, 6000);
     if (title.length < 3 || text.length < 20) return fail("Нужны название решения и его текст (не короче 20 знаков).");
     const dt = /^\d{4}-\d{2}-\d{2}$/.test(String(b.dt || "")) ? b.dt : mskDay();
-    if (b.id) await sql`update court_decisions set title = ${title}, case_no = ${clean(b.caseNo, 20)}, dt = ${dt}, arts = ${clean(b.arts, 200)}, tags = ${clean(b.tags, 120)}, text = ${text}
+    const panel = clean(b.panel, 400);
+    if (b.id) await sql`update court_decisions set title = ${title}, case_no = ${clean(b.caseNo, 20)}, dt = ${dt}, arts = ${clean(b.arts, 200)}, tags = ${clean(b.tags, 120)}, text = ${text}, panel = ${panel}
                         where id = ${parseInt(b.id, 10) || 0} and server = ${srv}`;
-    else await sql`insert into court_decisions (server, title, case_no, dt, arts, tags, text, author) values (${srv}, ${title}, ${clean(b.caseNo, 20)}, ${dt}, ${clean(b.arts, 200)}, ${clean(b.tags, 120)}, ${text}, ${p.nick || p.login})`;
+    else await sql`insert into court_decisions (server, title, case_no, dt, arts, tags, text, author, panel) values (${srv}, ${title}, ${clean(b.caseNo, 20)}, ${dt}, ${clean(b.arts, 200)}, ${clean(b.tags, 120)}, ${text}, ${p.nick || p.login}, ${panel})`;
     return { ok: true };
   }
   // ── судьи: Председатель Верховного суда одобряет заявки и назначает должности ──
@@ -7319,6 +7335,153 @@ async function courtApi(b) {
   }
   return fail("Неизвестное действие.");
 }
+// ── 4.3.1: совместное заседание — как экипаж у задержаний: ссылка-приглашение, роли, общий пульт и протокол ──
+const SES_ROLE = { presiding: "Председательствующий", rapporteur: "Судья-докладчик", member: "Судья коллегии", secretary: "Секретарь судебного заседания",
+  pros: "Государственный обвинитель", def: "Защитник", plaintiff: "Истец / представитель", defendant: "Подсудимый / ответчик", witness: "Свидетель", part: "Участник" };
+const SES_PANEL = ["presiding", "rapporteur", "member"];
+const SES_MAX = 15;
+const sesCode = (c) => String(c == null ? "" : c).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+function sesPult(x) {
+  x = x && typeof x === "object" ? x : {};
+  return { start: +x.start || 0, acc: +x.acc || 0, run: !!x.run, lim: Math.min(1800, Math.max(15, +x.lim || 120)), cur: x.cur ? clean(x.cur, 80) : null, curAt: +x.curAt || 0,
+    q: (Array.isArray(x.q) ? x.q : []).slice(0, 30).map((s) => clean(s, 80)).filter(Boolean), chk: x.chk && typeof x.chk === "object" ? Object.fromEntries(Object.entries(x.chk).slice(0, 40).map(([k, v]) => [String(k).slice(0, 3), !!v])) : {},
+    list: (Array.isArray(x.list) ? x.list : []).slice(0, 30).map((s) => clean(s, 120)).filter(Boolean) };
+}
+async function sesApi(p, b, op, srv) {
+  const sql = db();
+  if (!(await hit(`ses:${p.id}`, 2500, 3600))) return fail(RATE_MSG, { code: "rate" });
+  const mine = async () => (await sql`select m.code from court_session_members m join court_sessions s on s.code = m.code where m.user_id = ${p.id} and s.expires_at > now() limit 1`)[0];
+  const isGovU = (u) => u.org === GOV_ORG || ["moderator", "owner"].includes(u.rank);
+  const view = async (code) => {
+    await sql`update court_session_members set seen_at = now() where code = ${code} and user_id = ${p.id}`;
+    const [s] = await sql`select * from court_sessions where code = ${code}`;
+    if (!s) return { ok: true, ses: null };
+    const mem = await sql`select m.user_id, m.role, m.seen_at, m.sig, pr.nick, pr.org, pr.judge_pos, pr.static_id from court_session_members m join profiles pr on pr.id = m.user_id where m.code = ${code} order by m.joined_at`;
+    const meM = mem.find((m) => m.user_id === p.id);
+    const st = s.state || {};
+    return { ok: true, ses: {
+      code, title: s.title, caseId: s.case_id ? String(s.case_id) : "", caseNo: s.case_no, court: st.court || "", expires: s.expires_at, owner: s.owner_id === p.id,
+      myRole: meM ? meM.role : "", canRun: !!meM && ["presiding", "secretary"].includes(meM.role), canRole: !!meM && meM.role === "presiding",
+      members: mem.map((m) => ({ id: m.user_id, nick: m.nick, org: m.org, static: m.static_id || "", role: m.role, roleName: SES_ROLE[m.role] || m.role, judgeName: JUDGE_POS[m.judge_pos] || "",
+        me: m.user_id === p.id, online: Date.now() - new Date(m.seen_at).getTime() < 60e3, sig: m.sig || "", gov: m.org === GOV_ORG })),
+      pult: sesPult(st.pult), proto: Array.isArray(st.proto) ? st.proto : [], ver: +st.ver || 0, roles: SES_ROLE, panel: SES_PANEL } };
+  };
+  if (op === "ses_state") { const m = await mine(); return m ? view(m.code) : { ok: true, ses: null, roles: SES_ROLE }; }
+  if (op === "ses_peek") {
+    const code = sesCode(b.code);
+    const [s] = code.length === 6 ? await sql`select s.code, s.title, s.case_no, pr.nick, pr.static_id from court_sessions s left join court_session_members m on m.code = s.code and m.role = 'presiding'
+                                               left join profiles pr on pr.id = m.user_id where s.code = ${code} and s.expires_at > now() limit 1` : [];
+    if (!s) return fail("Заседание не найдено или уже закрыто.");
+    const [{ n }] = await sql`select count(*)::int n from court_session_members where code = ${code}`;
+    const [me] = await sql`select 1 from court_session_members where code = ${code} and user_id = ${p.id}`;
+    return { ok: true, code, title: s.title, caseNo: s.case_no, nick: s.nick || "", static: s.static_id || "", members: n, max: SES_MAX, already: !!me };
+  }
+  if (op === "ses_create") {
+    if (!isGovU(p)) return fail("Открыть заседание может сотрудник Government.");
+    const m = await mine();
+    if (m) return view(m.code);
+    let c0 = null;
+    if (b.caseId) [c0] = await sql`select id, no, title from court_cases where id = ${parseInt(b.caseId, 10) || 0} and server = ${srv}`;
+    const ABC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    for (let i = 0; i < 6 && !code; i++) {
+      const c = Array.from(crypto.getRandomValues(new Uint8Array(6))).map((x) => ABC[x % ABC.length]).join("");
+      const r = await sql`insert into court_sessions (code, server, owner_id, case_id, case_no, title, state, expires_at)
+                          values (${c}, ${srv}, ${p.id}, ${c0 ? c0.id : null}, ${c0 ? String(c0.no || c0.id).padStart(4, "0") : clean(b.caseNo, 20)}, ${c0 ? c0.title : clean(b.title, 120) || "Судебное заседание"},
+                                  ${sql.json({ court: clean(b.court, 80), pult: sesPult({}), proto: [], ver: 1 })}, now() + interval '12 hours') on conflict do nothing returning code`;
+      if (r.length) code = c;
+    }
+    if (!code) return fail("Не удалось открыть заседание. Попробуйте ещё раз.");
+    await sql`insert into court_session_members (code, user_id, role, sig) values (${code}, ${p.id}, 'presiding', ${sesSig(b.sig)})`;
+    await sql`delete from court_sessions where expires_at < now() - interval '1 day'`;
+    return view(code);
+  }
+  if (op === "ses_join") {
+    const code = sesCode(b.code);
+    const [s] = code.length === 6 ? await sql`select * from court_sessions where code = ${code} and expires_at > now()` : [];
+    if (!s) return fail("Заседание не найдено или уже закрыто.");
+    if (s.server !== srv && !["moderator", "owner"].includes(p.rank)) return fail("Это заседание другого сервера.");
+    const m = await mine();
+    if (m && m.code !== code) await sql`delete from court_session_members where code = ${m.code} and user_id = ${p.id}`;
+    const [{ n }] = await sql`select count(*)::int n from court_session_members where code = ${code}`;
+    if (n >= SES_MAX && !(m && m.code === code)) return fail(`В заседании уже ${SES_MAX} участников.`);
+    await sql`insert into court_session_members (code, user_id, role, sig) values (${code}, ${p.id}, 'part', ${sesSig(b.sig)}) on conflict (code, user_id) do update set sig = case when excluded.sig <> '' then excluded.sig else court_session_members.sig end`;
+    return view(code);
+  }
+  const m = await mine();
+  if (!m) return fail("Вы не участвуете в заседании.", { code: "noses" });
+  const [me] = await sql`select role from court_session_members where code = ${m.code} and user_id = ${p.id}`;
+  const role = me ? me.role : "";
+  const bump = async (fn) => {
+    const [s] = await sql`select state from court_sessions where code = ${m.code} for update`;
+    const st = (s && s.state) || {};
+    fn(st);
+    st.ver = (+st.ver || 0) + 1;
+    await sql`update court_sessions set state = ${sql.json(st)} where code = ${m.code}`;
+  };
+  if (op === "ses_leave") {
+    await sql`delete from court_session_members where code = ${m.code} and user_id = ${p.id}`;
+    const rest = await sql`select user_id, role from court_session_members where code = ${m.code} order by joined_at`;
+    if (!rest.length) await sql`delete from court_sessions where code = ${m.code}`;
+    else if (role === "presiding" && !rest.some((r) => r.role === "presiding")) {
+      const nx = rest.find((r) => SES_PANEL.includes(r.role)) || rest[0];
+      await sql`update court_session_members set role = 'presiding' where code = ${m.code} and user_id = ${nx.user_id}`;
+    }
+    return { ok: true, ses: null };
+  }
+  if (op === "ses_sig") {
+    await sql`update court_session_members set sig = ${sesSig(b.sig)} where code = ${m.code} and user_id = ${p.id}`;
+    return view(m.code);
+  }
+  if (op === "ses_role") {
+    if (role !== "presiding") return fail("Роли распределяет председательствующий.");
+    const r = SES_ROLE[b.role] ? b.role : "part";
+    const [u] = await sql`select m.user_id, pr.org, pr.rank from court_session_members m join profiles pr on pr.id = m.user_id where m.code = ${m.code} and m.user_id = ${b.id}`;
+    if (!u) return fail("Участник не найден.");
+    if ((SES_PANEL.includes(r) || r === "secretary") && !isGovU(u)) return fail("Роли судей и секретаря — только для сотрудников Government.");
+    if (r === "presiding") await sql`update court_session_members set role = 'member' where code = ${m.code} and role = 'presiding'`; // председательствующий один
+    await sql`update court_session_members set role = ${r} where code = ${m.code} and user_id = ${u.user_id}`;
+    return view(m.code);
+  }
+  if (op === "ses_info") {
+    if (role !== "presiding") return fail("Данные заседания меняет председательствующий.");
+    await sql`update court_sessions set title = ${clean(b.title, 120) || "Судебное заседание"}, case_no = ${clean(b.caseNo, 20)} where code = ${m.code}`;
+    await bump((st) => { st.court = clean(b.court, 80); });
+    return view(m.code);
+  }
+  if (op === "ses_pult") {
+    if (!["presiding", "secretary"].includes(role)) return fail("Пультом управляют председательствующий и секретарь.");
+    await bump((st) => { st.pult = sesPult(b.pult); });
+    return view(m.code);
+  }
+  if (op === "ses_proto") {
+    if (!(SES_PANEL.includes(role) || role === "secretary")) return fail("Протокол ведут судьи и секретарь.");
+    await bump((st) => {
+      const L = Array.isArray(st.proto) ? st.proto : [];
+      if (b.del != null) { const i = L.findIndex((x) => x.id === String(b.del)); if (i >= 0) L.splice(i, 1); }
+      else if (b.k && b.t) {
+        if (L.length >= 300) L.shift();
+        L.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at: Date.now(), k: ["speech", "motion", "decision", "note"].includes(b.k) ? b.k : "note", t: clean(b.t, 600), by: p.nick || p.login });
+      }
+      if (b.clear) L.length = 0;
+      st.proto = L;
+    });
+    return view(m.code);
+  }
+  if (op === "ses_close") {
+    if (role !== "presiding") return fail("Закрыть заседание может председательствующий.");
+    const [s] = await sql`select * from court_sessions where code = ${m.code}`;
+    const mem = await sql`select m.role, pr.nick, pr.judge_pos from court_session_members m join profiles pr on pr.id = m.user_id where m.code = ${m.code}`;
+    const panel = mem.filter((x) => SES_PANEL.includes(x.role) || x.role === "secretary").map((x) => ({ nick: x.nick, role: x.role, roleName: SES_ROLE[x.role], pos: JUDGE_POS[x.judge_pos] || "" }));
+    if (s && s.case_id && panel.length)
+      await sql`update court_cases set panel = ${sql.json(panel)}, judge = ${(panel.find((x) => x.role === "presiding") || panel[0]).nick}, updated_at = now() where id = ${s.case_id}`;
+    await sql`delete from court_sessions where code = ${m.code}`;
+    return { ok: true, ses: null, panel };
+  }
+  return fail("Неизвестное действие.");
+}
+const sesSig = (s) => (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(String(s || "")) && String(s).length < 90000 ? String(s) : "");
+
 // 97: закон на дату — ближайшая к дате версия файла законов из истории репозитория
 const lawAtCache = new Map();
 async function lawAt(p, b) {

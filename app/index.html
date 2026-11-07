@@ -7132,6 +7132,12 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"4.3.1",d:"07.11.2026",items:[
+  ["🤝","Совместное заседание","«Суд» → «Заседание»: председательствующий открывает заседание (можно прямо из карточки дела) и отправляет ссылку судьям коллегии, секретарю и сторонам — как экипаж у задержаний. Открыли ссылку — программа спросит, вступить ли в заседание."],
+  ["🎭","Роли участников","Председательствующий назначает роли: судья-докладчик, судья коллегии, секретарь, государственный обвинитель, защитник, истец, подсудимый, свидетель. Роли судей и секретаря — только для сотрудников Government. Председательствующий один, роль можно передать."],
+  ["🎙","Общий пульт и протокол","Таймер, очередь выступлений и чек-лист видны всем участникам; управляют председательствующий и секретарь. Протокол общий: записи судей и секретаря с временем и автором."],
+  ["⚖","Весь состав суда в документах","В решении — «Суд в составе: председательствующего …, судей … (судья-докладчик), при секретаре …» и подписи всех судей. В протоколе — состав и подписи-картинки участников. После закрытия заседания состав сохраняется в карточке дела, его видно в расписании и в справочнике решений."]
+ ]},
  {v:"4.3.0",d:"07.11.2026",items:[
   ["⚖","Раздел «Суд» для Government","В меню слева — «Суд»: дела, заседания, пульт и протокол заседания, конструктор приговора, документы, сроки, проверка законности задержания, решения суда, ордера, ИИ для сторон и тренажёр судьи."],
   ["📁","Карточка дела","Стороны, статьи, доказательства со ссылками и даты заседаний — в одной карточке. Дела видят все сотрудники Government, у каждого свой номер."],
@@ -17157,17 +17163,17 @@ function modal(t,b){return window.SA_modal?SA_modal(t,b):null}
 function closeM(){if(window.SA_modalClose)SA_modalClose()}
 
 /* ---------- ссылки ---------- */
-var RX={p:/^[A-Z0-9]{6}$/,i:/^SA-[A-Z0-9]{4}-[A-Z0-9]{4}$/,s:/^[A-Za-z0-9]{8}$/,x:/^\d{6}$/,ui:/^[A-Za-z0-9._~-]{3,160}$/};
+var RX={p:/^[A-Z0-9]{6}$/,h:/^[A-Z0-9]{6}$/,i:/^SA-[A-Z0-9]{4}-[A-Z0-9]{4}$/,s:/^[A-Za-z0-9]{8}$/,x:/^\d{6}$/,ui:/^[A-Za-z0-9._~-]{3,160}$/};
 function normV(k,v){v=String(v==null?"":v).trim();
- if(k==="p")return v.replace(/[^A-Za-z0-9]/g,"").toUpperCase();
+ if(k==="p"||k==="h")return v.replace(/[^A-Za-z0-9]/g,"").toUpperCase();
  if(k==="i"){var n=v.toUpperCase().replace(/^SA/,"").replace(/[^A-Z0-9]/g,"");return n.length===8?"SA-"+n.slice(0,4)+"-"+n.slice(4):v.toUpperCase()}
  if(k==="s")return v.replace(/[^A-Za-z0-9]/g,"");
  if(k==="x")return v.replace(/\D/g,"");
  return v}
 function link(k,v){return SITE+"/go/?"+k+"="+encodeURIComponent(normV(k,v))}
 function parse(s){s=String(s||"").trim();var k="",v="",m;
- if((m=/^go\|(p|i|s|x|ui)=(.{1,200})$/.exec(s))){k=m[1];v=m[2]}
- else if((m=/(?:senko-assistant\.site\/go\/?|senko-assistant:\/\/go\/?)\?(p|i|s|x|ui)=([^&#\s]{1,200})/i.exec(s))){k=m[1].toLowerCase();v=m[2]}
+ if((m=/^go\|(p|h|i|s|x|ui)=(.{1,200})$/.exec(s))){k=m[1];v=m[2]}
+ else if((m=/(?:senko-assistant\.site\/go\/?|senko-assistant:\/\/go\/?)\?(p|h|i|s|x|ui)=([^&#\s]{1,200})/i.exec(s))){k=m[1].toLowerCase();v=m[2]}
  if(!k)return null;try{v=decodeURIComponent(v)}catch(x){}
  v=normV(k,v);return RX[k].test(v)?{k:k,v:v}:null}
 window.SA_link=link;
@@ -17179,7 +17185,7 @@ window.SA_linkHtml=function(k,v,label){var u=link(k,v);return '<div class="s46-l
 document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s46cp]");if(!b)return;copy(b.dataset.s46cp);b.textContent="Скопировано";toast("Ссылка скопирована")});
 
 /* ---------- открытие ссылки ---------- */
-var NEED={p:1,i:1,s:1,x:1};
+var NEED={p:1,h:1,i:1,s:1,x:1};
 function go(str,tries){var g=parse(str);if(!g){toast("Ссылка не распознана");return false}
  tries=tries||0;
  if(NEED[g.k]&&!online()){if(tries<20){setTimeout(function(){go(str,tries+1)},700);return true}toast("Чтобы открыть ссылку, войдите в аккаунт и подключитесь к интернету");return false}
@@ -17188,6 +17194,9 @@ function go(str,tries){var g=parse(str);if(!g){toast("Ссылка не расп
  if(g.k==="p"){peek("patrol",g.v,"Совместный патруль",function(r){
    if(r.already){toast("Вы уже в этом экипаже");state.tab="timer";try{render()}catch(x){}return null}
    return '<p class="s46-ask">Желаете ли вы вступить в совместный патруль с <b>'+who(r)+'</b>?</p><p class="sd-note">В экипаже '+(+r.members||0)+' из '+(+r.max||6)+'. Задержания и таймеры участников будут видны всему экипажу.</p>'},"p",g.v);return true}
+ if(g.k==="h"){peek("court",g.v,"Судебное заседание",function(r){
+   if(r.already){toast("Вы уже в этом заседании");if(window.SA_COURT)SA_COURT.open("ses");return null}
+   return '<p class="s46-ask">Желаете ли вы вступить в судебное заседание'+(r.caseNo?' по делу <b>№ '+e(r.caseNo)+'</b>':'')+(r.title?' «'+e(r.title)+'»':'')+'?</p><p class="sd-note">Председательствующий: <b>'+who(r)+'</b>. Участников '+(+r.members||0)+' из '+(+r.max||15)+'. Роль (судья коллегии, докладчик, секретарь, сторона) назначит председательствующий; пульт и протокол заседания будут общими.</p>'},"h",g.v,"ses_peek");return true}
  if(g.k==="i"){peek("org_join",g.v,"Приглашение в организацию",function(r){
    if(r.already){toast("Вы уже в "+r.org);return null}
    return '<p class="s46-ask">Желаете ли вы вступить в <b>'+e(r.org)+'</b>'+(r.server?' ('+e(r.server)+')':'')+'?</p>'+(r.nick||r.label?'<p class="sd-note">Приглашает: <b>'+(r.nick?who(r):e(r.label))+'</b>.</p>':'')+'<p class="sd-note">После вступления программа обновит данные аккаунта и перезагрузится.</p>'},"i",g.v);return true}
@@ -17196,9 +17205,9 @@ function go(str,tries){var g=parse(str);if(!g){toast("Ссылка не расп
  return false}
 function who(r){return e(r.nick||"Без ника")+(r.static?' | '+e(r.static):'')}
 function yesNo(k,v){return '<p class="sd-note" id="s46m" role="status"></p><div class="sd-acts s46-yn"><button type="button" class="btn" data-sd="x">Нет</button><button type="button" class="btn primary" data-s46j="'+k+'" data-v="'+e(v)+'">Да</button></div>'}
-function peek(action,code,title,body,k,v){
+function peek(action,code,title,body,k,v,op){
  var o=modal(title,'<p class="sub">Проверяем ссылку…</p>');if(!o)return;
- Promise.resolve(A.api(action,{op:"peek",code:code})).then(function(r){r=r||{};var b=o.querySelector(".sa-body");if(!b||!o.isConnected)return;
+ Promise.resolve(A.api(action,{op:op||"peek",code:code})).then(function(r){r=r||{};var b=o.querySelector(".sa-body");if(!b||!o.isConnected)return;
   if(!r.ok){b.innerHTML='<p>'+e(r.error||"Ссылка не подошла.")+'</p><div class="sd-acts"><button type="button" class="btn primary" data-sd="x">Понятно</button></div>';return}
   var h=body(r);if(h==null){closeM();return}
   b.innerHTML=h+yesNo(k,v);var y=b.querySelector('[data-s46j]');if(y)y.focus()},
@@ -17206,11 +17215,11 @@ function peek(action,code,title,body,k,v){
 window.SA_openLink=go;
 document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-s46j]");if(!b)return;var k=b.dataset.s46j,v=b.dataset.v,m=document.getElementById("s46m");
  if(k==="ui"){var o=SA_ui.parse(v);closeM();if(o)SA_ui.apply(o);return}
- var f=k==="p"?window.SA_ptJoin:window.SA_orgJoin;if(!f){if(m)m.textContent="Эта функция сейчас недоступна.";return}
+ var f=k==="p"?window.SA_ptJoin:k==="h"?window.SA_sesJoin:window.SA_orgJoin;if(!f){if(m)m.textContent="Эта функция сейчас недоступна.";return}
  b.disabled=true;if(m)m.textContent="Подключаем…";
  Promise.resolve(f(v)).then(function(r){b.disabled=false;r=r||{};
   if(!r.ok){if(m)m.textContent=r.error||"Не удалось.";return}
-  closeM();if(k==="p"){toast(r.already?"Вы уже в этом экипаже":"Вы в экипаже "+(r.code||v));state.tab="timer";try{render()}catch(x){}window.scrollTo(0,0)}})});
+  closeM();if(k==="h"){toast("Вы в заседании. Роль назначит председательствующий");if(window.SA_COURT)SA_COURT.open("ses");window.scrollTo(0,0);return}if(k==="p"){toast(r.already?"Вы уже в этом экипаже":"Вы в экипаже "+(r.code||v));state.tab="timer";try{render()}catch(x){}window.scrollTo(0,0)}})});
 window.SA_goPrompt=function(){modal("Открыть ссылку",'<p class="sd-note">Вставьте ссылку от коллеги: экипаж, приглашение, тест, вопросы, вид интерфейса или расчёт.</p><input class="tin" id="s46in" maxlength="220" placeholder="https://senko-assistant.site/go/?…" style="width:100%;box-sizing:border-box"><p class="sd-note" id="s46pm" role="status"></p><div class="sd-acts"><button type="button" class="btn" data-sd="x">Отмена</button><button type="button" class="btn primary" data-s46="open">Открыть</button></div>');var i=document.getElementById("s46in");if(i)i.focus()};
 document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest('[data-s46="open"]');if(!b)return;var i=document.getElementById("s46in"),v=i?i.value:"";
  if(!parse(v)){var m=document.getElementById("s46pm");if(m)m.textContent="Это не ссылка Senko Assistant. Она начинается с senko-assistant.site/go/";return}closeM();go(v)});
@@ -18148,6 +18157,7 @@ document.addEventListener("change",function(ev){var t=ev.target;if(!t)return;if(
 .c54-list{display:grid;gap:6px}
 .c54-row{display:flex;gap:10px;align-items:center;text-align:left;font:inherit;color:inherit;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface);cursor:pointer;width:100%}
 .c54-row:hover{border-color:var(--accent)}
+.c54-ro .c54-bar button,.c54-ro .c54-q button{opacity:.55;cursor:not-allowed}
 .c54-row span{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .c54-row small{color:var(--muted);font-size:12.5px}
 .c54-st{font-style:normal;font-size:12px;font-weight:700;border-radius:999px;padding:2px 9px;border:1px solid var(--line)}
@@ -18246,8 +18256,8 @@ function lead(){return !!(C.me&&C.me.lead)}
 function judge(){return !!(C.me&&C.me.judge)}
 function pvs(){return !!(C.me&&(C.me.pvs||C.me.lead))}
 function say(m,bad){C.msg=m||"";C.bad=!!bad;repaint()}
-var TABS=[["cases","Дела"],["hear","Заседания"],["panel","Пульт заседания"],["verdict","Приговор"],["proto","Протокол"],["docs","Документы"],["terms","Сроки"],["legal","Законность задержания"],["decs","Решения суда"],["war","Ордера"],["ai","ИИ: доводы сторон"],["train","Тренажёр судьи"],["judges","Судьи"]];
-function tabsOk(){return TABS.filter(function(t){if(!gov())return t[0]==="war";if(t[0]==="judges")return pvs();return true})}
+var TABS=[["cases","Дела"],["ses","Заседание"],["hear","Расписание"],["panel","Пульт заседания"],["verdict","Приговор"],["proto","Протокол"],["docs","Документы"],["terms","Сроки"],["legal","Законность задержания"],["decs","Решения суда"],["war","Ордера"],["ai","ИИ: доводы сторон"],["train","Тренажёр судьи"],["judges","Судьи"]];
+function tabsOk(){return TABS.filter(function(t){if(!gov())return t[0]==="war"||(t[0]==="ses"&&!!S.ses);if(t[0]==="judges")return pvs();return true})}
 
 /* ---------- дела (167) и жребий (227) ---------- */
 function loadCases(){C.busy=true;capi("case_list",{q:C.cq,status:C.cst}).then(function(r){C.busy=false;if(r.ok){C.cases=r.list;C.err=""}else C.err=r.error;repaint()})}
@@ -18264,17 +18274,17 @@ function casesHtml(){
  return h+'<div class="c54-list">'+C.cases.map(function(c){var nx=(c.hearings||[]).filter(function(x){return Date.parse(x.at)>Date.now()})[0];
   return '<button type="button" class="c54-row" data-c54case="'+e(c.id)+'"><span><b>№ '+e(c.no)+' · '+e(c.title)+'</b><small>'+e(c.kindName)+(c.arts?' · '+e(c.arts):'')+(c.judge?' · ⚖ '+e(c.judge):' · судья не назначен')+(nx?' · заседание '+msk(Date.parse(nx.at)):'')+'</small></span><em class="c54-st '+c.status+'">'+(c.status==="open"?"открыто":"закрыто")+'</em></button>'}).join("")+'</div>'}
 function caseViewHtml(){var c=C.cur,h='<div class="c54-bar"><button type="button" class="btn" data-c54="back">← Все дела</button>'+(C.curEdit?'<button type="button" class="btn" data-c54="edit">Изменить</button>':'')+
-  '<button type="button" class="btn" data-c54="draw">'+(c.draw?"Повторный жребий":"⚖ Жребий: выбрать судью")+'</button><button type="button" class="btn" data-c54="tocourt">В протокол и пульт</button><button type="button" class="btn" data-c54="copycase">Скопировать</button></div>';
+  '<button type="button" class="btn" data-c54="draw">'+(c.draw?"Повторный жребий":"⚖ Жребий: выбрать судью")+'</button><button type="button" class="btn" data-c54="tocourt">В протокол и пульт</button>'+(gov()&&!S.ses?'<button type="button" class="btn" data-c54="sesopen">Совместное заседание</button>':'')+'<button type="button" class="btn" data-c54="copycase">Скопировать</button></div>';
  h+='<article class="c54-card"><h3>Дело № '+e(c.no)+' · '+e(c.title)+'</h3><p class="sub">'+e(c.kindName)+' · '+(c.status==="open"?"открыто":"закрыто")+' · завёл '+e(c.author)+' '+mskD(Date.parse(c.created))+'</p>';
  h+='<div class="c54-grid"><div><h4>Стороны</h4>'+(c.parties.length?'<ul>'+c.parties.map(function(p){return '<li><b>'+e(p.role)+':</b> '+e(p.name)+(p.note?' — '+e(p.note):'')+'</li>'}).join("")+'</ul>':'<p class="sub">не указаны</p>')+
-  '<h4>Статьи</h4><p>'+(c.arts?e(c.arts):'<span class="sub">не указаны</span>')+'</p><h4>Судья</h4><p>'+(c.judge?'⚖ <b>'+e(c.judge)+'</b>':'<span class="sub">не назначен</span>')+'</p>'+
+  '<h4>Статьи</h4><p>'+(c.arts?e(c.arts):'<span class="sub">не указаны</span>')+'</p><h4>'+(c.panel&&c.panel.length?'Состав суда':'Судья')+'</h4>'+(c.panel&&c.panel.length?'<ul>'+c.panel.map(function(x){return '<li><b>'+e(x.roleName||x.role)+':</b> '+(x.role!=="secretary"?"⚖ ":"")+e(x.nick)+(x.pos?' · '+e(x.pos):'')+'</li>'}).join("")+'</ul>':'<p>'+(c.judge?'⚖ <b>'+e(c.judge)+'</b>':'<span class="sub">не назначен</span>')+'</p>')+
   (c.draw?'<p class="c54-draw">Жребий провёл '+e(c.draw.by)+' '+msk(Date.parse(c.draw.at))+' среди '+c.draw.cands.length+' судей на смене: '+e(c.draw.cands.join(", "))+'. Выпал: <b>'+e(c.draw.judge)+'</b>.'+(c.draw.prev?' До этого судьёй был '+e(c.draw.prev)+'.':'')+' Результат выбран сервером случайно и сохранён в деле — изменить его вручную нельзя.</p>':'')+'</div>'+
   '<div><h4>Заседания</h4>'+(c.hearings.length?'<ul>'+c.hearings.map(function(x){var past=Date.parse(x.at)<Date.now();return '<li'+(past?' style="opacity:.6"':'')+'><b>'+msk(Date.parse(x.at))+'</b>'+(x.place?' · '+e(x.place):'')+(x.note?' — '+e(x.note):'')+'</li>'}).join("")+'</ul>':'<p class="sub">не назначены</p>')+
   '<h4>Доказательства</h4>'+(c.evidence.length?'<ul>'+c.evidence.map(function(x){return '<li>'+e(x.t)+(x.url?' · <a href="'+e(x.url)+'" target="_blank" rel="noopener">ссылка</a>':'')+'</li>'}).join("")+'</ul>':'<p class="sub">не добавлены</p>')+'</div></div>'+
   (c.notes?'<h4>Заметки</h4><p>'+nl(c.notes)+'</p>':'')+'</article>';
  return h+msgHtml()}
 function msgHtml(){return C.msg?'<p class="c54-msg'+(C.bad?" err":"")+'" role="status">'+e(C.msg)+'</p>':''}
-function caseText(c){return "Дело № "+c.no+" · "+c.title+"\nВид: "+c.kindName+"\nСтороны: "+c.parties.map(function(p){return p.role+" — "+p.name}).join("; ")+"\nСтатьи: "+(c.arts||"—")+"\nСудья: "+(c.judge||"не назначен")+
+function caseText(c){return "Дело № "+c.no+" · "+c.title+"\nВид: "+c.kindName+"\nСтороны: "+c.parties.map(function(p){return p.role+" — "+p.name}).join("; ")+"\nСтатьи: "+(c.arts||"—")+(c.panel&&c.panel.length?"\nСостав суда: "+c.panel.map(function(x){return (x.roleName||x.role)+" — "+x.nick}).join("; "):"\nСудья: "+(c.judge||"не назначен"))+
  "\nЗаседания: "+(c.hearings.map(function(x){return msk(Date.parse(x.at))+(x.place?" ("+x.place+")":"")}).join("; ")||"—")+"\nДоказательства: "+(c.evidence.map(function(x){return x.t+(x.url?" "+x.url:"")}).join("; ")||"—")}
 function caseEdHtml(){var c=C.edit,row=function(k,i,inner){return '<div class="c54-er" data-k="'+k+'" data-i="'+i+'">'+inner+'<button type="button" class="btn" data-c54rm="'+k+'" data-i="'+i+'" aria-label="Убрать">✕</button></div>'};
  var h='<div class="c54-bar"><button type="button" class="btn" data-c54="cancel">← Отмена</button></div><div class="c54-card c54-form">';
@@ -18299,7 +18309,7 @@ function hearHtml(){if(!C.hear)setTimeout(loadHear,0);
  if(!C.hear)return h+'<p class="bp-empty">Загружаем…</p>';
  if(!L.length)return h+'<p class="bp-empty">Заседаний не назначено.</p>';
  var by={};L.forEach(function(x){var d=mskD(Date.parse(x.at));(by[d]=by[d]||[]).push(x)});
- return h+Object.keys(by).map(function(d){return '<h4 class="c54-day">'+e(d)+'</h4><div class="c54-list">'+by[d].map(function(x){return '<button type="button" class="c54-row" data-c54case="'+e(x.case)+'"><span><b>'+msk(Date.parse(x.at),{day:undefined,month:undefined})+' · Дело № '+e(x.no)+' · '+e(x.title)+'</b><small>'+(x.place?e(x.place)+' · ':'')+(x.judge?'⚖ '+e(x.judge):'судья не назначен')+(x.note?' · '+e(x.note):'')+'</small></span></button>'}).join("")+'</div>'}).join("")}
+ return h+Object.keys(by).map(function(d){return '<h4 class="c54-day">'+e(d)+'</h4><div class="c54-list">'+by[d].map(function(x){return '<button type="button" class="c54-row" data-c54case="'+e(x.case)+'"><span><b>'+msk(Date.parse(x.at),{day:undefined,month:undefined})+' · Дело № '+e(x.no)+' · '+e(x.title)+'</b><small>'+(x.place?e(x.place)+' · ':'')+(x.panel&&x.panel.length?'⚖ '+e(x.panel.join(", ")):x.judge?'⚖ '+e(x.judge):'судья не назначен')+(x.note?' · '+e(x.note):'')+'</small></span></button>'}).join("")+'</div>'}).join("")}
 // напоминание за 15 минут — в программе (всплывающее сообщение и системное уведомление, если разрешено)
 function remindTick(){if(!gov()||!online())return;var L=C.hear||lj("bos-c54hear",[]);var R=lj("bos-c54rem",{}),now=Date.now(),ch=false;
  (L||[]).forEach(function(x){var t=Date.parse(x.at),k=x.case+"@"+x.at;if(t-now<=15*60e3&&t-now>-5*60e3&&!R[k]){R[k]=now;ch=true;var txt="Заседание по делу № "+x.no+" «"+x.title+"» в "+msk(t,{day:undefined,month:undefined})+(x.place?" · "+x.place:"");
@@ -18311,11 +18321,11 @@ setInterval(remindTick,60e3);setTimeout(remindTick,8000);
 /* ---------- пульт заседания (224): таймер, очередь выступлений с лимитом, свой чек-лист ---------- */
 var PDEF=["Открытие заседания, объявление дела","Проверка явки сторон","Разъяснение прав и отводы","Ходатайства сторон","Исследование доказательств","Прения сторон","Последнее слово","Удаление в совещательную комнату","Оглашение решения"];
 var P=lj("bos-c54pult",null)||{start:0,acc:0,run:false,lim:120,q:[],cur:null,curAt:0,chk:{},list:PDEF.slice(),log:true};
-function psave(){sj("bos-c54pult",P)}
+function psave(){if(S.ses){if(S.ses.canRun){S.pushAt=Date.now();capi("ses_pult",{pult:{start:P.start,acc:P.acc,run:P.run,lim:P.lim,cur:P.cur,curAt:P.curAt,q:P.q,chk:P.chk,list:P.list}}).then(function(r){sesGot(r)})}return}sj("bos-c54pult",P)}
 function pms(){return P.acc+(P.run?Date.now()-P.start:0)}
 function fmt(ms){ms=Math.max(0,Math.round(ms/1000));var h=Math.floor(ms/3600),m=Math.floor(ms%3600/60),s=ms%60;return (h?h+":":"")+String(m).padStart(2,"0")+":"+String(s).padStart(2,"0")}
-function panelHtml(){var cur=P.cur,left=cur?P.lim*1000-(Date.now()-P.curAt):0;
- var h='<div class="c54-pult"><div class="c54-clock"><small>Заседание идёт</small><b id="c54pT">'+fmt(pms())+'</b><div class="c54-bar"><button type="button" class="btn primary" data-c54p="run">'+(P.run?"Пауза":P.acc?"Продолжить":"Начать заседание")+'</button><button type="button" class="btn" data-c54p="reset">Сбросить</button></div></div>';
+function panelHtml(){var cur=P.cur,left=cur?P.lim*1000-(Date.now()-P.curAt):0,ro=!!(S.ses&&!S.ses.canRun);
+ var h=(S.ses?'<div class="c54-draw" style="margin-bottom:10px">Совместное заседание'+(S.ses.caseNo?' по делу № '+e(S.ses.caseNo):'')+': пульт общий для всех участников'+(ro?'. Управляют председательствующий и секретарь — вы видите то же, что они.':'.')+'</div>':'')+'<div class="c54-pult'+(ro?' c54-ro':'')+'"><div class="c54-clock"><small>Заседание идёт</small><b id="c54pT">'+fmt(pms())+'</b><div class="c54-bar"><button type="button" class="btn primary" data-c54p="run">'+(P.run?"Пауза":P.acc?"Продолжить":"Начать заседание")+'</button><button type="button" class="btn" data-c54p="reset">Сбросить</button></div></div>';
  h+='<div class="c54-clock'+(cur&&left<0?" over":cur&&left<15000?" warn":"")+'"><small>Сейчас выступает</small><b>'+(cur?e(cur):"—")+'</b><span id="c54pL" class="c54-left">'+(cur?(left<0?"лимит превышен на "+fmt(-left):"осталось "+fmt(left)):"")+'</span>'+
   '<div class="c54-bar"><button type="button" class="btn" data-c54p="next"'+(P.q.length?"":" disabled")+'>Следующий ▶</button><button type="button" class="btn" data-c54p="stop"'+(cur?"":" disabled")+'>Завершить выступление</button></div></div></div>';
  h+='<div class="c54-two"><div class="c54-card"><h4>Очередь выступлений</h4><div class="c54-bar"><select class="tin" id="c54pr">'+ROLES.concat(["Судья","Секретарь"]).map(function(r){return '<option>'+r+'</option>'}).join("")+'</select><input class="tin" id="c54pn" maxlength="60" placeholder="Имя (необязательно)"><button type="button" class="btn" data-c54p="add">В очередь</button></div>'+
@@ -18328,6 +18338,7 @@ setInterval(function(){if(state.tab!=="court"||C.tab!=="panel")return;var t=docu
  if(l&&P.cur){var left=P.lim*1000-(Date.now()-P.curAt);l.textContent=left<0?"лимит превышен на "+fmt(-left):"осталось "+fmt(left);var box=l.closest(".c54-clock");if(box){box.classList.toggle("over",left<0);box.classList.toggle("warn",left>=0&&left<15000)}
   if(left<0&&!P.beeped){P.beeped=1;try{var ac=new (window.AudioContext||window.webkitAudioContext)(),o=ac.createOscillator(),g=ac.createGain();o.frequency.value=880;g.gain.value=.08;o.connect(g);g.connect(ac.destination);o.start();setTimeout(function(){o.stop();ac.close()},350)}catch(x){}}}},500);
 function pEnd(){if(!P.cur)return;if(P.log)protoAdd("speech",P.cur+" — выступление "+fmt(Date.now()-P.curAt));P.cur=null;P.beeped=0}
+function roPult(){if(S.ses&&!S.ses.canRun){toast("Пультом управляют председательствующий и секретарь");return true}return false}
 
 /* ---------- конструктор приговора (225) ---------- */
 var V=lj("bos-c54v",null)||{arts:"",ma:{m:{},a:{}},term:0,fine:0,name:"",caseNo:"",kind:"guilty",extra:""};
@@ -18337,7 +18348,7 @@ function maList(){try{return window.SA_ma&&SA_ma.data?SA_ma.data():{m:[],a:[]}}c
 function vCalc(){var L=vItems(),ft=window.SA_term?SA_term(L):{m:0},fmin=0,fmax=0;L.forEach(function(r){fmin+=+r.fmin||0;fmax+=+r.fmax||0});return {L:L,ft:ft,fmin:fmin,fmax:fmax}}
 function verdictHtml(){var c=vCalc(),M=maList(),pm=Object.keys(V.ma.m).filter(function(k){return V.ma.m[k]}).length,pa=Object.keys(V.ma.a).filter(function(k){return V.ma.a[k]}).length;
  if(!V.term&&c.ft.m)V.term=c.ft.m;if(V.term>c.ft.m)V.term=c.ft.m;
- var h='<p class="sub">Выберите статьи (или возьмите их из калькулятора), отметьте обстоятельства, укажите срок и штраф в пределах расчёта — внизу готовый текст решения.</p><div class="c54-two"><div class="c54-card c54-form">';
+ var ctv=compText(),h='<p class="sub">Выберите статьи (или возьмите их из калькулятора), отметьте обстоятельства, укажите срок и штраф в пределах расчёта — внизу готовый текст решения.</p>'+(ctv?'<div class="c54-draw" style="margin-bottom:8px">Состав суда'+(S.ses?' из совместного заседания':' из карточки дела')+': '+e(ctv)+'. В решении будут подписи всех судей.</div>':'')+'<div class="c54-two"><div class="c54-card c54-form">';
  h+='<div class="c54-two"><label>Подсудимый<input class="tin" data-c54v="name" maxlength="80" value="'+e(V.name)+'" placeholder="Имя Фамилия"></label><label>№ дела<input class="tin" data-c54v="caseNo" maxlength="20" value="'+e(V.caseNo)+'"></label></div>';
  h+='<label>Статьи<input class="tin" data-c54v="arts" maxlength="300" value="'+e(V.arts)+'" placeholder="12.8, 17.6, ак 3.6"></label><div class="c54-bar"><button type="button" class="btn" data-c54v="fromcalc">Взять из калькулятора</button><select class="tin" data-c54v="kind"><option value="guilty"'+(V.kind==="guilty"?" selected":"")+'>Признать виновным</option><option value="acquit"'+(V.kind==="acquit"?" selected":"")+'>Оправдать</option></select></div>';
  h+='<p class="sub">Найдено статей: '+c.L.length+(c.L.length?' — '+e(c.L.map(function(r){return (r.k||"").toUpperCase()+" "+r.code+(r.part?" ч."+r.part:"")}).join(", ")):'')+'</p>';
@@ -18346,32 +18357,36 @@ function verdictHtml(){var c=vCalc(),M=maList(),pm=Object.keys(V.ma.m).filter(fu
  h+='<label>Дополнительно (необязательно)<textarea class="tin" data-c54v="extra" rows="2" maxlength="600">'+e(V.extra)+'</textarea></label></div>';
  h+='<div class="c54-card"><h4>Текст решения</h4><pre class="c54-pre" id="c54vt">'+e(verdictText())+'</pre><div class="c54-bar"><button type="button" class="btn primary" data-c54v="copy">Скопировать</button><button type="button" class="btn" data-c54v="proto">Записать в протокол</button></div></div></div>';
  return h}
-function verdictText(){var c=vCalc(),M=maList(),u=user()||{},jp=C.me&&C.me.judgeName;
+function verdictText(){var c=vCalc(),M=maList(),u=user()||{},jp=C.me&&C.me.judgeName,ct=compText(),sl=signLines();
  var arts=c.L.map(function(r){return (r.k==="uk"?"ст. ":r.k==="ak"?"АК ст. ":r.k==="dk"?"ДК ст. ":"ст. ")+r.code+(r.part?" ч. "+r.part:"")+(r.k==="uk"?" УК":"")}).join(", ")||"(статьи не выбраны)";
  var mm=M.m.filter(function(_,i){return V.ma.m[i]}),aa=M.a.filter(function(_,i){return V.ma.a[i]});
  var t="РЕШЕНИЕ СУДА\nпо делу № "+(V.caseNo||"___")+" от "+mskD(Date.now())+"\n\n";
- t+="Суд в составе: "+(jp?jp+" ":"судья ")+(u.nick||"__________")+", рассмотрев материалы дела в отношении "+(V.name||"__________")+", обвиняемого по "+arts+",\n\n";
- if(V.kind==="acquit")return t+"РЕШИЛ:\n1. Признать "+(V.name||"подсудимого")+" невиновным и оправдать.\n2. Отменить меры пресечения, вернуть изъятое имущество, кроме запрещённого к обороту."+(V.extra?"\n3. "+V.extra:"")+"\n\nРешение может быть обжаловано в установленном порядке.\n\n"+(jp||"Судья")+" ________ "+(u.nick||"");
+ t+="Суд в составе: "+(ct||(jp?jp+" ":"судья ")+(u.nick||"__________"))+", рассмотрев материалы дела в отношении "+(V.name||"__________")+", обвиняемого по "+arts+",\n\n";
+ if(V.kind==="acquit")return t+"РЕШИЛ:\n1. Признать "+(V.name||"подсудимого")+" невиновным и оправдать.\n2. Отменить меры пресечения, вернуть изъятое имущество, кроме запрещённого к обороту."+(V.extra?"\n3. "+V.extra:"")+"\n\nРешение может быть обжаловано в установленном порядке.\n\n"+(sl||(jp||"Судья")+" ________ "+(u.nick||""));
  if(mm.length)t+="Смягчающие обстоятельства: "+mm.join("; ").toLowerCase()+".\n";
  if(aa.length)t+="Отягчающие обстоятельства: "+aa.join("; ").toLowerCase()+".\n";
  t+="\nРЕШИЛ:\n1. Признать "+(V.name||"подсудимого")+" виновным по "+arts+".\n";
  var n=2;if(+V.term)t+=n+++". Назначить наказание в виде лишения свободы сроком "+V.term+" мес."+(c.ft.top?" (по наиболее тяжкой статье: "+c.ft.top.code+(c.ft.top.part?" ч. "+c.ft.top.part:"")+")":"")+".\n";
  if(+V.fine)t+=n+++". Назначить штраф в размере $"+(+V.fine).toLocaleString("ru-RU")+".\n";
  if(V.extra)t+=n+++". "+V.extra+"\n";
- return t+"\nРешение может быть обжаловано в установленном порядке.\n\n"+(jp||"Судья")+" ________ "+(u.nick||"")}
+ return t+"\nРешение может быть обжаловано в установленном порядке.\n\n"+(sl||(jp||"Судья")+" ________ "+(u.nick||""))}
 
 /* ---------- протокол заседания (226): журнал со временем, бумага, подписи коллегии ---------- */
 var PR=lj("bos-c54proto",null)||{caseNo:"",title:"",court:"",items:[],members:[]};
 function prsave(){sj("bos-c54proto",PR)}
 var PKIND={speech:"Выступление",motion:"Ходатайство",decision:"Решение",note:"Отметка"};
-function protoAdd(k,t){PR.items.push({at:Date.now(),k:k,t:String(t).slice(0,600)});prsave()}
-function protoText(){var L=["ПРОТОКОЛ СУДЕБНОГО ЗАСЕДАНИЯ","по делу № "+(PR.caseNo||"___")+(PR.title?" · "+PR.title:""),(PR.court||"Суд штата Сан-Андреас")+" · "+mskD(Date.now()),""];
- PR.items.forEach(function(x){L.push("["+msk(x.at,{day:undefined,month:undefined})+"] "+PKIND[x.k]+": "+x.t)});
- L.push("");PR.members.forEach(function(m){L.push((m.pos||"Член коллегии")+": "+m.name+" — подпись ________")});return L.join("\n")}
-function protoPaper(){return '<div class="c54-paper"><div class="c54-ph">ПРОТОКОЛ СУДЕБНОГО ЗАСЕДАНИЯ</div><div class="c54-ps">по делу № '+e(PR.caseNo||"___")+(PR.title?' · '+e(PR.title):'')+'</div><div class="c54-ps">'+e(PR.court||"Суд штата Сан-Андреас")+' · '+mskD(Date.now())+'</div>'+
- '<table class="c54-pt">'+PR.items.map(function(x,i){return '<tr><td>'+msk(x.at,{day:undefined,month:undefined})+'</td><td><b>'+PKIND[x.k]+'.</b> '+e(x.t)+'</td><td class="noprint"><button type="button" class="btn" data-c54prd="'+i+'" aria-label="Удалить запись">✕</button></td></tr>'}).join("")+'</table>'+
- '<div class="c54-signs">'+PR.members.map(function(m){return '<div class="c54-sign"><span>'+e(m.pos||"Член коллегии")+'</span>'+(m.sig?'<img src="'+m.sig+'" alt="подпись">':'<i></i>')+'<b>'+e(m.name)+'</b></div>'}).join("")+'</div></div>'}
-function protoHtml(){var h='<div class="c54-two"><div class="c54-card c54-form"><div class="c54-two"><label>№ дела<input class="tin" data-c54pr="caseNo" maxlength="20" value="'+e(PR.caseNo)+'"></label><label>Суд<input class="tin" data-c54pr="court" maxlength="80" value="'+e(PR.court)+'" placeholder="Окружной суд штата Сан-Андреас"></label></div>'+
+function protoAdd(k,t){if(S.ses){capi("ses_proto",{k:k,t:String(t).slice(0,600)}).then(function(r){if(!r.ok)toast(r.error);else sesGot(r,true)});return}PR.items.push({at:Date.now(),k:k,t:String(t).slice(0,600)});prsave()}
+// в совместном заседании протокол общий: записи, номер дела и коллегия — из заседания
+function prv(){if(!S.ses)return PR;var c=comp(),M=c.J.concat(c.sc).map(function(m){var sm=S.ses.members.filter(function(x){return x.nick===m.nick})[0];return {pos:SROLE[m.role]+(m.judgeName?", "+m.judgeName.toLowerCase():""),name:m.nick,sig:sm&&sm.sig||""}});
+ return {caseNo:S.ses.caseNo,title:S.ses.title,court:S.ses.court,items:S.ses.proto,members:M}}
+function protoText(){var Q=prv(),L=["ПРОТОКОЛ СУДЕБНОГО ЗАСЕДАНИЯ","по делу № "+(Q.caseNo||"___")+(Q.title?" · "+Q.title:""),(Q.court||"Суд штата Сан-Андреас")+" · "+mskD(Date.now())];
+ var ct=S.ses?compText():"";if(ct)L.push("Суд в составе: "+ct);L.push("");
+ Q.items.forEach(function(x){L.push("["+msk(x.at,{day:undefined,month:undefined})+"] "+PKIND[x.k]+": "+x.t)});
+ L.push("");Q.members.forEach(function(m){L.push((m.pos||"Член коллегии")+": "+m.name+" — подпись ________")});return L.join("\n")}
+function protoPaper(){var Q=prv(),ct=S.ses?compText():"";return '<div class="c54-paper"><div class="c54-ph">ПРОТОКОЛ СУДЕБНОГО ЗАСЕДАНИЯ</div><div class="c54-ps">по делу № '+e(Q.caseNo||"___")+(Q.title?' · '+e(Q.title):'')+'</div><div class="c54-ps">'+e(Q.court||"Суд штата Сан-Андреас")+' · '+mskD(Date.now())+'</div>'+(ct?'<p style="margin:8px 0 0">Суд в составе: '+e(ct)+'</p>':'')+
+ '<table class="c54-pt">'+Q.items.map(function(x,i){return '<tr><td>'+msk(x.at,{day:undefined,month:undefined})+'</td><td><b>'+PKIND[x.k]+'.</b> '+e(x.t)+(S.ses&&x.by?' <small style="color:#777">('+e(x.by)+')</small>':'')+'</td><td class="noprint"><button type="button" class="btn" data-c54prd="'+(S.ses?e(x.id):i)+'" aria-label="Удалить запись">✕</button></td></tr>'}).join("")+'</table>'+
+ '<div class="c54-signs">'+Q.members.map(function(m){return '<div class="c54-sign"><span>'+e(m.pos||"Член коллегии")+'</span>'+(m.sig?'<img src="'+m.sig+'" alt="подпись">':'<i></i>')+'<b>'+e(m.name)+'</b></div>'}).join("")+'</div></div>'}
+function protoHtml(){if(S.ses)return protoSesHtml();var h='<div class="c54-two"><div class="c54-card c54-form"><div class="c54-two"><label>№ дела<input class="tin" data-c54pr="caseNo" maxlength="20" value="'+e(PR.caseNo)+'"></label><label>Суд<input class="tin" data-c54pr="court" maxlength="80" value="'+e(PR.court)+'" placeholder="Окружной суд штата Сан-Андреас"></label></div>'+
   '<label>Название дела<input class="tin" data-c54pr="title" maxlength="120" value="'+e(PR.title)+'"></label><h4>Новая запись (время ставится само)</h4><div class="c54-bar"><select class="tin" id="c54prk">'+Object.keys(PKIND).map(function(k){return '<option value="'+k+'">'+PKIND[k]+'</option>'}).join("")+'</select><input class="tin" id="c54prt" maxlength="600" placeholder="Кто и что: «Защита заявила ходатайство о вызове свидетеля»" style="flex:1 1 240px"><button type="button" class="btn primary" data-c54pro="add">Записать</button></div>'+
   '<h4>Коллегия и подписи</h4>'+PR.members.map(function(m,i){return '<div class="c54-er"><input class="tin" data-c54pm="'+i+'" data-f="pos" maxlength="60" placeholder="Должность" value="'+e(m.pos||"")+'"><input class="tin" data-c54pm="'+i+'" data-f="name" maxlength="60" placeholder="Имя" value="'+e(m.name||"")+'"><label class="btn">Подпись<input type="file" accept="image/png,image/jpeg,image/webp" data-c54sig="'+i+'" hidden></label><button type="button" class="btn" data-c54pmr="'+i+'" aria-label="Убрать">✕</button></div>'}).join("")+
   '<div class="c54-bar"><button type="button" class="btn" data-c54pro="member">+ Член коллегии</button><button type="button" class="btn" data-c54pro="me">+ Я</button></div>'+
@@ -18441,11 +18456,11 @@ function loadDecs(){capi("dec_list",{q:C.dq}).then(function(r){if(r.ok){C.decs=r
 function decsHtml(){if(!C.decs)setTimeout(loadDecs,0);var d=C.decs,ed=C.decEd;
  var h='<div class="c54-bar"><input class="tin" id="c54dq" type="search" placeholder="Поиск по решениям: статья, имя, номер дела, слово" value="'+e(C.dq)+'" style="flex:1 1 260px">'+(d&&d.canAdd&&!ed?'<button type="button" class="btn primary" data-c54dec="new">+ Добавить решение</button>':'')+'</div>';
  if(ed)h+='<div class="c54-card c54-form"><label>Название<input class="tin" data-c54de="title" maxlength="150" value="'+e(ed.title||"")+'" placeholder="Государство против John Doe — о незаконном обыске"></label><div class="c54-two"><label>№ дела<input class="tin" data-c54de="caseNo" maxlength="20" value="'+e(ed.caseNo||"")+'"></label><label>Дата<input class="tin" type="date" data-c54de="dt" value="'+e(ed.dt||new Date().toISOString().slice(0,10))+'"></label></div>'+
-  '<div class="c54-two"><label>Статьи<input class="tin" data-c54de="arts" maxlength="200" value="'+e(ed.arts||"")+'"></label><label>Метки<input class="tin" data-c54de="tags" maxlength="120" value="'+e(ed.tags||"")+'" placeholder="обыск, недопустимые доказательства"></label></div><label>Текст решения<textarea class="tin" rows="8" data-c54de="text" maxlength="6000">'+e(ed.text||"")+'</textarea></label>'+
+  '<label>Состав суда<input class="tin" data-c54de="panel" maxlength="400" value="'+e(ed.panel!=null?ed.panel:compShort())+'" placeholder="A (председательствующий), B (судья коллегии)…"></label><div class="c54-two"><label>Статьи<input class="tin" data-c54de="arts" maxlength="200" value="'+e(ed.arts||"")+'"></label><label>Метки<input class="tin" data-c54de="tags" maxlength="120" value="'+e(ed.tags||"")+'" placeholder="обыск, недопустимые доказательства"></label></div><label>Текст решения<textarea class="tin" rows="8" data-c54de="text" maxlength="6000">'+e(ed.text||"")+'</textarea></label>'+
   '<div class="c54-bar"><button type="button" class="btn primary" data-c54dec="save">Сохранить</button><button type="button" class="btn" data-c54dec="cancel">Отмена</button></div>'+msgHtml()+'</div>';
  if(!d)return h+'<p class="bp-empty">Загружаем…</p>';
  if(!d.list.length)return h+'<p class="bp-empty">'+(C.dq?"Ничего не найдено.":"Справочник пуст. Его пополняют руководство Government и судьи.")+'</p>';
- return h+'<div class="c54-list">'+d.list.map(function(x){return '<details class="c54-dec"><summary><b>'+e(x.title)+'</b><small>'+(x.caseNo?'дело № '+e(x.caseNo)+' · ':'')+e(x.dt)+(x.arts?' · '+e(x.arts):'')+(x.tags?' · '+e(x.tags):'')+'</small></summary><p>'+nl(x.text)+'</p><div class="c54-bar"><button type="button" class="btn" data-c54decc="'+e(x.id)+'">Скопировать</button>'+(d.canAdd?'<button type="button" class="btn" data-c54dece="'+e(x.id)+'">Изменить</button><button type="button" class="btn" data-c54decd="'+e(x.id)+'">Удалить</button>':'')+'</div><small class="sub">Добавил: '+e(x.author)+'</small></details>'}).join("")+'</div>'}
+ return h+'<div class="c54-list">'+d.list.map(function(x){return '<details class="c54-dec"><summary><b>'+e(x.title)+'</b><small>'+(x.caseNo?'дело № '+e(x.caseNo)+' · ':'')+e(x.dt)+(x.arts?' · '+e(x.arts):'')+(x.tags?' · '+e(x.tags):'')+(x.panel?' · ⚖ '+e(x.panel):'')+'</small></summary><p>'+nl(x.text)+'</p><div class="c54-bar"><button type="button" class="btn" data-c54decc="'+e(x.id)+'">Скопировать</button>'+(d.canAdd?'<button type="button" class="btn" data-c54dece="'+e(x.id)+'">Изменить</button><button type="button" class="btn" data-c54decd="'+e(x.id)+'">Удалить</button>':'')+'</div><small class="sub">Добавил: '+e(x.author)+'</small></details>'}).join("")+'</div>'}
 
 /* ---------- ордера (172) ---------- */
 var WK={search:"Ордер на обыск",arrest:"Ордер на арест",wiretap:"Ордер на прослушивание",seize:"Ордер на выемку"};
@@ -18501,11 +18516,76 @@ function judgesHtml(){if(!C.judges&&!C.err)setTimeout(loadJudges,0);var J=C.judg
  h+='<h4>Судьи и сотрудники суда ('+act.length+')</h4>'+(act.length?'<ul class="c54-wl">'+act.map(function(x){return '<li><span><b>⚖ '+e(x.nick)+'</b> · '+e(x.posName)+(x.pvs?' · Председатель ВС':'')+'<small>был в сети '+(x.seen?msk(Date.parse(x.seen)):"—")+'</small></span>'+(J.canJ?'<span class="c54-wd">'+sel(x.id,x.pos)+'<button type="button" class="btn" data-c54j="set" data-id="'+e(x.id)+'">Сменить</button><button type="button" class="btn" data-c54j="rm" data-id="'+e(x.id)+'">Снять</button></span>':'')+'</li>'}).join("")+'</ul>':'<p class="sub">Судей пока нет.</p>');
  if(J.lead)h+='<div class="c54-card"><h4>Председатель Верховного суда</h4><p class="sub">Сейчас: '+(pv.length?pv.map(function(x){return e(x.nick)}).join(", "):"не назначен")+'. Назначает руководство Government или владелец.</p><div class="c54-bar"><input class="tin" id="c54pvs" placeholder="Логин или ник сотрудника Government"><button type="button" class="btn primary" data-c54j="pvs1">Назначить</button><button type="button" class="btn" data-c54j="pvs0">Снять</button></div></div>';
  return h+msgHtml()}
+/* ---------- 4.3.1: совместное заседание — ссылка-приглашение, роли, общий пульт и протокол ---------- */
+var S={ses:null,at:0,busy:false,pushAt:0,sig:"",form:{caseId:"",title:"",caseNo:"",court:""}};
+var SROLE={presiding:"Председательствующий",rapporteur:"Судья-докладчик",member:"Судья коллегии",secretary:"Секретарь судебного заседания",pros:"Государственный обвинитель",def:"Защитник",plaintiff:"Истец / представитель",defendant:"Подсудимый / ответчик",witness:"Свидетель",part:"Участник"};
+var SPANEL=["presiding","rapporteur","member"];
+function mySig(){var s=ls("bos-rp-sign")||"";return /^data:image\/(png|jpeg|webp);base64,/.test(s)&&s.length<90000?s:""}
+function sesSig(){return JSON.stringify(S.ses?[S.ses.ver,S.ses.members.map(function(m){return m.id+m.role+m.online+(m.sig?1:0)}).join(),S.ses.proto.length,S.ses.title,S.ses.caseNo,S.ses.court]:null)}
+function typing(){var a=document.activeElement;return !!(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.closest("#view"))}
+function sesGot(r,force){if(!r||!r.ok){if(r&&r.error)toast(r.error);return r}var was=sesSig();S.ses=r.ses||null;S.at=Date.now();
+ if(S.ses&&Date.now()-S.pushAt>1500){var pl=S.ses.pult;["start","acc","run","lim","cur","curAt","q","chk"].forEach(function(k){P[k]=pl[k]});if(pl.list&&pl.list.length)P.list=pl.list}
+ if((force||was!==sesSig())&&state.tab==="court"&&!typing())repaint();return r}
+function sesLoad(force){if(!online()||S.busy)return;S.busy=true;capi("ses_state").then(function(r){S.busy=false;sesGot(r,force)},function(){S.busy=false})}
+setInterval(function(){if(!online())return;var on=state.tab==="court"&&["ses","panel","proto","verdict"].indexOf(C.tab)>=0;if((on&&(S.ses||Date.now()-S.at>15000))||(S.ses&&Date.now()-S.at>20000))sesLoad()},3000);
+setTimeout(function(){if(online()&&gov())sesLoad()},6000);
+window.SA_sesJoin=function(code){return capi("ses_join",{code:code,sig:mySig()}).then(function(r){if(r.ok){sesGot(r,true);C.tab="ses";ls("bos-c54tab",JSON.stringify("ses"))}return r})};
+function panelOf(){var L=S.ses?S.ses.members.filter(function(m){return SPANEL.indexOf(m.role)>=0}):[];var o=["presiding","rapporteur","member"];return L.sort(function(a,b){return o.indexOf(a.role)-o.indexOf(b.role)})}
+function secOf(){return S.ses?S.ses.members.filter(function(m){return m.role==="secretary"}):[]}
+function nm(m){return (m.judgeName?m.judgeName+" ":"")+m.nick}
+// состав суда для решений и протокола: из совместного заседания, иначе из карточки дела, иначе один судья
+function comp(){var J=panelOf(),sc=secOf();
+ if(!J.length&&C.cur&&C.cur.panel&&C.cur.panel.length&&(!V.caseNo||V.caseNo===C.cur.no)){J=C.cur.panel.filter(function(x){return x.role!=="secretary"}).map(function(x){return {nick:x.nick,role:x.role,judgeName:x.pos||""}});sc=C.cur.panel.filter(function(x){return x.role==="secretary"}).map(function(x){return {nick:x.nick,role:"secretary",judgeName:""}})}
+ return {J:J,sc:sc}}
+function compText(){var c=comp(),J=c.J;if(!J.length)return "";var pr=J.filter(function(m){return m.role==="presiding"})[0],oth=J.filter(function(m){return m.role!=="presiding"});
+ var t=pr?"председательствующего — "+nm(pr):"";if(oth.length)t+=(t?", ":"")+"судей — "+oth.map(function(m){return nm(m)+(m.role==="rapporteur"?" (судья-докладчик)":"")}).join(", ");
+ if(c.sc.length)t+=", при секретаре "+c.sc.map(function(m){return m.nick}).join(", ");return t}
+function compShort(){var c=comp();return c.J.map(function(m){return m.nick+" ("+(SROLE[m.role]||"").toLowerCase()+")"}).join(", ")}
+function signLines(){var c=comp();return c.J.map(function(m){return SROLE[m.role]+" ________ "+nm(m)}).join("\n")}
+function sesHtml(){if(!S.ses&&!S.at)setTimeout(function(){sesLoad(true)},0);var s=S.ses;
+ if(!s){if(!gov())return '<p class="bp-empty">Вы не участвуете в заседании. Откройте ссылку-приглашение от председательствующего.</p>';
+  if(!C.cases&&!C.busy)setTimeout(loadCases,0);var f=S.form;
+  return '<p class="sub">Совместное заседание — как экипаж у задержаний: председательствующий открывает заседание и отправляет ссылку судьям коллегии, секретарю и сторонам. Роли назначает председательствующий. Пульт и протокол становятся общими, а в решении, протоколе и карточке дела пишется весь состав суда.</p>'+
+   '<div class="c54-card c54-form"><label>Дело<select class="tin" id="c54sc"><option value="">— без карточки дела —</option>'+(C.cases||[]).filter(function(c){return c.status==="open"}).map(function(c){return '<option value="'+e(c.id)+'"'+(f.caseId===c.id?" selected":"")+'>№ '+e(c.no)+' · '+e(c.title)+'</option>'}).join("")+'</select></label>'+
+   (f.caseId?'':'<div class="c54-two"><label>Название<input class="tin" id="c54st" maxlength="120" value="'+e(f.title)+'" placeholder="Судебное заседание"></label><label>№ дела<input class="tin" id="c54sn" maxlength="20" value="'+e(f.caseNo)+'"></label></div>')+
+   '<label>Суд<input class="tin" id="c54scourt" maxlength="80" value="'+e(f.court)+'" placeholder="Апелляционный суд штата Сан-Андреас"></label><div class="c54-bar"><button type="button" class="btn primary" data-c54s="create">Открыть заседание</button></div></div>'+msgHtml()}
+ var me=s.members.filter(function(m){return m.me})[0]||{},sel=function(m){return '<select class="tin" data-c54sr="'+e(m.id)+'">'+Object.keys(SROLE).map(function(k){return '<option value="'+k+'"'+(m.role===k?" selected":"")+(!m.gov&&(SPANEL.indexOf(k)>=0||k==="secretary")?" disabled":"")+'>'+SROLE[k]+'</option>'}).join("")+'</select>'};
+ var h='<div class="c54-card"><h3>⚖ '+e(s.title)+(s.caseNo?' · дело № '+e(s.caseNo):'')+'</h3><p class="sub">'+e(s.court||"Суд штата Сан-Андреас")+' · ваша роль: <b>'+e(SROLE[s.myRole]||"участник")+'</b> · заседание открыто до '+msk(Date.parse(s.expires))+'</p>'+
+  (s.canRole?'<details><summary>Изменить данные заседания</summary><div class="c54-form"><div class="c54-two"><label>Название<input class="tin" id="c54it" maxlength="120" value="'+e(s.title)+'"></label><label>№ дела<input class="tin" id="c54in" maxlength="20" value="'+e(s.caseNo)+'"></label></div><label>Суд<input class="tin" id="c54ic" maxlength="80" value="'+e(s.court)+'"></label><div class="c54-bar"><button type="button" class="btn" data-c54s="info">Сохранить</button></div></div></details>':'')+
+  (window.SA_linkHtml?SA_linkHtml("h",s.code,"Ссылка-приглашение: отправьте её судьям коллегии, секретарю и сторонам. Код: "+s.code):'<p>Код заседания: <b>'+e(s.code)+'</b></p>')+'</div>';
+ h+='<div class="c54-card"><h4>Участники и роли ('+s.members.length+')</h4><ul class="c54-wl">'+s.members.map(function(m){return '<li><span><b>'+(m.online?'🟢 ':'⚪ ')+e(m.nick)+'</b>'+(m.me?' (вы)':'')+'<small>'+e(m.org||"")+(m.judgeName?' · '+e(m.judgeName):'')+(m.static?' · статик '+e(m.static):'')+(m.sig?' · подпись загружена':'')+'</small></span>'+(s.canRole?sel(m):'<b class="c54-badge">'+e(SROLE[m.role]||m.role)+'</b>')+'</li>'}).join("")+'</ul>'+
+  (s.canRole?'<p class="sub">Председательствующий один: если назначить им другого, вы станете судьёй коллегии. Роли судей и секретаря — только для сотрудников Government.</p>':'')+'</div>';
+ var ct=compText();
+ h+='<div class="c54-card"><h4>Состав суда</h4><p>'+(ct?'Суд в составе: '+e(ct):'<span class="sub">Назначьте председательствующего и судей коллегии — состав появится в решении, протоколе и карточке дела.</span>')+'</p>'+
+  '<div class="c54-bar">'+(ct?'<button type="button" class="btn" data-c54s="copycomp">Скопировать</button>':'')+'<label class="btn">Моя подпись для протокола<input type="file" accept="image/png,image/jpeg,image/webp" data-c54ssig="1" hidden></label>'+(mySig()&&!me.sig?'<button type="button" class="btn" data-c54s="sigrp">Взять подпись из рапортов</button>':'')+'</div></div>';
+ h+='<div class="c54-bar"><button type="button" class="btn" data-c54tab="panel">Пульт заседания</button><button type="button" class="btn" data-c54tab="proto">Протокол</button><button type="button" class="btn" data-c54tab="verdict">Приговор</button><span style="flex:1"></span>'+
+  (s.canRole?'<button type="button" class="btn primary" data-c54s="close">Закрыть заседание</button>':'')+'<button type="button" class="btn" data-c54s="leave">Выйти из заседания</button></div>'+msgHtml();
+ return h}
+document.addEventListener("click",function(ev){var t=ev.target.closest&&ev.target.closest("[data-c54s]");if(!t)return;var a=t.dataset.c54s;
+ if(a==="create"){var f=S.form;f.caseId=val("c54sc");f.title=val("c54st");f.caseNo=val("c54sn");f.court=val("c54scourt");t.disabled=true;
+  capi("ses_create",{caseId:f.caseId,title:f.title,caseNo:f.caseNo,court:f.court,sig:mySig()}).then(function(r){t.disabled=false;if(r.ok){sesGot(r,true);C.msg="Заседание открыто. Отправьте ссылку участникам и назначьте роли.";C.bad=false}else say(r.error,true);repaint()});return}
+ if(a==="info"){capi("ses_info",{title:val("c54it"),caseNo:val("c54in"),court:val("c54ic")}).then(function(r){sesGot(r,true)});return}
+ if(a==="copycomp"){copy("Суд в составе: "+compText());return}
+ if(a==="sigrp"){capi("ses_sig",{sig:mySig()}).then(function(r){sesGot(r,true);toast("Подпись добавлена")});return}
+ if(a==="leave"){if(!confirm("Выйти из заседания?"))return;capi("ses_leave").then(function(r){S.ses=null;repaint()});return}
+ if(a==="close"){if(!confirm("Закрыть заседание? Состав суда сохранится в карточке дела, общий протокол — скопируйте его заранее."))return;
+  capi("ses_close").then(function(r){if(r.ok){S.ses=null;C.cases=null;if(C.cur)openCase(C.cur.id);toast("Заседание закрыто"+(r.panel&&r.panel.length?": состав суда сохранён в деле":""))}else toast(r.error);repaint()});return}
+});
+document.addEventListener("change",function(ev){var t=ev.target;if(!t||!t.dataset)return;
+ if(t.dataset.c54sr){capi("ses_role",{id:t.dataset.c54sr,role:t.value}).then(function(r){if(!r.ok){toast(r.error);sesLoad(true)}else sesGot(r,true)});return}
+ if(t.id==="c54sc"){S.form.caseId=t.value;repaint();return}
+ if(t.dataset.c54ssig&&t.files&&t.files[0]){var f=t.files[0];if(f.size>60000){toast("Картинка больше 60 КБ");return}var rd=new FileReader();rd.onload=function(){var s=String(rd.result||"");if(!/^data:image\/(png|jpeg|webp);base64,/.test(s))return;capi("ses_sig",{sig:s}).then(function(r){sesGot(r,true);toast("Подпись сохранена в заседании")})};rd.readAsDataURL(f);return}
+},true);
+
+function protoSesHtml(){var s=S.ses,can=SPANEL.indexOf(s.myRole)>=0||s.myRole==="secretary";
+ return '<div class="c54-two"><div class="c54-card c54-form"><div class="c54-draw">Совместное заседание'+(s.caseNo?' по делу № '+e(s.caseNo):'')+': протокол общий, записи видят все участники. Ведут протокол судьи и секретарь. Коллегия и подписи берутся из вкладки «Заседание».</div>'+
+  (can?'<h4>Новая запись (время ставится само)</h4><div class="c54-bar"><select class="tin" id="c54prk">'+Object.keys(PKIND).map(function(k){return '<option value="'+k+'">'+PKIND[k]+'</option>'}).join("")+'</select><input class="tin" id="c54prt" maxlength="600" placeholder="Кто и что: «Защита заявила ходатайство о вызове свидетеля»" style="flex:1 1 240px"><button type="button" class="btn primary" data-c54pro="add">Записать</button></div>':'<p class="sub">Вы видите протокол; записи вносят судьи и секретарь.</p>')+
+  '<div class="c54-bar"><button type="button" class="btn primary" data-c54pro="copy">Скопировать для форума</button><button type="button" class="btn" data-c54pro="pdf">PDF</button><button type="button" class="btn" data-c54tab="ses">Состав и роли</button></div></div><div>'+protoPaper()+'</div></div>'}
 /* ---------- страница ---------- */
 function pageHtml(){if(!C.me)me();var T=tabsOk();if(!T.some(function(t){return t[0]===C.tab}))C.tab=T[0][0];
  var jp=C.me&&C.me.judgeName,h='<section class="panel c54"><div class="c54-top"><h2>⚖ Суд'+(jp?' <small class="c54-badge">⚖ '+e(jp)+'</small>':'')+(C.me&&C.me.pvs?' <small class="c54-badge">Председатель ВС</small>':'')+'</h2></div>';
  h+='<div class="subnav noprint">'+T.map(function(t){return '<button class="pill" data-c54tab="'+t[0]+'" aria-pressed="'+(C.tab===t[0])+'">'+t[1]+'</button>'}).join("")+'</div><div class="c54-body">';
- var f={cases:casesHtml,hear:hearHtml,panel:panelHtml,verdict:verdictHtml,proto:protoHtml,docs:docsHtml,terms:termsHtml,legal:legalHtml,decs:decsHtml,war:warHtml,ai:aiHtml,train:trainHtml,judges:judgesHtml}[C.tab];
+ var f={cases:casesHtml,ses:sesHtml,hear:hearHtml,panel:panelHtml,verdict:verdictHtml,proto:protoHtml,docs:docsHtml,terms:termsHtml,legal:legalHtml,decs:decsHtml,war:warHtml,ai:aiHtml,train:trainHtml,judges:judgesHtml}[C.tab];
  try{h+=f()}catch(x){h+='<div class="banner bp-err">Ошибка раздела: '+e(x.message)+'</div>';try{console.error(x)}catch(y){}}
  return h+'</div></section>'}
 function ok(){return online()}
@@ -18547,6 +18627,7 @@ document.addEventListener("click",function(ev){var t=ev.target.closest&&ev.targe
  if(d.c54==="cancel"){C.edit=null;C.msg="";repaint();return}
  if(d.c54==="edit"&&C.cur){C.edit=JSON.parse(JSON.stringify(C.cur));C.msg="";repaint();return}
  if(d.c54==="copycase"&&C.cur){copy(caseText(C.cur));return}
+ if(d.c54==="sesopen"&&C.cur){S.form.caseId=C.cur.id;C.tab="ses";repaint();return}
  if(d.c54==="tocourt"&&C.cur){PR.caseNo=C.cur.no;PR.title=C.cur.title;prsave();V.caseNo=C.cur.no;var df=C.cur.parties.filter(function(p){return /Обвиняем|Ответчик/.test(p.role)})[0];if(df)V.name=df.name;if(C.cur.arts)V.arts=C.cur.arts;vsave();C.tab="panel";repaint();toast("Номер и название дела перенесены в протокол и приговор");return}
  if(d.c54==="save"&&C.edit){var c=C.edit;C.busy=true;repaint();capi("case_save",{id:c.id,title:c.title,kind:c.kind,status:c.status,arts:c.arts,parties:c.parties,evidence:c.evidence,notes:c.notes,
    hearings:c.hearings.map(function(x){return {id:x.id,at:x.at?new Date(typeof x.at==="number"?x.at:Date.parse(x.at)).toISOString():"",place:x.place,note:x.note}}).filter(function(x){return x.at})}).then(function(r){C.busy=false;
@@ -18556,7 +18637,7 @@ document.addEventListener("click",function(ev){var t=ev.target.closest&&ev.targe
  if(d.c54add&&C.edit){C.edit[d.c54add].push(d.c54add==="parties"?{role:"Свидетель",name:""}:d.c54add==="hearings"?{at:Date.now()+864e5,place:"",note:""}:{t:"",url:""});repaint();return}
  if(d.c54rm&&C.edit){C.edit[d.c54rm].splice(+d.i,1);repaint();return}
  // пульт
- if(d.c54p){var a=d.c54p;
+ if(d.c54p){if(roPult())return;var a=d.c54p;
   if(a==="run"){if(P.run){P.acc+=Date.now()-P.start;P.run=false;if(P.log)protoAdd("note","Перерыв")}else{P.start=Date.now();P.run=true;if(P.log)protoAdd("note",P.acc?"Заседание продолжено":"Заседание открыто")}}
   else if(a==="reset"){if(!confirm("Сбросить таймер, очередь и отметки чек-листа?"))return;P.acc=0;P.run=false;P.q=[];P.cur=null;P.chk={}}
   else if(a==="add"){var n=val("c54pn").trim();P.q.push(val("c54pr")+(n?" — "+n:""))}
@@ -18565,7 +18646,7 @@ document.addEventListener("click",function(ev){var t=ev.target.closest&&ev.targe
   else if(a==="savechk"){P.list=val("c54pl").split("\n").map(function(s){return s.trim()}).filter(Boolean).slice(0,30);P.chk={};toast("Чек-лист сохранён")}
   else if(a==="defchk"){P.list=PDEF.slice();P.chk={}}
   psave();repaint();return}
- if(d.c54pq!=null&&d.c54pq!==undefined){P.q.splice(+d.c54pq,1);psave();repaint();return}
+ if(d.c54pq!=null&&d.c54pq!==undefined){if(roPult())return;P.q.splice(+d.c54pq,1);psave();repaint();return}
  // приговор
  if(d.c54v==="fromcalc"){try{var B=basketItems();if(!B.length){toast("Калькулятор пуст: добавьте статьи кнопкой «+»");return}V.arts=B.map(function(r){return (r.k==="uk"?"":r.k+" ")+r.code+(r.part?" ч."+r.part:"")}).join(", ");var pk=window.SA_ma?SA_ma.pick():null,M=maList();
    if(pk){V.ma={m:{},a:{}};M.m.forEach(function(x,i){if(pk.m.indexOf(x)>=0)V.ma.m[i]=1});M.a.forEach(function(x,i){if(pk.a.indexOf(x)>=0)V.ma.a[i]=1})}V.term=0;vsave();repaint()}catch(x){toast("Не удалось взять статьи из калькулятора")}return}
@@ -18577,10 +18658,10 @@ document.addEventListener("click",function(ev){var t=ev.target.closest&&ev.targe
   else if(o==="member")PR.members.push({pos:"",name:""});
   else if(o==="me"){var u=user()||{};PR.members.push({pos:(C.me&&C.me.judgeName)||u.roleName||"",name:u.nick||""})}
   else if(o==="copy"){copy(protoText());return}
-  else if(o==="pdf"){pdf(protoPaper(),"Протокол "+(PR.caseNo||""));return}
+  else if(o==="pdf"){pdf(protoPaper(),"Протокол "+(prv().caseNo||""));return}
   else if(o==="clear"){if(!confirm("Начать новый протокол? Текущий будет очищен."))return;PR={caseNo:"",title:"",court:PR.court,items:[],members:PR.members}}
   prsave();repaint();return}
- if(d.c54prd!=null){PR.items.splice(+d.c54prd,1);prsave();repaint();return}
+ if(d.c54prd!=null){if(S.ses){capi("ses_proto",{del:d.c54prd}).then(function(r){if(!r.ok)toast(r.error);else sesGot(r,true)});return}PR.items.splice(+d.c54prd,1);prsave();repaint();return}
  if(d.c54pmr!=null){PR.members.splice(+d.c54pmr,1);prsave();repaint();return}
  // документы
  if(d.c54dk){DV.k=d.c54dk;sj("bos-c54docs",DV);repaint();return}
@@ -18597,8 +18678,8 @@ document.addEventListener("click",function(ev){var t=ev.target.closest&&ev.targe
  // решения
  if(d.c54dec==="new"){C.decEd={};C.msg="";repaint();return}
  if(d.c54dec==="cancel"){C.decEd=null;C.msg="";repaint();return}
- if(d.c54dec==="save"&&C.decEd){capi("dec_save",C.decEd).then(function(r){if(r.ok){C.decEd=null;C.decs=null;toast("Решение сохранено")}else say(r.error,true);repaint()});return}
- if(d.c54decc){var x=(C.decs.list||[]).filter(function(y){return y.id===d.c54decc})[0];if(x)copy(x.title+"\n"+(x.caseNo?"Дело № "+x.caseNo+", ":"")+x.dt+"\n\n"+x.text);return}
+ if(d.c54dec==="save"&&C.decEd){if(C.decEd.panel==null)C.decEd.panel=compShort();capi("dec_save",C.decEd).then(function(r){if(r.ok){C.decEd=null;C.decs=null;toast("Решение сохранено")}else say(r.error,true);repaint()});return}
+ if(d.c54decc){var x=(C.decs.list||[]).filter(function(y){return y.id===d.c54decc})[0];if(x)copy(x.title+"\n"+(x.caseNo?"Дело № "+x.caseNo+", ":"")+x.dt+(x.panel?"\nСостав суда: "+x.panel:"")+"\n\n"+x.text);return}
  if(d.c54dece){var x2=(C.decs.list||[]).filter(function(y){return y.id===d.c54dece})[0];if(x2){C.decEd=JSON.parse(JSON.stringify(x2));repaint();window.scrollTo(0,0)}return}
  if(d.c54decd){if(!confirm("Удалить решение из справочника?"))return;capi("dec_del",{id:d.c54decd}).then(function(r){C.decs=null;repaint()});return}
  // ордера
@@ -18643,7 +18724,7 @@ document.addEventListener("change",function(ev){var t=ev.target;if(!t)return;var
  if(t.id==="c54tf"){TM.from=t.value;sj("bos-c54terms",TM);repaint();return}
  if(t.id==="c54plim"){P.lim=Math.max(15,Math.min(1800,+t.value||120));psave();return}
  if(t.id==="c54plog"){P.log=t.checked;psave();return}
- if(d.c54pc!=null){P.chk[d.c54pc]=t.checked;psave();return}
+ if(d.c54pc!=null){if(roPult()){t.checked=!t.checked;return}P.chk[d.c54pc]=t.checked;psave();return}
  if(d.c54ma){V.ma[d.c54ma][d.i]=t.checked?1:0;vsave();repaint();return}
  if(d.c54v==="kind"||d.c54v==="term"||d.c54v==="fine"){V[d.c54v]=t.value;vsave();repaint();return}
  if(d.c54lg){LG[d.c54lg]=t.value;sj("bos-c54legal",LG);repaint();return}

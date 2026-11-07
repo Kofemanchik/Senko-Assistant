@@ -281,7 +281,7 @@
   // 3.8.1: ссылка со страницы /go/ — /app/?go=p:КОД (патруль, приглашение, обмен, перенос, вид интерфейса)
   try {
     var ga = new URLSearchParams(location.search).get("go") || "";
-    var gm = /^(p|i|s|x|ui):([A-Za-z0-9._~-]{3,160})$/.exec(ga);
+    var gm = /^(p|h|i|s|x|ui):([A-Za-z0-9._~-]{3,160})$/.exec(ga);
     if (ga) history.replaceState(null, "", location.pathname + location.hash);
     if (gm) openArg = "go|" + gm[1] + "=" + gm[2];
   } catch (e) {}

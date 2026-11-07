@@ -699,3 +699,18 @@ alter table public.court_decisions enable row level security;
 alter table public.warrants enable row level security;
 revoke all on table public.court_cases, public.court_decisions, public.warrants from anon, authenticated;
 
+-- 4.3.1: совместные заседания и состав суда
+
+alter table public.court_cases add column if not exists panel jsonb not null default '[]';
+alter table public.court_decisions add column if not exists panel text not null default '';
+create table if not exists public.court_sessions (
+  code text primary key, server integer not null default 12, owner_id uuid references public.profiles(id) on delete set null, case_id bigint references public.court_cases(id) on delete set null,
+  case_no text not null default '', title text not null default '', state jsonb not null default '{}', created_at timestamptz not null default now(), expires_at timestamptz not null);
+create table if not exists public.court_session_members (
+  code text not null references public.court_sessions(code) on delete cascade, user_id uuid not null references public.profiles(id) on delete cascade,
+  role text not null default 'part', sig text not null default '', joined_at timestamptz not null default now(), seen_at timestamptz not null default now(), primary key (code, user_id));
+create index if not exists court_session_members_user on public.court_session_members (user_id);
+alter table public.court_sessions enable row level security;
+alter table public.court_session_members enable row level security;
+revoke all on table public.court_sessions, public.court_session_members from anon, authenticated;
+
