@@ -209,7 +209,7 @@
       found = (Array.isArray(f) ? f : []).slice(0, 14);
       var sources = found.map(function (x) { return { ref: x.ref, go: x.go || "", lw: x.lw || "" }; });
       var hist = (opts && Array.isArray(opts.hist) ? opts.hist : []).slice(-6).map(function (t) { return { q: String((t && t.q) || "").slice(0, 1500), a: String((t && t.a) || "").slice(0, 2500) }; });
-      return W.call({ action: "ai_ask", token: (W.session() || {}).token, q: question, hist: hist, topic: plan.topic, mode: opts && (opts.mode === "court" || opts.mode === "judge") ? opts.mode : "", short: !!(opts && opts.short), ctx: found.map(function (x) { return { ref: String(x.ref || ""), text: String(x.text || "") }; }) }, 45000).then(function (r) {
+      return W.call({ action: "ai_ask", token: (W.session() || {}).token, q: question, hist: hist, topic: plan.topic, mode: opts && /^(court|judge|summary|check|vcheck|motive|appeal|questions|rpcheck|wcheck|spar|citizen)$/.test(String(opts.mode || "")) ? opts.mode : "", short: !!(opts && opts.short), ctx: found.map(function (x) { return { ref: String(x.ref || ""), text: String(x.text || "") }; }) }, 45000).then(function (r) {
         aiBusy = false;
         if (!r || !r.ok) return { ok: false, error: (r && r.error) || "ИИ-сервис вернул ошибку.", limit: !!(r && r.limit), sources: sources };
         var fid = "";

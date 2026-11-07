@@ -111,7 +111,7 @@ async function ask(question, opts) {
     const found = await retrieve(question, plan);
     const sources = found.map((f) => ({ ref: f.ref, go: f.go || "", lw: f.lw || "" }));
     const hist = opts && Array.isArray(opts.hist) ? opts.hist.slice(-6) : [];
-    const mode = opts && (opts.mode === "court" || opts.mode === "judge") ? opts.mode : "";
+    const mode = opts && /^(court|judge|summary|check|vcheck|motive|appeal|questions|rpcheck|wcheck|spar|citizen)$/.test(String(opts.mode || "")) ? opts.mode : "";
     const j = await ctx.ask({ short: !!(opts && opts.short), hist, topic: plan.topic, mode, q: question, ctx: found.map((f) => ({ ref: String(f.ref || ""), text: String(f.text || "") })) }, TIMEOUT_MS);
     if (!j || !j.ok) {
       const error = j && j.code === "auth" ? "Войдите в аккаунт, чтобы задавать вопросы ИИ." : (j && j.error) || "ИИ-сервис не ответил. Попробуйте позже.";

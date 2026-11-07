@@ -714,3 +714,49 @@ alter table public.court_sessions enable row level security;
 alter table public.court_session_members enable row level security;
 revoke all on table public.court_sessions, public.court_session_members from anon, authenticated;
 
+-- 4.3.5: судебная власть — этапы, материалы, отводы, апелляции, реестр решений, адвокаты, надзор
+
+alter table public.court_cases add column if not exists stage text not null default 'filed';
+alter table public.court_cases add column if not exists mat jsonb not null default '{}';
+alter table public.court_cases add column if not exists notes_side jsonb not null default '{}';
+alter table public.court_cases add column if not exists log jsonb not null default '[]';
+alter table public.court_cases add column if not exists recusals jsonb not null default '[]';
+alter table public.court_cases add column if not exists merged_into bigint;
+alter table public.court_cases add column if not exists appeal_of bigint;
+alter table public.court_cases add column if not exists level text not null default '';
+alter table public.court_cases add column if not exists closed_at timestamptz;
+alter table public.court_decisions add column if not exists no integer not null default 0;
+alter table public.court_decisions add column if not exists case_id bigint;
+alter table public.court_decisions add column if not exists person text not null default '';
+alter table public.court_decisions add column if not exists verdict text not null default '';
+alter table public.court_decisions add column if not exists term integer not null default 0;
+alter table public.court_decisions add column if not exists fine integer not null default 0;
+alter table public.court_decisions add column if not exists probation_until timestamptz;
+alter table public.court_decisions add column if not exists appeal_until timestamptz;
+alter table public.court_decisions add column if not exists exec_status text not null default 'done';
+alter table public.court_decisions add column if not exists exec_at timestamptz;
+alter table public.court_decisions add column if not exists amnesty text not null default '';
+alter table public.court_decisions add column if not exists outcome text not null default '';
+alter table public.court_decisions add column if not exists public boolean not null default false;
+alter table public.court_decisions add column if not exists anon boolean not null default true;
+alter table public.warrants add column if not exists no integer not null default 0;
+alter table public.warrants add column if not exists uses jsonb not null default '[]';
+alter table public.warrants drop constraint if exists warrants_status_check;
+alter table public.warrants add constraint warrants_status_check check (status in ('req','ok','no','rev'));
+alter table public.reports add column if not exists pros_mark text not null default '';
+alter table public.reports add column if not exists pros_note text not null default '';
+alter table public.reports add column if not exists pros_by text not null default '';
+alter table public.profiles add column if not exists adv_on boolean not null default false;
+alter table public.profiles add column if not exists adv_spec text not null default '';
+alter table public.profiles add column if not exists adv_busy boolean not null default false;
+alter table public.profiles add column if not exists adv_lic text not null default '';
+alter table public.profiles add column if not exists adv_last timestamptz;
+alter table public.profiles add column if not exists judge_exam jsonb;
+create table if not exists public.adv_calls (
+  id bigserial primary key, server integer not null default 12, caller_id uuid references public.profiles(id) on delete set null, caller text not null default '',
+  suspect text not null, place text not null default '', note text not null default '', status text not null default 'open' check (status in ('open','taken','closed')),
+  taker_id uuid references public.profiles(id) on delete set null, taker text not null default '', created_at timestamptz not null default now(), taken_at timestamptz);
+create index if not exists adv_calls_srv on public.adv_calls (server, created_at desc);
+alter table public.adv_calls enable row level security;
+revoke all on table public.adv_calls from anon, authenticated;
+

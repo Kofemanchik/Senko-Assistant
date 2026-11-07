@@ -1067,6 +1067,10 @@ async function api(req) {
     // 3.5: публичный сайт (без входа): справочник кодексов, калькулятор, лента изменений законов, цифры проекта, сообщение об ошибке
     case "pub_laws":
       return J(await pubLaws(b, ip));
+    case "pub_court":
+      return J(await pubCourt(b, ip));
+    case "pub_court_ai":
+      return J(await pubCourtAi(b, ip));
     case "pub_changes":
       return J(await pubChanges(b, ip));
     case "pub_stats":
@@ -5934,7 +5938,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 47;
+const SCHEMA_V = 48;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -6146,6 +6150,51 @@ alter table public.share_results enable row level security;
 revoke all on table public.share_results from anon, authenticated;
 `;
 // 3.8: одноразовые коды входа в веб-версию по QR
+const SCHEMA_45 = `
+alter table public.court_cases add column if not exists stage text not null default 'filed';
+alter table public.court_cases add column if not exists mat jsonb not null default '{}';
+alter table public.court_cases add column if not exists notes_side jsonb not null default '{}';
+alter table public.court_cases add column if not exists log jsonb not null default '[]';
+alter table public.court_cases add column if not exists recusals jsonb not null default '[]';
+alter table public.court_cases add column if not exists merged_into bigint;
+alter table public.court_cases add column if not exists appeal_of bigint;
+alter table public.court_cases add column if not exists level text not null default '';
+alter table public.court_cases add column if not exists closed_at timestamptz;
+alter table public.court_decisions add column if not exists no integer not null default 0;
+alter table public.court_decisions add column if not exists case_id bigint;
+alter table public.court_decisions add column if not exists person text not null default '';
+alter table public.court_decisions add column if not exists verdict text not null default '';
+alter table public.court_decisions add column if not exists term integer not null default 0;
+alter table public.court_decisions add column if not exists fine integer not null default 0;
+alter table public.court_decisions add column if not exists probation_until timestamptz;
+alter table public.court_decisions add column if not exists appeal_until timestamptz;
+alter table public.court_decisions add column if not exists exec_status text not null default 'done';
+alter table public.court_decisions add column if not exists exec_at timestamptz;
+alter table public.court_decisions add column if not exists amnesty text not null default '';
+alter table public.court_decisions add column if not exists outcome text not null default '';
+alter table public.court_decisions add column if not exists public boolean not null default false;
+alter table public.court_decisions add column if not exists anon boolean not null default true;
+alter table public.warrants add column if not exists no integer not null default 0;
+alter table public.warrants add column if not exists uses jsonb not null default '[]';
+alter table public.warrants drop constraint if exists warrants_status_check;
+alter table public.warrants add constraint warrants_status_check check (status in ('req','ok','no','rev'));
+alter table public.reports add column if not exists pros_mark text not null default '';
+alter table public.reports add column if not exists pros_note text not null default '';
+alter table public.reports add column if not exists pros_by text not null default '';
+alter table public.profiles add column if not exists adv_on boolean not null default false;
+alter table public.profiles add column if not exists adv_spec text not null default '';
+alter table public.profiles add column if not exists adv_busy boolean not null default false;
+alter table public.profiles add column if not exists adv_lic text not null default '';
+alter table public.profiles add column if not exists adv_last timestamptz;
+alter table public.profiles add column if not exists judge_exam jsonb;
+create table if not exists public.adv_calls (
+  id bigserial primary key, server integer not null default 12, caller_id uuid references public.profiles(id) on delete set null, caller text not null default '',
+  suspect text not null, place text not null default '', note text not null default '', status text not null default 'open' check (status in ('open','taken','closed')),
+  taker_id uuid references public.profiles(id) on delete set null, taker text not null default '', created_at timestamptz not null default now(), taken_at timestamptz);
+create index if not exists adv_calls_srv on public.adv_calls (server, created_at desc);
+alter table public.adv_calls enable row level security;
+revoke all on table public.adv_calls from anon, authenticated;
+`;
 const SCHEMA_44 = `
 alter table public.court_cases add column if not exists panel jsonb not null default '[]';
 alter table public.court_decisions add column if not exists panel text not null default '';
@@ -6237,7 +6286,7 @@ function ensureSchema() {
         if (+v >= SCHEMA_V) return;
         // база уже на 2.4: повторно 2.4 не выполняем (иначе вернулись бы удалённые баннеры по умолчанию)
         // 3.5: SCHEMA_30 и SCHEMA_35 повторяемы (create/alter … if not exists), их добавляем всем, кто ниже 35
-        await db().unsafe((+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35) + (+v < 37 ? SCHEMA_37_ONCE : "") + SCHEMA_38 + SCHEMA_39 + SCHEMA_40 + SCHEMA_41 + SCHEMA_42 + SCHEMA_43 + SCHEMA_44);
+        await db().unsafe((+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35) + (+v < 37 ? SCHEMA_37_ONCE : "") + SCHEMA_38 + SCHEMA_39 + SCHEMA_40 + SCHEMA_41 + SCHEMA_42 + SCHEMA_43 + SCHEMA_44 + SCHEMA_45);
         adsReady = true;
         await setSetting("schema_v", SCHEMA_V);
       } catch (e) {
@@ -6322,7 +6371,7 @@ async function betaApi(b) {
 }
 
 // ───────────── 2.4: вебхуки Discord для организаций ─────────────
-const HOOK_EVENTS = { rep: "Новые рапорты", join: "Новые сотрудники и заявки", ctrl: "Контрольные тесты", event: "Мероприятия и напоминания", week: "Еженедельный отчёт" };
+const HOOK_EVENTS = { court: "Суд: дела, заседания, ордера, решения (для Government)", rep: "Новые рапорты", join: "Новые сотрудники и заявки", ctrl: "Контрольные тесты", event: "Мероприятия и напоминания", week: "Еженедельный отчёт" };
 const HOOK_RE = /^https:\/\/(?:ptb\.|canary\.)?discord(?:app)?\.com\/api\/webhooks\/\d{5,25}\/[\w-]{20,120}$/;
 const hookMask = (u) => String(u || "").replace(/(\/webhooks\/\d+\/)[\w-]+$/, (m, a) => a + "•••" + String(u).slice(-4));
 // Telegram-HTML в Markdown Discord
@@ -7133,29 +7182,34 @@ const isGov = (p) => p.org === GOV_ORG || isStaff(p);
 const isJudge = (p) => JUDGE_SEAT.includes(p.judge_pos || "");
 const govLead = (p) => (p.rank === "leader" && p.org === GOV_ORG) || isStaff(p);
 const cleanArr = (a, n, f) => (Array.isArray(a) ? a : []).slice(0, n).map(f).filter(Boolean);
-function caseOut(r) {
+function caseOut(r, v) {
+  const ns = r.notes_side || {}, role = v ? v.game_role || "off" : "", all = !!v && (isJudge(v) || govLead(v) || !!v.pvs);
   return {
+    stage: r.stage || "filed", stageName: CASE_STAGE[r.stage || "filed"] || r.stage, mat: matClean(r.mat), log: (r.log || []).slice(-80), recusals: r.recusals || [], level: r.level || "",
+    appealOf: r.appeal_of ? String(r.appeal_of) : "", mergedInto: r.merged_into ? String(r.merged_into) : "", closedAt: r.closed_at,
+    notesPros: all || role === "pros" ? ns.pros || "" : null, notesDef: all || role === "adv" ? ns.def || "" : null,
     id: String(r.id), no: String(r.no || r.id).padStart(4, "0"), title: r.title, kind: r.kind, kindName: CASE_KIND[r.kind] || r.kind, status: r.status,
     parties: r.parties || [], arts: r.arts || "", evidence: r.evidence || [], hearings: r.hearings || [], notes: r.notes || "",
     judge: r.judge || "", judgeLogin: r.judge_login || "", draw: r.draw || null, panel: r.panel || [], author: r.author || "", authorLogin: r.author_login || "",
     created: r.created_at, updated: r.updated_at,
   };
 }
-const warOut = (r) => ({ id: String(r.id), kind: r.kind, kindName: WAR_KIND[r.kind] || r.kind, target: r.target, reason: r.reason, caseNo: r.case_no || "", status: r.status,
+const warOut = (r) => ({ id: String(r.id), no: r.no ? String(r.no).padStart(4, "0") : "", uses: r.uses || [], kind: r.kind, kindName: WAR_KIND[r.kind] || r.kind, target: r.target, reason: r.reason, caseNo: r.case_no || "", status: r.status,
   until: r.valid_until, by: r.issued_by || "", author: r.author || "", org: r.org || "", answer: r.answer || "", created: r.created_at,
-  active: r.status === "ok" && (!r.valid_until || tsOf(r.valid_until) > Date.now()) });
+  active: r.status === "ok" && (!r.valid_until || tsOf(r.valid_until) > Date.now()), revoked: r.status === "rev" });
 async function courtApi(b) {
   const { p, err } = await who(b);
   if (err) return err;
   const sql = db();
   const op = String(b.op || "me");
   const srv = isStaff(p) ? parseServer(b.server) || sv(p) : sv(p);
-  const me = { judgePos: p.judge_pos || "", judgeName: JUDGE_POS[p.judge_pos] || "", pvs: !!p.pvs, gov: isGov(p), lead: govLead(p), judge: isJudge(p) };
+  const me = { judgePos: p.judge_pos || "", judgeName: JUDGE_POS[p.judge_pos] || "", pvs: !!p.pvs, gov: isGov(p), lead: govLead(p), judge: isJudge(p), gameRole: p.game_role || "off" };
   if (op === "me") return { ok: true, ...me, positions: JUDGE_POS, kinds: CASE_KIND, warKinds: WAR_KIND, sesRoles: SES_ROLE };
   if (op.startsWith("ses_")) return await sesApi(p, b, op, srv);
+  if (op.startsWith("adv_") || op === "war_check") { const r = await advApi(p, b, op, srv); if (r) return r; }
   // ── ордера: список видят все сотрудники сервера (полиции важно знать, какие ордера действуют) ──
   if (op === "war_list") {
-    const rows = await sql`select * from warrants where server = ${srv} and (status <> 'no' or created_at > now() - interval '3 days')
+    const rows = await sql`select * from warrants where server = ${srv} and (status not in ('no', 'rev') or created_at > now() - interval '3 days')
                              and (valid_until is null or valid_until > now() - interval '7 days') order by (status = 'req') desc, created_at desc limit 200`;
     return { ok: true, ...me, list: rows.map(warOut) };
   }
@@ -7163,8 +7217,8 @@ async function courtApi(b) {
     if (!(await hit(`war:${p.id}`, 20, 3600))) return fail(RATE_MSG, { code: "rate" });
     const kind = WAR_KIND[b.kind] ? b.kind : "search", target = clean(b.target, 120), reason = clean(b.reason, 1200);
     if (!target || reason.length < 10) return fail("Укажите, на кого или что нужен ордер, и основание (не короче 10 знаков).");
-    const [r] = await sql`insert into warrants (server, kind, target, reason, case_no, status, author_id, author, org)
-                          values (${srv}, ${kind}, ${target}, ${reason}, ${clean(b.caseNo, 20)}, 'req', ${p.id}, ${p.nick || p.login}, ${p.org || ""}) returning *`;
+    const [r] = await sql`insert into warrants (server, no, kind, target, reason, case_no, status, author_id, author, org)
+                          values (${srv}, (select coalesce(max(no), 0) + 1 from warrants where server = ${srv}), ${kind}, ${target}, ${reason}, ${clean(b.caseNo, 20)}, 'req', ${p.id}, ${p.nick || p.login}, ${p.org || ""}) returning *`;
     try {
       const js = await sql`select id from profiles where server = ${srv} and judge_pos = any(${JUDGE_SEAT}) and not banned and approval = 'ok' limit 30`;
       for (const j of js) await sql`insert into broadcasts (user_id, title, author, text, expires_at) values (${j.id}, ${"📜 Запрос ордера"}, ${p.nick || p.login},
@@ -7180,6 +7234,7 @@ async function courtApi(b) {
                           where id = ${parseInt(b.id, 10) || 0} and server = ${srv} and status = 'req' returning *`;
     if (!r) return fail("Запрос не найден или уже рассмотрен.");
     await audit(p.login, "warrant", "", { id: String(r.id), ok });
+    if (ok) courtHook(srv, "📜 Выдан ордер №" + String(r.no || r.id).padStart(4, "0"), `${WAR_KIND[r.kind]}: ${r.target}\nВыдал: ${r.issued_by}\nДействует до ${new Date(tsOf(r.valid_until)).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })} (МСК)`);
     if (r.author_id) await sql`insert into broadcasts (user_id, title, author, text, expires_at) values (${r.author_id}, ${ok ? "📜 Ордер выдан" : "📜 В ордере отказано"}, ${p.nick || p.login},
               ${`${WAR_KIND[r.kind]}: ${r.target}. ${ok ? "Действует до " + new Date(tsOf(r.valid_until)).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" }) + " (МСК)." : "Отказано."}${r.answer ? " Комментарий: " + r.answer : ""}`}, now() + interval '3 days')`;
     return { ok: true, ...me, item: warOut(r) };
@@ -7205,17 +7260,18 @@ async function courtApi(b) {
   // ── 97: закон на дату — берём файл законов из истории репозитория ──
   if (op === "law_at") return await lawAt(p, b);
   if (!isGov(p)) return fail("Раздел «Суд» — для сотрудников Government.");
+  { const r2 = await court2(p, b, op, srv, me); if (r2) return r2; }
   // ── дела ──
   const canEdit = (r) => r.author_id === p.id || r.judge_login === p.login || govLead(p) || p.pvs;
   if (op === "case_list") {
     const q = clean(b.q, 60).toLowerCase();
-    const rows = await sql`select * from court_cases where server = ${srv} and (${b.status || ""} = '' or status = ${b.status || ""})
+    const rows = await sql`select * from court_cases where server = ${srv} and (${b.status || ""} = '' or status = ${b.status || ""}) and (${b.stage || ""} = '' or stage = ${b.stage || ""})
                            and (${q} = '' or lower(title || ' ' || arts || ' ' || parties::text || ' ' || coalesce(judge, '')) like ${"%" + q + "%"}) order by status, updated_at desc limit 200`;
     return { ok: true, ...me, list: rows.map(caseOut) };
   }
   if (op === "case_get") {
     const [r] = await sql`select * from court_cases where id = ${parseInt(b.id, 10) || 0} and server = ${srv}`;
-    return r ? { ok: true, ...me, item: caseOut(r), canEdit: canEdit(r) } : fail("Дело не найдено.");
+    return r ? { ok: true, ...me, item: caseOut(r, p), canEdit: canEdit(r) } : fail("Дело не найдено.");
   }
   if (op === "case_save") {
     if (!(await hit(`case:${p.id}`, 60, 3600))) return fail(RATE_MSG, { code: "rate" });
@@ -7223,7 +7279,8 @@ async function courtApi(b) {
     if (title.length < 3) return fail("Назовите дело: например, «Государство против John Doe».");
     const kind = CASE_KIND[b.kind] ? b.kind : "crim", status = b.status === "closed" ? "closed" : "open";
     const parties = cleanArr(b.parties, 12, (x) => (x && clean(x.name, 80) ? { role: clean(x.role, 30) || "Сторона", name: clean(x.name, 80), note: clean(x.note, 120) } : null));
-    const evidence = cleanArr(b.evidence, 30, (x) => (x && clean(x.t, 200) ? { t: clean(x.t, 200), url: /^https?:\/\//.test(String(x.url || "")) ? clean(x.url, 300) : "" } : null));
+    const evidence = cleanArr(b.evidence, 30, (x) => (x && clean(x.t, 200) ? { t: clean(x.t, 200), url: /^https?:\/\//.test(String(x.url || "")) ? clean(x.url, 300) : "", adm: ADM[x.adm] != null ? x.adm : "", admWhy: clean(x.admWhy, 200) } : null));
+    const stage = CASE_STAGE[b.stage] ? b.stage : "filed";
     const hearings = cleanArr(b.hearings, 20, (x) => (x && Date.parse(x.at) ? { id: clean(x.id, 12) || Math.random().toString(36).slice(2, 8), at: new Date(Date.parse(x.at)).toISOString(), place: clean(x.place, 80), note: clean(x.note, 160) } : null))
       .sort((a, c) => Date.parse(a.at) - Date.parse(c.at));
     const arts = clean(b.arts, 300), notes = String(b.notes == null ? "" : b.notes).slice(0, 4000);
@@ -7231,14 +7288,28 @@ async function courtApi(b) {
       const [r0] = await sql`select * from court_cases where id = ${parseInt(b.id, 10) || 0} and server = ${srv}`;
       if (!r0) return fail("Дело не найдено.");
       if (!canEdit(r0)) return fail("Менять дело могут автор, судья по делу и руководство Government.");
-      const [r] = await sql`update court_cases set title = ${title}, kind = ${kind}, status = ${status}, parties = ${sql.json(parties)}, arts = ${arts},
-                            evidence = ${sql.json(evidence)}, hearings = ${sql.json(hearings)}, notes = ${notes}, updated_at = now() where id = ${r0.id} returning *`;
-      return { ok: true, ...me, item: caseOut(r), canEdit: true };
+      const [r] = await sql`update court_cases set title = ${title}, kind = ${kind}, status = ${status}, stage = ${stage}, parties = ${sql.json(parties)}, arts = ${arts},
+                            evidence = ${sql.json(evidence)}, hearings = ${sql.json(hearings)}, notes = ${notes}, updated_at = now(),
+                            closed_at = ${status === "closed" ? r0.closed_at || new Date() : null} where id = ${r0.id} returning *`;
+      const by = p.nick || p.login, no4 = String(r.no).padStart(4, "0");
+      if ((r0.stage || "filed") !== stage) await caseLog(r.id, "Этап: " + CASE_STAGE[stage], by);
+      if (r0.status !== status) await caseLog(r.id, status === "closed" ? "Дело закрыто" : "Дело открыто снова", by);
+      for (const x of evidence) { const o = (r0.evidence || []).find((y) => y.t === x.t); if (x.adm && (!o || o.adm !== x.adm)) await caseLog(r.id, `Доказательство «${x.t.slice(0, 60)}»: ${ADM[x.adm]}`, by); }
+      const newH = hearings.filter((x) => !(r0.hearings || []).some((y) => y.at === x.at));
+      for (const x of newH) { await caseLog(r.id, "Назначено заседание: " + new Date(Date.parse(x.at)).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" }), by); courtHook(srv, "📅 Заседание по делу №" + no4, `${r.title}\n${new Date(Date.parse(x.at)).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })} (МСК)${x.place ? " · " + x.place : ""}`); }
+      // 42: при закрытии дела действующие ордера по нему отзываются
+      if (status === "closed" && r0.status !== "closed") {
+        const rv = await sql`update warrants set status = 'rev', answer = ${"отозван: дело №" + no4 + " закрыто"} where server = ${srv} and case_no = ${no4} and status in ('ok', 'req') returning id`;
+        if (rv.length) await caseLog(r.id, "Отозвано ордеров: " + rv.length, by);
+      }
+      return { ok: true, ...me, item: caseOut(r, p), canEdit: true };
     }
-    const [r] = await sql`insert into court_cases (server, no, title, kind, status, parties, arts, evidence, hearings, notes, author_id, author, author_login)
-                          values (${srv}, (select coalesce(max(no), 0) + 1 from court_cases where server = ${srv}), ${title}, ${kind}, 'open', ${sql.json(parties)}, ${arts},
-                                  ${sql.json(evidence)}, ${sql.json(hearings)}, ${notes}, ${p.id}, ${p.nick || p.login}, ${p.login}) returning *`;
-    return { ok: true, ...me, item: caseOut(r), canEdit: true };
+    const [r] = await sql`insert into court_cases (server, no, title, kind, status, stage, parties, arts, evidence, hearings, notes, author_id, author, author_login, mat)
+                          values (${srv}, (select coalesce(max(no), 0) + 1 from court_cases where server = ${srv}), ${title}, ${kind}, 'open', ${stage}, ${sql.json(parties)}, ${arts},
+                                  ${sql.json(evidence)}, ${sql.json(hearings)}, ${notes}, ${p.id}, ${p.nick || p.login}, ${p.login}, ${sql.json(matClean(b.mat))}) returning *`;
+    await caseLog(r.id, "Дело заведено" + (b.fromReport ? " по рапорту №" + clean(b.fromReport, 20) : ""), p.nick || p.login);
+    courtHook(srv, "📁 Новое дело №" + String(r.no).padStart(4, "0"), `${r.title}${r.arts ? "\nСтатьи: " + r.arts : ""}\nЗавёл: ${p.nick || p.login}`);
+    return { ok: true, ...me, item: caseOut(r, p), canEdit: true };
   }
   if (op === "case_del") {
     const [r] = await sql`delete from court_cases where id = ${parseInt(b.id, 10) || 0} and server = ${srv} and (author_id = ${p.id} or ${govLead(p)} or ${!!p.pvs}) returning id`;
@@ -7250,22 +7321,10 @@ async function courtApi(b) {
     if (!r0) return fail("Дело не найдено.");
     if (r0.draw && !(govLead(p) || p.pvs)) return fail("Судья по делу уже выбран жребием. Повторный жребий может провести только руководство или ПВС.");
     if (!(await hit(`draw:${r0.id}`, 5, 3600))) return fail(RATE_MSG, { code: "rate" });
-    const L = await sql`select login, nick, judge_pos from profiles where server = ${srv} and judge_pos = any(${JUDGE_SEAT}) and not banned and approval = 'ok'
-                        and last_seen > now() - interval '20 minutes' order by lower(nick) limit 40`;
-    if (!L.length) return fail("Сейчас на смене нет судей (никто из судей не заходил в программу последние 20 минут).");
-    const rnd = new Uint32Array(1);
-    crypto.getRandomValues(rnd);
-    const k = rnd[0] % L.length, pick = L[k];
-    const draw = { at: new Date().toISOString(), by: p.nick || p.login, cands: L.map((x) => (x.nick || x.login) + " · " + JUDGE_POS[x.judge_pos]), pick: k,
-      judge: pick.nick || pick.login, prev: r0.draw ? r0.judge : "" };
-    const [r] = await sql`update court_cases set judge = ${pick.nick || pick.login}, judge_login = ${pick.login}, draw = ${sql.json(draw)}, updated_at = now() where id = ${r0.id} returning *`;
-    await audit(p.login, "court_draw", pick.login, { id: String(r.id), n: L.length });
-    try {
-      const [u] = await sql`select id from profiles where login = ${pick.login}`;
-      if (u) await sql`insert into broadcasts (user_id, title, author, text, expires_at) values (${u.id}, ${"⚖ Вам распределено дело"}, ${"Жребий"},
-                ${`Дело №${caseOut(r).no} «${r.title}» — жребий выбрал вас среди ${L.length} судей на смене.`}, now() + interval '3 days')`;
-    } catch (e) {}
-    return { ok: true, ...me, item: caseOut(r), canEdit: true };
+    const ex = (r0.recusals || []).filter((y) => y.status === "ok").map((y) => y.login);
+    const d = await drawJudge(p, r0, srv, ex);
+    if (d.err) return fail(d.err);
+    return { ok: true, ...me, item: caseOut(d.r, p), canEdit: true };
   }
   // ── 173: ближайшие заседания ──
   if (op === "hearings") {
@@ -7283,7 +7342,7 @@ async function courtApi(b) {
     const q = clean(b.q, 80).toLowerCase().replace(/ё/g, "е");
     const rows = await sql`select * from court_decisions where server = ${srv} and (${q} = '' or replace(lower(title || ' ' || case_no || ' ' || arts || ' ' || tags || ' ' || text), 'ё', 'е') like ${"%" + q + "%"})
                            order by dt desc, id desc limit 100`;
-    return { ok: true, ...me, canAdd: govLead(p) || !!p.pvs || isJudge(p), list: rows.map((r) => ({ id: String(r.id), title: r.title, caseNo: r.case_no, dt: r.dt, arts: r.arts, tags: r.tags, text: r.text, author: r.author, panel: r.panel || "" })) };
+    return { ok: true, ...me, canAdd: govLead(p) || !!p.pvs || isJudge(p), list: rows.map(decOut) };
   }
   if (op === "dec_save" || op === "dec_del") {
     if (!(govLead(p) || p.pvs || isJudge(p))) return fail("Справочник решений пополняет руководство Government и судьи.");
@@ -7294,11 +7353,23 @@ async function courtApi(b) {
     const title = clean(b.title, 150), text = String(b.text == null ? "" : b.text).trim().slice(0, 6000);
     if (title.length < 3 || text.length < 20) return fail("Нужны название решения и его текст (не короче 20 знаков).");
     const dt = /^\d{4}-\d{2}-\d{2}$/.test(String(b.dt || "")) ? b.dt : mskDay();
-    const panel = clean(b.panel, 400);
-    if (b.id) await sql`update court_decisions set title = ${title}, case_no = ${clean(b.caseNo, 20)}, dt = ${dt}, arts = ${clean(b.arts, 200)}, tags = ${clean(b.tags, 120)}, text = ${text}, panel = ${panel}
-                        where id = ${parseInt(b.id, 10) || 0} and server = ${srv}`;
-    else await sql`insert into court_decisions (server, title, case_no, dt, arts, tags, text, author, panel) values (${srv}, ${title}, ${clean(b.caseNo, 20)}, ${dt}, ${clean(b.arts, 200)}, ${clean(b.tags, 120)}, ${text}, ${p.nick || p.login}, ${panel})`;
-    return { ok: true };
+    const panel = clean(b.panel, 400), person = clean(b.person, 80), verdict = ["guilty", "acquit", "other"].includes(b.verdict) ? b.verdict : "";
+    const term = Math.max(0, parseInt(b.term, 10) || 0), fine = Math.max(0, parseInt(b.fine, 10) || 0);
+    const probU = +b.probMonths > 0 ? new Date(Date.now() + Math.min(60, +b.probMonths) * 30 * 864e5) : null;
+    const appU = +b.appealDays > 0 ? new Date(Date.now() + Math.min(60, +b.appealDays) * 864e5) : null;
+    const caseNo = clean(b.caseNo, 20);
+    const [cs] = caseNo ? await sql`select id, no, title from court_cases where server = ${srv} and no = ${parseInt(caseNo, 10) || 0}` : [];
+    let r;
+    if (b.id) [r] = await sql`update court_decisions set title = ${title}, case_no = ${caseNo}, dt = ${dt}, arts = ${clean(b.arts, 200)}, tags = ${clean(b.tags, 120)}, text = ${text}, panel = ${panel},
+                        person = ${person}, verdict = ${verdict}, term = ${term}, fine = ${fine} where id = ${parseInt(b.id, 10) || 0} and server = ${srv} returning *`;
+    else {
+      [r] = await sql`insert into court_decisions (server, no, title, case_no, case_id, dt, arts, tags, text, author, panel, person, verdict, term, fine, probation_until, appeal_until, exec_status)
+                     values (${srv}, (select coalesce(max(no), 0) + 1 from court_decisions where server = ${srv}), ${title}, ${caseNo}, ${cs ? cs.id : null}, ${dt}, ${clean(b.arts, 200)}, ${clean(b.tags, 120)}, ${text},
+                             ${p.nick || p.login}, ${panel}, ${person}, ${verdict}, ${term}, ${fine}, ${probU}, ${appU}, ${verdict === "guilty" ? "pending" : "done"}) returning *`;
+      if (cs) { await sql`update court_cases set stage = 'heard', updated_at = now() where id = ${cs.id}`; await caseLog(cs.id, "Вынесено решение №" + String(r.no).padStart(4, "0"), p.nick || p.login); }
+      courtHook(srv, "⚖ Решение №" + String(r.no).padStart(4, "0"), `${title}${caseNo ? "\nДело №" + caseNo : ""}${panel ? "\nСостав суда: " + panel : ""}`);
+    }
+    return { ok: true, item: r ? decOut(r) : null };
   }
   // ── судьи: Председатель Верховного суда одобряет заявки и назначает должности ──
   if (op === "judges" || op === "judge_set" || op === "pvs_set") {
@@ -7328,13 +7399,350 @@ async function courtApi(b) {
       }
       await audit(p.login, "judge_set", u0.login, { pos, reject: !!b.reject });
     }
-    const rows = await sql`select id, login, nick, static_id, judge_pos, approval, pvs, last_seen, created_at, game_role from profiles
+    const rows = await sql`select id, login, nick, static_id, judge_pos, approval, pvs, last_seen, created_at, game_role, judge_exam from profiles
                            where server = ${srv} and org = ${GOV_ORG} and not banned and (judge_pos <> '' or pvs or game_role = 'judge') order by approval desc, lower(nick) limit 200`;
     return { ok: true, ...me, canJ, list: rows.map((r) => ({ id: r.id, login: r.login, nick: r.nick, static: r.static_id, pos: r.judge_pos, posName: JUDGE_POS[r.judge_pos] || "",
-      pending: r.approval === "pending", rejected: r.approval === "rejected", pvs: !!r.pvs, seen: r.last_seen, created: r.created_at })) };
+      pending: r.approval === "pending", rejected: r.approval === "rejected", pvs: !!r.pvs, seen: r.last_seen, created: r.created_at, exam: r.judge_exam || null })) };
   }
   return fail("Неизвестное действие.");
 }
+// ───────────── 4.3.5: судебная власть — материалы дела, этапы, отводы, апелляция, реестр решений, адвокаты, надзор ─────────────
+const CASE_STAGE = { filed: "Подано", accepted: "Принято к производству", scheduled: "Назначено", heard: "Рассмотрено", appealed: "Обжаловано", executed: "Исполнено", suspended: "Приостановлено" };
+const ARG_MARK = { "": "без оценки", ok: "обоснован", part: "частично обоснован", no: "необоснован" };
+const MOT_DEC = { wait: "ожидает решения", ok: "удовлетворено", part: "удовлетворено частично", no: "отклонено", later: "отложено" };
+const ADM = { "": "не оценено", ok: "допустимо", no: "недопустимо" };
+const AI_MODES = ["court", "judge", "summary", "check", "vcheck", "motive", "appeal", "questions", "rpcheck", "wcheck", "spar", "citizen"];
+function matClean(m) {
+  m = m && typeof m === "object" ? m : {};
+  const id = (x) => (/^[\w-]{1,16}$/.test(String(x || "")) ? String(x) : Math.random().toString(36).slice(2, 9));
+  return {
+    args: cleanArr(m.args, 60, (x) => (x && clean(x.t, 600) ? { id: id(x.id), side: clean(x.side, 40) || "Сторона", who: clean(x.who, 60), t: clean(x.t, 600), mark: ARG_MARK[x.mark] != null ? x.mark : "", note: clean(x.note, 300) } : null)),
+    persons: cleanArr(m.persons, 40, (x) => (x && clean(x.name, 80) ? { id: id(x.id), role: clean(x.role, 40) || "Участник", name: clean(x.name, 80), info: clean(x.info, 160), present: x.present === true ? true : x.present === false ? false : null, warns: Math.min(9, +x.warns || 0), removed: !!x.removed } : null)),
+    motions: cleanArr(m.motions, 60, (x) => (x && clean(x.t, 600) ? { id: id(x.id), who: clean(x.who, 60), t: clean(x.t, 600), dec: MOT_DEC[x.dec] ? x.dec : "wait", why: clean(x.why, 400), at: +x.at || Date.now() } : null)),
+  };
+}
+async function caseLog(id, text, by) {
+  try { await db()`update court_cases set log = (coalesce(log, '[]'::jsonb) || ${db().json([{ at: Date.now(), t: clean(text, 200), by: by || "" }])}) where id = ${id}`; } catch (e) { console.error("case log", e); }
+}
+// жребий: только судьи нужного уровня на смене, без заявленных отводов; из них — наименее загруженные
+async function drawJudge(p, r0, srv, exclude) {
+  const sql = db();
+  const lvl = r0.level === "appeal" ? ["appeal", "supreme"] : r0.level === "cassation" ? ["supreme"] : JUDGE_SEAT;
+  let L = await sql`select login, nick, judge_pos from profiles where server = ${srv} and judge_pos = any(${lvl}) and not banned and approval = 'ok'
+                    and last_seen > now() - interval '20 minutes' order by lower(nick) limit 40`;
+  L = L.filter((x) => !(exclude || []).includes(x.login));
+  if (!L.length) return { err: "Сейчас на смене нет подходящих судей (" + (r0.level === "cassation" ? "верховных" : r0.level === "appeal" ? "апелляционных и верховных" : "окружных, апелляционных, верховных") + "), не заявленных к отводу." };
+  const loads = await sql`select judge_login, count(*)::int n from court_cases where server = ${srv} and status = 'open' and judge_login = any(${L.map((x) => x.login)}) group by judge_login`;
+  const LD = Object.fromEntries(loads.map((x) => [x.judge_login, x.n]));
+  const min = Math.min(...L.map((x) => LD[x.login] || 0));
+  const pool = L.filter((x) => (LD[x.login] || 0) === min);
+  const rnd = new Uint32Array(1);
+  crypto.getRandomValues(rnd);
+  const pick = pool[rnd[0] % pool.length];
+  const cands = L.map((x) => (x.nick || x.login) + " · " + JUDGE_POS[x.judge_pos] + " · дел в работе: " + (LD[x.login] || 0));
+  const draw = { at: new Date().toISOString(), by: p.nick || p.login, cands, pick: L.indexOf(pick), judge: pick.nick || pick.login, prev: r0.draw ? r0.judge : "", pool: pool.length, rule: "среди наименее загруженных" };
+  const [r] = await sql`update court_cases set judge = ${pick.nick || pick.login}, judge_login = ${pick.login}, draw = ${sql.json(draw)}, updated_at = now() where id = ${r0.id} returning *`;
+  await caseLog(r.id, "Жребий: судья " + draw.judge + " (кандидатов " + L.length + ")", p.nick || p.login);
+  await audit(p.login, "court_draw", pick.login, { id: String(r.id), n: L.length });
+  try {
+    const [u] = await sql`select id from profiles where login = ${pick.login}`;
+    if (u) await sql`insert into broadcasts (user_id, title, author, text, expires_at) values (${u.id}, ${"⚖ Вам распределено дело"}, ${"Жребий"},
+              ${`Дело №${String(r.no).padStart(4, "0")} «${r.title}» — жребий выбрал вас среди ${L.length} судей на смене.`}, now() + interval '3 days')`;
+  } catch (e) {}
+  return { r };
+}
+const courtHook = (srv, title, text) => postHook(GOV_ORG, srv, "court", title, text, 0x7b1e2b).catch(() => false);
+const initials = (s) => String(s || "").split(/\s+/).filter(Boolean).map((w) => w[0].toUpperCase() + ".").join(" ");
+function decOut(r) {
+  return { id: String(r.id), no: r.no ? String(r.no).padStart(4, "0") : "", title: r.title, caseNo: r.case_no, caseId: r.case_id ? String(r.case_id) : "", dt: r.dt, arts: r.arts, tags: r.tags, text: r.text,
+    author: r.author, panel: r.panel || "", person: r.person || "", verdict: r.verdict || "", term: r.term || 0, fine: r.fine || 0, probUntil: r.probation_until, appealUntil: r.appeal_until,
+    exec: r.exec_status || "pending", execAt: r.exec_at, amnesty: r.amnesty || "", outcome: r.outcome || "", pub: !!r.public, anon: r.anon !== false };
+}
+async function court2(p, b, op, srv, me) {
+  const sql = db();
+  const canJ = isJudge(p) || govLead(p) || !!p.pvs;
+  // ── материалы дела: доводы сторон, лица, ходатайства — с оценкой и решением судьи ──
+  if (op === "case_mat") {
+    const [r0] = await sql`select * from court_cases where id = ${parseInt(b.id, 10) || 0} and server = ${srv}`;
+    if (!r0) return fail("Дело не найдено.");
+    const mat = matClean(b.mat), old = matClean(r0.mat);
+    // оценки и решения ставит только судья/руководство; стороны могут добавлять свои доводы и ходатайства
+    if (!canJ && !(r0.author_id === p.id)) {
+      const O = Object.fromEntries(old.args.concat(old.motions).map((x) => [x.id, x]));
+      for (const x of mat.args) if (O[x.id]) { x.mark = O[x.id].mark; x.note = O[x.id].note; } else { x.mark = ""; x.note = ""; }
+      for (const x of mat.motions) if (O[x.id]) { x.dec = O[x.id].dec; x.why = O[x.id].why; } else { x.dec = "wait"; x.why = ""; }
+    }
+    for (const x of mat.motions) { const o = old.motions.find((y) => y.id === x.id); if (o && o.dec !== x.dec && x.dec !== "wait") await caseLog(r0.id, `Ходатайство (${x.who || "сторона"}): ${MOT_DEC[x.dec]}`, p.nick || p.login); }
+    const [r] = await sql`update court_cases set mat = ${sql.json(mat)}, updated_at = now() where id = ${r0.id} returning *`;
+    return { ok: true, ...me, item: caseOut(r, p), canEdit: true };
+  }
+  if (op === "case_note") {
+    const side = b.side === "def" ? "def" : "pros";
+    const role = p.game_role || "off";
+    if (!(canJ || (side === "pros" && role === "pros") || (side === "def" && role === "adv"))) return fail("Эти заметки ведёт своя сторона (" + (side === "pros" ? "обвинение" : "защита") + ").");
+    const [r0] = await sql`select * from court_cases where id = ${parseInt(b.id, 10) || 0} and server = ${srv}`;
+    if (!r0) return fail("Дело не найдено.");
+    const ns = { ...(r0.notes_side || {}), [side]: String(b.text == null ? "" : b.text).slice(0, 4000) };
+    const [r] = await sql`update court_cases set notes_side = ${sql.json(ns)} where id = ${r0.id} returning *`;
+    return { ok: true, ...me, item: caseOut(r, p) };
+  }
+  if (op === "case_related") {
+    const [r0] = await sql`select * from court_cases where id = ${parseInt(b.id, 10) || 0} and server = ${srv}`;
+    if (!r0) return fail("Дело не найдено.");
+    const names = (r0.parties || []).filter((x) => !/обвинение|защита|прокурор|адвокат|представ/i.test(x.role)).map((x) => String(x.name || "").toLowerCase()).filter((x) => x.length > 3);
+    const arts = String(r0.arts || "").match(/\d+(?:\.\d+)*/g) || [];
+    const rows = await sql`select * from court_cases where server = ${srv} and id <> ${r0.id} order by created_at desc limit 400`;
+    const out = [];
+    for (const r of rows) {
+      const why = [];
+      const pn = (r.parties || []).map((x) => String(x.name || "").toLowerCase());
+      const same = names.filter((n) => pn.includes(n));
+      if (same.length) why.push("тот же участник: " + same.join(", "));
+      const ra = String(r.arts || "").match(/\d+(?:\.\d+)*/g) || [];
+      const sa = arts.filter((a) => ra.includes(a));
+      if (sa.length) why.push("та же статья: " + sa.join(", "));
+      if (why.length) out.push({ id: String(r.id), no: String(r.no).padStart(4, "0"), title: r.title, status: r.status, why: why.join("; "), repeat: same.length > 0 });
+      if (out.length >= 20) break;
+    }
+    const hist = names.length ? await sql`select * from court_decisions where server = ${srv} and verdict = 'guilty' and lower(person) = any(${names}) order by dt desc limit 20` : [];
+    return { ok: true, list: out, decisions: hist.map(decOut) };
+  }
+  if (op === "case_merge") {
+    if (!canJ) return fail("Объединяет дела судья или руководство.");
+    const [a] = await sql`select * from court_cases where id = ${parseInt(b.id, 10) || 0} and server = ${srv}`;
+    const [t] = await sql`select * from court_cases where server = ${srv} and (id = ${parseInt(b.into, 10) || 0} or no = ${parseInt(b.intoNo, 10) || 0}) and id <> ${a ? a.id : 0} limit 1`;
+    if (!a || !t) return fail("Не найдено одно из дел.");
+    const mA = matClean(a.mat), mT = matClean(t.mat);
+    const mat = matClean({ args: mT.args.concat(mA.args), persons: mT.persons.concat(mA.persons.filter((x) => !mT.persons.some((y) => y.name === x.name))), motions: mT.motions.concat(mA.motions) });
+    const parties = (t.parties || []).concat((a.parties || []).filter((x) => !(t.parties || []).some((y) => y.name === x.name))).slice(0, 12);
+    const arts = [t.arts, a.arts].filter(Boolean).join(", ").slice(0, 300);
+    const [r] = await sql`update court_cases set parties = ${sql.json(parties)}, arts = ${arts}, evidence = ${sql.json((t.evidence || []).concat(a.evidence || []).slice(0, 30))},
+                          hearings = ${sql.json((t.hearings || []).concat(a.hearings || []).slice(0, 20))}, mat = ${sql.json(mat)}, updated_at = now() where id = ${t.id} returning *`;
+    await sql`update court_cases set status = 'closed', merged_into = ${t.id}, closed_at = now(), updated_at = now() where id = ${a.id}`;
+    await caseLog(t.id, `Присоединено дело №${String(a.no).padStart(4, "0")}`, p.nick || p.login);
+    await caseLog(a.id, `Объединено с делом №${String(t.no).padStart(4, "0")}`, p.nick || p.login);
+    return { ok: true, ...me, item: caseOut(r, p), canEdit: true };
+  }
+  // ── отвод судьи (10) ──
+  if (op === "recuse") {
+    const [r0] = await sql`select * from court_cases where id = ${parseInt(b.id, 10) || 0} and server = ${srv}`;
+    if (!r0 || !r0.judge_login) return fail("У дела нет назначенного судьи.");
+    const reason = clean(b.reason, 400);
+    if (reason.length < 10) return fail("Опишите основание отвода (не короче 10 знаков).");
+    const L = Array.isArray(r0.recusals) ? r0.recusals : [];
+    L.push({ at: Date.now(), by: p.nick || p.login, judge: r0.judge, login: r0.judge_login, reason, status: "wait" });
+    const [r] = await sql`update court_cases set recusals = ${sql.json(L)} where id = ${r0.id} returning *`;
+    await caseLog(r0.id, `Заявлен отвод судье ${r0.judge}`, p.nick || p.login);
+    return { ok: true, ...me, item: caseOut(r, p) };
+  }
+  if (op === "recuse_decide") {
+    if (!(govLead(p) || p.pvs)) return fail("Отвод рассматривает руководство Government или Председатель Верховного суда.");
+    const [r0] = await sql`select * from court_cases where id = ${parseInt(b.id, 10) || 0} and server = ${srv}`;
+    if (!r0) return fail("Дело не найдено.");
+    const L = Array.isArray(r0.recusals) ? r0.recusals : [], x = L[+b.idx];
+    if (!x || x.status !== "wait") return fail("Отвод не найден или уже рассмотрен.");
+    x.status = b.ok ? "ok" : "no"; x.dby = p.nick || p.login;
+    await sql`update court_cases set recusals = ${sql.json(L)} where id = ${r0.id}`;
+    await caseLog(r0.id, `Отвод судье ${x.judge}: ${b.ok ? "удовлетворён" : "отклонён"}`, p.nick || p.login);
+    if (b.ok) {
+      const ex = L.filter((y) => y.status === "ok").map((y) => y.login);
+      const d = await drawJudge(p, { ...r0, recusals: L }, srv, ex);
+      if (d.err) { await sql`update court_cases set judge = '', judge_login = '' where id = ${r0.id}`; return fail("Отвод удовлетворён, но новый жребий не провести: " + d.err); }
+      return { ok: true, ...me, item: caseOut(d.r, p), canEdit: true, redraw: true };
+    }
+    const [r] = await sql`select * from court_cases where id = ${r0.id}`;
+    return { ok: true, ...me, item: caseOut(r, p), canEdit: true };
+  }
+  // ── апелляция и кассация (29, 32) ──
+  if (op === "case_appeal") {
+    const [r0] = await sql`select * from court_cases where id = ${parseInt(b.id, 10) || 0} and server = ${srv}`;
+    if (!r0) return fail("Дело не найдено.");
+    const level = b.level === "cassation" ? "cassation" : "appeal";
+    const title = (level === "appeal" ? "Апелляция" : "Кассация") + " по делу №" + String(r0.no).padStart(4, "0") + " · " + r0.title;
+    const parties = (r0.parties || []).concat([{ role: "Заявитель", name: clean(b.by, 80) || p.nick || p.login, note: level === "appeal" ? "апелляционная жалоба" : "кассационная жалоба" }]).slice(0, 12);
+    const [r] = await sql`insert into court_cases (server, no, title, kind, status, stage, parties, arts, evidence, notes, author_id, author, author_login, appeal_of, level)
+                          values (${srv}, (select coalesce(max(no), 0) + 1 from court_cases where server = ${srv}), ${title.slice(0, 120)}, ${r0.kind}, 'open', 'filed', ${sql.json(parties)}, ${r0.arts},
+                                  ${sql.json(r0.evidence || [])}, ${clean(b.reason, 2000)}, ${p.id}, ${p.nick || p.login}, ${p.login}, ${r0.id}, ${level}) returning *`;
+    await sql`update court_cases set stage = 'appealed', updated_at = now() where id = ${r0.id}`;
+    await caseLog(r0.id, (level === "appeal" ? "Подана апелляция" : "Подана кассация") + ": дело №" + String(r.no).padStart(4, "0"), p.nick || p.login);
+    await caseLog(r.id, "Создано по жалобе на дело №" + String(r0.no).padStart(4, "0"), p.nick || p.login);
+    courtHook(srv, "📨 " + (level === "appeal" ? "Апелляция" : "Кассация"), `Дело №${String(r.no).padStart(4, "0")}: ${r.title}`);
+    return { ok: true, ...me, item: caseOut(r, p), canEdit: true };
+  }
+  // ── реестр решений: исполнение, испытательный срок, амнистия, итог обжалования, публикация ──
+  if (["dec_exec", "dec_amnesty", "dec_outcome", "dec_public"].includes(op)) {
+    if (!canJ) return fail("Это меняет судья или руководство.");
+    const id = parseInt(b.id, 10) || 0;
+    let r;
+    if (op === "dec_exec") [r] = await sql`update court_decisions set exec_status = ${b.done ? "done" : "pending"}, exec_at = ${b.done ? new Date() : null} where id = ${id} and server = ${srv} returning *`;
+    if (op === "dec_amnesty") { if (!(govLead(p) || p.pvs)) return fail("Амнистию отмечает руководство Government или ПВС."); [r] = await sql`update court_decisions set amnesty = ${clean(b.text, 300)} where id = ${id} and server = ${srv} returning *`; }
+    if (op === "dec_outcome") [r] = await sql`update court_decisions set outcome = ${["", "upheld", "changed", "overturned"].includes(b.outcome) ? b.outcome : ""} where id = ${id} and server = ${srv} returning *`;
+    if (op === "dec_public") [r] = await sql`update court_decisions set public = ${!!b.on}, anon = ${b.anon !== false} where id = ${id} and server = ${srv} returning *`;
+    if (!r) return fail("Решение не найдено.");
+    if (op === "dec_exec" && r.case_id && b.done) { await sql`update court_cases set stage = 'executed' where id = ${r.case_id}`; await caseLog(r.case_id, "Решение исполнено", p.nick || p.login); }
+    return { ok: true, item: decOut(r) };
+  }
+  if (op === "person_hist") {
+    const n = clean(b.name, 80).toLowerCase();
+    if (n.length < 3) return { ok: true, list: [] };
+    const rows = await sql`select * from court_decisions where server = ${srv} and lower(person) = ${n} order by dt desc limit 30`;
+    return { ok: true, list: rows.map(decOut) };
+  }
+  if (op === "dec_due") {
+    const rows = await sql`select * from court_decisions where server = ${srv} and (exec_status = 'pending' and verdict = 'guilty' or probation_until > now() or appeal_until > now()) order by dt desc limit 100`;
+    return { ok: true, list: rows.map(decOut) };
+  }
+  if (op === "pub_set") {
+    if (!govLead(p)) return fail("Публичный реестр включает руководство Government.");
+    await setSetting(`court_pub:${srv}`, { on: !!b.on, by: p.login, at: Date.now() });
+    return { ok: true, on: !!b.on };
+  }
+  if (op === "pub_get") return { ok: true, on: !!(await getSetting(`court_pub:${srv}`, { on: false })).on };
+  // ── ордера: номер, проверка по номеру, использование ──
+  if (op === "war_use") {
+    const [r] = await sql`update warrants set uses = coalesce(uses, '[]'::jsonb) || ${sql.json([{ at: Date.now(), by: p.nick || p.login, t: clean(b.note, 200) }])}
+                          where id = ${parseInt(b.id, 10) || 0} and server = ${srv} and status = 'ok' returning *`;
+    return r ? { ok: true, item: warOut(r) } : fail("Ордер не найден или не действует.");
+  }
+  // ── 45, 47: статистика судей и отчёт за месяц ──
+  if (op === "judge_stats") {
+    if (!(govLead(p) || p.pvs)) return fail("Статистику судей видят Председатель Верховного суда и руководство.");
+    const js = await sql`select login, nick, judge_pos, judge_exam from profiles where server = ${srv} and judge_pos = any(${JUDGE_SEAT}) and not banned order by lower(nick)`;
+    const cs = await sql`select id, judge_login, panel, status, created_at, closed_at, appeal_of from court_cases where server = ${srv}`;
+    const decs = await sql`select case_id, outcome from court_decisions where server = ${srv} and case_id is not null`;
+    const DO = {}; for (const d of decs) DO[d.case_id] = d.outcome;
+    const byId = Object.fromEntries(cs.map((c) => [c.id, c]));
+    return { ok: true, list: js.map((j) => {
+      const mine = cs.filter((c) => c.judge_login === j.login || (c.panel || []).some((x) => x.nick === j.nick && x.role !== "secretary"));
+      const closed = mine.filter((c) => c.status === "closed" && c.closed_at);
+      const avg = closed.length ? closed.reduce((s, c) => s + (tsOf(c.closed_at) - tsOf(c.created_at)), 0) / closed.length / 864e5 : null;
+      const appealed = cs.filter((c) => c.appeal_of && byId[c.appeal_of] && mine.includes(byId[c.appeal_of]));
+      const over = appealed.filter((c) => ["overturned", "changed"].includes(DO[c.id] || "")).length;
+      return { nick: j.nick, pos: JUDGE_POS[j.judge_pos], open: mine.filter((c) => c.status === "open").length, closed: closed.length, avgDays: avg == null ? null : Math.round(avg * 10) / 10,
+        appealed: appealed.length, overturned: over, exam: j.judge_exam || null };
+    }) };
+  }
+  if (op === "court_month") {
+    const m = /^\d{4}-\d{2}$/.test(String(b.month || "")) ? String(b.month) : mskDay(new Date()).slice(0, 7);
+    const a = new Date(Date.parse(m + "-01T00:00:00+03:00")), z = new Date(Date.parse(addMonthStr(m) + "-01T00:00:00+03:00"));
+    const [c] = await sql`select count(*) filter (where created_at >= ${a} and created_at < ${z})::int opened, count(*) filter (where closed_at >= ${a} and closed_at < ${z})::int closed,
+                                 count(*) filter (where level <> '' and created_at >= ${a} and created_at < ${z})::int appeals from court_cases where server = ${srv}`;
+    const [w] = await sql`select count(*) filter (where status = 'ok')::int issued, count(*) filter (where status = 'no')::int denied from warrants where server = ${srv} and created_at >= ${a} and created_at < ${z}`;
+    const [d] = await sql`select count(*) filter (where verdict = 'guilty')::int guilty, count(*) filter (where verdict = 'acquit')::int acquit, count(*)::int total from court_decisions where server = ${srv} and dt >= ${m + "-01"} and dt < ${addMonthStr(m) + "-01"}`;
+    const top = await sql`select author, count(*)::int n from court_decisions where server = ${srv} and dt >= ${m + "-01"} and dt < ${addMonthStr(m) + "-01"} group by author order by n desc limit 3`;
+    return { ok: true, month: m, server: srvName(srv), cases: c, warrants: w, decisions: d, top };
+  }
+  // ── 43: экзамен на судью ──
+  if (op === "exam_save") {
+    const score = Math.max(0, Math.min(100, parseInt(b.score, 10) || 0));
+    await sql`update profiles set judge_exam = ${sql.json({ score, total: parseInt(b.total, 10) || 0, at: Date.now() })} where id = ${p.id}`;
+    return { ok: true, score };
+  }
+  // ── 33, 34: адвокаты — реестр, дежурный, вызов из задержания ──
+  if (op === "adv_set") {
+    if (p.org !== GOV_ORG) return fail("В реестр адвокатов вносятся сотрудники Government.");
+    await sql`update profiles set adv_on = ${!!b.on}, adv_spec = ${clean(b.spec, 120)}, adv_busy = ${!!b.busy}, adv_lic = ${clean(b.lic, 40)} where id = ${p.id}`;
+    return { ok: true };
+  }
+  // ── 37, 39: прокурорский надзор за рапортами ──
+  if (op === "rp_list") {
+    if (!isGov(p)) return fail("Надзор ведёт прокуратура (Government).");
+    const days = Math.min(30, Math.max(1, parseInt(b.days, 10) || 7));
+    const rows = await sql`select id, org_no, org, author, login, kind, title, body, fields, status, created_at, pros_mark, pros_note, pros_by from reports
+                           where coalesce(server, ${DEFAULT_SERVER}) = ${srv} and created_at > now() - make_interval(days => ${days}) and (${b.org || ""} = '' or org = ${b.org || ""})
+                             and (${b.mark || ""} = '' or pros_mark = ${b.mark === "none" ? "" : b.mark || ""}) order by created_at desc limit 150`;
+    return { ok: true, list: rows.map((r) => ({ id: String(r.id), no: r.org_no ? String(r.org_no).padStart(4, "0") : String(r.id), org: r.org, author: r.author, kind: r.kind, title: r.title, body: r.body, fields: r.fields || {},
+      status: r.status, created: r.created_at, mark: r.pros_mark || "", note: r.pros_note || "", by: r.pros_by || "" })) };
+  }
+  if (op === "rp_mark") {
+    if (!isGov(p)) return fail("Надзор ведёт прокуратура (Government).");
+    const mark = ["", "ok", "viol"].includes(b.mark) ? b.mark : "";
+    const [r] = await sql`update reports set pros_mark = ${mark}, pros_note = ${clean(b.note, 600)}, pros_by = ${mark ? p.nick || p.login : ""} where id = ${parseInt(b.id, 10) || 0} and coalesce(server, ${DEFAULT_SERVER}) = ${srv} returning user_id, title, org`;
+    if (!r) return fail("Рапорт не найден.");
+    if (mark === "viol" && r.user_id) await sql`insert into broadcasts (user_id, title, author, text, expires_at) values (${r.user_id}, ${"⚖ Прокурорская проверка"}, ${p.nick || p.login},
+              ${`В рапорте «${r.title}» прокуратура нашла нарушения: ${clean(b.note, 600) || "см. рапорт"}.`}, now() + interval '7 days')`;
+    return { ok: true };
+  }
+  return null;
+}
+const addMonthStr = (m) => { const y = +m.slice(0, 4), mo = +m.slice(5, 7); return mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, "0")}`; };
+// адвокаты и вызов — доступны всем сотрудникам сервера (полиция зовёт адвоката к задержанному)
+async function advApi(p, b, op, srv) {
+  const sql = db();
+  if (op === "adv_list") {
+    const rows = await sql`select id, nick, static_id, adv_spec, adv_busy, adv_lic, adv_last, last_seen from profiles where server = ${srv} and adv_on and not banned and approval = 'ok' order by adv_busy, adv_last nulls first, lower(nick) limit 100`;
+    const calls = await sql`select * from adv_calls where server = ${srv} and created_at > now() - interval '12 hours' order by created_at desc limit 40`;
+    const free = rows.filter((r) => !r.adv_busy && r.last_seen && Date.now() - tsOf(r.last_seen) < 20 * 60e3);
+    return { ok: true, duty: free[0] ? free[0].nick : "", me: { on: !!p.adv_on, spec: p.adv_spec || "", busy: !!p.adv_busy, lic: p.adv_lic || "" }, canBe: p.org === GOV_ORG,
+      list: rows.map((r) => ({ nick: r.nick, static: r.static_id || "", spec: r.adv_spec || "", busy: !!r.adv_busy, lic: r.adv_lic || "", online: !!r.last_seen && Date.now() - tsOf(r.last_seen) < 20 * 60e3, me: r.id === p.id })),
+      calls: calls.map((c) => ({ id: String(c.id), caller: c.caller, suspect: c.suspect, place: c.place, note: c.note, status: c.status, taker: c.taker, created: c.created_at, mine: c.caller_id === p.id, took: c.taker_id === p.id })) };
+  }
+  if (op === "adv_call") {
+    if (!(await hit(`advc:${p.id}`, 10, 3600))) return fail(RATE_MSG, { code: "rate" });
+    const suspect = clean(b.suspect, 80);
+    if (!suspect) return fail("Укажите, кому нужен адвокат.");
+    const [c] = await sql`insert into adv_calls (server, caller_id, caller, suspect, place, note) values (${srv}, ${p.id}, ${(p.nick || p.login) + (p.org ? " (" + p.org + ")" : "")}, ${suspect}, ${clean(b.place, 120)}, ${clean(b.note, 300)}) returning *`;
+    const L = await sql`select id from profiles where server = ${srv} and adv_on and not adv_busy and not banned and last_seen > now() - interval '20 minutes' order by adv_last nulls first limit 10`;
+    for (const a of L) await sql`insert into broadcasts (user_id, title, author, text, expires_at) values (${a.id}, ${"🛡 Нужен адвокат"}, ${p.nick || p.login},
+              ${`${suspect}${b.place ? " · " + clean(b.place, 120) : ""}. Принять вызов — «Суд» → «Адвокаты».`}, now() + interval '6 hours')`;
+    return { ok: true, sent: L.length, id: String(c.id) };
+  }
+  if (op === "adv_take") {
+    if (!p.adv_on) return fail("Сначала включите себя в реестр адвокатов.");
+    const [c] = await sql`update adv_calls set status = 'taken', taker_id = ${p.id}, taker = ${p.nick || p.login}, taken_at = now() where id = ${parseInt(b.id, 10) || 0} and server = ${srv} and status = 'open' returning *`;
+    if (!c) return fail("Вызов уже принят другим адвокатом или закрыт.");
+    await sql`update profiles set adv_last = now(), adv_busy = true where id = ${p.id}`;
+    if (c.caller_id) await sql`insert into broadcasts (user_id, title, author, text, expires_at) values (${c.caller_id}, ${"🛡 Адвокат едет"}, ${p.nick || p.login},
+              ${`Вызов для ${c.suspect} принял адвокат ${p.nick || p.login}.`}, now() + interval '6 hours')`;
+    return { ok: true };
+  }
+  if (op === "adv_close") {
+    await sql`update adv_calls set status = 'closed' where id = ${parseInt(b.id, 10) || 0} and server = ${srv} and (caller_id = ${p.id} or taker_id = ${p.id})`;
+    if (b.free) await sql`update profiles set adv_busy = false where id = ${p.id}`;
+    return { ok: true };
+  }
+  if (op === "war_check") {
+    const no = parseInt(String(b.no || "").replace(/\D/g, ""), 10) || 0;
+    const [r] = await sql`select * from warrants where server = ${srv} and no = ${no}`;
+    if (!r) return fail("Ордер с таким номером не найден на этом сервере.");
+    return { ok: true, item: warOut(r) };
+  }
+  return null;
+}
+// публичный реестр решений и консультант для граждан на сайте (48, 50)
+async function pubCourt(b, ip) {
+  if (!(await hit(`pc:${ip}`, 60, 3600))) return fail(RATE_MSG, { code: "rate" });
+  const srv = parseServer(b.server) || DEFAULT_SERVER;
+  if (!(await getSetting(`court_pub:${srv}`, { on: false })).on) return { ok: true, off: true, list: [] };
+  const q = clean(b.q, 80).toLowerCase().replace(/ё/g, "е");
+  const rows = await sql_pub(srv, q);
+  return { ok: true, list: rows.map((r) => {
+    const d = decOut(r);
+    if (d.anon && d.person) { const re = new RegExp(d.person.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"); d.title = d.title.replace(re, initials(d.person)); d.text = d.text.replace(re, initials(d.person)); d.person = initials(d.person); }
+    return { no: d.no, title: d.title, caseNo: d.caseNo, dt: d.dt, arts: d.arts, tags: d.tags, text: d.text, panel: d.panel, verdict: d.verdict, outcome: d.outcome };
+  }) };
+}
+async function sql_pub(srv, q) {
+  return await db()`select * from court_decisions where server = ${srv} and public and (${q} = '' or replace(lower(title || ' ' || arts || ' ' || tags || ' ' || text), 'ё', 'е') like ${"%" + q + "%"}) order by dt desc limit 60`;
+}
+async function pubCourtAi(b, ip) {
+  if ((await flagsNow()).courtai === "off") return fail("Консультант временно выключен.");
+  if (!AI_KEY) return fail("Консультант ещё не подключён.");
+  if (!(await hit(`pca:${ip}`, 5, 86400))) return fail("Лимит консультаций на сегодня исчерпан (5 вопросов в день). Задайте вопрос в программе после входа.", { limit: true });
+  const q = String(b.q == null ? "" : b.q).replace(/\s+/g, " ").trim().slice(0, 800);
+  if (q.length < 10) return fail("Опишите ситуацию подробнее.");
+  const cid = (await sha256("pub:" + ip)).slice(0, 32), ts = String(Date.now());
+  try {
+    const r = await fetch(AI_URL + "/ask", { method: "POST", headers: { "content-type": "application/json", "x-senko-cid": cid, "x-senko-ts": ts, "x-senko-sig": await hmacHex(AI_KEY, cid + "." + ts) },
+      body: JSON.stringify({ q, ctx: [], hist: [], srv: parseServer(b.server) || DEFAULT_SERVER, mode: "citizen" }), signal: AbortSignal.timeout(35000) });
+    const j = await r.json().catch(() => null);
+    if (!j || !j.ok) return fail((j && j.error) || "Консультант не ответил.");
+    return { ok: true, answer: j.answer };
+  } catch (e) {
+    return fail("Не удалось связаться с консультантом.");
+  }
+}
+
 // ── 4.3.1: совместное заседание — как экипаж у задержаний: ссылка-приглашение, роли, общий пульт и протокол ──
 const SES_ROLE = { presiding: "Председательствующий", rapporteur: "Судья-докладчик", member: "Судья коллегии", secretary: "Секретарь судебного заседания",
   pros: "Государственный обвинитель", def: "Защитник", plaintiff: "Истец / представитель", defendant: "Подсудимый / ответчик", witness: "Свидетель", part: "Участник" };
@@ -7345,7 +7753,7 @@ function sesPult(x) {
   x = x && typeof x === "object" ? x : {};
   return { start: +x.start || 0, acc: +x.acc || 0, run: !!x.run, lim: Math.min(1800, Math.max(15, +x.lim || 120)), cur: x.cur ? clean(x.cur, 80) : null, curAt: +x.curAt || 0,
     q: (Array.isArray(x.q) ? x.q : []).slice(0, 30).map((s) => clean(s, 80)).filter(Boolean), chk: x.chk && typeof x.chk === "object" ? Object.fromEntries(Object.entries(x.chk).slice(0, 40).map(([k, v]) => [String(k).slice(0, 3), !!v])) : {},
-    list: (Array.isArray(x.list) ? x.list : []).slice(0, 30).map((s) => clean(s, 120)).filter(Boolean) };
+    list: (Array.isArray(x.list) ? x.list : []).slice(0, 30).map((s) => clean(s, 120)).filter(Boolean), recess: Math.max(0, +x.recess || 0) };
 }
 async function sesApi(p, b, op, srv) {
   const sql = db();
@@ -7364,7 +7772,9 @@ async function sesApi(p, b, op, srv) {
       myRole: meM ? meM.role : "", canRun: !!meM && ["presiding", "secretary"].includes(meM.role), canRole: !!meM && meM.role === "presiding",
       members: mem.map((m) => ({ id: m.user_id, nick: m.nick, org: m.org, static: m.static_id || "", role: m.role, roleName: SES_ROLE[m.role] || m.role, judgeName: JUDGE_POS[m.judge_pos] || "",
         me: m.user_id === p.id, online: Date.now() - new Date(m.seen_at).getTime() < 60e3, sig: m.sig || "", gov: m.org === GOV_ORG })),
-      pult: sesPult(st.pult), proto: Array.isArray(st.proto) ? st.proto : [], ver: +st.ver || 0, roles: SES_ROLE, panel: SES_PANEL } };
+      pult: sesPult(st.pult), proto: Array.isArray(st.proto) ? st.proto : [], ver: +st.ver || 0, roles: SES_ROLE, panel: SES_PANEL,
+      warns: st.warns || {}, vote: st.vote ? (() => { const v = st.vote, vs = Object.values(v.votes || {}), cnt = { for: vs.filter((x) => x === "for").length, against: vs.filter((x) => x === "against").length, abstain: vs.filter((x) => x === "abstain").length };
+        return { q: v.q, open: !!v.open, n: vs.length, total: mem.filter((m) => SES_PANEL.includes(m.role)).length, mine: meM ? (v.votes || {})[meM.user_id] || "" : "", res: v.open ? null : cnt, at: v.at }; })() : null } };
   };
   if (op === "ses_state") { const m = await mine(); return m ? view(m.code) : { ok: true, ses: null, roles: SES_ROLE }; }
   if (op === "ses_peek") {
@@ -7466,6 +7876,57 @@ async function sesApi(p, b, op, srv) {
       if (b.clear) L.length = 0;
       st.proto = L;
     });
+    return view(m.code);
+  }
+  // 13: тайное голосование коллегии — видно только, сколько проголосовало; итог — после закрытия голосования
+  if (op === "ses_vote_start" || op === "ses_vote_end") {
+    if (role !== "presiding") return fail("Голосование открывает и закрывает председательствующий.");
+    if (op === "ses_vote_start") { const q = clean(b.q, 200); if (q.length < 3) return fail("Сформулируйте вопрос для голосования."); await bump((st) => { st.vote = { q, open: true, votes: {}, at: Date.now() }; }); }
+    else await bump((st) => {
+      if (!st.vote) return;
+      st.vote.open = false;
+      const vs = Object.values(st.vote.votes || {});
+      const L = Array.isArray(st.proto) ? st.proto : [];
+      L.push({ id: Date.now().toString(36), at: Date.now(), k: "decision", t: `Голосование коллегии «${st.vote.q}»: за — ${vs.filter((x) => x === "for").length}, против — ${vs.filter((x) => x === "against").length}, воздержались — ${vs.filter((x) => x === "abstain").length}`, by: p.nick || p.login });
+      st.proto = L;
+    });
+    return view(m.code);
+  }
+  if (op === "ses_vote") {
+    if (!SES_PANEL.includes(role)) return fail("Голосуют судьи коллегии.");
+    const v = ["for", "against", "abstain"].includes(b.v) ? b.v : "";
+    await bump((st) => { if (st.vote && st.vote.open && v) { st.vote.votes = st.vote.votes || {}; st.vote.votes[p.id] = v; } });
+    return view(m.code);
+  }
+  // 14: ходатайство от участника — попадает в материалы дела и протокол, решение принимает суд
+  if (op === "ses_motion") {
+    const t = clean(b.t, 600);
+    if (t.length < 5) return fail("Опишите ходатайство.");
+    const [s] = await sql`select case_id from court_sessions where code = ${m.code}`;
+    const who = (p.nick || p.login) + " (" + (SES_ROLE[role] || "участник").toLowerCase() + ")";
+    if (s && s.case_id) {
+      const [c] = await sql`select mat from court_cases where id = ${s.case_id}`;
+      const mat = matClean(c && c.mat);
+      mat.motions.push({ id: Math.random().toString(36).slice(2, 9), who, t, dec: "wait", why: "", at: Date.now() });
+      await sql`update court_cases set mat = ${sql.json(matClean(mat))}, updated_at = now() where id = ${s.case_id}`;
+    }
+    await bump((st) => { const L = Array.isArray(st.proto) ? st.proto : []; L.push({ id: Date.now().toString(36) + "m", at: Date.now(), k: "motion", t: who + ": " + t, by: p.nick || p.login }); st.proto = L; });
+    return view(m.code);
+  }
+  // 20: замечание и удаление из зала
+  if (op === "ses_warn") {
+    if (role !== "presiding") return fail("Порядок в зале поддерживает председательствующий.");
+    const [u] = await sql`select m.user_id, pr.nick from court_session_members m join profiles pr on pr.id = m.user_id where m.code = ${m.code} and m.user_id = ${b.id}`;
+    if (!u) return fail("Участник не найден.");
+    const rm = b.kind === "remove";
+    await bump((st) => {
+      st.warns = st.warns || {};
+      st.warns[u.user_id] = rm ? 99 : (st.warns[u.user_id] || 0) + 1;
+      const L = Array.isArray(st.proto) ? st.proto : [];
+      L.push({ id: Date.now().toString(36) + "w", at: Date.now(), k: "note", t: rm ? `${u.nick} удалён из зала судебного заседания` : `${u.nick}: замечание за нарушение порядка (${st.warns[u.user_id]}-е)`, by: p.nick || p.login });
+      st.proto = L;
+    });
+    if (rm) await sql`update court_session_members set role = 'part' where code = ${m.code} and user_id = ${u.user_id}`;
     return view(m.code);
   }
   if (op === "ses_close") {
@@ -7936,7 +8397,7 @@ async function aiAsk(b) {
         "content-type": "application/json", "x-senko-cid": cid, "x-senko-ts": ts, "x-senko-sig": await hmacHex(AI_KEY, cid + "." + ts),
         ...(bonus > 0 ? { "x-senko-bsig": await hmacHex(AI_KEY, cid + "." + ts + ".b") } : {}),
       },
-      body: JSON.stringify({ short: !!b.short, clar: clar && !b.mode, q, ctx, hist, srv: sv(p), mode: ["court", "judge"].includes(b.mode) ? b.mode : "" }),
+      body: JSON.stringify({ short: !!b.short, clar: clar && !b.mode, q, ctx, hist, srv: sv(p), mode: AI_MODES.includes(b.mode) ? b.mode : "" }),
       signal: AbortSignal.timeout(35000),
     });
     status = r.status;

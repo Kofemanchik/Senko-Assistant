@@ -7132,6 +7132,22 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"4.3.5",d:"07.11.2026",items:[
+  ["📚","Материалы дела с оценкой судьи","«Суд» → «Материалы»: доводы сторон, лица, участвующие в деле, и ходатайства. Стороны добавляют свои, судья ставит оценку доводам (обоснован / частично / необоснован) и решения по ходатайствам с мотивом. Итог одной кнопкой уходит в мотивировку приговора, а в заседании — сразу в протокол."],
+  ["🗣","Речи судьи — свои","«Речи»: открытие, разъяснение прав, явка, перерыв, удаление в совещательную комнату, оглашение, закрытие — с подстановкой номера дела, имён и состава суда. Любую речь можно переписать под себя, она сохранится; можно добавить свои."],
+  ["📄","PDF с гербом","Решения и ордера сохраняются в PDF с гербом судебной власти штата и декоративным QR-узором. Узор ничего не кодирует и никуда не ведёт."],
+  ["📁","Дело: этапы, хронология, связи","Этапы дела (подано → принято → назначено → рассмотрено → обжаловано → исполнено, приостановлено), хронология событий, связанные дела и прошлые приговоры участников, ИИ-сводка и проверка полноты дела."],
+  ["🔒","Заметки сторон и доказательства","Заметки обвинения видят только обвинение и суд, заметки защиты — только защита и суд. Судья отмечает доказательства допустимыми или недопустимыми."],
+  ["⚖","Отводы, апелляция, кассация, объединение","Отвод судье с рассмотрением руководством или ПВС и новым жребием; апелляция и кассация одной кнопкой (жребий только среди судей нужного уровня); объединение дел. Жребий выбирает среди наименее загруженных судей."],
+  ["🎙","Заседание","Тайное голосование коллегии, ходатайства участников прямо из заседания, замечания и удаление из зала, перерыв с обратным отсчётом, режим «Зал суда» на весь экран, диктовка протокола голосом и итог заседания от ИИ."],
+  ["🧾","Приговор и реестр","Проверка приговора перед оглашением (и ИИ-проверка), черновик мотивировки от ИИ, условный срок, срок обжалования, предупреждение о прошлых приговорах. «Огласить и внести в реестр» — решение получает номер и переводит дело в «Рассмотрено»."],
+  ["📋","Реестр решений","Исполнение решений, испытательные сроки и сроки обжалования с отсчётом, амнистия, итог обжалования, фильтр «Требуют внимания». Решения можно публиковать на сайте senko-assistant.site/court/ (с инициалами вместо имени)."],
+  ["📜","Ордера","Номера ордеров и проверка по номеру — её видят и полицейские; отметка об использовании; ИИ-оценка обоснованности запроса; при закрытии дела его ордера отзываются."],
+  ["🛡","Адвокаты","Реестр адвокатов с лицензией и специализацией, дежурный адвокат, вызов адвоката к задержанному — в том числе кнопкой прямо в таймере задержания. Шаблоны «Соглашение на защиту» и «Обвинительное заключение»."],
+  ["🔍","Прокурорский надзор","«Надзор»: рапорты всех ведомств, отметки «проверено» и «есть нарушения» (автору приходит уведомление), ИИ-проверка рапорта и «Завести дело» из рапорта о задержании."],
+  ["🤖","ИИ для суда","Подготовка к допросу, шансы апелляции, спарринг с ИИ в роли противоположной стороны, консультант для граждан — всё бесплатно, в общем лимите. На сайте консультант доступен и без аккаунта."],
+  ["🎓","Экзамен и статистика","Экзамен на судью (результат видит ПВС), статистика судей (дела, средний срок, доля отменённых решений) и отчёт судебной власти за месяц картинкой для Discord. В вебхуках организации — новое событие «Суд»."]
+ ]},
  {v:"4.3.1",d:"07.11.2026",items:[
   ["🤝","Совместное заседание","«Суд» → «Заседание»: председательствующий открывает заседание (можно прямо из карточки дела) и отправляет ссылку судьям коллегии, секретарю и сторонам — как экипаж у задержаний. Открыли ссылку — программа спросит, вступить ли в заседание."],
   ["🎭","Роли участников","Председательствующий назначает роли: судья-докладчик, судья коллегии, секретарь, государственный обвинитель, защитник, истец, подсудимый, свидетель. Роли судей и секретаря — только для сотрудников Government. Председательствующий один, роль можно передать."],
@@ -18158,6 +18174,20 @@ document.addEventListener("change",function(ev){var t=ev.target;if(!t)return;if(
 .c54-row{display:flex;gap:10px;align-items:center;text-align:left;font:inherit;color:inherit;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface);cursor:pointer;width:100%}
 .c54-row:hover{border-color:var(--accent)}
 .c54-ro .c54-bar button,.c54-ro .c54-q button{opacity:.55;cursor:not-allowed}
+.c55-tl{list-style:none;margin:0;padding:0 0 0 14px;border-left:2px solid var(--line)}
+.c55-tl li{position:relative;padding:4px 0 8px 12px;font-size:14px}.c55-tl li::before{content:"";position:absolute;left:-20px;top:9px;width:10px;height:10px;border-radius:50%;background:var(--accent)}
+.c55-tl li.fut::before{background:var(--surface);border:2px solid var(--accent)}.c55-tl time{display:block;font-size:12px;color:var(--muted)}.c55-tl small{color:var(--muted)}
+.c55-warn{margin:0;padding-left:18px;color:#b26a00}
+@media (max-width:760px){.c54-tt{display:block;overflow-x:auto;max-width:100%}}.c55-rc{font-size:18px;font-variant-numeric:tabular-nums;color:#c62828}
+.c55-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.c55-tags .c54-st{font-size:11px}
+.c55-kpi{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin:8px 0}.c55-kpi div{border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center}.c55-kpi b{display:block;font-size:26px}.c55-kpi small{color:var(--muted)}
+.c55-chat{max-height:40vh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px 12px}.c55-chat p{margin:0 0 8px}.c55-chat p.me{color:var(--muted)}
+.c55-hall{position:fixed;inset:0;z-index:2147483000;background:#0d0607;color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}
+.c55-hx{position:absolute;top:16px;right:16px}.c55-h1{font-size:clamp(20px,3vw,34px);font-weight:700;margin-bottom:20px}
+.c55-hbig{font-size:clamp(60px,14vw,180px);font-weight:800;font-variant-numeric:tabular-nums;line-height:1.05}.c55-hbig.rc{color:#ffb74d;font-size:clamp(44px,10vw,130px)}
+.c55-hcur{font-size:clamp(18px,3vw,34px);margin-top:22px;padding:10px 18px;border-radius:12px;background:rgba(255,255,255,.08);display:inline-block}.c55-hcur.over{background:#b71c1c}
+.c55-hq{margin-top:16px;font-size:clamp(14px,2vw,22px);opacity:.75}
+
 .c54-row span{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .c54-row small{color:var(--muted);font-size:12.5px}
 .c54-st{font-style:normal;font-size:12px;font-weight:700;border-radius:999px;padding:2px 9px;border:1px solid var(--line)}
@@ -18256,32 +18286,32 @@ function lead(){return !!(C.me&&C.me.lead)}
 function judge(){return !!(C.me&&C.me.judge)}
 function pvs(){return !!(C.me&&(C.me.pvs||C.me.lead))}
 function say(m,bad){C.msg=m||"";C.bad=!!bad;repaint()}
-var TABS=[["cases","Дела"],["ses","Заседание"],["hear","Расписание"],["panel","Пульт заседания"],["verdict","Приговор"],["proto","Протокол"],["docs","Документы"],["terms","Сроки"],["legal","Законность задержания"],["decs","Решения суда"],["war","Ордера"],["ai","ИИ: доводы сторон"],["train","Тренажёр судьи"],["judges","Судьи"]];
-function tabsOk(){return TABS.filter(function(t){if(!gov())return t[0]==="war"||(t[0]==="ses"&&!!S.ses);if(t[0]==="judges")return pvs();return true})}
+var TABS=[["cases","Дела"],["ses","Заседание"],["mat","Материалы"],["hear","Расписание"],["panel","Пульт заседания"],["speech","Речи"],["verdict","Приговор"],["proto","Протокол"],["decs","Решения суда"],["war","Ордера"],["adv","Адвокаты"],["over","Надзор"],["docs","Документы"],["terms","Сроки"],["legal","Законность задержания"],["ai","ИИ"],["train","Тренажёр судьи"],["exam","Экзамен"],["stats","Статистика"],["judges","Судьи"]];
+function tabsOk(){return TABS.filter(function(t){if(!gov())return t[0]==="war"||t[0]==="adv"||(t[0]==="ses"&&!!S.ses);if(t[0]==="judges")return pvs();return true})}
 
 /* ---------- дела (167) и жребий (227) ---------- */
-function loadCases(){C.busy=true;capi("case_list",{q:C.cq,status:C.cst}).then(function(r){C.busy=false;if(r.ok){C.cases=r.list;C.err=""}else C.err=r.error;repaint()})}
+function loadCases(){C.busy=true;capi("case_list",{q:C.cq,status:C.cst,stage:C.stg||""}).then(function(r){C.busy=false;if(r.ok){C.cases=r.list;C.err=""}else C.err=r.error;repaint()})}
 var KIND={crim:"Уголовное",admin:"Административное",civil:"Гражданское"};
 var ROLES=["Истец","Ответчик","Обвиняемый","Потерпевший","Обвинение (прокурор)","Защита (адвокат)","Свидетель","Представитель"];
 function casesHtml(){
  if(C.edit)return caseEdHtml();
  if(C.cur)return caseViewHtml();
  if(!C.cases&&!C.busy&&!C.err)setTimeout(loadCases,0);
- var h='<div class="c54-bar"><input class="tin" id="c54cq" type="search" placeholder="Поиск: название, статья, сторона, судья" value="'+e(C.cq)+'"><select class="tin" id="c54cst"><option value="open"'+(C.cst==="open"?" selected":"")+'>Открытые</option><option value="closed"'+(C.cst==="closed"?" selected":"")+'>Закрытые</option><option value=""'+(!C.cst?" selected":"")+'>Все</option></select><button type="button" class="btn primary" data-c54="new">+ Новое дело</button></div>';
+ var h='<div class="c54-bar"><input class="tin" id="c54cq" type="search" placeholder="Поиск: название, статья, сторона, судья" value="'+e(C.cq)+'"><select class="tin" id="c54cst"><option value="open"'+(C.cst==="open"?" selected":"")+'>Открытые</option><option value="closed"'+(C.cst==="closed"?" selected":"")+'>Закрытые</option><option value=""'+(!C.cst?" selected":"")+'>Все</option></select><select class="tin" id="c55cst"><option value="">Любой этап</option>'+opts(STG,C.stg||"")+'</select><button type="button" class="btn primary" data-c54="new">+ Новое дело</button></div>';
  if(C.err)return h+'<div class="banner bp-err">'+e(C.err)+'</div>';
  if(!C.cases)return h+'<p class="bp-empty">Загружаем дела…</p>';
  if(!C.cases.length)return h+'<p class="bp-empty">Дел нет. Нажмите «Новое дело»: стороны, статьи, доказательства и даты заседаний будут в одной карточке.</p>';
  return h+'<div class="c54-list">'+C.cases.map(function(c){var nx=(c.hearings||[]).filter(function(x){return Date.parse(x.at)>Date.now()})[0];
-  return '<button type="button" class="c54-row" data-c54case="'+e(c.id)+'"><span><b>№ '+e(c.no)+' · '+e(c.title)+'</b><small>'+e(c.kindName)+(c.arts?' · '+e(c.arts):'')+(c.judge?' · ⚖ '+e(c.judge):' · судья не назначен')+(nx?' · заседание '+msk(Date.parse(nx.at)):'')+'</small></span><em class="c54-st '+c.status+'">'+(c.status==="open"?"открыто":"закрыто")+'</em></button>'}).join("")+'</div>'}
+  return '<button type="button" class="c54-row" data-c54case="'+e(c.id)+'"><span><b>№ '+e(c.no)+' · '+e(c.title)+'</b><small>'+e(c.kindName)+(c.arts?' · '+e(c.arts):'')+(c.judge?' · ⚖ '+e(c.judge):' · судья не назначен')+(nx?' · заседание '+msk(Date.parse(nx.at)):'')+'</small></span><em class="c54-st">'+e(STG[c.stage]||"")+'</em><em class="c54-st '+c.status+'">'+(c.status==="open"?"открыто":"закрыто")+'</em></button>'}).join("")+'</div>'}
 function caseViewHtml(){var c=C.cur,h='<div class="c54-bar"><button type="button" class="btn" data-c54="back">← Все дела</button>'+(C.curEdit?'<button type="button" class="btn" data-c54="edit">Изменить</button>':'')+
-  '<button type="button" class="btn" data-c54="draw">'+(c.draw?"Повторный жребий":"⚖ Жребий: выбрать судью")+'</button><button type="button" class="btn" data-c54="tocourt">В протокол и пульт</button>'+(gov()&&!S.ses?'<button type="button" class="btn" data-c54="sesopen">Совместное заседание</button>':'')+'<button type="button" class="btn" data-c54="copycase">Скопировать</button></div>';
+  '<button type="button" class="btn" data-c54="draw">'+(c.draw?"Повторный жребий":"⚖ Жребий: выбрать судью")+'</button><button type="button" class="btn" data-c54="tocourt">В протокол и пульт</button>'+(gov()&&!S.ses?'<button type="button" class="btn" data-c54="sesopen">Совместное заседание</button>':'')+'<button type="button" class="btn" data-c54="copycase">Скопировать</button><button type="button" class="btn" data-c55="tomat">Материалы дела</button></div>';
  h+='<article class="c54-card"><h3>Дело № '+e(c.no)+' · '+e(c.title)+'</h3><p class="sub">'+e(c.kindName)+' · '+(c.status==="open"?"открыто":"закрыто")+' · завёл '+e(c.author)+' '+mskD(Date.parse(c.created))+'</p>';
  h+='<div class="c54-grid"><div><h4>Стороны</h4>'+(c.parties.length?'<ul>'+c.parties.map(function(p){return '<li><b>'+e(p.role)+':</b> '+e(p.name)+(p.note?' — '+e(p.note):'')+'</li>'}).join("")+'</ul>':'<p class="sub">не указаны</p>')+
   '<h4>Статьи</h4><p>'+(c.arts?e(c.arts):'<span class="sub">не указаны</span>')+'</p><h4>'+(c.panel&&c.panel.length?'Состав суда':'Судья')+'</h4>'+(c.panel&&c.panel.length?'<ul>'+c.panel.map(function(x){return '<li><b>'+e(x.roleName||x.role)+':</b> '+(x.role!=="secretary"?"⚖ ":"")+e(x.nick)+(x.pos?' · '+e(x.pos):'')+'</li>'}).join("")+'</ul>':'<p>'+(c.judge?'⚖ <b>'+e(c.judge)+'</b>':'<span class="sub">не назначен</span>')+'</p>')+
   (c.draw?'<p class="c54-draw">Жребий провёл '+e(c.draw.by)+' '+msk(Date.parse(c.draw.at))+' среди '+c.draw.cands.length+' судей на смене: '+e(c.draw.cands.join(", "))+'. Выпал: <b>'+e(c.draw.judge)+'</b>.'+(c.draw.prev?' До этого судьёй был '+e(c.draw.prev)+'.':'')+' Результат выбран сервером случайно и сохранён в деле — изменить его вручную нельзя.</p>':'')+'</div>'+
   '<div><h4>Заседания</h4>'+(c.hearings.length?'<ul>'+c.hearings.map(function(x){var past=Date.parse(x.at)<Date.now();return '<li'+(past?' style="opacity:.6"':'')+'><b>'+msk(Date.parse(x.at))+'</b>'+(x.place?' · '+e(x.place):'')+(x.note?' — '+e(x.note):'')+'</li>'}).join("")+'</ul>':'<p class="sub">не назначены</p>')+
   '<h4>Доказательства</h4>'+(c.evidence.length?'<ul>'+c.evidence.map(function(x){return '<li>'+e(x.t)+(x.url?' · <a href="'+e(x.url)+'" target="_blank" rel="noopener">ссылка</a>':'')+'</li>'}).join("")+'</ul>':'<p class="sub">не добавлены</p>')+'</div></div>'+
-  (c.notes?'<h4>Заметки</h4><p>'+nl(c.notes)+'</p>':'')+'</article>';
+  (c.notes?'<h4>Заметки</h4><p>'+nl(c.notes)+'</p>':'')+'</article>'+caseExtras(c);
  return h+msgHtml()}
 function msgHtml(){return C.msg?'<p class="c54-msg'+(C.bad?" err":"")+'" role="status">'+e(C.msg)+'</p>':''}
 function caseText(c){return "Дело № "+c.no+" · "+c.title+"\nВид: "+c.kindName+"\nСтороны: "+c.parties.map(function(p){return p.role+" — "+p.name}).join("; ")+"\nСтатьи: "+(c.arts||"—")+(c.panel&&c.panel.length?"\nСостав суда: "+c.panel.map(function(x){return (x.roleName||x.role)+" — "+x.nick}).join("; "):"\nСудья: "+(c.judge||"не назначен"))+
@@ -18290,6 +18320,7 @@ function caseEdHtml(){var c=C.edit,row=function(k,i,inner){return '<div class="c
  var h='<div class="c54-bar"><button type="button" class="btn" data-c54="cancel">← Отмена</button></div><div class="c54-card c54-form">';
  h+='<label>Название дела<input class="tin" data-c54f="title" maxlength="120" value="'+e(c.title)+'" placeholder="Государство против John Doe"></label>';
  h+='<div class="c54-two"><label>Вид<select class="tin" data-c54f="kind">'+Object.keys(KIND).map(function(k){return '<option value="'+k+'"'+(c.kind===k?" selected":"")+'>'+KIND[k]+'</option>'}).join("")+'</select></label><label>Статус<select class="tin" data-c54f="status"><option value="open"'+(c.status!=="closed"?" selected":"")+'>Открыто</option><option value="closed"'+(c.status==="closed"?" selected":"")+'>Закрыто</option></select></label></div>';
+ h+='<label>Этап<select class="tin" data-c54f="stage">'+opts(STG,c.stage||"filed")+'</select></label>';
  h+='<label>Статьи<input class="tin" data-c54f="arts" maxlength="300" value="'+e(c.arts)+'" placeholder="УК 12.8, АК 3.6"></label>';
  h+='<h4>Стороны</h4>'+c.parties.map(function(p,i){return row("parties",i,'<select class="tin" data-c54a="parties" data-i="'+i+'" data-f="role">'+ROLES.map(function(r){return '<option'+(r===p.role?" selected":"")+'>'+r+'</option>'}).join("")+'</select><input class="tin" data-c54a="parties" data-i="'+i+'" data-f="name" maxlength="80" placeholder="Имя Фамилия" value="'+e(p.name)+'"><input class="tin" data-c54a="parties" data-i="'+i+'" data-f="note" maxlength="120" placeholder="Паспорт, примечание" value="'+e(p.note||"")+'">')}).join("")+'<button type="button" class="btn" data-c54add="parties">+ Сторона</button>';
  h+='<h4>Заседания (время московское)</h4>'+c.hearings.map(function(x,i){return row("hearings",i,'<input class="tin" type="datetime-local" data-c54a="hearings" data-i="'+i+'" data-f="at" value="'+e(x.at?toLocal(typeof x.at==="number"?x.at:Date.parse(x.at)):"")+'"><input class="tin" data-c54a="hearings" data-i="'+i+'" data-f="place" maxlength="80" placeholder="Зал, здание" value="'+e(x.place||"")+'"><input class="tin" data-c54a="hearings" data-i="'+i+'" data-f="note" maxlength="160" placeholder="Предварительное, прения…" value="'+e(x.note||"")+'">')}).join("")+'<button type="button" class="btn" data-c54add="hearings">+ Заседание</button>';
@@ -18332,7 +18363,7 @@ function panelHtml(){var cur=P.cur,left=cur?P.lim*1000-(Date.now()-P.curAt):0,ro
   '<ol class="c54-q">'+P.q.map(function(x,i){return '<li>'+e(x)+' <button type="button" class="btn" data-c54pq="'+i+'" aria-label="Убрать">✕</button></li>'}).join("")+'</ol>'+
   '<label class="c54-inl">Лимит на реплику, сек.<input class="tin" type="number" min="15" max="1800" step="15" id="c54plim" value="'+P.lim+'"></label><label class="c54-inl"><input type="checkbox" id="c54plog"'+(P.log?" checked":"")+'> записывать выступления в протокол</label></div>';
  h+='<div class="c54-card"><h4>Чек-лист заседания</h4><ul class="c54-chk">'+P.list.map(function(t,i){return '<li><label><input type="checkbox" data-c54pc="'+i+'"'+(P.chk[i]?" checked":"")+'> '+e(t)+'</label></li>'}).join("")+'</ul>'+
-  '<details><summary>Настроить чек-лист</summary><p class="sub">Один пункт — одна строка.</p><textarea class="tin" id="c54pl" rows="8">'+e(P.list.join("\n"))+'</textarea><div class="c54-bar"><button type="button" class="btn" data-c54p="savechk">Сохранить</button><button type="button" class="btn" data-c54p="defchk">Вернуть стандартный</button></div></details></div></div>';
+  '<details><summary>Настроить чек-лист</summary><p class="sub">Один пункт — одна строка.</p><textarea class="tin" id="c54pl" rows="8">'+e(P.list.join("\n"))+'</textarea><div class="c54-bar"><button type="button" class="btn" data-c54p="savechk">Сохранить</button><button type="button" class="btn" data-c54p="defchk">Вернуть стандартный</button></div></details></div></div>'+pultExtra();
  return h}
 setInterval(function(){if(state.tab!=="court"||C.tab!=="panel")return;var t=document.getElementById("c54pT");if(t)t.textContent=fmt(pms());var l=document.getElementById("c54pL");
  if(l&&P.cur){var left=P.lim*1000-(Date.now()-P.curAt);l.textContent=left<0?"лимит превышен на "+fmt(-left):"осталось "+fmt(left);var box=l.closest(".c54-clock");if(box){box.classList.toggle("over",left<0);box.classList.toggle("warn",left>=0&&left<15000)}
@@ -18354,7 +18385,7 @@ function verdictHtml(){var c=vCalc(),M=maList(),pm=Object.keys(V.ma.m).filter(fu
  h+='<p class="sub">Найдено статей: '+c.L.length+(c.L.length?' — '+e(c.L.map(function(r){return (r.k||"").toUpperCase()+" "+r.code+(r.part?" ч."+r.part:"")}).join(", ")):'')+'</p>';
  if(V.kind==="guilty"){h+='<div class="c54-two"><label>Срок, мес. (по расчёту до '+(c.ft.m||0)+')<input class="tin" type="number" min="0" max="'+(c.ft.m||0)+'" data-c54v="term" value="'+(V.term||0)+'"></label><label>Штраф, $ ('+c.fmin+'–'+c.fmax+')<input class="tin" type="number" min="0" data-c54v="fine" value="'+(V.fine||c.fmin||0)+'"></label></div>';
   h+='<details'+(pm+pa?" open":"")+'><summary>Смягчающие ('+pm+') и отягчающие ('+pa+')</summary><div class="c54-two"><div>'+M.m.map(function(t,i){return '<label class="c54-inl"><input type="checkbox" data-c54ma="m" data-i="'+i+'"'+(V.ma.m[i]?" checked":"")+'> '+e(t)+'</label>'}).join("")+'</div><div>'+M.a.map(function(t,i){return '<label class="c54-inl"><input type="checkbox" data-c54ma="a" data-i="'+i+'"'+(V.ma.a[i]?" checked":"")+'> '+e(t)+'</label>'}).join("")+'</div></div></details>'}
- h+='<label>Дополнительно (необязательно)<textarea class="tin" data-c54v="extra" rows="2" maxlength="600">'+e(V.extra)+'</textarea></label></div>';
+ h+='<label>Дополнительно (необязательно)<textarea class="tin" data-c54v="extra" rows="2" maxlength="600">'+e(V.extra)+'</textarea></label>'+verdictExtra()+'</div>';
  h+='<div class="c54-card"><h4>Текст решения</h4><pre class="c54-pre" id="c54vt">'+e(verdictText())+'</pre><div class="c54-bar"><button type="button" class="btn primary" data-c54v="copy">Скопировать</button><button type="button" class="btn" data-c54v="proto">Записать в протокол</button></div></div></div>';
  return h}
 function verdictText(){var c=vCalc(),M=maList(),u=user()||{},jp=C.me&&C.me.judgeName,ct=compText(),sl=signLines();
@@ -18362,14 +18393,17 @@ function verdictText(){var c=vCalc(),M=maList(),u=user()||{},jp=C.me&&C.me.judge
  var mm=M.m.filter(function(_,i){return V.ma.m[i]}),aa=M.a.filter(function(_,i){return V.ma.a[i]});
  var t="РЕШЕНИЕ СУДА\nпо делу № "+(V.caseNo||"___")+" от "+mskD(Date.now())+"\n\n";
  t+="Суд в составе: "+(ct||(jp?jp+" ":"судья ")+(u.nick||"__________"))+", рассмотрев материалы дела в отношении "+(V.name||"__________")+", обвиняемого по "+arts+",\n\n";
- if(V.kind==="acquit")return t+"РЕШИЛ:\n1. Признать "+(V.name||"подсудимого")+" невиновным и оправдать.\n2. Отменить меры пресечения, вернуть изъятое имущество, кроме запрещённого к обороту."+(V.extra?"\n3. "+V.extra:"")+"\n\nРешение может быть обжаловано в установленном порядке.\n\n"+(sl||(jp||"Судья")+" ________ "+(u.nick||""));
+ if(V.motive&&String(V.motive).trim())t+="УСТАНОВИЛ:\n"+String(V.motive).trim()+"\n\n";
+ var apl="Решение может быть обжаловано"+(+V.appdays?" в течение "+(+V.appdays)+" дн. со дня оглашения.":" в установленном порядке.");
+ if(V.kind==="acquit")return t+"РЕШИЛ:\n1. Признать "+(V.name||"подсудимого")+" невиновным и оправдать.\n2. Отменить меры пресечения, вернуть изъятое имущество, кроме запрещённого к обороту."+(V.extra?"\n3. "+V.extra:"")+"\n\n"+apl+"\n\n"+(sl||(jp||"Судья")+" ________ "+(u.nick||""));
  if(mm.length)t+="Смягчающие обстоятельства: "+mm.join("; ").toLowerCase()+".\n";
  if(aa.length)t+="Отягчающие обстоятельства: "+aa.join("; ").toLowerCase()+".\n";
  t+="\nРЕШИЛ:\n1. Признать "+(V.name||"подсудимого")+" виновным по "+arts+".\n";
  var n=2;if(+V.term)t+=n+++". Назначить наказание в виде лишения свободы сроком "+V.term+" мес."+(c.ft.top?" (по наиболее тяжкой статье: "+c.ft.top.code+(c.ft.top.part?" ч. "+c.ft.top.part:"")+")":"")+".\n";
  if(+V.fine)t+=n+++". Назначить штраф в размере $"+(+V.fine).toLocaleString("ru-RU")+".\n";
+ if(+V.prob&&+V.term)t+=n+++". Назначенное наказание в виде лишения свободы считать условным с испытательным сроком "+(+V.prob)+" мес.\n";
  if(V.extra)t+=n+++". "+V.extra+"\n";
- return t+"\nРешение может быть обжаловано в установленном порядке.\n\n"+(sl||(jp||"Судья")+" ________ "+(u.nick||""))}
+ return t+"\n"+apl+"\n\n"+(sl||(jp||"Судья")+" ________ "+(u.nick||""))}
 
 /* ---------- протокол заседания (226): журнал со временем, бумага, подписи коллегии ---------- */
 var PR=lj("bos-c54proto",null)||{caseNo:"",title:"",court:"",items:[],members:[]};
@@ -18390,7 +18424,7 @@ function protoHtml(){if(S.ses)return protoSesHtml();var h='<div class="c54-two">
   '<label>Название дела<input class="tin" data-c54pr="title" maxlength="120" value="'+e(PR.title)+'"></label><h4>Новая запись (время ставится само)</h4><div class="c54-bar"><select class="tin" id="c54prk">'+Object.keys(PKIND).map(function(k){return '<option value="'+k+'">'+PKIND[k]+'</option>'}).join("")+'</select><input class="tin" id="c54prt" maxlength="600" placeholder="Кто и что: «Защита заявила ходатайство о вызове свидетеля»" style="flex:1 1 240px"><button type="button" class="btn primary" data-c54pro="add">Записать</button></div>'+
   '<h4>Коллегия и подписи</h4>'+PR.members.map(function(m,i){return '<div class="c54-er"><input class="tin" data-c54pm="'+i+'" data-f="pos" maxlength="60" placeholder="Должность" value="'+e(m.pos||"")+'"><input class="tin" data-c54pm="'+i+'" data-f="name" maxlength="60" placeholder="Имя" value="'+e(m.name||"")+'"><label class="btn">Подпись<input type="file" accept="image/png,image/jpeg,image/webp" data-c54sig="'+i+'" hidden></label><button type="button" class="btn" data-c54pmr="'+i+'" aria-label="Убрать">✕</button></div>'}).join("")+
   '<div class="c54-bar"><button type="button" class="btn" data-c54pro="member">+ Член коллегии</button><button type="button" class="btn" data-c54pro="me">+ Я</button></div>'+
-  '<div class="c54-bar"><button type="button" class="btn primary" data-c54pro="copy">Скопировать для форума</button><button type="button" class="btn" data-c54pro="pdf">PDF</button><button type="button" class="btn" data-c54pro="clear">Новый протокол</button></div></div>'+
+  '<div class="c54-bar"><button type="button" class="btn primary" data-c54pro="copy">Скопировать для форума</button><button type="button" class="btn" data-c54pro="pdf">PDF</button><button type="button" class="btn" data-c54pro="clear">Новый протокол</button></div>'+protoExtra()+'</div>'+
   '<div>'+protoPaper()+'</div></div>';return h}
 function pdf(html,name){var fr=document.createElement("iframe");fr.style.cssText="position:fixed;right:0;bottom:0;width:0;height:0;border:0";document.body.appendChild(fr);
  var css='body{font:14px/1.5 "Times New Roman",serif;color:#000;margin:16mm}.noprint{display:none}.c54-ph{text-align:center;font-weight:700;font-size:17px}.c54-ps{text-align:center}table{width:100%;border-collapse:collapse;margin:14px 0}td{vertical-align:top;padding:4px 6px;border-bottom:1px solid #ccc}td:first-child{white-space:nowrap;width:60px}.c54-signs{display:flex;flex-wrap:wrap;gap:24px;margin-top:24px}.c54-sign{display:flex;flex-direction:column;min-width:180px}.c54-sign i{display:block;border-bottom:1px solid #000;height:36px}.c54-sign img{max-height:46px;max-width:180px}';
@@ -18408,7 +18442,7 @@ var DV=lj("bos-c54docs",null)||{k:"motion",v:{}};
 function docsHtml(){var D=DOCS[DV.k],v=DV.v[DV.k]||{},u=user()||{},who=(u.nick||"")+(u.roleName&&u.role!=="off"?", "+u.roleName.toLowerCase():"")+(u.static?", статик "+u.static:"");
  return '<div class="seg" role="group" style="margin-bottom:8px">'+Object.keys(DOCS).map(function(k){return '<button type="button" data-c54dk="'+k+'" aria-pressed="'+(DV.k===k)+'">'+DOCS[k].t+'</button>'}).join("")+'</div><div class="c54-two"><div class="c54-card c54-form">'+
   D.f.map(function(f){return '<label>'+f[1]+(f[3]?'<textarea class="tin" rows="3" data-c54d="'+f[0]+'" placeholder="'+e(f[2])+'">'+e(v[f[0]]||"")+'</textarea>':'<input class="tin" data-c54d="'+f[0]+'" placeholder="'+e(f[2])+'" value="'+e(v[f[0]]||"")+'">')+'</label>'}).join("")+
-  '</div><div class="c54-card"><h4>Готовый текст</h4><pre class="c54-pre" id="c54dt">'+e(D.build(v,who))+'</pre><div class="c54-bar"><button type="button" class="btn primary" data-c54do="copy">Скопировать</button><button type="button" class="btn" data-c54do="clear">Очистить поля</button></div></div></div>'}
+  (DV.k==="indict"&&(C.cur||MT.c)?'<div class="c54-bar"><button type="button" class="btn" data-c55="indfill">Заполнить из дела № '+e((C.cur||MT.c).no)+'</button></div>':'')+'</div><div class="c54-card"><h4>Готовый текст</h4><pre class="c54-pre" id="c54dt">'+e(D.build(v,who))+'</pre><div class="c54-bar"><button type="button" class="btn primary" data-c54do="copy">Скопировать</button><button type="button" class="btn" data-c54do="clear">Очистить поля</button></div></div></div>'}
 function docText(){var u=user()||{};return DOCS[DV.k].build(DV.v[DV.k]||{},(u.nick||"")+(u.roleName&&u.role!=="off"?", "+u.roleName.toLowerCase():"")+(u.static?", статик "+u.static:""))}
 
 /* ---------- калькулятор сроков по ПК (169): сроки находятся в тексте Процессуального кодекса ---------- */
@@ -18453,37 +18487,17 @@ function legalText(){var bad=LG_ITEMS.filter(function(x){return LG.v[x[0]]==="ba
 
 /* ---------- решения суда (170) ---------- */
 function loadDecs(){capi("dec_list",{q:C.dq}).then(function(r){if(r.ok){C.decs=r;C.err=""}else C.err=r.error;repaint()})}
-function decsHtml(){if(!C.decs)setTimeout(loadDecs,0);var d=C.decs,ed=C.decEd;
- var h='<div class="c54-bar"><input class="tin" id="c54dq" type="search" placeholder="Поиск по решениям: статья, имя, номер дела, слово" value="'+e(C.dq)+'" style="flex:1 1 260px">'+(d&&d.canAdd&&!ed?'<button type="button" class="btn primary" data-c54dec="new">+ Добавить решение</button>':'')+'</div>';
- if(ed)h+='<div class="c54-card c54-form"><label>Название<input class="tin" data-c54de="title" maxlength="150" value="'+e(ed.title||"")+'" placeholder="Государство против John Doe — о незаконном обыске"></label><div class="c54-two"><label>№ дела<input class="tin" data-c54de="caseNo" maxlength="20" value="'+e(ed.caseNo||"")+'"></label><label>Дата<input class="tin" type="date" data-c54de="dt" value="'+e(ed.dt||new Date().toISOString().slice(0,10))+'"></label></div>'+
-  '<label>Состав суда<input class="tin" data-c54de="panel" maxlength="400" value="'+e(ed.panel!=null?ed.panel:compShort())+'" placeholder="A (председательствующий), B (судья коллегии)…"></label><div class="c54-two"><label>Статьи<input class="tin" data-c54de="arts" maxlength="200" value="'+e(ed.arts||"")+'"></label><label>Метки<input class="tin" data-c54de="tags" maxlength="120" value="'+e(ed.tags||"")+'" placeholder="обыск, недопустимые доказательства"></label></div><label>Текст решения<textarea class="tin" rows="8" data-c54de="text" maxlength="6000">'+e(ed.text||"")+'</textarea></label>'+
-  '<div class="c54-bar"><button type="button" class="btn primary" data-c54dec="save">Сохранить</button><button type="button" class="btn" data-c54dec="cancel">Отмена</button></div>'+msgHtml()+'</div>';
- if(!d)return h+'<p class="bp-empty">Загружаем…</p>';
- if(!d.list.length)return h+'<p class="bp-empty">'+(C.dq?"Ничего не найдено.":"Справочник пуст. Его пополняют руководство Government и судьи.")+'</p>';
- return h+'<div class="c54-list">'+d.list.map(function(x){return '<details class="c54-dec"><summary><b>'+e(x.title)+'</b><small>'+(x.caseNo?'дело № '+e(x.caseNo)+' · ':'')+e(x.dt)+(x.arts?' · '+e(x.arts):'')+(x.tags?' · '+e(x.tags):'')+(x.panel?' · ⚖ '+e(x.panel):'')+'</small></summary><p>'+nl(x.text)+'</p><div class="c54-bar"><button type="button" class="btn" data-c54decc="'+e(x.id)+'">Скопировать</button>'+(d.canAdd?'<button type="button" class="btn" data-c54dece="'+e(x.id)+'">Изменить</button><button type="button" class="btn" data-c54decd="'+e(x.id)+'">Удалить</button>':'')+'</div><small class="sub">Добавил: '+e(x.author)+'</small></details>'}).join("")+'</div>'}
+
 
 /* ---------- ордера (172) ---------- */
 var WK={search:"Ордер на обыск",arrest:"Ордер на арест",wiretap:"Ордер на прослушивание",seize:"Ордер на выемку"};
 function loadWars(){capi("war_list").then(function(r){if(r.ok){C.wars=r;C.err=""}else C.err=r.error;repaint()})}
 function warText(){var f=C.warF,u=user()||{};return "В Окружной суд штата Сан-Андреас\nот "+(u.nick||"")+(u.org?", "+u.org:"")+(u.static?", статик "+u.static:"")+"\n\nЗАПРОС\nна выдачу: "+WK[f.kind].toLowerCase()+"\n\nВ отношении: "+(f.target||"___")+(f.caseNo?"\nПо делу № "+f.caseNo:"")+"\n\nОснования:\n"+(f.reason||"___")+"\n\nПрошу выдать "+WK[f.kind].toLowerCase()+".\n\n"+mskD(Date.now())+"    "+(u.nick||"")}
-function warHtml(){if(!C.wars)setTimeout(loadWars,0);var f=C.warF,W=C.wars,cj=W&&(W.judge||W.lead);
- var h='<div class="c54-two"><div class="c54-card c54-form"><h4>Запрос ордера</h4><label>Вид<select class="tin" data-c54w="kind">'+Object.keys(WK).map(function(k){return '<option value="'+k+'"'+(f.kind===k?" selected":"")+'>'+WK[k]+'</option>'}).join("")+'</select></label>'+
-  '<label>В отношении кого / чего<input class="tin" data-c54w="target" maxlength="120" value="'+e(f.target)+'" placeholder="John Doe, дом 12 по Grove Street"></label><label>№ дела (если есть)<input class="tin" data-c54w="caseNo" maxlength="20" value="'+e(f.caseNo)+'"></label><label>Основания<textarea class="tin" rows="4" data-c54w="reason" maxlength="1200" placeholder="Какие есть данные, почему без ордера не обойтись">'+e(f.reason)+'</textarea></label>'+
-  '<div class="c54-bar"><button type="button" class="btn primary" data-c54wo="send">Отправить судьям</button><button type="button" class="btn" data-c54wo="copy">Скопировать текст запроса</button></div>'+msgHtml()+'</div><div class="c54-card"><h4>Текст запроса</h4><pre class="c54-pre" id="c54wt">'+e(warText())+'</pre></div></div>';
- if(!W)return h+'<p class="bp-empty">Загружаем ордера…</p>';
- var L=W.list||[],req=L.filter(function(x){return x.status==="req"}),act=L.filter(function(x){return x.active}),old=L.filter(function(x){return x.status!=="req"&&!x.active});
- var row=function(x){return '<li class="'+(x.active?"on":x.status)+'"><span><b>'+e(x.kindName)+'</b> · '+e(x.target)+(x.caseNo?' · дело № '+e(x.caseNo):'')+'<small>'+(x.status==="req"?'запросил '+e(x.author)+(x.org?' ('+e(x.org)+')':'')+' '+msk(Date.parse(x.created)):x.status==="ok"?'выдал '+e(x.by)+(x.active?' · действует до <b>'+msk(Date.parse(x.until))+'</b>':' · срок истёк'):'отказано · '+e(x.by))+(x.answer?' · '+e(x.answer):'')+'</small><small>Основание: '+e(x.reason.slice(0,240))+'</small></span>'+
-  (x.status==="req"&&cj?'<span class="c54-wd"><select class="tin" data-c54wh="'+e(x.id)+'"><option value="6">6 ч</option><option value="24" selected>24 ч</option><option value="72">3 суток</option><option value="168">7 суток</option></select><button type="button" class="btn primary" data-c54wdec="1" data-id="'+e(x.id)+'">Выдать</button><button type="button" class="btn" data-c54wdec="0" data-id="'+e(x.id)+'">Отказать</button></span>':'')+'</li>'};
- h+='<h4>Действующие ордера ('+act.length+')</h4>'+(act.length?'<ul class="c54-wl">'+act.map(row).join("")+'</ul>':'<p class="sub">Сейчас действующих ордеров нет.</p>');
- h+='<h4>Запросы на рассмотрении ('+req.length+')</h4>'+(req.length?'<ul class="c54-wl">'+req.map(row).join("")+'</ul>':'<p class="sub">Нет запросов.</p>')+(cj?'':'<p class="sub">Выдают ордера судьи (окружной, апелляционный, верховный).</p>');
- if(old.length)h+='<details><summary>Истёкшие и отказанные ('+old.length+')</summary><ul class="c54-wl">'+old.map(row).join("")+'</ul></details>';
- return h}
+
 
 /* ---------- ИИ для защиты и обвинения (174) ---------- */
 function aiOk(){try{return !!(A&&A.ai&&A.ai.available())}catch(x){return false}}
-function aiHtml(){var a=C.ai;return '<p class="sub">Опишите дело: что произошло, кто задержан, какие статьи вменяют, какие есть доказательства и что известно о порядке задержания. ИИ даст квалификацию, доводы обвинения и защиты со ссылками на статьи и слабые места. Решение остаётся за судом.</p>'+
- '<div class="c54-card c54-form"><textarea class="tin" id="c54aiq" rows="6" maxlength="1500" placeholder="Например: John Doe задержан за стрельбу на Grove Street. Права зачитаны через 15 минут после задержания, оружие изъято без описи, свидетелей двое…">'+e(a.q)+'</textarea><div class="c54-bar"><button type="button" class="btn primary" data-c54ai="ask"'+(a.busy||!aiOk()?" disabled":"")+'>'+(a.busy?"Думаю…":"Доводы сторон")+'</button>'+(aiOk()?'':'<span class="sub">ИИ-помощник недоступен: войдите в аккаунт.</span>')+'</div></div>'+
- (a.a?'<div class="c54-card c54-ai"><div>'+nl(a.a)+'</div><div class="c54-bar"><button type="button" class="btn" data-c54ai="copy">Скопировать</button></div></div>':'')+(a.err?'<p class="c54-msg err">'+e(a.err)+'</p>':'')}
+
 
 /* ---------- тренажёр судьи (228) ---------- */
 var TRC=[
@@ -18512,7 +18526,7 @@ function judgesHtml(){if(!C.judges&&!C.err)setTimeout(loadJudges,0);var J=C.judg
  if(C.err)return h+'<div class="banner bp-err">'+e(C.err)+'</div>';if(!J)return h+'<p class="bp-empty">Загружаем…</p>';
  var pend=J.list.filter(function(x){return x.pending}),act=J.list.filter(function(x){return !x.pending&&x.pos}),pv=J.list.filter(function(x){return x.pvs});
  var sel=function(id,cur){return '<select class="tin" data-c54jp="'+e(id)+'"><option value="">— должность —</option>'+Object.keys(JP).map(function(k){return '<option value="'+k+'"'+(k===cur?" selected":"")+'>'+JP[k]+'</option>'}).join("")+'</select>'};
- h+='<h4>Заявки ('+pend.length+')</h4>'+(pend.length?'<ul class="c54-wl">'+pend.map(function(x){return '<li><span><b>'+e(x.nick)+'</b> · статик '+e(x.static)+'<small>зарегистрировался '+msk(Date.parse(x.created))+'</small></span>'+(J.canJ?'<span class="c54-wd">'+sel(x.id,"")+'<button type="button" class="btn primary" data-c54j="ok" data-id="'+e(x.id)+'">Одобрить</button><button type="button" class="btn" data-c54j="no" data-id="'+e(x.id)+'">Отклонить</button></span>':'')+'</li>'}).join("")+'</ul>':'<p class="sub">Новых заявок нет.</p>');
+ h+='<h4>Заявки ('+pend.length+')</h4>'+(pend.length?'<ul class="c54-wl">'+pend.map(function(x){return '<li><span><b>'+e(x.nick)+'</b> · статик '+e(x.static)+'<small>зарегистрировался '+msk(Date.parse(x.created))+(x.exam?' · экзамен: '+x.exam.score+'%':' · экзамен не сдавал')+'</small></span>'+(J.canJ?'<span class="c54-wd">'+sel(x.id,"")+'<button type="button" class="btn primary" data-c54j="ok" data-id="'+e(x.id)+'">Одобрить</button><button type="button" class="btn" data-c54j="no" data-id="'+e(x.id)+'">Отклонить</button></span>':'')+'</li>'}).join("")+'</ul>':'<p class="sub">Новых заявок нет.</p>');
  h+='<h4>Судьи и сотрудники суда ('+act.length+')</h4>'+(act.length?'<ul class="c54-wl">'+act.map(function(x){return '<li><span><b>⚖ '+e(x.nick)+'</b> · '+e(x.posName)+(x.pvs?' · Председатель ВС':'')+'<small>был в сети '+(x.seen?msk(Date.parse(x.seen)):"—")+'</small></span>'+(J.canJ?'<span class="c54-wd">'+sel(x.id,x.pos)+'<button type="button" class="btn" data-c54j="set" data-id="'+e(x.id)+'">Сменить</button><button type="button" class="btn" data-c54j="rm" data-id="'+e(x.id)+'">Снять</button></span>':'')+'</li>'}).join("")+'</ul>':'<p class="sub">Судей пока нет.</p>');
  if(J.lead)h+='<div class="c54-card"><h4>Председатель Верховного суда</h4><p class="sub">Сейчас: '+(pv.length?pv.map(function(x){return e(x.nick)}).join(", "):"не назначен")+'. Назначает руководство Government или владелец.</p><div class="c54-bar"><input class="tin" id="c54pvs" placeholder="Логин или ник сотрудника Government"><button type="button" class="btn primary" data-c54j="pvs1">Назначить</button><button type="button" class="btn" data-c54j="pvs0">Снять</button></div></div>';
  return h+msgHtml()}
@@ -18553,12 +18567,13 @@ function sesHtml(){if(!S.ses&&!S.at)setTimeout(function(){sesLoad(true)},0);var 
  var h='<div class="c54-card"><h3>⚖ '+e(s.title)+(s.caseNo?' · дело № '+e(s.caseNo):'')+'</h3><p class="sub">'+e(s.court||"Суд штата Сан-Андреас")+' · ваша роль: <b>'+e(SROLE[s.myRole]||"участник")+'</b> · заседание открыто до '+msk(Date.parse(s.expires))+'</p>'+
   (s.canRole?'<details><summary>Изменить данные заседания</summary><div class="c54-form"><div class="c54-two"><label>Название<input class="tin" id="c54it" maxlength="120" value="'+e(s.title)+'"></label><label>№ дела<input class="tin" id="c54in" maxlength="20" value="'+e(s.caseNo)+'"></label></div><label>Суд<input class="tin" id="c54ic" maxlength="80" value="'+e(s.court)+'"></label><div class="c54-bar"><button type="button" class="btn" data-c54s="info">Сохранить</button></div></div></details>':'')+
   (window.SA_linkHtml?SA_linkHtml("h",s.code,"Ссылка-приглашение: отправьте её судьям коллегии, секретарю и сторонам. Код: "+s.code):'<p>Код заседания: <b>'+e(s.code)+'</b></p>')+'</div>';
- h+='<div class="c54-card"><h4>Участники и роли ('+s.members.length+')</h4><ul class="c54-wl">'+s.members.map(function(m){return '<li><span><b>'+(m.online?'🟢 ':'⚪ ')+e(m.nick)+'</b>'+(m.me?' (вы)':'')+'<small>'+e(m.org||"")+(m.judgeName?' · '+e(m.judgeName):'')+(m.static?' · статик '+e(m.static):'')+(m.sig?' · подпись загружена':'')+'</small></span>'+(s.canRole?sel(m):'<b class="c54-badge">'+e(SROLE[m.role]||m.role)+'</b>')+'</li>'}).join("")+'</ul>'+
+ h+='<div class="c54-card"><h4>Участники и роли ('+s.members.length+')</h4><ul class="c54-wl">'+s.members.map(function(m){return '<li><span><b>'+(m.online?'🟢 ':'⚪ ')+e(m.nick)+'</b>'+(m.me?' (вы)':'')+'<small>'+e(m.org||"")+(m.judgeName?' · '+e(m.judgeName):'')+(m.static?' · статик '+e(m.static):'')+(m.sig?' · подпись загружена':'')+'</small></span>'+(s.canRole?sel(m):'<b class="c54-badge">'+e(SROLE[m.role]||m.role)+'</b>')+(s.canRole&&!m.me?'<span class="c54-wd"><button type="button" class="btn" data-c55sw="warn" data-id="'+e(m.id)+'">Замечание</button><button type="button" class="btn" data-c55sw="remove" data-id="'+e(m.id)+'">Удалить из зала</button></span>':'')+((s.warns||{})[m.id]?'<small class="sub">'+((s.warns||{})[m.id]>=99?"удалён из зала":"замечаний: "+(s.warns||{})[m.id])+'</small>':'')+'</li>'}).join("")+'</ul>'+
   (s.canRole?'<p class="sub">Председательствующий один: если назначить им другого, вы станете судьёй коллегии. Роли судей и секретаря — только для сотрудников Government.</p>':'')+'</div>';
  var ct=compText();
  h+='<div class="c54-card"><h4>Состав суда</h4><p>'+(ct?'Суд в составе: '+e(ct):'<span class="sub">Назначьте председательствующего и судей коллегии — состав появится в решении, протоколе и карточке дела.</span>')+'</p>'+
   '<div class="c54-bar">'+(ct?'<button type="button" class="btn" data-c54s="copycomp">Скопировать</button>':'')+'<label class="btn">Моя подпись для протокола<input type="file" accept="image/png,image/jpeg,image/webp" data-c54ssig="1" hidden></label>'+(mySig()&&!me.sig?'<button type="button" class="btn" data-c54s="sigrp">Взять подпись из рапортов</button>':'')+'</div></div>';
- h+='<div class="c54-bar"><button type="button" class="btn" data-c54tab="panel">Пульт заседания</button><button type="button" class="btn" data-c54tab="proto">Протокол</button><button type="button" class="btn" data-c54tab="verdict">Приговор</button><span style="flex:1"></span>'+
+ h+=sesExtra();
+ h+='<div class="c54-bar"><button type="button" class="btn" data-c54tab="mat">Материалы</button><button type="button" class="btn" data-c54tab="speech">Речи</button><button type="button" class="btn" data-c54tab="panel">Пульт заседания</button><button type="button" class="btn" data-c54tab="proto">Протокол</button><button type="button" class="btn" data-c54tab="verdict">Приговор</button><span style="flex:1"></span>'+
   (s.canRole?'<button type="button" class="btn primary" data-c54s="close">Закрыть заседание</button>':'')+'<button type="button" class="btn" data-c54s="leave">Выйти из заседания</button></div>'+msgHtml();
  return h}
 document.addEventListener("click",function(ev){var t=ev.target.closest&&ev.target.closest("[data-c54s]");if(!t)return;var a=t.dataset.c54s;
@@ -18580,12 +18595,426 @@ document.addEventListener("change",function(ev){var t=ev.target;if(!t||!t.datase
 function protoSesHtml(){var s=S.ses,can=SPANEL.indexOf(s.myRole)>=0||s.myRole==="secretary";
  return '<div class="c54-two"><div class="c54-card c54-form"><div class="c54-draw">Совместное заседание'+(s.caseNo?' по делу № '+e(s.caseNo):'')+': протокол общий, записи видят все участники. Ведут протокол судьи и секретарь. Коллегия и подписи берутся из вкладки «Заседание».</div>'+
   (can?'<h4>Новая запись (время ставится само)</h4><div class="c54-bar"><select class="tin" id="c54prk">'+Object.keys(PKIND).map(function(k){return '<option value="'+k+'">'+PKIND[k]+'</option>'}).join("")+'</select><input class="tin" id="c54prt" maxlength="600" placeholder="Кто и что: «Защита заявила ходатайство о вызове свидетеля»" style="flex:1 1 240px"><button type="button" class="btn primary" data-c54pro="add">Записать</button></div>':'<p class="sub">Вы видите протокол; записи вносят судьи и секретарь.</p>')+
-  '<div class="c54-bar"><button type="button" class="btn primary" data-c54pro="copy">Скопировать для форума</button><button type="button" class="btn" data-c54pro="pdf">PDF</button><button type="button" class="btn" data-c54tab="ses">Состав и роли</button></div></div><div>'+protoPaper()+'</div></div>'}
+  '<div class="c54-bar"><button type="button" class="btn primary" data-c54pro="copy">Скопировать для форума</button><button type="button" class="btn" data-c54pro="pdf">PDF</button><button type="button" class="btn" data-c54tab="ses">Состав и роли</button></div>'+protoExtra()+'</div><div>'+protoPaper()+'</div></div>'}
+/* ===================== 4.3.5: судебная власть — 50 идей ===================== */
+var STG={filed:"Подано",accepted:"Принято к производству",scheduled:"Назначено",heard:"Рассмотрено",appealed:"Обжаловано",executed:"Исполнено",suspended:"Приостановлено"};
+var ADMN={"":"не оценено",ok:"допустимо",no:"недопустимо"};
+var ARGM={"":"без оценки",ok:"обоснован",part:"частично обоснован",no:"необоснован"};
+var MOTD={wait:"ожидает решения",ok:"удовлетворено",part:"удовлетворено частично",no:"отклонено",later:"отложено"};
+function canJudge(){return !!(C.me&&(C.me.judge||C.me.lead||C.me.pvs))}
+function opts(O,cur){return Object.keys(O).map(function(k){return '<option value="'+e(k)+'"'+(k===cur?" selected":"")+'>'+e(O[k])+'</option>'}).join("")}
+var AIR={};   // результаты ИИ по ключу: {busy, text, err}
+function aiRun(key,q,mode,hist){if(!aiOk()){AIR[key]={err:"ИИ-помощник недоступен: войдите в аккаунт."};repaint();return Promise.resolve(null)}AIR[key]={busy:true};repaint();
+ return A.ai.ask(String(q).replace(/\s+\n/g,"\n").slice(0,1500),{hist:hist||[],mode:mode}).then(function(r){AIR[key]=r&&r.ok?{text:r.answer}:{err:(r&&r.error)||"ИИ не ответил."};repaint();return r},function(){AIR[key]={err:"Ошибка связи."};repaint();return null})}
+function aiBox(key){var a=AIR[key];if(!a)return "";if(a.busy)return '<p class="sub">ИИ думает…</p>';if(a.err)return '<p class="c54-msg err">'+e(a.err)+'</p>';
+ return '<div class="c54-card c54-ai"><div>'+nl(a.text)+'</div><div class="c54-bar"><button type="button" class="btn" data-c55copy="'+e(key)+'">Скопировать</button><button type="button" class="btn" data-c55x="'+e(key)+'">Скрыть</button></div></div>'}
+
+/* ---------- карточка дела: этап, ИИ, связанные дела, хронология, заметки сторон, доказательства, отводы, апелляция (1–4, 6–10, 29, 32) ---------- */
+C.rel={};
+function caseExtras(c){var cj=canJudge(),h='';
+ h+='<div class="c54-card"><div class="c54-bar"><b>Этап:</b> <span class="c54-badge">'+e(STG[c.stage]||c.stage)+'</span>'+(c.level?'<span class="c54-badge">'+(c.level==="appeal"?"апелляция":"кассация")+'</span>':'')+(c.mergedInto?'<span class="sub">объединено с другим делом</span>':'')+
+  '<span style="flex:1"></span><button type="button" class="btn" data-c55="aisum">🤖 Сводка</button><button type="button" class="btn" data-c55="aichk">🤖 Полнота дела</button></div>'+aiBox("sum"+c.id)+aiBox("chk"+c.id)+'</div>';
+ // доказательства: оценка допустимости судьёй (7)
+ if(c.evidence.length)h+='<div class="c54-card"><h4>Допустимость доказательств</h4><ul class="c54-wl">'+c.evidence.map(function(x,i){return '<li class="'+(x.adm==="ok"?"on":x.adm==="no"?"no":"")+'"><span>'+e(x.t)+(x.url?' · <a href="'+e(x.url)+'" target="_blank" rel="noopener">ссылка</a>':'')+(x.admWhy?'<small>'+e(x.admWhy)+'</small>':'')+'</span>'+
+  (cj&&C.curEdit?'<span class="c54-wd"><select class="tin" data-c55adm="'+i+'">'+opts(ADMN,x.adm||"")+'</select></span>':'<b class="c54-badge">'+e(ADMN[x.adm||""])+'</b>')+'</li>'}).join("")+'</ul></div>';
+ // заметки сторон (6)
+ if(c.notesPros!=null||c.notesDef!=null)h+='<div class="c54-two">'+(c.notesPros!=null?'<div class="c54-card c54-form"><h4>🔒 Заметки обвинения</h4><p class="sub">Видят обвинение и суд.</p><textarea class="tin" id="c55np" rows="4" maxlength="4000">'+e(c.notesPros)+'</textarea><div class="c54-bar"><button type="button" class="btn" data-c55="note" data-side="pros">Сохранить</button></div></div>':'')+
+  (c.notesDef!=null?'<div class="c54-card c54-form"><h4>🔒 Заметки защиты</h4><p class="sub">Видят защита и суд.</p><textarea class="tin" id="c55nd" rows="4" maxlength="4000">'+e(c.notesDef)+'</textarea><div class="c54-bar"><button type="button" class="btn" data-c55="note" data-side="def">Сохранить</button></div></div>':'')+'</div>';
+ // отводы (10)
+ var RC=c.recusals||[];
+ h+='<div class="c54-card"><h4>Отводы судье</h4>'+(RC.length?'<ul class="c54-wl">'+RC.map(function(x,i){return '<li class="'+(x.status==="wait"?"req":x.status==="ok"?"on":"no")+'"><span><b>'+e(x.judge)+'</b> · заявил '+e(x.by)+' '+msk(x.at)+'<small>'+e(x.reason)+'</small><small>'+(x.status==="wait"?"на рассмотрении":x.status==="ok"?"удовлетворён ("+e(x.dby||"")+"), проведён новый жребий":"отклонён ("+e(x.dby||"")+")")+'</small></span>'+
+  (x.status==="wait"&&C.me&&(C.me.lead||C.me.pvs)?'<span class="c54-wd"><button type="button" class="btn primary" data-c55rd="'+i+'" data-ok="1">Удовлетворить</button><button type="button" class="btn" data-c55rd="'+i+'" data-ok="0">Отклонить</button></span>':'')+'</li>'}).join("")+'</ul>':'<p class="sub">Отводов не заявлено.</p>')+
+  (c.judge?'<div class="c54-bar"><input class="tin" id="c55rr" maxlength="400" placeholder="Основание отвода: личная заинтересованность, родство…" style="flex:1 1 260px"><button type="button" class="btn" data-c55="recuse">Заявить отвод</button></div>':'')+'</div>';
+ // обжалование, объединение (9, 29, 32)
+ h+='<div class="c54-card"><h4>Обжалование и объединение</h4><div class="c54-bar"><input class="tin" id="c55ar" maxlength="2000" placeholder="Доводы жалобы (кратко)" style="flex:1 1 260px"><button type="button" class="btn" data-c55="appeal">Апелляция</button><button type="button" class="btn" data-c55="cass">Кассация в Верховный суд</button></div>'+
+  '<p class="sub">Будет создано новое дело со ссылкой на это; жребий для него — только среди апелляционных (или верховных) судей.</p>'+(cj?'<div class="c54-bar"><input class="tin" id="c55mi" maxlength="6" placeholder="№ дела" style="width:110px"><button type="button" class="btn" data-c55="merge">Присоединить это дело к делу №</button></div>':'')+'</div>';
+ // связанные дела и прошлые приговоры (3, 25)
+ var R=C.rel[c.id];if(!R){C.rel[c.id]={busy:true};capi("case_related",{id:c.id}).then(function(r){C.rel[c.id]=r.ok?r:{list:[],decisions:[]};repaint()})}
+ h+='<div class="c54-card"><h4>Связанные дела</h4>'+(!R||R.busy?'<p class="sub">Ищем…</p>':(R.list.length?'<div class="c54-list">'+R.list.map(function(x){return '<button type="button" class="c54-row" data-c54case="'+e(x.id)+'"><span><b>№ '+e(x.no)+' · '+e(x.title)+'</b><small>'+e(x.why)+'</small></span>'+(x.repeat?'<em class="c54-st no">рецидив?</em>':'')+'</button>'}).join("")+'</div>':'<p class="sub">Связанных дел не найдено.</p>')+
+  (R.decisions&&R.decisions.length?'<h4>Прошлые обвинительные решения участников</h4><ul>'+R.decisions.map(function(d){return '<li><b>№ '+e(d.no)+'</b> · '+e(d.person)+' · '+e(d.dt)+' · '+e(d.title)+(d.term?' · '+d.term+' мес.':'')+'</li>'}).join("")+'</ul>':''))+'</div>';
+ // хронология (4)
+ var T=[{at:Date.parse(c.created),t:"Дело заведено",by:c.author}];
+ (c.log||[]).forEach(function(x){if(x.t!=="Дело заведено"&&!/^Дело заведено/.test(x.t)||!T.length)T.push({at:x.at,t:x.t,by:x.by});else T[0].t=x.t});
+ (c.hearings||[]).forEach(function(x){T.push({at:Date.parse(x.at),t:"Заседание"+(x.place?" · "+x.place:"")+(x.note?" — "+x.note:""),fut:Date.parse(x.at)>Date.now()})});
+ T.sort(function(a,b){return a.at-b.at});
+ h+='<div class="c54-card"><h4>Хронология</h4><ol class="c55-tl">'+T.map(function(x){return '<li class="'+(x.fut?"fut":"")+'"><time>'+msk(x.at)+'</time><span>'+e(x.t)+(x.by?' <small>· '+e(x.by)+'</small>':'')+'</span></li>'}).join("")+'</ol></div>';
+ return h}
+
+/* ---------- материалы дела: доводы сторон, лица, ходатайства — оценки и решения судьи (14, 17, 20 + правка) ---------- */
+var MT={id:"",c:null,busy:false,t:0};
+function matCaseId(){return (S.ses&&S.ses.caseId)||MT.id||(C.cur&&C.cur.id)||""}
+function matLoad(id){MT.busy=true;MT.id=id;capi("case_get",{id:id}).then(function(r){MT.busy=false;MT.c=r.ok?r.item:null;if(!r.ok)toast(r.error);repaint()})}
+function matSave(now){clearTimeout(MT.t);var go=function(){if(!MT.c)return;capi("case_mat",{id:MT.c.id,mat:MT.c.mat}).then(function(r){if(r.ok){MT.c.mat=r.item.mat;if(C.cur&&C.cur.id===MT.c.id)C.cur.mat=r.item.mat}else toast(r.error)})};if(now)go();else MT.t=setTimeout(go,700)}
+var SIDES=["Обвинение","Защита","Истец","Ответчик","Потерпевший","Третье лицо"];
+function matHtml(){var id=matCaseId();if(!C.cases&&!C.busy)setTimeout(loadCases,0);
+ if(id&&(!MT.c||MT.c.id!==id)&&!MT.busy)setTimeout(function(){matLoad(id)},0);
+ var h='<div class="c54-bar"><label class="c54-inl">Дело<select class="tin" id="c55mc"><option value="">— выберите дело —</option>'+(C.cases||[]).map(function(c){return '<option value="'+e(c.id)+'"'+(c.id===id?" selected":"")+'>№ '+e(c.no)+' · '+e(c.title)+'</option>'}).join("")+'</select></label>'+(S.ses&&S.ses.caseId?'<span class="sub">дело совместного заседания</span>':'')+'</div>';
+ if(!id)return h+'<p class="bp-empty">Выберите дело — доводы сторон, лица и ходатайства хранятся в его карточке.</p>';
+ if(!MT.c||MT.c.id!==id)return h+'<p class="bp-empty">Загружаем материалы…</p>';
+ var m=MT.c.mat,cj=canJudge(),ses=!!S.ses;
+ h+='<p class="sub">Стороны добавляют свои доводы и ходатайства; оценку доводов и решения по ходатайствам ставит судья. '+(ses?'Решения, явка и замечания сразу записываются в общий протокол заседания.':'')+'</p>';
+ // доводы
+ h+='<div class="c54-card"><h4>Доводы сторон ('+m.args.length+')</h4><div class="c54-bar"><select class="tin" id="c55as">'+SIDES.map(function(s){return '<option>'+s+'</option>'}).join("")+'</select><input class="tin" id="c55aw" maxlength="60" placeholder="Кто (ник)" style="width:150px"><input class="tin" id="c55at" maxlength="600" placeholder="Довод: «права задержанному зачитаны с опозданием»" style="flex:1 1 260px"><button type="button" class="btn primary" data-c55m="arg">Добавить довод</button></div>'+
+  (m.args.length?'<ul class="c54-wl">'+m.args.map(function(x){return '<li class="'+(x.mark==="ok"?"on":x.mark==="no"?"no":x.mark==="part"?"req":"")+'"><span><b>'+e(x.side)+'</b>'+(x.who?' · '+e(x.who):'')+'<small style="color:var(--ink);font-size:14px">'+e(x.t)+'</small>'+(x.note&&!cj?'<small>Суд: '+e(x.note)+'</small>':'')+'</span>'+
+   (cj?'<span class="c54-wd"><select class="tin" data-c55amk="'+e(x.id)+'">'+opts(ARGM,x.mark)+'</select><input class="tin" data-c55an="'+e(x.id)+'" maxlength="300" placeholder="Комментарий суда" value="'+e(x.note)+'" style="width:200px"><button type="button" class="btn" data-c55del="args" data-id="'+e(x.id)+'" aria-label="Удалить">✕</button></span>':'<b class="c54-badge">'+e(ARGM[x.mark])+'</b>')+'</li>'}).join("")+'</ul>':'<p class="sub">Доводов пока нет.</p>')+'</div>';
+ // лица
+ h+='<div class="c54-card"><h4>Лица, участвующие в деле ('+m.persons.length+')</h4><div class="c54-bar"><select class="tin" id="c55pr">'+["Подсудимый","Ответчик","Истец","Потерпевший","Свидетель","Эксперт","Представитель","Обвинитель","Защитник"].map(function(s){return '<option>'+s+'</option>'}).join("")+'</select><input class="tin" id="c55pn" maxlength="80" placeholder="Имя Фамилия" style="width:180px"><input class="tin" id="c55pi" maxlength="160" placeholder="Паспорт, примечание" style="flex:1 1 200px"><button type="button" class="btn primary" data-c55m="person">Добавить</button>'+(MT.c.parties.length?'<button type="button" class="btn" data-c55m="fromparties">Из сторон дела</button>':'')+'</div>'+
+  (m.persons.length?'<ul class="c54-wl">'+m.persons.map(function(x){return '<li class="'+(x.removed?"no":x.present===true?"on":"")+'"><span><b>'+e(x.name)+'</b> · '+e(x.role)+(x.info?'<small>'+e(x.info)+'</small>':'')+'<small>'+(x.present===true?'явился':x.present===false?'не явился':'явка не отмечена')+(x.warns?' · замечаний: '+x.warns:'')+(x.removed?' · удалён из зала':'')+'</small></span>'+
+   (cj?'<span class="c54-wd"><button type="button" class="btn" data-c55pa="'+e(x.id)+'" data-v="1">Явился</button><button type="button" class="btn" data-c55pa="'+e(x.id)+'" data-v="0">Не явился</button><button type="button" class="btn" data-c55pw="'+e(x.id)+'">Замечание</button><button type="button" class="btn" data-c55prm="'+e(x.id)+'">Удалить из зала</button><button type="button" class="btn" data-c55del="persons" data-id="'+e(x.id)+'" aria-label="Убрать">✕</button></span>':'')+'</li>'}).join("")+'</ul>':'<p class="sub">Добавьте подсудимого, свидетелей и других участников — отметки явки попадут в протокол.</p>')+'</div>';
+ // ходатайства
+ h+='<div class="c54-card"><h4>Ходатайства ('+m.motions.length+')</h4><div class="c54-bar"><input class="tin" id="c55mw" maxlength="60" placeholder="Кто заявил" style="width:170px"><input class="tin" id="c55mt" maxlength="600" placeholder="О вызове свидетеля / об исключении доказательства…" style="flex:1 1 260px"><button type="button" class="btn primary" data-c55m="motion">Добавить ходатайство</button></div>'+
+  (m.motions.length?'<ul class="c54-wl">'+m.motions.map(function(x){return '<li class="'+(x.dec==="ok"?"on":x.dec==="no"?"no":x.dec==="wait"?"req":"")+'"><span><b>'+e(x.who||"Сторона")+'</b> · '+msk(x.at)+'<small style="color:var(--ink);font-size:14px">'+e(x.t)+'</small>'+(x.why&&!cj?'<small>Мотив: '+e(x.why)+'</small>':'')+'</span>'+
+   (cj?'<span class="c54-wd"><select class="tin" data-c55md="'+e(x.id)+'">'+opts(MOTD,x.dec)+'</select><input class="tin" data-c55mw2="'+e(x.id)+'" maxlength="400" placeholder="Мотив решения" value="'+e(x.why)+'" style="width:200px"><button type="button" class="btn" data-c55del="motions" data-id="'+e(x.id)+'" aria-label="Удалить">✕</button></span>':'<b class="c54-badge">'+e(MOTD[x.dec])+'</b>')+'</li>'}).join("")+'</ul>':'<p class="sub">Ходатайств нет.</p>')+'</div>';
+ h+='<div class="c54-card"><h4>Итог по материалам</h4><pre class="c54-pre">'+e(matText(m))+'</pre><div class="c54-bar"><button type="button" class="btn" data-c55m="copy">Скопировать</button><button type="button" class="btn primary" data-c55m="tomotive">В мотивировку приговора</button></div></div>';
+ return h}
+function matText(m){var L=[];
+ var a=m.args.filter(function(x){return x.mark});if(a.length){L.push("Оценка доводов сторон:");a.forEach(function(x){L.push("— "+x.side+(x.who?" ("+x.who+")":"")+": «"+x.t+"» — "+ARGM[x.mark]+(x.note?"; "+x.note:""))})}
+ var mo=m.motions.filter(function(x){return x.dec!=="wait"});if(mo.length){L.push("Ходатайства:");mo.forEach(function(x){L.push("— "+(x.who||"сторона")+": «"+x.t+"» — "+MOTD[x.dec]+(x.why?" ("+x.why+")":""))})}
+ var ab=m.persons.filter(function(x){return x.present===false});if(ab.length)L.push("Не явились: "+ab.map(function(x){return x.name+" ("+x.role.toLowerCase()+")"}).join(", ")+".");
+ return L.join("\n")||"Пока нет оценённых доводов и решённых ходатайств."}
+function matFind(k,id){var L=MT.c&&MT.c.mat[k]||[];for(var i=0;i<L.length;i++)if(L[i].id===id)return L[i];return null}
+function rid(){return Math.random().toString(36).slice(2,9)}
+/* ---------- шаблоны речей судьи (19 + правка: редактируются и сохраняются) ---------- */
+var SPD={open:["Открытие заседания","Судебное заседание {суд} объявляется открытым. Рассматривается дело № {номер} «{дело}». Председательствует {судья}. Суд в составе: {состав}. Прошу всех соблюдать порядок в зале суда. Время — {время}, дата — {дата}."],
+ rights:["Разъяснение прав","{подсудимый}, вам разъясняются ваши права: право знать, в чём вы обвиняетесь; право на защиту и помощь адвоката; право давать показания или отказаться от них; право заявлять ходатайства и отводы; право на последнее слово; право обжаловать решение суда. Права вам понятны?"],
+ parties:["Установление явки","Проверяется явка. Со стороны обвинения: {обвинитель}. Со стороны защиты: {защитник}. Подсудимый: {подсудимый}. Есть ли отводы составу суда?"],
+ recess:["Перерыв","В судебном заседании объявляется перерыв. Заседание продолжится после перерыва. Участникам просьба не покидать здание суда."],
+ retire:["Удаление в совещательную комнату","Суд удаляется в совещательную комнату для вынесения решения по делу № {номер}."],
+ verdict:["Оглашение решения","Именем штата Сан-Андреас! Суд в составе: {состав}, рассмотрев дело № {номер} в отношении {подсудимый} по {статьи}, оглашает решение. Прошу всех встать."],
+ close:["Закрытие заседания","Решение оглашено. Порядок и срок обжалования разъяснены. Судебное заседание по делу № {номер} объявляется закрытым."]};
+var SPU=lj("bos-c55sp",null)||{e:{},custom:[],cur:"open"};
+function spsave(){sj("bos-c55sp",SPU)}
+function spList(){var L=Object.keys(SPD).map(function(k){return {id:k,n:SPD[k][0],t:SPU.e[k]!=null?SPU.e[k]:SPD[k][1],std:true,changed:SPU.e[k]!=null}});return L.concat(SPU.custom.map(function(c){return {id:c.id,n:c.n,t:c.t,std:false}}))}
+function spVars(){var u=user()||{},c=S.ses||{},cc=C.cur||MT.c||{},roleOf=function(r){var m=S.ses?S.ses.members.filter(function(x){return x.role===r}).map(function(x){return x.nick}):[];return m.join(", ")},party=function(re){return (cc.parties||[]).filter(function(p){return re.test(p.role)}).map(function(p){return p.name}).join(", ")};
+ var ct=compText(),jp=C.me&&C.me.judgeName;
+ return {"номер":c.caseNo||cc.no||V.caseNo||"___","дело":c.title||cc.title||"___","подсудимый":V.name||party(/Обвиняем|Подсудим|Ответчик/)||roleOf("defendant")||"___","судья":(jp?jp+" ":"судья ")+(u.nick||""),
+  "состав":ct||((jp?jp+" ":"судья ")+(u.nick||"")),"суд":c.court||"Суд штата Сан-Андреас","дата":mskD(Date.now()),"время":msk(Date.now(),{day:undefined,month:undefined}),
+  "обвинитель":roleOf("pros")||party(/Обвинение|прокурор/i)||"___","защитник":roleOf("def")||party(/Защита|адвокат/i)||"___","статьи":(cc.arts||V.arts||"___")}}
+function spFill(t){var v=spVars();return String(t).replace(/\{([а-яё]+)\}/gi,function(m,k){k=k.toLowerCase();return v[k]!=null?v[k]:m})}
+function speechHtml(){var L=spList(),cur=L.filter(function(x){return x.id===SPU.cur})[0]||L[0];
+ var h='<p class="sub">Речи судьи с подстановкой: {номер}, {дело}, {подсудимый}, {судья}, {состав}, {суд}, {дата}, {время}, {обвинитель}, {защитник}, {статьи}. Текст любой речи можно изменить — он сохранится у вас.</p>';
+ h+='<div class="seg" role="group" style="flex-wrap:wrap;margin-bottom:8px">'+L.map(function(x){return '<button type="button" data-c55sp="'+e(x.id)+'" aria-pressed="'+(x.id===cur.id)+'">'+e(x.n)+(x.changed?' ✎':'')+'</button>'}).join("")+'</div>';
+ h+='<div class="c54-two"><div class="c54-card c54-form"><h4>Шаблон: '+e(cur.n)+'</h4>'+(cur.std?'':'<label>Название<input class="tin" id="c55spn" maxlength="60" value="'+e(cur.n)+'"></label>')+'<textarea class="tin" id="c55spt" rows="9" maxlength="3000">'+e(cur.t)+'</textarea>'+
+  '<div class="c54-bar"><button type="button" class="btn primary" data-c55s="save">Сохранить</button>'+(cur.std?(cur.changed?'<button type="button" class="btn" data-c55s="reset">Вернуть стандартный</button>':''):'<button type="button" class="btn" data-c55s="del">Удалить речь</button>')+'</div>'+
+  '<div class="c54-bar"><input class="tin" id="c55spa" maxlength="60" placeholder="Название новой речи" style="flex:1 1 200px"><button type="button" class="btn" data-c55s="add">+ Своя речь</button></div></div>'+
+  '<div class="c54-card"><h4>Готовый текст</h4><pre class="c54-pre" id="c55spo">'+e(spFill(cur.t))+'</pre><div class="c54-bar"><button type="button" class="btn primary" data-c55s="copy">Скопировать</button><button type="button" class="btn" data-c55s="proto">Огласить → в протокол</button></div></div></div>';
+ return h}
+
+/* ---------- пульт: перерыв с обратным отсчётом (15), режим «Зал суда» (18) ---------- */
+function pultExtra(){var rc=+P.recess||0,left=rc-Date.now();
+ return '<div class="c54-card"><h4>Перерыв и зал</h4><div class="c54-bar">'+(left>0?'<b class="c55-rc" id="c55rc">Перерыв: '+fmt(left)+'</b><button type="button" class="btn" data-c55p="recend">Закончить перерыв</button>':'<input class="tin" type="number" min="1" max="120" id="c55rm" value="10" style="width:80px"><button type="button" class="btn" data-c55p="recess">Объявить перерыв, мин.</button>')+
+  '<span style="flex:1"></span><button type="button" class="btn primary" data-c55p="hall">🖥 Режим «Зал суда»</button></div><p class="sub">Режим «Зал суда» — крупный таймер, выступающий и очередь на весь экран: удобно вывести на второй монитор или в стрим. '+(S.ses?'Перерыв виден всем участникам заседания.':'')+'</p></div>'}
+var HALL=null;
+function hallOpen(){if(HALL)return;HALL=document.createElement("div");HALL.className="c55-hall";HALL.innerHTML='<button type="button" class="btn c55-hx" data-c55p="hallx">Выйти (Esc)</button><div class="c55-hb"></div>';document.body.appendChild(HALL);
+ try{if(HALL.requestFullscreen)HALL.requestFullscreen().catch(function(){})}catch(x){}hallPaint()}
+function hallClose(){if(!HALL)return;try{if(document.fullscreenElement)document.exitFullscreen()}catch(x){}HALL.remove();HALL=null}
+function hallPaint(){if(!HALL)return;var s=S.ses,cur=P.cur,left=cur?P.lim*1000-(Date.now()-P.curAt):0,rc=(+P.recess||0)-Date.now();
+ HALL.querySelector(".c55-hb").innerHTML='<div class="c55-h1">⚖ '+e(s?s.title:(PR.title||"Судебное заседание"))+(s&&s.caseNo?' · дело № '+e(s.caseNo):'')+'</div>'+
+  (rc>0?'<div class="c55-hbig rc">ПЕРЕРЫВ<br>'+fmt(rc)+'</div>':'<div class="c55-hbig">'+fmt(pms())+'</div>')+
+  '<div class="c55-hcur'+(cur&&left<0?" over":"")+'">'+(cur?'Выступает: <b>'+e(cur)+'</b> · '+(left<0?'лимит превышен на '+fmt(-left):'осталось '+fmt(left)):'Сейчас никто не выступает')+'</div>'+
+  (P.q.length?'<div class="c55-hq">Далее: '+P.q.slice(0,4).map(e).join(" → ")+'</div>':'')}
+setInterval(function(){if(HALL)hallPaint();var r=document.getElementById("c55rc");if(r){var l=(+P.recess||0)-Date.now();if(l<=0)repaint();else r.textContent="Перерыв: "+fmt(l)}},500);
+document.addEventListener("keydown",function(ev){if(ev.key==="Escape"&&HALL){ev.stopPropagation();hallClose()}},true);
+
+/* ---------- совместное заседание: голосование коллегии (13), ходатайство участника (14), замечания (20) ---------- */
+function sesExtra(){var s=S.ses;if(!s)return "";var v=s.vote,inPanel=SPANEL.indexOf(s.myRole)>=0,h='';
+ h+='<div class="c54-card"><h4>Тайное голосование коллегии</h4>';
+ if(v&&v.open)h+='<p><b>«'+e(v.q)+'»</b> — проголосовали '+v.n+' из '+v.total+'.'+(v.mine?' Ваш голос учтён.':'')+'</p>'+(inPanel?'<div class="c54-bar"><button type="button" class="btn'+(v.mine==="for"?" primary":"")+'" data-c55v="for">За</button><button type="button" class="btn'+(v.mine==="against"?" primary":"")+'" data-c55v="against">Против</button><button type="button" class="btn'+(v.mine==="abstain"?" primary":"")+'" data-c55v="abstain">Воздержаться</button></div>':'')+
+  (s.canRole?'<div class="c54-bar"><button type="button" class="btn" data-c55v="end">Завершить голосование</button></div>':'');
+ else h+=(v&&v.res?'<p>Итог «'+e(v.q)+'»: за — <b>'+v.res.for+'</b>, против — <b>'+v.res.against+'</b>, воздержались — <b>'+v.res.abstain+'</b>.</p>':'<p class="sub">Голосуют судьи коллегии; виден только счёт, кто как голосовал — не видно никому.</p>')+
+  (s.canRole?'<div class="c54-bar"><input class="tin" id="c55vq" maxlength="200" placeholder="Вопрос: признать подсудимого виновным?" style="flex:1 1 260px"><button type="button" class="btn" data-c55v="start">Начать голосование</button></div>':'');
+ h+='</div><div class="c54-card"><h4>Заявить ходатайство</h4><div class="c54-bar"><input class="tin" id="c55sm" maxlength="600" placeholder="Например: прошу вызвать свидетеля Mike Ross" style="flex:1 1 260px"><button type="button" class="btn" data-c55="smotion">Заявить</button></div><p class="sub">Ходатайство попадёт в протокол и в материалы дела — суд вынесет по нему решение.</p></div>';
+ return h}
+
+/* ---------- протокол: диктовка голосом (11) и итог заседания от ИИ (12) ---------- */
+var DIC={on:false,ctx:null,src:null,proc:null,ch:[],stream:null,busy:false};
+function wav16(chunks,rate){var n=0;chunks.forEach(function(c){n+=c.length});var all=new Float32Array(n),o=0;chunks.forEach(function(c){all.set(c,o);o+=c.length});
+ var ratio=rate/16000,m=Math.floor(all.length/ratio),pcm=new Int16Array(m);for(var i=0;i<m;i++){var v=all[Math.floor(i*ratio)];v=Math.max(-1,Math.min(1,v*2));pcm[i]=v<0?v*32768:v*32767}
+ var buf=new ArrayBuffer(44+pcm.length*2),dv=new DataView(buf),w=function(off,s){for(var k=0;k<s.length;k++)dv.setUint8(off+k,s.charCodeAt(k))};
+ w(0,"RIFF");dv.setUint32(4,36+pcm.length*2,true);w(8,"WAVE");w(12,"fmt ");dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,1,true);dv.setUint32(24,16000,true);dv.setUint32(28,32000,true);dv.setUint16(32,2,true);dv.setUint16(34,16,true);w(36,"data");dv.setUint32(40,pcm.length*2,true);
+ new Int16Array(buf,44).set(pcm);var b=new Uint8Array(buf),s="";for(var q=0;q<b.length;q+=0x8000)s+=String.fromCharCode.apply(null,b.subarray(q,q+0x8000));return btoa(s)}
+function dictToggle(){if(DIC.on){dictStop();return}if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){toast("Микрофон недоступен");return}
+ navigator.mediaDevices.getUserMedia({audio:true}).then(function(st){DIC.stream=st;DIC.ctx=new (window.AudioContext||window.webkitAudioContext)();DIC.src=DIC.ctx.createMediaStreamSource(st);DIC.proc=DIC.ctx.createScriptProcessor(4096,1,1);DIC.ch=[];
+  DIC.proc.onaudioprocess=function(ev){DIC.ch.push(new Float32Array(ev.inputBuffer.getChannelData(0)));if(DIC.ch.length*4096/DIC.ctx.sampleRate>28)dictStop()};DIC.src.connect(DIC.proc);DIC.proc.connect(DIC.ctx.destination);DIC.on=true;repaint()},function(){toast("Нет доступа к микрофону")})}
+function dictStop(){if(!DIC.on)return;DIC.on=false;var rate=DIC.ctx.sampleRate,ch=DIC.ch;try{DIC.proc.disconnect();DIC.src.disconnect();DIC.stream.getTracks().forEach(function(t){t.stop()});DIC.ctx.close()}catch(x){}
+ if(ch.length*4096/rate<0.8){toast("Слишком короткая запись");repaint();return}DIC.busy=true;repaint();
+ api("stt",{audio:wav16(ch,rate),prompt:"Протокол судебного заседания. Суд, ходатайство, подсудимый, обвинение, защита, свидетель."}).then(function(r){DIC.busy=false;if(r.ok&&r.text){var i=document.getElementById("c54prt");DIC.last=r.text;repaint();setTimeout(function(){var j=document.getElementById("c54prt");if(j){j.value=(j.value?j.value+" ":"")+r.text;j.focus()}},50)}else{toast(r.error||"Не распознано");repaint()}})}
+function protoExtra(){return '<div class="c54-bar"><button type="button" class="btn'+(DIC.on?" primary":"")+'" data-c55="dict">'+(DIC.on?"⏹ Остановить диктовку":DIC.busy?"Распознаём…":"🎙 Диктовать запись")+'</button><button type="button" class="btn" data-c55="psum">🤖 Итог заседания</button></div><p class="sub">Диктовка: скажите запись голосом (до 30 секунд) — текст появится в поле «Новая запись», проверьте и нажмите «Записать».</p>'+aiBox("psum")}
+
+/* ---------- приговор: проверка (21), мотивировка ИИ (22), реестр (23), прошлые приговоры (25), условно (26), срок обжалования (30), PDF (28) ---------- */
+V.motive=V.motive||"";V.prob=V.prob||0;V.appdays=V.appdays==null?3:V.appdays;
+var PH={name:"",list:null,t:0};
+function personHist(){var n=String(V.name||"").trim();if(n===PH.name)return;PH.name=n;PH.list=null;clearTimeout(PH.t);if(n.length<3)return;PH.t=setTimeout(function(){capi("person_hist",{name:n}).then(function(r){if(PH.name===n){PH.list=r.ok?r.list:[];if(C.tab==="verdict"&&!typing())repaint()}})},500)}
+function vChecks(){var c=vCalc(),W=[];if(V.kind!=="guilty")return W;
+ if(!c.L.length)W.push("Не выбраны статьи.");if(+V.term>c.ft.m)W.push("Срок больше расчётного максимума ("+c.ft.m+" мес.).");
+ if(+V.fine&&c.fmax&&+V.fine>c.fmax)W.push("Штраф больше суммы максимумов по статьям ($"+c.fmax+").");if(+V.fine&&c.fmin&&+V.fine<c.fmin)W.push("Штраф меньше суммы минимумов по статьям ($"+c.fmin+").");
+ if(!V.name)W.push("Не указан подсудимый.");if(!V.caseNo)W.push("Не указан номер дела.");if(+V.prob&&!+V.term)W.push("Условный срок без срока лишения свободы.");return W}
+function verdictExtra(){personHist();var W=vChecks(),h='';
+ h+='<label>Суд установил (мотивировочная часть)<textarea class="tin" data-c54v="motive" rows="5" maxlength="3000" placeholder="Обстоятельства дела, оценка доказательств и доводов сторон…">'+e(V.motive)+'</textarea></label><div class="c54-bar"><button type="button" class="btn" data-c55="vmotive">🤖 Черновик мотивировки</button><button type="button" class="btn" data-c55="vmat">Из материалов дела</button></div>'+aiBox("motive");
+ if(V.kind==="guilty")h+='<div class="c54-two"><label>Условно, испытательный срок, мес. (0 — реально)<input class="tin" type="number" min="0" max="60" data-c54v="prob" value="'+(+V.prob||0)+'"></label><label>Срок обжалования, дней<input class="tin" type="number" min="0" max="60" data-c54v="appdays" value="'+(+V.appdays||0)+'"></label></div>';
+ else h+='<label>Срок обжалования, дней<input class="tin" type="number" min="0" max="60" data-c54v="appdays" value="'+(+V.appdays||0)+'"></label>';
+ if(PH.list&&PH.list.length)h+='<div class="c54-draw">⚠ Ранее '+e(PH.name)+': '+PH.list.length+' решени'+(PH.list.length===1?"е":"й")+' — '+PH.list.slice(0,4).map(function(d){return '№ '+e(d.no)+' ('+e(d.dt)+(d.verdict==="guilty"?', виновен':d.verdict==="acquit"?', оправдан':'')+')'}).join(", ")+'. Учтите рецидив.</div>';
+ h+='<div class="c54-card"><h4>Проверка перед оглашением</h4>'+(W.length?'<ul class="c55-warn">'+W.map(function(w){return '<li>'+e(w)+'</li>'}).join("")+'</ul>':'<p class="sub">✅ Формальных ошибок не найдено.</p>')+'<div class="c54-bar"><button type="button" class="btn" data-c55="vcheck">🤖 Проверить приговор</button></div>'+aiBox("vcheck")+'</div>';
+ h+='<div class="c54-bar"><button type="button" class="btn primary" data-c55="vreg">Огласить и внести в реестр</button><button type="button" class="btn" data-c55="vpdf">PDF с гербом</button></div>'+(C.vmsg?'<p class="c54-msg">'+e(C.vmsg)+'</p>':'');
+ return h}
+/* герб и декоративный QR: QR — только узор, никуда не ведёт и ничего не кодирует (ссылки и коды проверки на документах запрещены правилами проекта) */
+var EMBLEM='<svg viewBox="0 0 120 120" width="84" height="84" aria-hidden="true"><defs><path id="c55ea" d="M60 60 m-47 0 a47 47 0 1 1 94 0 a47 47 0 1 1 -94 0"/></defs><circle cx="60" cy="60" r="57" fill="none" stroke="#111" stroke-width="2.5"/><circle cx="60" cy="60" r="38" fill="none" stroke="#111" stroke-width="1.2"/>'+
+ '<text font-size="9.5" font-family="Times New Roman,serif" letter-spacing="1.6" fill="#111"><textPath href="#c55ea">ШТАТ САН-АНДРЕАС · СУДЕБНАЯ ВЛАСТЬ ·</textPath></text>'+
+ '<path d="M60 30v50M42 80h36M40 42h40" stroke="#111" stroke-width="2.4" fill="none"/><path d="M40 42l-9 18h18zM80 42l-9 18h18z" fill="none" stroke="#111" stroke-width="1.8"/><path d="M31 60a9 4 0 0 0 18 0M71 60a9 4 0 0 0 18 0" fill="#111"/><circle cx="60" cy="28" r="3" fill="#111"/></svg>';
+function fakeQR(seed){var h=2166136261;String(seed).split("").forEach(function(c){h^=c.charCodeAt(0);h=Math.imul(h,16777619)>>>0});var rnd=function(){h^=h<<13;h>>>=0;h^=h>>>17;h^=h<<5;h>>>=0;return h/4294967296};
+ var N=25,r='',fin=function(x,y){return (x<7&&y<7)||(x>=N-7&&y<7)||(x<7&&y>=N-7)};
+ for(var y=0;y<N;y++)for(var x=0;x<N;x++){if(fin(x,y))continue;if(rnd()<.5)r+='<rect x="'+x+'" y="'+y+'" width="1" height="1"/>'}
+ var F=function(x,y){return '<rect x="'+x+'" y="'+y+'" width="7" height="7"/><rect x="'+(x+1)+'" y="'+(y+1)+'" width="5" height="5" fill="#fff"/><rect x="'+(x+2)+'" y="'+(y+2)+'" width="3" height="3"/>'};
+ return '<svg viewBox="-1 -1 27 27" width="78" height="78" aria-hidden="true" shape-rendering="crispEdges"><rect x="-1" y="-1" width="27" height="27" fill="#fff"/><g fill="#111">'+r+F(0,0)+F(N-7,0)+F(0,N-7)+'</g></svg>'}
+function docPdf(title,body,no){var html='<div class="c55-doc"><div class="c55-dh">'+EMBLEM+'<div><b>ШТАТ САН-АНДРЕАС</b><br>Судебная власть<br><small>'+e((S.ses&&S.ses.court)||"Суд штата Сан-Андреас")+'</small></div>'+fakeQR(title+no+body.length)+'</div><pre>'+e(body)+'</pre><div class="c55-df">'+(no?'№ '+e(no)+' · ':'')+mskD(Date.now())+'</div></div>';
+ var css='body{margin:16mm;color:#000;font:14px/1.5 "Times New Roman",serif}.c55-dh{display:flex;align-items:center;gap:18px;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:14px}.c55-dh>div{flex:1;text-align:center;font-size:15px}.c55-dh small{font-size:12px}pre{white-space:pre-wrap;font:14px/1.55 "Times New Roman",serif;margin:0}.c55-df{margin-top:18px;font-size:11px;color:#444;text-align:right}';
+ var fr=document.createElement("iframe");fr.style.cssText="position:fixed;right:0;bottom:0;width:0;height:0;border:0";document.body.appendChild(fr);var d=fr.contentDocument;
+ d.open();d.write('<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>'+e(title)+'</title><style>'+css+'</style></head><body>'+html+'</body></html>');d.close();
+ setTimeout(function(){try{fr.contentWindow.focus();fr.contentWindow.print()}catch(x){toast("Не удалось открыть печать")}setTimeout(function(){fr.remove()},60000)},300)}
+/* ---------- решения суда: реестр с номерами, исполнение, испытательный срок, обжалование, амнистия, публикация (23, 24, 26, 27, 30, 48) ---------- */
+var DF={f:"all",due:null,pub:null};
+function left(t){var l=Date.parse(t)-Date.now();if(!(l>0))return "";var d=Math.floor(l/864e5),hh=Math.floor(l%864e5/3600e3);return d?d+" дн. "+hh+" ч":hh+" ч "+Math.floor(l%3600e3/60e3)+" мин"}
+var OUTC={"":"—",upheld:"оставлено в силе",changed:"изменено",overturned:"отменено"};
+function decRow(x,d){var adm=d&&d.canAdd,lead=C.me&&(C.me.lead||C.me.pvs);
+ return '<details class="c54-dec"><summary><b>'+(x.no?'№ '+e(x.no)+' · ':'')+e(x.title)+'</b><small>'+(x.caseNo?'дело № '+e(x.caseNo)+' · ':'')+e(x.dt)+(x.person?' · '+e(x.person):'')+(x.verdict?' · '+(x.verdict==="guilty"?"обвинительное":x.verdict==="acquit"?"оправдательное":"иное"):'')+(x.panel?' · ⚖ '+e(x.panel):'')+'</small>'+
+  '<span class="c55-tags">'+(x.verdict==="guilty"?(x.exec==="done"?'<em class="c54-st open">исполнено</em>':'<em class="c54-st no">не исполнено</em>'):'')+(left(x.appealUntil)?'<em class="c54-st">обжалование: '+left(x.appealUntil)+'</em>':'')+(left(x.probUntil)?'<em class="c54-st">испыт. срок: '+left(x.probUntil)+'</em>':'')+(x.amnesty?'<em class="c54-st">амнистия</em>':'')+(x.outcome?'<em class="c54-st">'+OUTC[x.outcome]+'</em>':'')+(x.pub?'<em class="c54-st">на сайте</em>':'')+'</span></summary>'+
+  '<p>'+nl(x.text)+'</p>'+(x.amnesty?'<p class="c54-draw">Амнистия: '+e(x.amnesty)+'</p>':'')+
+  '<div class="c54-bar"><button type="button" class="btn" data-c54decc="'+e(x.id)+'">Скопировать</button><button type="button" class="btn" data-c55dp="'+e(x.id)+'">PDF с гербом</button>'+(adm?'<button type="button" class="btn" data-c54dece="'+e(x.id)+'">Изменить</button><button type="button" class="btn" data-c54decd="'+e(x.id)+'">Удалить</button>':'')+'</div>'+
+  (adm?'<div class="c54-bar">'+(x.verdict==="guilty"?'<button type="button" class="btn'+(x.exec==="done"?"":" primary")+'" data-c55ex="'+e(x.id)+'" data-v="'+(x.exec==="done"?0:1)+'">'+(x.exec==="done"?"Отметить неисполненным":"Отметить исполненным")+'</button>':'')+
+   '<label class="c54-inl">Итог обжалования<select class="tin" data-c55oc="'+e(x.id)+'">'+opts(OUTC,x.outcome)+'</select></label><label class="c54-inl"><input type="checkbox" data-c55pub="'+e(x.id)+'"'+(x.pub?" checked":"")+'> на сайте</label><label class="c54-inl"><input type="checkbox" data-c55anon="'+e(x.id)+'"'+(x.anon?" checked":"")+'> скрыть имя</label></div>'+
+   (lead?'<div class="c54-bar"><input class="tin" data-c55amt="'+e(x.id)+'" maxlength="300" placeholder="Амнистия: акт, дата" value="'+e(x.amnesty)+'" style="flex:1 1 220px"><button type="button" class="btn" data-c55am="'+e(x.id)+'">Отметить амнистию</button></div>':''):'')+
+  '<small class="sub">Добавил: '+e(x.author)+'</small></details>'}
+function decsHtml(){if(!C.decs)setTimeout(loadDecs,0);var d=C.decs,ed=C.decEd,lead=C.me&&C.me.lead;
+ if(DF.f==="due"&&!DF.due){DF.due=[];capi("dec_due").then(function(r){DF.due=r.ok?r.list:[];repaint()})}
+ if(lead&&DF.pub==null){DF.pub=false;capi("pub_get").then(function(r){DF.pub=!!r.on;repaint()})}
+ var h='<div class="c54-bar"><div class="seg" role="group"><button type="button" data-c55df="all" aria-pressed="'+(DF.f==="all")+'">Все решения</button><button type="button" data-c55df="due" aria-pressed="'+(DF.f==="due")+'">Требуют внимания</button></div><input class="tin" id="c54dq" type="search" placeholder="Поиск: статья, имя, номер" value="'+e(C.dq)+'" style="flex:1 1 220px">'+(d&&d.canAdd&&!ed?'<button type="button" class="btn primary" data-c54dec="new">+ Добавить решение</button>':'')+'</div>';
+ if(lead)h+='<div class="c54-bar"><label class="c54-inl"><input type="checkbox" id="c55pubon"'+(DF.pub?" checked":"")+'> Публичный реестр решений на сайте senko-assistant.site/court/ включён</label><span class="sub">На сайт попадают только решения с отметкой «на сайте»; при «скрыть имя» вместо имени — инициалы.</span></div>';
+ if(ed)h+='<div class="c54-card c54-form"><label>Название<input class="tin" data-c54de="title" maxlength="150" value="'+e(ed.title||"")+'"></label><div class="c54-two"><label>№ дела<input class="tin" data-c54de="caseNo" maxlength="20" value="'+e(ed.caseNo||"")+'"></label><label>Дата<input class="tin" type="date" data-c54de="dt" value="'+e(ed.dt||new Date().toISOString().slice(0,10))+'"></label></div>'+
+  '<div class="c54-two"><label>Подсудимый / ответчик<input class="tin" data-c54de="person" maxlength="80" value="'+e(ed.person||"")+'"></label><label>Решение<select class="tin" data-c54de="verdict">'+opts({"":"—",guilty:"обвинительное",acquit:"оправдательное",other:"иное"},ed.verdict||"")+'</select></label></div>'+
+  '<label>Состав суда<input class="tin" data-c54de="panel" maxlength="400" value="'+e(ed.panel!=null?ed.panel:compShort())+'"></label><div class="c54-two"><label>Статьи<input class="tin" data-c54de="arts" maxlength="200" value="'+e(ed.arts||"")+'"></label><label>Метки<input class="tin" data-c54de="tags" maxlength="120" value="'+e(ed.tags||"")+'"></label></div><label>Текст решения<textarea class="tin" rows="8" data-c54de="text" maxlength="6000">'+e(ed.text||"")+'</textarea></label>'+
+  '<div class="c54-bar"><button type="button" class="btn primary" data-c54dec="save">Сохранить</button><button type="button" class="btn" data-c54dec="cancel">Отмена</button></div>'+msgHtml()+'</div>';
+ var L=DF.f==="due"?DF.due:d&&d.list;
+ if(!L)return h+'<p class="bp-empty">Загружаем…</p>';
+ if(!L.length)return h+'<p class="bp-empty">'+(DF.f==="due"?"Неисполненных решений, испытательных сроков и открытых сроков обжалования нет.":C.dq?"Ничего не найдено.":"Реестр пуст. Решения попадают сюда кнопкой «Огласить и внести в реестр» в конструкторе приговора.")+'</p>';
+ return h+'<div class="c54-list">'+L.map(function(x){return decRow(x,d)}).join("")+'</div>'}
+function decById(id){var L=((C.decs&&C.decs.list)||[]).concat(DF.due||[]);for(var i=0;i<L.length;i++)if(L[i].id===id)return L[i];return null}
+
+/* ---------- ордера: номер, проверка по номеру, использование, ИИ-оценка, PDF (40–42) ---------- */
+var WC={no:"",res:null};
+function warHtml(){if(!C.wars)setTimeout(loadWars,0);var f=C.warF,W=C.wars,cj=W&&(W.judge||W.lead);
+ var h='<div class="c54-card"><h4>Проверить ордер по номеру</h4><div class="c54-bar"><input class="tin" id="c55wn" maxlength="6" placeholder="№ ордера" value="'+e(WC.no)+'" style="width:120px"><button type="button" class="btn primary" data-c55w="check">Проверить</button>'+
+  (WC.res?(WC.res.ok?'<b class="c54-badge">'+(WC.res.item.active?"✅ действует до "+msk(Date.parse(WC.res.item.until)):WC.res.item.revoked?"⛔ отозван":WC.res.item.status==="req"?"⏳ ещё не выдан":WC.res.item.status==="no"?"⛔ в выдаче отказано":"⌛ срок истёк")+'</b><span>'+e(WC.res.item.kindName)+' · '+e(WC.res.item.target)+' · '+e(WC.res.item.by||"")+'</span>':'<span class="c54-msg err">'+e(WC.res.error)+'</span>'):'')+'</div></div>';
+ h+='<div class="c54-two"><div class="c54-card c54-form"><h4>Запрос ордера</h4><label>Вид<select class="tin" data-c54w="kind">'+Object.keys(WK).map(function(k){return '<option value="'+k+'"'+(f.kind===k?" selected":"")+'>'+WK[k]+'</option>'}).join("")+'</select></label>'+
+  '<label>В отношении кого / чего<input class="tin" data-c54w="target" maxlength="120" value="'+e(f.target)+'" placeholder="John Doe, дом 12 по Grove Street"></label><label>№ дела (если есть)<input class="tin" data-c54w="caseNo" maxlength="20" value="'+e(f.caseNo)+'"></label><label>Основания<textarea class="tin" rows="4" data-c54w="reason" maxlength="1200" placeholder="Какие есть данные, почему без ордера не обойтись">'+e(f.reason)+'</textarea></label>'+
+  '<div class="c54-bar"><button type="button" class="btn primary" data-c54wo="send">Отправить судьям</button><button type="button" class="btn" data-c54wo="copy">Скопировать текст запроса</button></div>'+msgHtml()+'</div><div class="c54-card"><h4>Текст запроса</h4><pre class="c54-pre" id="c54wt">'+e(warText())+'</pre></div></div>';
+ if(!W)return h+'<p class="bp-empty">Загружаем ордера…</p>';
+ var L=W.list||[],req=L.filter(function(x){return x.status==="req"}),act=L.filter(function(x){return x.active}),old=L.filter(function(x){return x.status!=="req"&&!x.active});
+ var row=function(x){return '<li class="'+(x.active?"on":x.status)+'"><span><b>'+(x.no?'№ '+e(x.no)+' · ':'')+e(x.kindName)+'</b> · '+e(x.target)+(x.caseNo?' · дело № '+e(x.caseNo):'')+'<small>'+(x.status==="req"?'запросил '+e(x.author)+(x.org?' ('+e(x.org)+')':'')+' '+msk(Date.parse(x.created)):x.status==="ok"?'выдал '+e(x.by)+(x.active?' · действует до <b>'+msk(Date.parse(x.until))+'</b> (ещё '+left(x.until)+')':' · срок истёк'):x.revoked?'отозван':'отказано · '+e(x.by))+(x.answer?' · '+e(x.answer):'')+'</small><small>Основание: '+e(x.reason.slice(0,240))+'</small>'+
+  ((x.uses||[]).length?'<small>Использование: '+x.uses.map(function(u){return msk(u.at)+' — '+e(u.by)+(u.t?': '+e(u.t):'')}).join("; ")+'</small>':'')+'</span>'+
+  (x.status==="req"&&cj?'<span class="c54-wd"><button type="button" class="btn" data-c55wai="'+e(x.id)+'">🤖 Оценить</button><select class="tin" data-c54wh="'+e(x.id)+'"><option value="6">6 ч</option><option value="24" selected>24 ч</option><option value="72">3 суток</option><option value="168">7 суток</option></select><button type="button" class="btn primary" data-c54wdec="1" data-id="'+e(x.id)+'">Выдать</button><button type="button" class="btn" data-c54wdec="0" data-id="'+e(x.id)+'">Отказать</button></span>':'')+
+  (x.active?'<span class="c54-wd"><button type="button" class="btn" data-c55wu="'+e(x.id)+'">Отметить использование</button><button type="button" class="btn" data-c55wp="'+e(x.id)+'">PDF</button></span>':'')+'</li>'+(AIR["war"+x.id]?'<li style="border:0;padding:0">'+aiBox("war"+x.id)+'</li>':'')};
+ h+='<h4>Действующие ордера ('+act.length+')</h4>'+(act.length?'<ul class="c54-wl">'+act.map(row).join("")+'</ul>':'<p class="sub">Сейчас действующих ордеров нет.</p>');
+ h+='<h4>Запросы на рассмотрении ('+req.length+')</h4>'+(req.length?'<ul class="c54-wl">'+req.map(row).join("")+'</ul>':'<p class="sub">Нет запросов.</p>')+(cj?'':'<p class="sub">Выдают ордера судьи (окружной, апелляционный, верховный).</p>');
+ if(old.length)h+='<details><summary>Истёкшие, отозванные и отказанные ('+old.length+')</summary><ul class="c54-wl">'+old.map(row).join("")+'</ul></details>';
+ return h}
+function warById(id){return ((C.wars&&C.wars.list)||[]).filter(function(x){return x.id===id})[0]}
+function warPdfText(x){return "ОРДЕР № "+(x.no||x.id)+"\n"+x.kindName.toUpperCase()+"\n\nВ отношении: "+x.target+(x.caseNo?"\nПо делу № "+x.caseNo:"")+"\n\nОснования:\n"+x.reason+"\n\nВыдал: "+x.by+"\nДействует до: "+msk(Date.parse(x.until),{year:"numeric"})+" (МСК)"+"\n\nПодпись ________"}
+
+/* ---------- адвокаты: реестр, дежурный, вызовы, соглашение (33–35) ---------- */
+var ADV={d:null};
+function loadAdv(){capi("adv_list").then(function(r){ADV.d=r.ok?r:{err:r.error};repaint()})}
+function advHtml(){if(!ADV.d)setTimeout(loadAdv,0);var d=ADV.d;if(!d)return '<p class="bp-empty">Загружаем…</p>';if(d.err)return '<div class="banner bp-err">'+e(d.err)+'</div>';
+ var h='<div class="c54-two"><div class="c54-card"><h4>Дежурный адвокат</h4><p>'+(d.duty?'⚖ <b>'+e(d.duty)+'</b> — свободен и в сети, первым в очереди дежурства.':'Свободных адвокатов в сети сейчас нет.')+'</p>'+
+  '<h4>Вызвать адвоката к задержанному</h4><div class="c54-form"><input class="tin" id="c55cs" maxlength="80" placeholder="Кому нужен адвокат: Имя Фамилия"><input class="tin" id="c55cp" maxlength="120" placeholder="Где: КПЗ LSPD, Mission Row"><input class="tin" id="c55cn" maxlength="300" placeholder="Примечание"><div class="c54-bar"><button type="button" class="btn primary" data-c55a="call">Вызвать</button></div></div></div>';
+ h+='<div class="c54-card c54-form"><h4>Я в реестре адвокатов</h4>'+(d.canBe?'<label class="c54-inl"><input type="checkbox" id="c55aon"'+(d.me.on?" checked":"")+'> Показывать меня в реестре и присылать вызовы</label><label>Лицензия №<input class="tin" id="c55alic" maxlength="40" value="'+e(d.me.lic)+'"></label><label>Специализация<input class="tin" id="c55aspec" maxlength="120" value="'+e(d.me.spec)+'" placeholder="уголовные дела, ДТП, гражданские иски"></label><label class="c54-inl"><input type="checkbox" id="c55abusy"'+(d.me.busy?" checked":"")+'> Сейчас занят</label><div class="c54-bar"><button type="button" class="btn primary" data-c55a="save">Сохранить</button></div>':'<p class="sub">В реестр вносятся сотрудники Government.</p>')+'</div></div>';
+ h+='<h4>Вызовы за 12 часов</h4>'+(d.calls.length?'<ul class="c54-wl">'+d.calls.map(function(c){return '<li class="'+(c.status==="open"?"req":c.status==="taken"?"on":"")+'"><span><b>'+e(c.suspect)+'</b>'+(c.place?' · '+e(c.place):'')+'<small>вызвал '+e(c.caller)+' '+msk(Date.parse(c.created))+(c.status==="taken"?' · принял '+e(c.taker):c.status==="closed"?' · закрыт':' · ждёт адвоката')+(c.note?' · '+e(c.note):'')+'</small></span>'+
+  (c.status==="open"&&d.me.on?'<button type="button" class="btn primary" data-c55a="take" data-id="'+e(c.id)+'">Принять вызов</button>':'')+(c.status!=="closed"&&(c.mine||c.took)?'<button type="button" class="btn" data-c55a="close" data-id="'+e(c.id)+'"'+(c.took?' data-free="1"':'')+'>Закрыть</button>':'')+'</li>'}).join("")+'</ul>':'<p class="sub">Вызовов нет.</p>');
+ h+='<h4>Реестр адвокатов ('+d.list.length+')</h4>'+(d.list.length?'<ul class="c54-wl">'+d.list.map(function(a){return '<li class="'+(a.online&&!a.busy?"on":"")+'"><span><b>'+(a.online?'🟢 ':'⚪ ')+e(a.nick)+'</b>'+(a.lic?' · лицензия № '+e(a.lic):'')+'<small>'+(a.spec?e(a.spec)+' · ':'')+(a.busy?'занят':'свободен')+(a.static?' · статик '+e(a.static):'')+'</small></span></li>'}).join("")+'</ul>':'<p class="sub">В реестре пока никого нет.</p>');
+ return h}
+
+/* ---------- прокурорский надзор за рапортами (37, 39) и дело из рапорта (5) ---------- */
+var OV={days:7,org:"",mark:"",d:null,open:{}};
+function loadOv(){capi("rp_list",{days:OV.days,org:OV.org,mark:OV.mark}).then(function(r){OV.d=r.ok?r:{err:r.error};repaint()})}
+function ovHtml(){if(!OV.d)setTimeout(loadOv,0);var d=OV.d;
+ var h='<p class="sub">Рапорты сотрудников всех ведомств сервера: прокуратура отмечает «проверено» или «есть нарушения» — автору приходит уведомление. Из рапорта о задержании можно сразу завести дело.</p><div class="c54-bar"><select class="tin" id="c55od">'+[[1,"сутки"],[3,"3 дня"],[7,"неделя"],[30,"месяц"]].map(function(x){return '<option value="'+x[0]+'"'+(OV.days===x[0]?" selected":"")+'>'+x[1]+'</option>'}).join("")+'</select><select class="tin" id="c55oo"><option value="">Все ведомства</option>'+["LSPD","LSCSD","FIB","SANG"].map(function(o){return '<option'+(OV.org===o?" selected":"")+'>'+o+'</option>'}).join("")+'</select><select class="tin" id="c55om">'+opts({"":"Любая отметка",none:"Не проверены",ok:"Проверено",viol:"Есть нарушения"},OV.mark)+'</select></div>';
+ if(!d)return h+'<p class="bp-empty">Загружаем…</p>';if(d.err)return h+'<div class="banner bp-err">'+e(d.err)+'</div>';
+ if(!d.list.length)return h+'<p class="bp-empty">Рапортов за период нет.</p>';
+ return h+'<div class="c54-list">'+d.list.map(function(r){return '<details class="c54-dec"'+(OV.open[r.id]?" open":"")+' data-c55ov="'+e(r.id)+'"><summary><b>'+e(r.org)+' № '+e(r.no)+' · '+e(r.title)+'</b><small>'+e(r.author)+' · '+msk(Date.parse(r.created))+(r.mark?' · '+(r.mark==="ok"?"✅ проверено":"⚠ есть нарушения")+' ('+e(r.by)+')':' · не проверен')+'</small></summary><pre class="c54-pre">'+e(r.body)+'</pre>'+
+  '<div class="c54-bar"><input class="tin" data-c55on="'+e(r.id)+'" maxlength="600" placeholder="Замечания прокуратуры" value="'+e(r.note)+'" style="flex:1 1 240px"><button type="button" class="btn" data-c55om2="ok" data-id="'+e(r.id)+'">Проверено</button><button type="button" class="btn" data-c55om2="viol" data-id="'+e(r.id)+'">Есть нарушения</button></div>'+
+  '<div class="c54-bar"><button type="button" class="btn" data-c55oai="'+e(r.id)+'">🤖 Проверить рапорт</button>'+(r.kind==="arrest"?'<button type="button" class="btn primary" data-c55ocase="'+e(r.id)+'">Завести дело</button>':'')+'</div>'+aiBox("rp"+r.id)+'</details>'}).join("")+'</div>'}
+function ovById(id){return ((OV.d&&OV.d.list)||[]).filter(function(x){return x.id===id})[0]}
+function caseFromReport(r){var f=r.fields||{},ev=[];String(f.evidence||"").split(/[,\s]+/).filter(function(u){return /^https?:\/\//.test(u)}).forEach(function(u){ev.push({t:"Доказательство из рапорта",url:u})});
+ C.edit={title:"Государство против "+(f.suspect||"___"),kind:"crim",status:"open",stage:"filed",arts:f.arts||"",fromReport:r.org+" "+r.no,
+  parties:[{role:"Обвинение (прокурор)",name:(user()||{}).nick||""},{role:"Обвиняемый",name:f.suspect||"",note:f.sid?"паспорт "+f.sid:""},{role:"Свидетель",name:r.author.split(/[,(]/)[0].trim(),note:"автор рапорта "+r.org+" № "+r.no}],
+  hearings:[],evidence:ev.concat([{t:"Рапорт "+r.org+" № "+r.no+" от "+mskD(Date.parse(r.created)),url:""}]),notes:"Создано по рапорту "+r.org+" № "+r.no+".\n\n"+r.body.slice(0,3000),
+  mat:{persons:[{role:"Подсудимый",name:f.suspect||"",info:f.sid?"паспорт "+f.sid:""}],args:[],motions:[]}};C.cur=null;C.tab="cases";repaint();window.scrollTo(0,0)}
+
+/* ---------- ИИ: доводы сторон, подготовка к допросу, шансы апелляции, спарринг, консультант (31, 36, 44, 50, 174) ---------- */
+var AIM={court:["Доводы сторон","Опишите дело — ИИ даст квалификацию, доводы обвинения и защиты со статьями и слабые места."],questions:["Подготовка к допросу","Укажите свою сторону и материалы — ИИ предложит вопросы свидетелю и возможные возражения."],
+ appeal:["Шансы апелляции","Вставьте текст решения (и при желании протокол) — ИИ перечислит нарушения для жалобы и оценит шансы."],spar:["Спарринг","Тренировка спора: вы — одна сторона, ИИ — другая. Напишите «итог», чтобы получить оценку."],
+ citizen:["Консультант для граждан","Простыми словами: куда обратиться и какой документ подать. То же есть на сайте для граждан без аккаунта."]};
+var AIS=lj("bos-c55ai",null)||{m:"court",side:"Защита"};var SPAR=[];
+function aiHtml(){var a=C.ai,m=AIS.m,res=AIR["ai_"+m];
+ var h='<div class="seg" role="group" style="flex-wrap:wrap;margin-bottom:8px">'+Object.keys(AIM).map(function(k){return '<button type="button" data-c55aim="'+k+'" aria-pressed="'+(m===k)+'">'+AIM[k][0]+'</button>'}).join("")+'</div><p class="sub">'+AIM[m][1]+'</p>';
+ h+='<div class="c54-card c54-form">'+((m==="questions"||m==="spar")?'<label class="c54-inl">Моя сторона<select class="tin" id="c55aside">'+["Защита","Обвинение","Истец","Ответчик"].map(function(s){return '<option'+(AIS.side===s?" selected":"")+'>'+s+'</option>'}).join("")+'</select></label>':'')+
+  (m==="spar"&&SPAR.length?'<div class="c55-chat">'+SPAR.map(function(t){return '<p class="me"><b>Вы:</b> '+nl(t.q)+'</p><p><b>Оппонент:</b> '+nl(t.a)+'</p>'}).join("")+'</div>':'')+
+  '<textarea class="tin" id="c54aiq" rows="6" maxlength="1500" placeholder="'+(m==="spar"?(SPAR.length?"Ваш ответ оппоненту… (или «итог»)":"Опишите дело и свой первый довод"):m==="appeal"?"Текст решения суда…":"Опишите дело…")+'">'+e(m==="court"?a.q:"")+'</textarea>'+
+  '<div class="c54-bar"><button type="button" class="btn primary" data-c55ai="go"'+(res&&res.busy||!aiOk()?" disabled":"")+'>'+(res&&res.busy?"Думаю…":m==="spar"?(SPAR.length?"Ответить":"Начать спор"):"Спросить ИИ")+'</button>'+(m==="spar"&&SPAR.length?'<button type="button" class="btn" data-c55ai="reset">Новый спор</button>':'')+(aiOk()?'':'<span class="sub">ИИ-помощник недоступен: войдите в аккаунт.</span>')+'</div></div>';
+ return h+(m==="spar"?(res&&res.err?'<p class="c54-msg err">'+e(res.err)+'</p>':''):aiBox("ai_"+m))}
+
+/* ---------- экзамен на судью (43) ---------- */
+var EX={q:null,i:0,ok:0,done:false,res:null};
+function exStart(){var pool=[].concat(((window.DATA&&DATA.uk)||[]).filter(function(r){return r.title&&r.code}),((window.DATA&&DATA.pk)||[]).filter(function(r){return r.title&&r.code}));
+ if(pool.length<8){toast("Нет данных кодексов для экзамена");return}var pick=function(){return pool[Math.floor(Math.random()*pool.length)]},Q=[];
+ for(var i=0;i<15;i++){var r=pick(),wrong=[];while(wrong.length<3){var w=pick();if(w.title!==r.title&&wrong.every(function(x){return x.title!==w.title}))wrong.push(w)}
+  var o=[r].concat(wrong).sort(function(){return Math.random()-.5});Q.push({t:(r.k==="pk"?"ПК":"УК")+" ст. "+r.code+(r.part?" ч. "+r.part:"")+" — о чём эта статья?",o:o.map(function(x){return x.title}),a:o.indexOf(r)})}
+ EX={q:Q,i:0,ok:0,done:false,res:null};repaint()}
+function examHtml(){if(!EX.q)return '<div class="c54-card"><h4>Экзамен на судью</h4><p class="sub">15 вопросов по Уголовному и Процессуальному кодексам: выберите, о чём статья. Результат сохранится в профиле — его видит Председатель Верховного суда при рассмотрении заявки.</p><div class="c54-bar"><button type="button" class="btn primary" data-c55e="start">Начать экзамен</button></div></div>';
+ if(EX.done)return '<div class="c54-card"><h4>Результат: '+EX.ok+' из '+EX.q.length+' ('+Math.round(EX.ok/EX.q.length*100)+'%)</h4><p>'+(EX.ok/EX.q.length>=.8?"✅ Экзамен сдан.":"Экзамен не сдан: нужно 80% и выше.")+' Результат сохранён.</p><div class="c54-bar"><button type="button" class="btn" data-c55e="start">Пройти ещё раз</button></div></div>';
+ var q=EX.q[EX.i];return '<div class="c54-card"><h4>Вопрос '+(EX.i+1)+' из '+EX.q.length+'</h4><p><b>'+e(q.t)+'</b></p><div class="c54-list">'+q.o.map(function(o,i){return '<button type="button" class="c54-row" data-c55ea="'+i+'"><span>'+e(o)+'</span></button>'}).join("")+'</div></div>'}
+
+/* ---------- статистика судей, нагрузка и отчёт за месяц (45–47) ---------- */
+var ST={js:null,m:null,month:new Date(Date.now()+3*3600e3).toISOString().slice(0,7)};
+function statsHtml(){var can=C.me&&(C.me.lead||C.me.pvs);if(can&&!ST.js)capi("judge_stats").then(function(r){ST.js=r.ok?r.list:[];repaint()});if(!ST.m)capi("court_month",{month:ST.month}).then(function(r){ST.m=r.ok?r:{err:r.error};repaint()});
+ var h='';if(ST.m&&!ST.m.err){var m=ST.m;h+='<div class="c54-card"><div class="c54-bar"><h4 style="margin:0;flex:1">Отчёт судебной власти за '+e(m.month)+'</h4><input class="tin" type="month" id="c55sm2" value="'+e(ST.month)+'"><button type="button" class="btn primary" data-c55st="img">Картинка для Discord</button></div>'+
+  '<div class="c55-kpi">'+[["Новых дел",m.cases.opened],["Закрыто дел",m.cases.closed],["Апелляций",m.cases.appeals],["Ордеров выдано",m.warrants.issued],["Отказано в ордере",m.warrants.denied],["Обвинительных",m.decisions.guilty],["Оправдательных",m.decisions.acquit]].map(function(k){return '<div><b>'+(k[1]||0)+'</b><small>'+k[0]+'</small></div>'}).join("")+'</div>'+
+  (m.top.length?'<p class="sub">Больше всего решений: '+m.top.map(function(t){return e(t.author)+' ('+t.n+')'}).join(", ")+'</p>':'')+'<div id="c55cv"></div></div>'}
+ else h+='<p class="bp-empty">'+(ST.m&&ST.m.err?e(ST.m.err):"Загружаем отчёт…")+'</p>';
+ if(can)h+='<div class="c54-card"><h4>Статистика судей</h4>'+(ST.js?'<table class="c54-tt"><thead><tr><th>Судья</th><th>В работе</th><th>Закрыто</th><th>Средний срок, дн.</th><th>Обжаловано</th><th>Отменено / изменено</th><th>Экзамен</th></tr></thead><tbody>'+ST.js.map(function(j){return '<tr><td><b>'+e(j.nick)+'</b><br><small>'+e(j.pos)+'</small></td><td>'+j.open+'</td><td>'+j.closed+'</td><td>'+(j.avgDays==null?"—":j.avgDays)+'</td><td>'+j.appealed+'</td><td>'+j.overturned+(j.appealed?' ('+Math.round(j.overturned/j.appealed*100)+'%)':'')+'</td><td>'+(j.exam?j.exam.score+'%':'—')+'</td></tr>'}).join("")+'</tbody></table><p class="sub">Жребий выбирает судью среди наименее загруженных: у кого меньше дел в работе.</p>':'<p class="sub">Загружаем…</p>')+'</div>';
+ return h}
+function monthImg(){var m=ST.m;if(!m||m.err)return;var W=1000,H=560,cv=document.createElement("canvas");cv.width=W;cv.height=H;var g=cv.getContext("2d");
+ var gr=g.createLinearGradient(0,0,W,H);gr.addColorStop(0,"#3a0d14");gr.addColorStop(1,"#7b1e2b");g.fillStyle=gr;g.fillRect(0,0,W,H);
+ g.fillStyle="#fff";g.font="700 40px sans-serif";g.fillText("⚖ Судебная власть · "+m.month,48,80);g.font="22px sans-serif";g.globalAlpha=.8;g.fillText(m.server+" · Senko Assistant",48,118);g.globalAlpha=1;
+ var K=[["Новых дел",m.cases.opened],["Закрыто",m.cases.closed],["Апелляций",m.cases.appeals],["Ордеров",m.warrants.issued],["Обвинительных",m.decisions.guilty],["Оправдательных",m.decisions.acquit]];
+ K.forEach(function(k,i){var x=48+(i%3)*310,y=170+Math.floor(i/3)*170;g.fillStyle="rgba(255,255,255,.1)";g.fillRect(x,y,280,140);g.fillStyle="#fff";g.font="700 60px sans-serif";g.fillText(String(k[1]||0),x+24,y+78);g.font="22px sans-serif";g.fillText(k[0],x+24,y+116)});
+ if(m.top.length){g.font="20px sans-serif";g.fillText("Больше всего решений: "+m.top.map(function(t){return t.author+" ("+t.n+")"}).join(", "),48,H-30)}
+ var box=document.getElementById("c55cv");if(box){box.innerHTML="";cv.style.cssText="max-width:100%;border-radius:10px;margin-top:8px";box.appendChild(cv)}
+ try{cv.toBlob(function(b){if(b&&navigator.clipboard&&window.ClipboardItem)navigator.clipboard.write([new ClipboardItem({"image/png":b})]).then(function(){toast("Картинка скопирована — вставьте в Discord")},function(){})})}catch(x){}
+ var a=document.createElement("a");a.href=cv.toDataURL("image/png");a.download="sud-"+m.month+".png";a.textContent="Скачать картинку";a.className="btn";if(box)box.appendChild(a)}
+
+/* ---------- документы: соглашение на защиту (35) и обвинительное заключение (38) ---------- */
+DOCS.agreement={t:"Соглашение на защиту",f:[["client","Доверитель","Имя Фамилия, паспорт"],["lawyer","Адвокат","Имя Фамилия, лицензия №"],["subject","Предмет","защита по делу № … / представительство в суде"],["fee","Гонорар","$ … (порядок оплаты)"],["terms","Условия","сроки, обязанности сторон, конфиденциальность",1]],
+ build:function(v,u){return "СОГЛАШЕНИЕ ОБ ОКАЗАНИИ ЮРИДИЧЕСКОЙ ПОМОЩИ\n"+mskD(Date.now())+"\n\nДоверитель: "+(v.client||"___")+"\nАдвокат: "+(v.lawyer||u)+"\n\n1. Предмет соглашения: "+(v.subject||"___")+".\n2. Вознаграждение адвоката: "+(v.fee||"___")+".\n3. Адвокат обязуется действовать в интересах доверителя, сохранять адвокатскую тайну и информировать доверителя о ходе дела.\n4. "+(v.terms||"Иные условия: —")+"\n\nПодписи сторон:\nДоверитель ________ "+(v.client||"")+"\nАдвокат ________ "+(v.lawyer||u)}};
+DOCS.indict={t:"Обвинительное заключение",f:[["caseNo","№ дела",""],["accused","Обвиняемый","Имя Фамилия, паспорт"],["arts","Статьи",""],["facts","Существо обвинения","Что, где и когда совершено",1],["evidence","Доказательства","Перечень доказательств",1],["mitig","Смягчающие и отягчающие обстоятельства",""],["ask","Предлагаемое наказание",""]],
+ build:function(v,u){return "ОБВИНИТЕЛЬНОЕ ЗАКЛЮЧЕНИЕ\nпо делу № "+(v.caseNo||"___")+"\n\nОбвиняемый: "+(v.accused||"___")+"\nОбвиняется по: "+(v.arts||"___")+"\n\nСущество обвинения:\n"+(v.facts||"")+"\n\nДоказательства:\n"+(v.evidence||"")+(v.mitig?"\n\nОбстоятельства: "+v.mitig:"")+(v.ask?"\n\nОбвинение предлагает назначить: "+v.ask:"")+"\n\nГосударственный обвинитель: "+u+"\n"+mskD(Date.now())}};
+/* ---------- события 4.3.5 ---------- */
+function matPush(k,o){if(!MT.c)return;MT.c.mat[k].push(o);matSave(true);repaint()}
+function curCase(){return C.cur||MT.c}
+document.addEventListener("click",function(ev){var t=ev.target.closest&&ev.target.closest("[data-c55],[data-c55copy],[data-c55x],[data-c55adm],[data-c55rd],[data-c55m],[data-c55del],[data-c55pa],[data-c55pw],[data-c55prm],[data-c55sp],[data-c55s],[data-c55p],[data-c55v],[data-c55w],[data-c55wai],[data-c55wu],[data-c55wp],[data-c55dp],[data-c55ex],[data-c55am],[data-c55df],[data-c55a],[data-c55om2],[data-c55oai],[data-c55ocase],[data-c55aim],[data-c55ai],[data-c55e],[data-c55ea],[data-c55st],[data-c55sw]");if(!t)return;var d=t.dataset,c=C.cur;
+ if(d.c55copy){var a=AIR[d.c55copy];if(a&&a.text)copy(a.text);return}
+ if(d.c55x){delete AIR[d.c55x];repaint();return}
+ // карточка дела
+ if(d.c55==="tomat"&&c){MT.id=c.id;MT.c=c;C.tab="mat";repaint();window.scrollTo(0,0);return}
+ if(d.c55==="indfill"){var ic=C.cur||MT.c;if(ic){var df=ic.parties.filter(function(p){return /Обвиняем|Подсудим/.test(p.role)})[0];DV.v.indict=Object.assign({},DV.v.indict||{},{caseNo:ic.no,accused:df?df.name+(df.note?", "+df.note:""):"",arts:ic.arts,facts:ic.notes||"",evidence:ic.evidence.map(function(x){return "— "+x.t+(x.url?" ("+x.url+")":"")+(x.adm?" — "+ADMN[x.adm]:"")}).join("\n")});sj("bos-c54docs",DV);repaint()}return}
+ if(d.c55==="aisum"&&c){aiRun("sum"+c.id,caseText(c)+(c.notes?"\nЗаметки: "+c.notes:"")+"\n"+matText(c.mat),"summary");return}
+ if(d.c55==="aichk"&&c){aiRun("chk"+c.id,caseText(c)+(c.notes?"\nЗаметки: "+c.notes:""),"check");return}
+ if(d.c55==="note"&&c){var tx=val(d.side==="pros"?"c55np":"c55nd");capi("case_note",{id:c.id,side:d.side,text:tx}).then(function(r){if(r.ok){C.cur=r.item;toast("Заметки сохранены")}else toast(r.error)});return}
+ if(d.c55==="recuse"&&c){capi("recuse",{id:c.id,reason:val("c55rr")}).then(function(r){if(r.ok){C.cur=r.item;toast("Отвод заявлен — его рассмотрит руководство или ПВС")}else toast(r.error);repaint()});return}
+ if(d.c55rd!=null&&c){capi("recuse_decide",{id:c.id,idx:d.c55rd,ok:d.ok==="1"}).then(function(r){if(r.ok){C.cur=r.item;if(r.redraw)drawAnim(r.item)}else toast(r.error);repaint()});return}
+ if((d.c55==="appeal"||d.c55==="cass")&&c){if(!confirm(d.c55==="appeal"?"Создать апелляционное дело?":"Создать кассационное дело в Верховный суд?"))return;capi("case_appeal",{id:c.id,level:d.c55==="cass"?"cassation":"appeal",reason:val("c55ar")}).then(function(r){if(r.ok){C.cur=r.item;C.cases=null;toast("Создано дело № "+r.item.no)}else toast(r.error);repaint()});return}
+ if(d.c55==="merge"&&c){var into=val("c55mi").replace(/\D/g,"");if(!into){toast("Укажите номер дела");return}if(!confirm("Присоединить дело № "+c.no+" к делу № "+into+"? Это дело закроется."))return;capi("case_merge",{id:c.id,intoNo:into}).then(function(r){if(r.ok){C.cur=r.item;C.cases=null;toast("Дела объединены")}else toast(r.error);repaint()});return}
+ // материалы
+ if(d.c55m==="arg"){var at=val("c55at").trim();if(!at){toast("Напишите довод");return}matPush("args",{id:rid(),side:val("c55as"),who:val("c55aw").trim(),t:at,mark:"",note:""});return}
+ if(d.c55m==="person"){var pn=val("c55pn").trim();if(!pn){toast("Укажите имя");return}matPush("persons",{id:rid(),role:val("c55pr"),name:pn,info:val("c55pi").trim(),present:null,warns:0,removed:false});return}
+ if(d.c55m==="fromparties"&&MT.c){MT.c.parties.forEach(function(p){if(!MT.c.mat.persons.some(function(x){return x.name===p.name}))MT.c.mat.persons.push({id:rid(),role:p.role,name:p.name,info:p.note||"",present:null,warns:0,removed:false})});matSave(true);repaint();return}
+ if(d.c55m==="motion"){var mt=val("c55mt").trim();if(!mt){toast("Опишите ходатайство");return}var who=val("c55mw").trim();matPush("motions",{id:rid(),who:who,t:mt,dec:"wait",why:"",at:Date.now()});if(S.ses)protoAdd("motion",(who?who+": ":"")+mt);return}
+ if(d.c55m==="copy"&&MT.c){copy(matText(MT.c.mat));return}
+ if(d.c55m==="tomotive"&&MT.c){V.motive=(V.motive?V.motive+"\n\n":"")+matText(MT.c.mat);if(!V.caseNo)V.caseNo=MT.c.no;vsave();C.tab="verdict";repaint();toast("Итог по материалам добавлен в мотивировку");return}
+ if(d.c55del){if(!confirm("Удалить запись?"))return;MT.c.mat[d.c55del]=MT.c.mat[d.c55del].filter(function(x){return x.id!==d.id});matSave(true);repaint();return}
+ if(d.c55pa){var ps=matFind("persons",d.c55pa);if(ps){ps.present=d.v==="1";matSave(true);if(S.ses)protoAdd("note",ps.name+" ("+ps.role.toLowerCase()+") — "+(ps.present?"явился":"не явился"));repaint()}return}
+ if(d.c55pw){var pw=matFind("persons",d.c55pw);if(pw){pw.warns=(pw.warns||0)+1;matSave(true);protoAdd("note",pw.name+": замечание за нарушение порядка в зале ("+pw.warns+"-е)");repaint()}return}
+ if(d.c55prm){var pr=matFind("persons",d.c55prm);if(pr&&confirm("Удалить "+pr.name+" из зала суда?")){pr.removed=true;matSave(true);protoAdd("note",pr.name+" удалён из зала судебного заседания");repaint()}return}
+ // речи
+ if(d.c55sp){SPU.cur=d.c55sp;spsave();repaint();return}
+ if(d.c55s){var L=spList(),cur=L.filter(function(x){return x.id===SPU.cur})[0]||L[0],txt=val("c55spt");
+  if(d.c55s==="save"){if(cur.std)SPU.e[cur.id]=txt;else SPU.custom.forEach(function(x){if(x.id===cur.id){x.t=txt;x.n=val("c55spn")||x.n}});spsave();repaint();toast("Речь сохранена");return}
+  if(d.c55s==="reset"){delete SPU.e[cur.id];spsave();repaint();return}
+  if(d.c55s==="del"){if(!confirm("Удалить речь «"+cur.n+"»?"))return;SPU.custom=SPU.custom.filter(function(x){return x.id!==cur.id});SPU.cur="open";spsave();repaint();return}
+  if(d.c55s==="add"){var nm=val("c55spa").trim();if(!nm){toast("Назовите речь");return}var id="u"+rid();SPU.custom.push({id:id,n:nm,t:"Текст речи. Можно использовать {номер}, {подсудимый}, {состав}…"});SPU.cur=id;spsave();repaint();return}
+  if(d.c55s==="copy"){copy(spFill(txt||cur.t));return}
+  if(d.c55s==="proto"){protoAdd("speech",cur.n+": "+spFill(txt||cur.t).slice(0,560));toast("Записано в протокол");return}}
+ // пульт
+ if(d.c55p==="hall"){hallOpen();return}
+ if(d.c55p==="hallx"){hallClose();return}
+ if(d.c55p==="recess"||d.c55p==="recend"){if(roPult())return;if(d.c55p==="recess"){var mn=Math.max(1,Math.min(120,+val("c55rm")||10));P.recess=Date.now()+mn*60e3;if(P.run){P.acc+=Date.now()-P.start;P.run=false}protoAdd("note","Объявлен перерыв на "+mn+" мин.")}else{P.recess=0;protoAdd("note","Перерыв окончен")}psave();repaint();return}
+ // голосование и ходатайство в заседании
+ if(d.c55v){var op=d.c55v==="start"?"ses_vote_start":d.c55v==="end"?"ses_vote_end":"ses_vote";capi(op,{q:val("c55vq"),v:d.c55v}).then(function(r){if(!r.ok)toast(r.error);else sesGot(r,true)});return}
+ if(d.c55==="smotion"){capi("ses_motion",{t:val("c55sm")}).then(function(r){if(!r.ok)toast(r.error);else{sesGot(r,true);toast("Ходатайство заявлено");MT.c=null}});return}
+ if(d.c55sw){capi("ses_warn",{id:d.id,kind:d.c55sw}).then(function(r){if(!r.ok)toast(r.error);else sesGot(r,true)});return}
+ // протокол
+ if(d.c55==="dict"){dictToggle();return}
+ if(d.c55==="psum"){aiRun("psum",protoText(),"summary");return}
+ // приговор
+ if(d.c55==="vmotive"){var mc=MT.c&&MT.c.no===V.caseNo?MT.c:C.cur&&C.cur.no===V.caseNo?C.cur:null;aiRun("motive","Дело № "+(V.caseNo||"—")+". Подсудимый: "+(V.name||"—")+". Статьи: "+(V.arts||"—")+".\n"+(mc?caseText(mc)+"\n"+matText(mc.mat)+(mc.notes?"\nЗаметки: "+mc.notes:""):"")+(V.motive?"\nЧерновик судьи: "+V.motive:""),"motive").then(function(r){if(r&&r.ok&&!V.motive.trim()){V.motive=r.answer;vsave();repaint()}});return}
+ if(d.c55==="vmat"){var mc2=MT.c||C.cur;if(!mc2){toast("Откройте дело во вкладке «Материалы»");return}V.motive=(V.motive?V.motive+"\n\n":"")+matText(mc2.mat);vsave();repaint();return}
+ if(d.c55==="vcheck"){aiRun("vcheck",verdictText(),"vcheck");return}
+ if(d.c55==="vpdf"){docPdf("Решение суда по делу № "+(V.caseNo||""),verdictText(),V.caseNo);return}
+ if(d.c55==="vreg"){var W=vChecks();if(W.length&&!confirm("Есть замечания:\n— "+W.join("\n— ")+"\n\nВсё равно внести решение в реестр?"))return;var c0=vCalc();
+  capi("dec_save",{title:(V.kind==="acquit"?"Оправдательное решение":"Решение")+" в отношении "+(V.name||"___")+(c0.L.length?" ("+c0.L.map(function(r){return r.code}).join(", ")+")":""),caseNo:V.caseNo,dt:new Date(Date.now()+3*3600e3).toISOString().slice(0,10),arts:V.arts,text:verdictText(),panel:compShort(),person:V.name,verdict:V.kind==="acquit"?"acquit":"guilty",term:V.term,fine:V.fine,probMonths:V.kind==="guilty"?V.prob:0,appealDays:V.appdays})
+   .then(function(r){if(r.ok){C.vmsg="Решение № "+(r.item&&r.item.no)+" внесено в реестр"+(V.caseNo?", дело № "+V.caseNo+" переведено в этап «Рассмотрено»":"")+".";protoAdd("decision","Оглашено решение № "+(r.item&&r.item.no)+": "+(V.kind==="acquit"?"оправдать ":"признать виновным ")+(V.name||""));C.decs=null;DF.due=null}else C.vmsg=r.error;repaint()});return}
+ // решения
+ if(d.c55df){DF.f=d.c55df;DF.due=null;repaint();return}
+ if(d.c55dp){var x=decById(d.c55dp);if(x)docPdf(x.title,x.title+"\n"+(x.caseNo?"Дело № "+x.caseNo+"\n":"")+(x.panel?"Состав суда: "+x.panel+"\n":"")+"\n"+x.text,x.no);return}
+ if(d.c55ex){capi("dec_exec",{id:d.c55ex,done:d.v==="1"}).then(function(r){if(!r.ok)toast(r.error);C.decs=null;DF.due=null;repaint()});return}
+ if(d.c55am){var at2=document.querySelector('[data-c55amt="'+d.c55am+'"]');capi("dec_amnesty",{id:d.c55am,text:at2?at2.value:""}).then(function(r){if(!r.ok)toast(r.error);C.decs=null;repaint()});return}
+ // ордера
+ if(d.c55w==="check"){WC.no=val("c55wn");capi("war_check",{no:WC.no}).then(function(r){WC.res=r;repaint()});return}
+ if(d.c55wai){var w=warById(d.c55wai);if(w)aiRun("war"+w.id,w.kindName+" в отношении: "+w.target+(w.caseNo?"\nДело № "+w.caseNo:"")+"\nОснования: "+w.reason,"wcheck");return}
+ if(d.c55wu){var nt=prompt("Как использован ордер? (например: обыск проведён, изъято …)");if(nt==null)return;capi("war_use",{id:d.c55wu,note:nt}).then(function(r){if(!r.ok)toast(r.error);C.wars=null;repaint()});return}
+ if(d.c55wp){var w2=warById(d.c55wp);if(w2)docPdf("Ордер № "+(w2.no||w2.id),warPdfText(w2),w2.no);return}
+ // адвокаты
+ if(d.c55a==="save"){capi("adv_set",{on:document.getElementById("c55aon").checked,lic:val("c55alic"),spec:val("c55aspec"),busy:document.getElementById("c55abusy").checked}).then(function(r){toast(r.ok?"Сохранено":r.error);loadAdv()});return}
+ if(d.c55a==="call"){capi("adv_call",{suspect:val("c55cs"),place:val("c55cp"),note:val("c55cn")}).then(function(r){toast(r.ok?(r.sent?"Вызов отправлен свободным адвокатам: "+r.sent:"Вызов создан, но свободных адвокатов в сети нет"):r.error);loadAdv()});return}
+ if(d.c55a==="take"||d.c55a==="close"){capi(d.c55a==="take"?"adv_take":"adv_close",{id:d.id,free:d.free==="1"}).then(function(r){if(!r.ok)toast(r.error);loadAdv()});return}
+ // надзор
+ if(d.c55om2){var nn=document.querySelector('[data-c55on="'+d.id+'"]');capi("rp_mark",{id:d.id,mark:d.c55om2,note:nn?nn.value:""}).then(function(r){toast(r.ok?(d.c55om2==="ok"?"Отмечено: проверено":"Отмечено: есть нарушения — автор получит уведомление"):r.error);loadOv()});return}
+ if(d.c55oai){var rr=ovById(d.c55oai);if(rr){OV.open[rr.id]=1;aiRun("rp"+rr.id,rr.body,"rpcheck")}return}
+ if(d.c55ocase){var r3=ovById(d.c55ocase);if(r3)caseFromReport(r3);return}
+ // ИИ
+ if(d.c55aim){AIS.m=d.c55aim;sj("bos-c55ai",AIS);repaint();return}
+ if(d.c55ai==="reset"){SPAR=[];delete AIR.ai_spar;repaint();return}
+ if(d.c55ai==="go"){var q=val("c54aiq").trim(),m=AIS.m,sd=val("c55aside")||AIS.side;AIS.side=sd;sj("bos-c55ai",AIS);if(q.length<(m==="spar"&&SPAR.length?2:15)){toast("Напишите подробнее");return}
+  if(m==="court")C.ai.q=q;var qq=m==="questions"||m==="spar"&&!SPAR.length?"Моя сторона: "+sd+".\n"+q:q;
+  aiRun("ai_"+m,qq,m,m==="spar"?SPAR.slice(-5):[]).then(function(r){if(m==="spar"&&r&&r.ok){SPAR.push({q:qq,a:r.answer});repaint()}});return}
+ // экзамен
+ if(d.c55e==="start"){exStart();return}
+ if(d.c55ea!=null&&EX.q){var qq2=EX.q[EX.i];if(+d.c55ea===qq2.a)EX.ok++;else toast("Неверно. Правильно: "+qq2.o[qq2.a]);EX.i++;if(EX.i>=EX.q.length){EX.done=true;capi("exam_save",{score:Math.round(EX.ok/EX.q.length*100),total:EX.q.length})}repaint();return}
+ // статистика
+ if(d.c55st==="img"){monthImg();return}
+});
+document.addEventListener("input",function(ev){var t=ev.target;if(!t||!t.dataset)return;var d=t.dataset;
+ if(d.c55an){var a=matFind("args",d.c55an);if(a){a.note=t.value;matSave()}return}
+ if(d.c55mw2){var m=matFind("motions",d.c55mw2);if(m){m.why=t.value;matSave()}return}
+ if(t.id==="c55spt"){var o=document.getElementById("c55spo");if(o)o.textContent=spFill(t.value);return}
+ if(d.c54v==="motive"||d.c54v==="prob"||d.c54v==="appdays"){V[d.c54v]=t.value;vsave();var o2=document.getElementById("c54vt");if(o2)o2.textContent=verdictText();return}
+},true);
+document.addEventListener("change",function(ev){var t=ev.target;if(!t||!t.dataset)return;var d=t.dataset;
+ if(d.c55adm!=null&&C.cur){var c=JSON.parse(JSON.stringify(C.cur));c.evidence[+d.c55adm].adm=t.value;capi("case_save",{id:c.id,title:c.title,kind:c.kind,status:c.status,stage:c.stage,arts:c.arts,parties:c.parties,evidence:c.evidence,notes:c.notes,hearings:c.hearings}).then(function(r){if(r.ok){C.cur=r.item;if(S.ses)protoAdd("decision","Доказательство «"+c.evidence[+d.c55adm].t+"» признано "+ADMN[t.value]+"м")}else toast(r.error);repaint()});return}
+ if(d.c55amk){var a=matFind("args",d.c55amk);if(a){a.mark=t.value;matSave(true);if(S.ses&&t.value)protoAdd("decision","Довод «"+a.t.slice(0,120)+"» ("+a.side.toLowerCase()+") признан "+ARGM[t.value]+"м");repaint()}return}
+ if(d.c55md){var m=matFind("motions",d.c55md);if(m){m.dec=t.value;matSave(true);if(S.ses&&t.value!=="wait")protoAdd("decision","Ходатайство «"+m.t.slice(0,120)+"» ("+(m.who||"сторона")+"): "+MOTD[t.value]+(m.why?" — "+m.why:""));repaint()}return}
+ if(t.id==="c55mc"){MT.id=t.value;MT.c=null;repaint();return}
+ if(d.c55oc){capi("dec_outcome",{id:d.c55oc,outcome:t.value}).then(function(r){if(!r.ok)toast(r.error);C.decs=null;repaint()});return}
+ if(d.c55pub||d.c55anon){var id=d.c55pub||d.c55anon,x=decById(id),pub=d.c55pub?t.checked:x&&x.pub,an=d.c55anon?t.checked:x&&x.anon;capi("dec_public",{id:id,on:pub,anon:an}).then(function(r){if(!r.ok)toast(r.error);C.decs=null;repaint()});return}
+ if(t.id==="c55pubon"){capi("pub_set",{on:t.checked}).then(function(r){DF.pub=r.ok?r.on:DF.pub;toast(r.ok?(r.on?"Публичный реестр включён":"Публичный реестр выключен"):r.error);repaint()});return}
+ if(t.id==="c55od"||t.id==="c55oo"||t.id==="c55om"){OV.days=+val("c55od");OV.org=val("c55oo");OV.mark=val("c55om");OV.d=null;repaint();return}
+ if(t.id==="c55sm2"){ST.month=t.value;ST.m=null;repaint();return}
+ if(d.c54v==="name"){personHist();return}
+},true);
+document.addEventListener("toggle",function(ev){var t=ev.target;if(t&&t.dataset&&t.dataset.c55ov)OV.open[t.dataset.c55ov]=t.open?1:0},true);
+
+/* ---------- 34: вызов адвоката из таймера задержания ---------- */
+function timerAdv(){if(state.tab!=="timer"||!online())return;var v=document.getElementById("view");if(!v||v.querySelector('.s9-hb[data-k="adv55"]'))return;var tmv=typeof tm!=="undefined"?tm:null;if(!tmv||!tmv.start)return;
+ v.insertAdjacentHTML("afterbegin",'<div class="s9-hb noprint" data-k="adv55"><span class="t"><b>🛡 Задержанный просит адвоката?</b><small>Вызов уйдёт свободным адвокатам Government в сети, принявший сообщит, что едет.</small></span><button type="button" class="btn primary" data-c55tadv="1">Вызвать адвоката</button></div>')}
+var R55=window.render;window.render=function(){var r=R55.apply(this,arguments);try{timerAdv()}catch(x){}return r};
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-c55tadv]");if(!b)return;var tmv=typeof tm!=="undefined"?tm:{};
+ var o=window.SA_modal?SA_modal("Вызвать адвоката",'<div class="c54-form"><label>Кому нужен адвокат<input class="tin" id="c55ts" maxlength="80" value="'+e(tmv.nick||"")+'"></label><label>Где<input class="tin" id="c55tp" maxlength="120" placeholder="КПЗ, участок"></label><div class="c54-bar"><button type="button" class="btn primary" id="c55tgo">Вызвать</button></div><p class="sub" id="c55tm"></p></div>'):null;if(!o)return;
+ o.querySelector("#c55tgo").onclick=function(){capi("adv_call",{suspect:o.querySelector("#c55ts").value,place:o.querySelector("#c55tp").value}).then(function(r){o.querySelector("#c55tm").textContent=r.ok?(r.sent?"Вызов отправлен адвокатам: "+r.sent+". Ответ придёт уведомлением.":"Вызов создан, но свободных адвокатов в сети сейчас нет."):r.error})}});
+
 /* ---------- страница ---------- */
 function pageHtml(){if(!C.me)me();var T=tabsOk();if(!T.some(function(t){return t[0]===C.tab}))C.tab=T[0][0];
  var jp=C.me&&C.me.judgeName,h='<section class="panel c54"><div class="c54-top"><h2>⚖ Суд'+(jp?' <small class="c54-badge">⚖ '+e(jp)+'</small>':'')+(C.me&&C.me.pvs?' <small class="c54-badge">Председатель ВС</small>':'')+'</h2></div>';
  h+='<div class="subnav noprint">'+T.map(function(t){return '<button class="pill" data-c54tab="'+t[0]+'" aria-pressed="'+(C.tab===t[0])+'">'+t[1]+'</button>'}).join("")+'</div><div class="c54-body">';
- var f={cases:casesHtml,ses:sesHtml,hear:hearHtml,panel:panelHtml,verdict:verdictHtml,proto:protoHtml,docs:docsHtml,terms:termsHtml,legal:legalHtml,decs:decsHtml,war:warHtml,ai:aiHtml,train:trainHtml,judges:judgesHtml}[C.tab];
+ var f={cases:casesHtml,ses:sesHtml,mat:matHtml,speech:speechHtml,adv:advHtml,over:ovHtml,exam:examHtml,stats:statsHtml,hear:hearHtml,panel:panelHtml,verdict:verdictHtml,proto:protoHtml,docs:docsHtml,terms:termsHtml,legal:legalHtml,decs:decsHtml,war:warHtml,ai:aiHtml,train:trainHtml,judges:judgesHtml}[C.tab];
  try{h+=f()}catch(x){h+='<div class="banner bp-err">Ошибка раздела: '+e(x.message)+'</div>';try{console.error(x)}catch(y){}}
  return h+'</div></section>'}
 function ok(){return online()}
@@ -18629,7 +19058,7 @@ document.addEventListener("click",function(ev){var t=ev.target.closest&&ev.targe
  if(d.c54==="copycase"&&C.cur){copy(caseText(C.cur));return}
  if(d.c54==="sesopen"&&C.cur){S.form.caseId=C.cur.id;C.tab="ses";repaint();return}
  if(d.c54==="tocourt"&&C.cur){PR.caseNo=C.cur.no;PR.title=C.cur.title;prsave();V.caseNo=C.cur.no;var df=C.cur.parties.filter(function(p){return /Обвиняем|Ответчик/.test(p.role)})[0];if(df)V.name=df.name;if(C.cur.arts)V.arts=C.cur.arts;vsave();C.tab="panel";repaint();toast("Номер и название дела перенесены в протокол и приговор");return}
- if(d.c54==="save"&&C.edit){var c=C.edit;C.busy=true;repaint();capi("case_save",{id:c.id,title:c.title,kind:c.kind,status:c.status,arts:c.arts,parties:c.parties,evidence:c.evidence,notes:c.notes,
+ if(d.c54==="save"&&C.edit){var c=C.edit;C.busy=true;repaint();capi("case_save",{id:c.id,title:c.title,kind:c.kind,status:c.status,stage:c.stage||"filed",mat:c.mat,fromReport:c.fromReport,arts:c.arts,parties:c.parties,evidence:c.evidence,notes:c.notes,
    hearings:c.hearings.map(function(x){return {id:x.id,at:x.at?new Date(typeof x.at==="number"?x.at:Date.parse(x.at)).toISOString():"",place:x.place,note:x.note}}).filter(function(x){return x.at})}).then(function(r){C.busy=false;
    if(r.ok){C.edit=null;C.cur=r.item;C.curEdit=true;C.cases=null;C.hear=null;C.msg="Дело сохранено.";C.bad=false}else{C.msg=r.error;C.bad=true}repaint()});return}
  if(d.c54==="del"&&C.edit&&C.edit.id){if(!confirm("Удалить дело № "+C.edit.no+"?"))return;capi("case_del",{id:C.edit.id}).then(function(r){if(r.ok){C.edit=null;C.cur=null;C.cases=null;toast("Дело удалено")}else say(r.error,true);repaint()});return}
@@ -18728,7 +19157,8 @@ document.addEventListener("change",function(ev){var t=ev.target;if(!t)return;var
  if(d.c54ma){V.ma[d.c54ma][d.i]=t.checked?1:0;vsave();repaint();return}
  if(d.c54v==="kind"||d.c54v==="term"||d.c54v==="fine"){V[d.c54v]=t.value;vsave();repaint();return}
  if(d.c54lg){LG[d.c54lg]=t.value;sj("bos-c54legal",LG);repaint();return}
- if(d.c54f==="kind"||d.c54f==="status"){if(C.edit)C.edit[d.c54f]=t.value;return}
+ if(d.c54f==="kind"||d.c54f==="status"||d.c54f==="stage"){if(C.edit)C.edit[d.c54f]=t.value;return}
+ if(t.id==="c55cst"){C.stg=t.value;C.cases=null;loadCases();return}
  if(d.c54sig!=null&&t.files&&t.files[0]){var f=t.files[0];if(f.size>60000){toast("Картинка больше 60 КБ");return}var rd=new FileReader();rd.onload=function(){var s=String(rd.result||"");if(!/^data:image\/(png|jpeg|webp);base64,/.test(s))return;var m=PR.members[+d.c54sig];if(m){m.sig=s;prsave();repaint()}};rd.readAsDataURL(f);return}
 },true);
 })();
