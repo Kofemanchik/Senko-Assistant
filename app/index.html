@@ -2840,7 +2840,7 @@ function archiveTm(t){
   endPause(t);
   var res=t.result||(t.decidedAt?"Мера избрана":(elapsed(t)>=LIM?"Час истёк":"Прервано"));
   ev(t,"archive","В архив: "+res);
-  thist.unshift({id:t.id,start:t.start,end:Date.now(),dur:elapsed(t),nick:t.nick,st:t.st,arts:t.arts,res:res,decided:!!t.decidedAt,pauses:t.log.slice(),events:t.events.slice()});
+  thist.unshift({id:t.id,start:t.start,end:Date.now(),dur:elapsed(t),nick:t.nick,st:t.st,arts:t.arts,res:res,decided:!!t.decidedAt,pauses:t.log.slice(),events:t.events.slice(),loc:t.loc||null});
   if(thist.length>100) thist.length=100;
   removeTm(t);
 }
@@ -3433,7 +3433,7 @@ function buildNav(){nav2.innerHTML="";[tbT,tbC].forEach(function(b){b.hidden=tru
 // раздел, который можно открыть в роли: кодексы, главная и руководство есть всегда
 function tabOk(r,t){return t==="home"||t==="boss"||BASE.indexOf(t)>=0||visible(r).indexOf(t)>=0}
 function firstTab(r){var L=ROLES[r][1];return L.length?L[0]:"home"}
-function remember(t){if(!t||t==="boss"||t==="ideas"||t==="tester"||t==="colleagues"||t==="vac"||t==="court")return;if(RC.last[X.role]!==t){RC.last[X.role]=t;saveRC()}}
+function remember(t){if(!t||t==="boss"||t==="ideas"||t==="tester"||t==="colleagues"||t==="vac"||t==="court"||t==="map")return;if(RC.last[X.role]!==t){RC.last[X.role]=t;saveRC()}}
 function setRole(r){if(ALLOW.indexOf(r)<0)r="off";remember(state.tab);X.role=r;try{localStorage.setItem("bos-role",r)}catch(e){}buildNav();
  var t=RC.last[r];
  if(t&&tabOk(r,t))state.tab=t; else if(!tabOk(r,state.tab))state.tab=firstTab(r);
@@ -7132,6 +7132,16 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"4.4.0",d:"08.11.2026",items:[
+  ["🗺","Интерактивная карта штата","Новый раздел «Карта» в меню: схема всего штата San Andreas с приближением колесом мыши и перетаскиванием. При приближении появляются названия районов, улиц и более 100 мест. Схему мы нарисовали сами по мотивам игры — это не карта GTA V, и мы не претендуем на права Rockstar Games и Majestic RP."],
+  ["🔎","Поиск места","Введите «Пиллбокс», «Мейз Банк», «Сэнди-Шорс» или «maze bank» — карта приблизит место и подсветит его. Работает и по своим меткам."],
+  ["📍","Свои метки","Засады, места частых ДТП, точки встречи, посты — с типом, названием и заметкой. Хранятся на вашем компьютере."],
+  ["🚓","Юрисдикция и охраняемые территории","Слой «Юрисдикция»: город Лос-Сантос (LSPD), округа (LSCSD) и федеральные объекты. Охраняемые территории — Форт-Занкудо, Кайо-Перико, Болингброк, Капитолий, зал суда, Humane Labs — подсвечены, нажатие показывает правила входа."],
+  ["🛣","Маршруты патруля","Нарисуйте маршрут кликами по карте — программа посчитает примерную длину и сохранит его. Маршрут открывается в мини-окне поверх игры."],
+  ["🗗","Карта в мини-окне","Карта или выбранный маршрут показываются в мини-окне поверх игры (в программе для Windows), прозрачность — ползунком."],
+  ["🚨","Место задержания","В таймере появилась плашка «Место задержания»: отметьте точку на карте или найдите район — место попадёт в рапорт (поле «Место») и в историю."],
+  ["🔥","Карта своих задержаний","Тепловая карта районов, где вы задерживали чаще всего, и список самых частых районов."]
+ ]},
  {v:"4.3.5",d:"07.11.2026",items:[
   ["📚","Материалы дела с оценкой судьи","«Суд» → «Материалы»: доводы сторон, лица, участвующие в деле, и ходатайства. Стороны добавляют свои, судья ставит оценку доводам (обоснован / частично / необоснован) и решения по ходатайствам с мотивом. Итог одной кнопкой уходит в мотивировку приговора, а в заседании — сразу в протокол."],
   ["🗣","Речи судьи — свои","«Речи»: открытие, разъяснение прав, явка, перерыв, удаление в совещательную комнату, оглашение, закрытие — с подстановкой номера дела, имён и состава суда. Любую речь можно переписать под себя, она сохранится; можно добавить свои."],
@@ -8215,7 +8225,7 @@ function loadMine(force){
 /* ---------- данные из таймера и калькулятора ---------- */
 function prefill(src){
  var p={_src:src}, t=(typeof tm!=="undefined"&&tm&&tm.start)?tm:null;
- if(t){p._src=src+":"+t.id;p.suspect=t.nick||"";p.sid=t.st||"";p.arts=t.arts||"";p.dt=nowStr(t.start);if(t.result)p.measure=t.result;
+ if(t){p._src=src+":"+t.id;p.suspect=t.nick||"";p.sid=t.st||"";p.arts=t.arts||"";p.dt=nowStr(t.start);if(t.loc&&window.SA_tmLoc)p.place=SA_tmLoc(t);if(t.result)p.measure=t.result;
   try{p.tmr=timerSummary()}catch(e){}
   var ev=[];(t.media||[]).forEach(function(m){if(m.t==="url"&&(ev.join(", ")+", "+m.u).length<=300)ev.push(m.u)});if(ev.length)p.evidence=ev.join(", ");
   var c=[];if(t.checks&&(t.checks["inv:mir"]||t.checks["war:mir"]))c.push("mir");
@@ -13632,6 +13642,7 @@ function miniPush(){
   calc={n:it.length,stars:Math.max.apply(null,uk.map(function(r){return r.stars||0}).concat([0])),term:ft.m||0,cut:!!ft.cut,fine:it.filter(function(r){return r.k!=="uk"||!r.m}).reduce(function(a,r){return a+(r.fmax||0)},0)}}}catch(x){}
  var d={timers:T,sel:typeof selId!=="undefined"?selId:0,calc:calc,accent:cssVar("--accent","")};
  try{if(window.SA_padMini){var pd=SA_padMini();if(pd)d.pad=pd}}catch(x){} // 2.8: блокнот в мини-окне
+ try{if(window.SA_mapMini){var mm=SA_mapMini();if(mm)d.map=mm}}catch(x){} // 4.4: карта в мини-окне
  var sig=JSON.stringify(d);if(sig===MINI.sig&&Date.now()-MINI.at<30000)return;MINI.sig=sig;MINI.at=Date.now();A.miniState(d);
 }
 if(DESK&&A.miniState)setInterval(miniPush,1000);
@@ -14849,6 +14860,7 @@ var I={
  menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
  tester:'<path d="M9 3h6M10 3v6L4.5 18.5A2 2 0 0 0 6.2 21.5h11.6a2 2 0 0 0 1.7-3L14 9V3"/><path d="M7.5 15h9"/>',
  ideas:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.9V16h5v-.2c0-.8.4-1.5 1-1.9A6 6 0 0 0 12 3z"/>',
+ map:'<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/>',
  court:'<path d="M12 3v18M5 21h14M4 7h16"/><path d="m7 7-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z"/>',
  vac:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 14h3v3H8z"/>',
  colleagues:'<circle cx="8" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.5"/><path d="M2.5 19c.6-3.200 2.800-5 5.500-5s4.900 1.800 5.500 5"/><path d="M14.500 14.300c.6-.2 1.300-.3 2-.3 2.300 0 4.100 1.500 4.600 4.500"/>'
@@ -14879,6 +14891,7 @@ var D={
  ref:["Справочник","Шпаргалка, неприкосновенные","Справочник","Шпаргалка, неприкосновенные лица, охраняемые места и регламент передачи дел."],
  boss:["Руководство","Панель руководителя","Панель руководителя","Сотрудники организации, рейтинг недели, смены и контрольные тесты."],
  ideas:["Идеи","Предложить и проголосовать","Идеи","Предложите, что добавить в программу, и голосуйте за идеи других. Самые популярные разработчик берёт в работу."],
+ map:["Карта","Поиск, метки, маршруты","Карта штата","Интерактивная схема штата: поиск мест, свои метки, юрисдикция ведомств, охраняемые территории, маршруты патруля, мини-окно и тепловая карта задержаний."],
  court:["Суд","Дела, ордера, пульт","Суд","Раздел Government: дела и жребий судьи, заседания, пульт и протокол, приговор, документы, сроки, ордера, решения суда, ИИ для сторон и тренажёр судьи."],
  vac:["Отпуска","Календарь и заявки","Отпуска","Календарь отпусков ведомства: выберите даты или часы и отправьте заявку руководителю. Одобренные отпуска видны всем — ник на дате, дата красная."],
  colleagues:["Коллеги","Профили своего ведомства","Коллеги","Сотрудники вашего ведомства: должность, уровень, задержания, тесты и достижения. Свою должность и «о себе» укажите в личном кабинете."],
@@ -14950,7 +14963,7 @@ function navHtml(){
  var O=window.SA_tabOrder?window.SA_tabOrder():null; // 2.2: свой порядок разделов для роли
  var grp=function(name,L){L=L.filter(has);if(O)L.sort(function(a,b){var x=O.indexOf(a),y=O.indexOf(b);return (x<0?99:x)-(y<0?99:y)});if(L.length)h+='<div class="sd-g">'+name+'</div>'+L.map(item).join("")};
  h+='<div class="sd-g">Начало</div>'+item("home")+(window.SA_VAC&&SA_VAC.ok()?item("vac"):"");
- grp("Кодексы и законы",CODES); grp("Работа",WORKS); if(window.SA_COURT&&SA_COURT.ok())h+=(h.indexOf('>Работа</div>')<0?'<div class="sd-g">Работа</div>':'')+item("court"); grp("Развитие",DEV);
+ grp("Кодексы и законы",CODES); grp("Работа",WORKS); if(window.SA_COURT&&SA_COURT.ok())h+=(h.indexOf('>Работа</div>')<0?'<div class="sd-g">Работа</div>':'')+item("court"); if(window.SA_MAP)h+=(h.indexOf('>Работа</div>')<0?'<div class="sd-g">Работа</div>':'')+item("map"); grp("Развитие",DEV);
  if(bossOk()) h+='<div class="sd-g">Руководство</div>'+item("boss");
  var S24=window.SA_S24;
  var COM=[]; if(window.SA_COL&&SA_COL.ok()) COM.push("colleagues"); if(S24&&S24.ideasOk()) COM.push("ideas");
@@ -19161,6 +19174,288 @@ document.addEventListener("change",function(ev){var t=ev.target;if(!t)return;var
  if(t.id==="c55cst"){C.stg=t.value;C.cases=null;loadCases();return}
  if(d.c54sig!=null&&t.files&&t.files[0]){var f=t.files[0];if(f.size>60000){toast("Картинка больше 60 КБ");return}var rd=new FileReader();rd.onload=function(){var s=String(rd.result||"");if(!/^data:image\/(png|jpeg|webp);base64,/.test(s))return;var m=PR.members[+d.c54sig];if(m){m.sig=s;prsave();repaint()}};rd.readAsDataURL(f);return}
 },true);
+})();
+</script>
+
+<style id="s56-style">
+.m56{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:12px;align-items:start}
+@media (max-width:900px){.m56{grid-template-columns:1fr}}
+.m56-top{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 8px;position:relative}
+.m56-q{flex:1 1 240px;position:relative}
+.m56-q input{width:100%;box-sizing:border-box}
+.m56-sug{position:absolute;left:0;right:0;top:100%;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);max-height:300px;overflow:auto;margin-top:4px}
+.m56-sug button{display:flex;gap:8px;width:100%;text-align:left;border:0;background:transparent;color:var(--ink);font:inherit;padding:7px 10px;cursor:pointer}
+.m56-sug button:hover,.m56-sug button.on{background:var(--chip)}
+.m56-sug small{color:var(--muted);margin-left:auto}
+.m56-lay{display:flex;flex-wrap:wrap;gap:6px}
+.m56-wrap{position:relative;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--bg);touch-action:none}
+.m56-wrap svg{display:block;width:100%;height:auto;max-height:82vh;cursor:grab}
+.m56-wrap.pan svg{cursor:grabbing}
+.m56-wrap.tool svg{cursor:crosshair}
+.m56-ctl{position:absolute;right:8px;top:8px;display:grid;gap:1px;border-radius:9px;overflow:hidden;border:1px solid var(--line);background:var(--line)}
+.m56-ctl button{width:32px;height:30px;border:0;background:var(--surface);color:var(--ink);font:700 16px/1 inherit;cursor:pointer}
+.m56-scale{position:absolute;left:8px;bottom:8px;font-size:11.5px;background:color-mix(in srgb,var(--surface) 85%,transparent);border-radius:6px;padding:2px 6px;color:var(--muted)}
+.m56-disc{font-size:12px;color:var(--muted);margin:6px 2px 0;line-height:1.45}
+.m56-side .c54-card{margin-top:0}
+.m56-pl{list-style:none;margin:0;padding:0;display:grid;gap:5px}
+.m56-pl li{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:9px;padding:6px 9px;font-size:13.5px;cursor:pointer;background:var(--surface)}
+.m56-pl li.on{border-color:var(--accent)}
+.m56-pl li span{flex:1;min-width:0}
+.m56-pl li small{display:block;color:var(--muted);font-size:12px}
+.m56-sw{width:12px;height:12px;border-radius:50%;flex:none}
+/* слои на схеме: размер подписей и значков делится на --zf (приближение) */
+.m56 svg{--zk:1}
+.m56-dl{font-size:calc(2.5px / var(--zk));font-weight:700;fill:var(--ink);paint-order:stroke;stroke:var(--bg);stroke-width:calc(.7px / var(--zk));text-anchor:middle;letter-spacing:.03em;opacity:.85}
+.m56-sl{font-size:calc(1.9px / var(--zk));fill:var(--muted);paint-order:stroke;stroke:var(--bg);stroke-width:calc(.5px / var(--zk));font-style:italic}
+.m56-pl2{font-size:calc(1.9px / var(--zk));fill:var(--ink);paint-order:stroke;stroke:var(--bg);stroke-width:calc(.55px / var(--zk))}
+.m56-st{fill:none;stroke:color-mix(in srgb,var(--ink) 30%,transparent);stroke-width:calc(.32px / var(--zk));stroke-linecap:round}
+.m56-poi circle{stroke:#fff;stroke-width:calc(.3px / var(--zk))}
+.m56-poi.on circle{stroke:var(--accent);stroke-width:calc(.7px / var(--zk))}
+.m56-poi{cursor:pointer}
+.m56-hit{animation:m56hit 1.2s ease-out 2;fill:none;stroke:var(--accent);stroke-width:calc(.6px / var(--zk))}
+@keyframes m56hit{0%{r:.5;opacity:1}100%{r:6;opacity:0}}
+.m56 svg[data-m="0"] .m56-z1,.m56 svg[data-m="0"] .m56-z2,.m56 svg[data-m="0"] .m56-z3,.m56 svg[data-m="1"] .m56-z2,.m56 svg[data-m="1"] .m56-z3,.m56 svg[data-m="2"] .m56-z3{display:none}
+.m56 .sm-dl{display:none}
+.m56-jur{opacity:.32}
+.m56-prot{fill:#e53935;fill-opacity:.25;stroke:#e53935;stroke-width:calc(.5px / var(--zk));stroke-dasharray:calc(1.2px / var(--zk)) calc(.8px / var(--zk));cursor:pointer}
+.m56-prot:hover{fill-opacity:.4}
+.m56-route{fill:none;stroke-width:calc(.9px / var(--zk));stroke-linecap:round;stroke-linejoin:round}
+.m56-rpt{stroke:#fff;stroke-width:calc(.3px / var(--zk))}
+.m56-mark text{font-size:calc(2px / var(--zk));fill:var(--ink);paint-order:stroke;stroke:var(--bg);stroke-width:calc(.5px / var(--zk))}
+.m56-mark{cursor:pointer}
+.m56-legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12.5px;color:var(--muted);margin-top:6px}
+.m56-legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:-2px}
+.m56-pick svg{display:block;width:100%;height:auto;max-height:70vh;cursor:crosshair;border-radius:10px;border:1px solid var(--line)}
+.m56-loc{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+</style>
+<script>
+/* 4.4.0: «Карта» — интерактивная схема штата San Andreas: поиск мест (175), свои метки (176), юрисдикция (177),
+   охраняемые территории (178), маршруты патруля (179), карта в мини-окне (180), место задержания (181),
+   тепловая карта своих задержаний (182). Схема нарисована нами по мотивам игры (не копия карты игры). */
+(function(){
+"use strict";
+var A=window.senkoApp;
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function toast(t){try{if(window.SA_toast)SA_toast(t)}catch(x){}}
+function lj(k,d){try{var v=JSON.parse(localStorage.getItem(k)||"null");return v==null?d:v}catch(x){return d}}
+function sj(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(x){}}
+function norm(s){return String(s||"").toLowerCase().replace(/ё/g,"е").replace(/[^a-zа-я0-9 ]+/g," ").replace(/\s+/g," ").trim()}
+var DISC="Схема нарисована по мотивам игры для удобства игроков, расположение мест примерное. Мы не претендуем на права на GTA V, Los Santos и материалы Rockstar Games и Majestic RP; все права принадлежат их правообладателям.";
+window.SA_mapDisc=DISC;
+/* ---------- справочник мест: [id, название, другие названия для поиска, тип, x, y] (координаты схемы 0–100 × 0–140) ---------- */
+var T={dist:["Район","#7a6f63"],town:["Населённый пункт","#5d6b7a"],gov:["Госучреждение","#7b1e2b"],law:["Полиция и шериф","#1f4e8c"],hosp:["Больница","#c62828"],bank:["Банк","#2e7d32"],
+ fed:["Федеральный объект","#6a1b9a"],biz:["Место","#b26a00"],nat:["Природа","#4d6b24"],trans:["Транспорт","#455a64"]};
+var G=[
+ // районы Лос-Сантоса
+ ["d1","Пасифик-Блафс","pacific bluffs","dist",30.5,106.6],["d2","Дель-Перро","del perro","dist",31.6,112.4],["d3","Веспуччи","vespucci","dist",33.4,119.6],["d4","Каналы Веспуччи","vespucci canals","dist",35,117],
+ ["d5","Ричман","richman","dist",36.4,103.2],["d6","Морнингвуд","morningwood","dist",37.5,108.2],["d7","Рокфорд-Хиллз","rockford hills","dist",41,109.2],["d8","Бёртон","burton","dist",45.6,104.2],
+ ["d9","Западный Вайнвуд","west vinewood","dist",48.8,102.6],["d10","Вайнвуд","vinewood","dist",52.6,103.4],["d11","Даунтаун-Вайнвуд","downtown vinewood","dist",55.6,104.8],["d12","Восточный Вайнвуд","east vinewood","dist",61.5,104.6],
+ ["d13","Миррор-Парк","mirror park","dist",65.8,107.8],["d14","Хоик","hawick","dist",53.4,106.6],["d15","Алта","alta","dist",50.6,107.4],["d16","Даунтаун","downtown","dist",53.6,110.4],["d17","Пиллбокс-Хилл","pillbox hill","dist",51.6,113.4],
+ ["d18","Литл-Сеул","little seoul","dist",40.6,115.4],["d19","Текстайл-Сити","textile city","dist",55.4,116],["d20","Ла-Меса","la mesa","dist",60.6,117.4],["d21","Эль-Бурро-Хайтс","el burro heights","dist",66.2,115.6],
+ ["d22","Мурьета-Хайтс","murrieta heights","dist",64.2,111.2],["d23","Строберри","strawberry","dist",44,123.6],["d24","Чемберлен-Хиллз","chamberlain hills","dist",43.6,127.6],["d25","Дэвис","davis","dist",49.4,127.6],
+ ["d26","Ранчо","rancho","dist",56,128.8],["d27","Мишн-Роу","mission row","dist",56.4,122.4],["d28","Сайпресс-Флэтс","cypress flats","dist",64.6,121.8],["d29","Элизиан-Айленд","elysian island","dist",66,134.4],
+ ["d30","Терминал","terminal port","dist",66.5,128.6],["d31","Баннинг","banning","dist",59.4,133.2],["d32","Ла-Пуэрта","la puerta","dist",38.6,125.4],["d33","Аэропорт Лос-Сантоса","lsia airport international","trans",39.2,131.5],
+ ["d34","Банхэм-Каньон","banham canyon","dist",26.4,100.2],["d35","Вайнвуд-Хиллз","vinewood hills","dist",47,97.5],["d36","Паломино-Хайлендс","palomino highlands","dist",73,108],["d37","Тонгва-Хиллз","tongva hills","nat",23,94.4],
+ ["d38","Чумаш","chumash","town",19,97],["d39","Гольф-клуб","golf club los santos","biz",37,103.4],["d40","Ричардс-Маджестик (киностудия)","richards majestic studio","biz",37.6,113.2],
+ // ориентиры Лос-Сантоса
+ ["p1","Мэрия (Капитолий)","мэрия capitol government city hall","gov",45,113],["p2","Зал суда","суд court courthouse","gov",50,118],["p3","FIB, штаб-квартира","fib","fed",50,115],["p4","LSPD, Мишн-Роу","lspd mission row участок полиция police","law",53,123],
+ ["p5","LSPD, Веспуччи","lspd vespucci полиция","law",33.2,121.2],["p6","LSPD, Рокфорд-Хиллз","lspd rockford полиция","law",40,108.2],["p7","LSPD, Вайнвуд","lspd vinewood полиция","law",54.2,102.4],["p8","LSPD, Ла-Меса","lspd la mesa полиция","law",60.2,119.2],
+ ["p9","LSCSD, Дэвис","lscsd davis шериф sheriff","law",50.6,126.4],["p10","Больница Pillbox Hill","pillbox пиллбокс больница hospital ems","hosp",52,119],["p11","Больница Маунт-Зонах","mount zonah больница hospital","hosp",40.2,111.6],
+ ["p12","Больница Сентрал (Дэвис)","central los santos больница hospital","hosp",50.4,129.6],["p13","Мейз Банк Тауэр","maze bank tower мейз банк","bank",51.2,111.4],["p14","Банк Pacific Standard","pacific standard bank банк","bank",54.6,104.2],
+ ["p15","Fleeca, Легион-сквер","fleeca банк legion","bank",48.6,109.2],["p16","Fleeca, Рокфорд-Хиллз","fleeca банк rockford","bank",40.8,110.6],["p17","Fleeca, Бёртон","fleeca банк burton","bank",45.2,106.2],["p18","Fleeca, Хоик","fleeca банк hawick","bank",53,107.2],
+ ["p19","Легион-сквер","legion square","biz",48.6,108.6],["p20","Мейз Банк Арена","maze bank arena арена","biz",49.5,132.5],["p21","Пирс Дель-Перро","del perro pier пирс","biz",24.5,112.3],["p22","Пляж Веспуччи","vespucci beach пляж","nat",28,121],
+ ["p23","Казино Diamond","diamond casino казино","biz",63.6,101.6],["p24","Ипподром Вайнвуда","racetrack ипподром","biz",65,99.6],["p25","Вайнвуд-Боул","vinewood bowl","biz",56,99.4],["p26","Обсерватория Галилео","galileo observatory обсерватория","biz",48,96.3],
+ ["p27","Знак VINEWOOD","vinewood sign знак","biz",52,95.4],["p28","Центр Кортц","kortz center музей","biz",31,103.6],["p29","Порт Лос-Сантоса","port docks порт","trans",65.5,127],["p30","ЛС Кастомс, Бёртон","los santos customs тюнинг","biz",44.4,106.8],
+ ["p31","ЛС Кастомс, Ла-Меса","los santos customs тюнинг","biz",62.2,118.6],["p32","Гроув-стрит","grove street","biz",48,129.6],["p33","Плотина Лэнд-Экт","land act dam плотина","nat",62,92.7],["p34","Канал Лос-Сантос","los santos river река","nat",61.6,110],
+ ["p35","Тюремный автобус / КПЗ Мишн-Роу","кпз изолятор","law",53.6,123.8],["p36","Пожарная часть, Дэвис","fire station пожарная","gov",47.6,126.2],["p37","Пожарная часть, Рокфорд","fire station пожарная","gov",39.2,107.2],["p38","Вертолётная площадка, Пиллбокс","вертодром helipad","trans",52.6,118.4],
+ // округ Блэйн и окрестности
+ ["b1","Сэнди-Шорс","sandy shores","town",66,57.6],["b2","Грейпсид","grapeseed","town",72,40.5],["b3","Палето-Бэй","paleto bay","town",36,14],["b4","Хармони","harmony","town",41,77.5],["b5","Стэб-Сити","stab city","town",49,61.2],
+ ["b6","Грейт-Сенора","senora","nat",58,73.2],["b7","Аламо-Си","alamo sea озеро","nat",55,52.8],["b8","Гора Чилиад","mount chiliad чилиад","nat",50,18.6],["b9","Гора Гордо","mount gordo","nat",82,42.8],["b10","Гора Джосайя","mount josiah","nat",29,40.8],
+ ["b11","Лес Палето","paleto forest","nat",25,30],["b12","Каньон Ратон","raton canyon","nat",40,37],["b13","Грейт-Чапаррал","great chaparral","nat",33,85],["b14","Пустыня Гранд-Сенора","grand senora desert","nat",68,86.5],
+ ["b15","Тюрьма Болингброк","bolingbroke prison тюрьма","fed",73,74],["b16","Форт-Занкудо","fort zancudo форт база военная","fed",21,67],["b17","Humane Labs","humane labs лаборатория","fed",84,52],["b18","ЭС Палмер-Тейлор","palmer taylor power станция","biz",84,81.6],
+ ["b19","Аэродром Сэнди-Шорс","sandy shores airfield аэродром","trans",73.3,59.4],["b20","Аэродром Маккензи","mckenzie airfield аэродром","trans",77.6,34.6],["b21","LSCSD, Сэнди-Шорс","lscsd sandy шериф","law",62,66],["b22","LSCSD, Палето-Бэй","lscsd paleto шериф","law",38,20],
+ ["b23","Больница Сэнди-Шорс","sandy больница hospital","hosp",64,64],["b24","Больница Палето-Бэй","paleto больница hospital","hosp",40,23],["b25","Банк Blaine County, Палето","blaine county savings банк","bank",36.6,15.2],["b26","Fleeca, Хармони","fleeca банк harmony","bank",41.6,78.4],
+ ["b27","Fleeca, Грейт-Оушен","fleeca банк great ocean","bank",16.6,90.6],["b28","Ветряки","wind farm ветряки","nat",77,87],["b29","Шоссе 68","route 68 шоссе","trans",32,78],["b30","Шоссе Грейт-Оушен","great ocean highway","trans",15,60],
+ ["b31","Сенора-фривей","senora freeway","trans",85,62],["b32","Река Занкудо","zancudo river","nat",30.4,61.4],["b33","Озеро Занкудо","lago zancudo","nat",13.6,77.2],["b34","Кайо-Перико","cayo perico остров","fed",88,129],
+ ["b35","Пляж Прокопио","procopio beach","nat",46,8],["b36","Перевал Брэддок","braddock pass","nat",62,22],["b37","Ферма Грейпсида","grapeseed farm","nat",74,46]
+];
+/* ---------- улицы Лос-Сантоса (подписи при сильном приближении) ---------- */
+var ST=[["Бул. Дель-Перро",[[24,112],[32,111],[40,110],[46,109]]],["Вайнвуд-бульвар",[[44,103],[50,102.6],[56,102],[62,103]]],["Бул. Веспуччи",[[30,118],[38,117],[46,116],[54,115.5]]],
+ ["Строберри-авеню",[[46.2,112],[46.2,122],[46,130]]],["Алта-стрит",[[52,104],[52.5,112],[53,120]]],["Форум-драйв",[[44.5,124.2],[49.5,124.8]]],["Гроув-стрит",[[46.6,128.8],[49,130]]],
+ ["Сан-Андреас-авеню",[[36,113.2],[44,112.8],[52,112.2],[58,112]]],["Синнер-стрит",[[53,120.6],[54,126]]],["Эль-Ранчо-бул.",[[56,124],[58,132]]],["Миррор-Парк-бул.",[[62.6,106],[68,108.4]]],
+ ["Рокфорд-драйв",[[38,104.6],[40.6,112.4]]],["Бул. Морнингвуд",[[35,107],[39.6,108.6]]],["Пауэр-стрит",[[50,103.6],[50.4,111]]],["Элгин-авеню",[[55,108],[56,118]]],["Попьюлар-стрит",[[59.6,112],[60.6,124]]],
+ ["Карсон-авеню",[[44,121],[56,120.6]]],["Дэвис-авеню",[[45,127],[57,126.6]]],["Эль-Бурро-бул.",[[62,113],[66,118]]],["Гроув-стрит (Строберри)",[[42,122],[44.6,126]]],
+ ["Бул. Мэрмэйд (Палето)",[[33.4,12.6],[38.6,15.4]]],["Алгонкин-бул. (Сэнди)",[[63,56.4],[69,58.8]]],["Грейпсид-мейн",[[70,39],[74,42]]]];
+/* ---------- юрисдикция (177): примерное деление — уточняйте по законам своего сервера ---------- */
+var LSPOLY=[[24,100],[33,99],[44,98.4],[56,98.8],[63,98.6],[70,102.4],[71.6,112],[71.4,124],[69,133],[62,137.6],[50,138.4],[40,138.6],[31,136],[27.4,127],[24.4,118],[22,108]];
+var FEDS=[["b16","Форт-Занкудо","SANG (Национальная гвардия)",[[14,64.5],[26.5,65.5],[27,75.5],[15,76.5]]],["b15","Тюрьма Болингброк","федеральная тюрьма",[[68.6,71.2],[77.4,71.2],[77.4,76.8],[68.6,76.8]]],
+ ["b17","Humane Labs","охраняемый федеральный объект",[[81.6,50],[86.4,50],[86.4,54.2],[81.6,54.2]]],["p3","FIB","федеральное здание",[[48.8,114],[51.2,114],[51.2,116],[48.8,116]]],["b34","Кайо-Перико","SANG",[[83,123],[95,123],[95,135.5],[83,135.5]]]];
+/* ---------- охраняемые территории (178) ---------- */
+var PROT=[["b16","Форт-Занкудо",[[14,64.5],[26.5,65.5],[27,75.5],[15,76.5]],"Задерживает Национальная гвардия (SANG) на территории форта и в 500 м от КПП, затем передаёт FIB, LSPD или LSCSD. Вход без допуска запрещён; за проникновение — статьи УК о режимных объектах (ПК ст. 15)."],
+ ["b34","Кайо-Перико",[[83,123],[95,123],[95,135.5],[83,135.5]],"Остров. Национальная гвардия вправе задерживать и здесь (ПК ст. 15 ч. 3)."],
+ ["b15","Тюрьма Болингброк",[[68.6,71.2],[77.4,71.2],[77.4,76.8],[68.6,76.8]],"Место отбывания наказания. Посторонним вход закрыт; передача задержанных — по процедуре ведомства."],
+ ["p1","Мэрия (Капитолий)",[[43.6,112],[46.4,112],[46.4,114.2],[43.6,114.2]],"Секретная служба вправе досматривать граждан при входе в Капитолий (ПК ст. 29 ч. 3). С оружием — только госслужащие при исполнении."],
+ ["p2","Зал суда",[[49,117],[51,117],[51,119],[49,119]],"Досмотр Секретной службой при входе, кроме госслужащих при исполнении и неприкосновенных (ПК ст. 29 ч. 3)."],
+ ["b17","Humane Labs",[[81.6,50],[86.4,50],[86.4,54.2],[81.6,54.2]],"Закрытая лаборатория. Проход только по допуску; нарушителей задерживает охрана объекта и передаёт полиции."]];
+/* ---------- состояние и хранение ---------- */
+var MK={ambush:["Засада","#e53935"],crash:["Частые ДТП","#fb8c00"],meet:["Место встречи","#1e88e5"],post:["Пост","#43a047"],other:["Другое","#8e24aa"]};
+var M=lj("bos-map44",null)||{};
+M.marks=M.marks||[];M.routes=M.routes||[];M.dets=M.dets||[];M.lay=M.lay||{dist:1,poi:1,streets:1,jur:0,prot:1,marks:1,routes:1,heat:0};M.mini=M.mini||{on:false,route:""};
+function save(){sj("bos-map44",{marks:M.marks,routes:M.routes,dets:M.dets,lay:M.lay,mini:M.mini})}
+var V={v:[0,0,100],sel:null,tool:"",draft:[],q:"",sug:-1,hit:null,mkType:"ambush",rname:""};
+function rid(){return Math.random().toString(36).slice(2,9)}
+function lvl(w){return w<=16?3:w<=30?2:w<=60?1:0}
+function clampV(v){var w=Math.max(6,Math.min(100,v[2]));return [Math.max(-2,Math.min(102-w,v[0])),Math.max(-2,Math.min(142-w*1.4,v[1])),w]}
+function smoothLine(P){if(P.length<2)return "";var d="M"+P[0][0]+" "+P[0][1];for(var i=1;i<P.length;i++)d+=" L"+P[i][0]+" "+P[i][1];return d}
+function poly(P){return "M"+P.map(function(p){return p[0]+" "+p[1]}).join(" L")+"Z"}
+function gById(id){for(var i=0;i<G.length;i++)if(G[i][0]===id)return G[i];return null}
+// ближайший район или место к точке — для подписи места задержания
+function nearName(x,y){var best=null,bd=1e9;G.forEach(function(g){if(g[3]!=="dist"&&g[3]!=="town"&&g[3]!=="nat")return;var d=(g[4]-x)*(g[4]-x)+(g[5]-y)*(g[5]-y);if(d<bd){bd=d;best=g}});return best?(bd>40?"около: ":"")+best[1]:"место на схеме"}
+window.SA_mapNear=nearName;
+// 1 единица схемы ≈ 85 м (ширина штата по схеме ≈ 8,5 км)
+function km(P){var s=0;for(var i=1;i<P.length;i++){var dx=P[i][0]-P[i-1][0],dy=P[i][1]-P[i-1][1];s+=Math.sqrt(dx*dx+dy*dy)}return s*.085}
+/* ---------- рисование слоёв ---------- */
+function layers(o){o=o||{};var L=M.lay,h="";
+ if(L.jur)h+='<g class="m56-jur"><path d="M-2 -2H102V142H-2Z '+poly(LSPOLY)+'" fill="#7c8b3a" fill-rule="evenodd" clip-path="url(#smClip)"/><path d="'+poly(LSPOLY)+'" fill="#1f4e8c"/>'+FEDS.map(function(f){return '<path d="'+poly(f[3])+'" fill="#6a1b9a"/>'}).join("")+'</g>'+
+  '<g class="m56-z1"><text x="47" y="140" class="m56-dl" style="fill:#1f4e8c">ЮРИСДИКЦИЯ LSPD</text><text x="50" y="58" class="m56-dl" style="fill:#5b6a1e">ЮРИСДИКЦИЯ LSCSD</text></g>';
+ if(L.streets)h+='<g class="m56-z2">'+ST.map(function(s,i){return '<path id="m56s'+i+(o.pfx||"")+'" d="'+smoothLine(s[1])+'" class="m56-st"/>'}).join("")+'</g><g class="m56-z3">'+ST.map(function(s,i){return '<text class="m56-sl"><textPath href="#m56s'+i+(o.pfx||"")+'" startOffset="8%">'+e(s[0])+'</textPath></text>'}).join("")+'</g>';
+ if(L.prot)h+='<g>'+PROT.map(function(p){return '<path d="'+poly(p[2])+'" class="m56-prot" data-m56prot="'+e(p[0])+'"><title>'+e(p[1])+'</title></path>'}).join("")+'</g>';
+ if(L.dist)h+='<g class="m56-z1">'+G.filter(function(g){return g[3]==="dist"}).map(function(g){return '<text x="'+g[4]+'" y="'+g[5]+'" class="m56-dl">'+e(g[1])+'</text>'}).join("")+'</g>';
+ if(L.poi)h+='<g class="m56-z2">'+G.filter(function(g){return g[3]!=="dist"&&g[3]!=="nat"}).map(function(g){var on=V.sel===g[0];return '<g class="m56-poi'+(on?" on":"")+'" data-m56g="'+e(g[0])+'"><circle cx="'+g[4]+'" cy="'+g[5]+'" r=".75" style="r:calc(.75px / var(--zk))" fill="'+T[g[3]][1]+'"/><text x="'+g[4]+'" y="'+g[5]+'" class="m56-pl2 m56-z3" style="transform:translate(calc(1.1px / var(--zk)),calc(.6px / var(--zk)))">'+e(g[1])+'</text></g>'}).join("")+'</g>';
+ if(L.heat&&M.dets.length)h+='<defs><radialGradient id="m56hg'+(o.pfx||"")+'"><stop offset="0" stop-color="#ff1744" stop-opacity=".55"/><stop offset="1" stop-color="#ff1744" stop-opacity="0"/></radialGradient></defs><g>'+M.dets.map(function(d){return '<circle cx="'+d.x+'" cy="'+d.y+'" r="4.5" fill="url(#m56hg'+(o.pfx||"")+')"/>'}).join("")+'</g>';
+ if(L.routes)h+='<g>'+M.routes.filter(function(r){return !o.only||r.id===o.only}).map(function(r){return '<path d="'+smoothLine(r.p)+'" class="m56-route" stroke="'+e(r.c)+'"/>'+r.p.map(function(p,i){return i===0||i===r.p.length-1?'<circle cx="'+p[0]+'" cy="'+p[1]+'" r=".7" style="r:calc(.7px / var(--zk))" class="m56-rpt" fill="'+e(r.c)+'"/>':''}).join("")}).join("")+'</g>';
+ if(V.draft.length&&!o.mini)h+='<path d="'+smoothLine(V.draft)+'" class="m56-route" stroke="var(--accent)" stroke-dasharray="1 .6"/>'+V.draft.map(function(p){return '<circle cx="'+p[0]+'" cy="'+p[1]+'" r=".6" fill="var(--accent)"/>'}).join("");
+ if(L.marks)h+='<g>'+M.marks.map(function(m){var c=(MK[m.c]||MK.other)[1];return '<g class="m56-mark" data-m56mk="'+e(m.id)+'"><path d="M'+m.x+' '+m.y+' l-1.1 -2.2 a1.25 1.25 0 1 1 2.2 0 z" fill="'+c+'" stroke="#fff" stroke-width=".25" style="transform-box:fill-box;transform-origin:bottom;transform:scale(calc(1 / var(--zk)))"/><text x="'+(m.x+1.4)+'" y="'+(m.y-1)+'" class="m56-z2">'+e(m.n)+'</text></g>'}).join("")+'</g>';
+ if(V.hit&&!o.mini)h+='<circle cx="'+V.hit[0]+'" cy="'+V.hit[1]+'" r="1" class="m56-hit"/>';
+ return h}
+function svgHtml(id,v,o){o=o||{};v=v||V.v;var zf=Math.pow(100/v[2],.75),art=window.SA_mapArt?SA_mapArt():"";
+ return '<svg id="'+id+'" viewBox="'+v[0]+' '+v[1]+' '+v[2]+' '+(v[2]*1.4)+'" data-z="'+(100/v[2]>=2.5?3:100/v[2]>=1.45?2:1)+'" data-m="'+lvl(v[2])+'" style="--zf:'+zf.toFixed(3)+';--zk:'+(100/v[2]).toFixed(3)+'" role="img" aria-label="Интерактивная схема штата San Andreas">'+art+layers(o)+'</svg>'}
+function applyV(svg,v){svg.setAttribute("viewBox",v[0]+" "+v[1]+" "+v[2]+" "+(v[2]*1.4));var z=100/v[2];svg.dataset.z=z>=2.5?3:z>=1.45?2:1;svg.dataset.m=lvl(v[2]);svg.style.setProperty("--zf",Math.pow(z,.75).toFixed(3));svg.style.setProperty("--zk",z.toFixed(3));
+ var sc=document.getElementById("m56sc");if(sc)sc.textContent="масштаб ×"+(z).toFixed(1)+" · по ширине ≈ "+(v[2]*.085).toFixed(1)+" км"}
+function zoomAt(f,cx,cy){var v=V.v,w=Math.max(6,Math.min(100,v[2]/f)),k=w/v[2];if(cx==null){cx=v[0]+v[2]/2;cy=v[1]+v[2]*.7}V.v=clampV([cx-(cx-v[0])*k,cy-(cy-v[1])*k,w]);var s=document.getElementById("m56svg");if(s)applyV(s,V.v)}
+function focus(x,y,w){V.v=clampV([x-w/2,y-w*.7,w]);var s=document.getElementById("m56svg");if(s)applyV(s,V.v)}
+function svgPt(ev,svg){var m=svg.getScreenCTM();if(!m)return null;var p=svg.createSVGPoint();p.x=ev.clientX;p.y=ev.clientY;p=p.matrixTransform(m.inverse());return [Math.round(p.x*10)/10,Math.round(p.y*10)/10]}
+/* ---------- поиск (175) ---------- */
+function search(q){q=norm(q);if(q.length<2)return [];var W=q.split(" ");
+ var R=G.map(function(g){var hay=norm(g[1]+" "+g[2]),s=0;W.forEach(function(w){var i=hay.indexOf(w);if(i===0)s+=3;else if(i>0)s+=hay.charAt(i-1)===" "?2:1;else s-=5});return {g:g,s:s}}).filter(function(x){return x.s>0});
+ M.marks.forEach(function(m){if(norm(m.n+" "+(m.d||"")).indexOf(q)>=0)R.push({g:["mk:"+m.id,m.n,"","mark",m.x,m.y],s:4})});
+ return R.sort(function(a,b){return b.s-a.s}).slice(0,10).map(function(x){return x.g})}
+function goTo(g){V.sel=g[0];V.hit=[g[4],g[5]];V.q=g[1];focus(g[4],g[5],g[3]==="dist"||g[3]==="town"?26:16);rp();setTimeout(function(){V.hit=null},2600)}
+/* ---------- страница ---------- */
+function sideHtml(){var h='',g=V.sel&&V.sel.indexOf("mk:")!==0?gById(V.sel):null,mk=V.sel&&V.sel.indexOf("mk:")===0?M.marks.filter(function(m){return "mk:"+m.id===V.sel})[0]:null,pr=V.prot?PROT.filter(function(p){return p[0]===V.prot})[0]:null;
+ if(pr)h+='<div class="c54-card"><h4>🛡 '+e(pr[1])+'</h4><p style="margin:0">'+e(pr[3])+'</p><div class="c54-bar"><button type="button" class="btn" data-m56="zones">Охраняемые места по законам</button><button type="button" class="btn" data-m56="xprot">Закрыть</button></div></div>';
+ if(g)h+='<div class="c54-card"><h4><span class="m56-sw" style="display:inline-block;background:'+T[g[3]][1]+'"></span> '+e(g[1])+'</h4><p class="sub" style="margin:0">'+e(T[g[3]][0])+' · квадрат '+"ABCDE"[Math.min(4,Math.floor(g[4]/20))]+(Math.floor(g[5]/20)+1)+'</p><div class="c54-bar"><button type="button" class="btn" data-m56="markhere">Метка здесь</button><button type="button" class="btn" data-m56="xsel">Закрыть</button></div></div>';
+ if(mk)h+='<div class="c54-card c54-form"><h4>📍 Моя метка</h4><label>Название<input class="tin" id="m56mn" maxlength="60" value="'+e(mk.n)+'"></label><label>Тип<select class="tin" id="m56mc">'+Object.keys(MK).map(function(k){return '<option value="'+k+'"'+(mk.c===k?" selected":"")+'>'+MK[k][0]+'</option>'}).join("")+'</select></label><label>Заметка<textarea class="tin" id="m56md" rows="2" maxlength="300">'+e(mk.d||"")+'</textarea></label><div class="c54-bar"><button type="button" class="btn primary" data-m56="mksave" data-id="'+e(mk.id)+'">Сохранить</button><button type="button" class="btn" data-m56="mkdel" data-id="'+e(mk.id)+'">Удалить</button></div><p class="sub" style="margin:0">'+e(nearName(mk.x,mk.y))+'</p></div>';
+ // инструменты
+ h+='<div class="c54-card"><h4>Мои метки ('+M.marks.length+')</h4><div class="c54-bar"><select class="tin" id="m56mt">'+Object.keys(MK).map(function(k){return '<option value="'+k+'"'+(V.mkType===k?" selected":"")+'>'+MK[k][0]+'</option>'}).join("")+'</select><button type="button" class="btn'+(V.tool==="mark"?" primary":"")+'" data-m56="tmark">'+(V.tool==="mark"?"Нажмите на карту…":"+ Метка")+'</button></div>'+
+  (M.marks.length?'<ul class="m56-pl">'+M.marks.slice().reverse().map(function(m){return '<li data-m56mk="'+e(m.id)+'" class="'+(V.sel==="mk:"+m.id?"on":"")+'"><i class="m56-sw" style="background:'+(MK[m.c]||MK.other)[1]+'"></i><span>'+e(m.n)+'<small>'+e((MK[m.c]||MK.other)[0])+' · '+e(nearName(m.x,m.y))+'</small></span></li>'}).join("")+'</ul>':'<p class="sub" style="margin:0">Засады, места частых ДТП, точки встречи — с заметкой. Хранятся на этом компьютере.</p>')+'</div>';
+ h+='<div class="c54-card"><h4>Маршруты патруля ('+M.routes.length+')</h4>'+(V.tool==="route"?'<p class="sub">Нажимайте на карту по ходу маршрута. Точек: '+V.draft.length+(V.draft.length>1?' · ≈ '+km(V.draft).toFixed(1)+' км':'')+'</p><div class="c54-bar"><input class="tin" id="m56rn" maxlength="40" placeholder="Название маршрута" value="'+e(V.rname)+'" style="flex:1 1 140px"><button type="button" class="btn primary" data-m56="rsave"'+(V.draft.length<2?" disabled":"")+'>Сохранить</button><button type="button" class="btn" data-m56="rundo"'+(V.draft.length?"":" disabled")+'>↶</button><button type="button" class="btn" data-m56="rcancel">Отмена</button></div>':'<div class="c54-bar"><button type="button" class="btn" data-m56="troute">+ Нарисовать маршрут</button></div>')+
+  (M.routes.length?'<ul class="m56-pl">'+M.routes.map(function(r){return '<li data-m56r="'+e(r.id)+'"><i class="m56-sw" style="background:'+e(r.c)+'"></i><span>'+e(r.n)+'<small>'+r.p.length+' точек · ≈ '+km(r.p).toFixed(1)+' км'+(M.mini.on&&M.mini.route===r.id?' · в мини-окне':'')+'</small></span>'+(A&&A.miniState?'<button type="button" class="btn" data-m56rm="'+e(r.id)+'" title="Показать в мини-окне">🗗</button>':'')+'<button type="button" class="btn" data-m56rd="'+e(r.id)+'" aria-label="Удалить">✕</button></li>'}).join("")+'</ul>':'')+'</div>';
+ // мини-окно (180)
+ if(A&&A.miniState){var c=(A.state&&A.state()||{}).cfg||{};h+='<div class="c54-card"><h4>Карта в мини-окне</h4><label class="c54-inl"><input type="checkbox" id="m56mini"'+(M.mini.on?" checked":"")+'> Показывать карту в мини-окне поверх игры</label><p class="sub" style="margin:4px 0">Показывает текущий вид карты'+(M.mini.route?' и выбранный маршрут':'')+'. Окно открывается горячей клавишей мини-окна.</p><label class="c54-inl">Непрозрачность<input type="range" min="30" max="100" step="5" id="m56op" value="'+(+c.miniOpacity||90)+'"></label><div class="c54-bar"><button type="button" class="btn" data-m56="miniview">Отправить текущий вид</button></div></div>'}
+ // задержания (182)
+ h+='<div class="c54-card"><h4>Мои задержания на карте ('+M.dets.length+')</h4>'+(M.dets.length?'<p class="sub" style="margin:0 0 6px">Чаще всего: '+topDist().map(function(x){return e(x[0])+' ('+x[1]+')'}).join(", ")+'</p><div class="c54-bar"><button type="button" class="btn'+(M.lay.heat?" primary":"")+'" data-m56lay="heat">Тепловая карта</button><button type="button" class="btn" data-m56="detclr">Очистить</button></div>':'<p class="sub" style="margin:0">Укажите «Место задержания» в таймере — точки соберутся в тепловую карту районов.</p>')+'</div>';
+ return h}
+function topDist(){var c={};M.dets.forEach(function(d){var n=nearName(d.x,d.y).replace(/^около: /,"");c[n]=(c[n]||0)+1});return Object.keys(c).map(function(k){return [k,c[k]]}).sort(function(a,b){return b[1]-a[1]}).slice(0,4)}
+function pageHtml(){var L=M.lay,lb=function(k,t){return '<button type="button" class="pill" data-m56lay="'+k+'" aria-pressed="'+(!!L[k])+'">'+t+'</button>'};
+ var h='<section class="panel"><div class="m56-top"><div class="m56-q"><input class="tin" id="m56q" type="search" autocomplete="off" placeholder="Найти место: «Пиллбокс», «Мейз Банк», «Сэнди-Шорс»…" value="'+e(V.q)+'" aria-label="Поиск места на карте"><div class="m56-sug" id="m56sug" hidden></div></div></div>'+
+  '<div class="m56-lay" style="margin-bottom:8px">'+lb("dist","Районы")+lb("poi","Места")+lb("streets","Улицы")+lb("jur","Юрисдикция")+lb("prot","Охраняемые")+lb("marks","Мои метки")+lb("routes","Маршруты")+lb("heat","Мои задержания")+'</div>';
+ h+='<div class="m56"><div><div class="m56-wrap'+(V.tool?" tool":"")+'" id="m56w">'+svgHtml("m56svg")+'<div class="m56-ctl noprint"><button type="button" data-m56z="in" aria-label="Приблизить">+</button><button type="button" data-m56z="out" aria-label="Отдалить">−</button><button type="button" data-m56z="all" aria-label="Весь штат" title="Весь штат">⤢</button></div><span class="m56-scale" id="m56sc"></span></div>'+
+  (L.jur?'<div class="m56-legend"><span><i style="background:#1f4e8c;opacity:.5"></i>LSPD — город Лос-Сантос</span><span><i style="background:#7c8b3a;opacity:.5"></i>LSCSD — округа Лос-Сантос и Блэйн</span><span><i style="background:#6a1b9a;opacity:.5"></i>федеральные объекты</span><span>Граница примерная — уточняйте по законам своего сервера.</span></div>':'')+
+  '<p class="m56-disc">Колесо мыши — приблизить, перетаскивание — двигать карту. При приближении появляются названия районов, улиц и мест. '+e(DISC)+'</p></div><div class="m56-side">'+sideHtml()+'</div></div></section>';
+ return h}
+window.SA_pages=window.SA_pages||{};
+window.SA_pages.map={ok:function(){return true},html:pageHtml,after:function(){var s=document.getElementById("m56svg");if(s)applyV(s,V.v)}};
+function rp(){if(state.tab==="map")try{render()}catch(x){}}
+window.SA_MAP={open:function(q){if(window.SA_go)SA_go("map");else{state.tab="map";render()}if(q){var r=search(q);if(r[0])goTo(r[0])}},search:search,near:nearName};
+/* ---------- события карты ---------- */
+var drag=null;
+document.addEventListener("wheel",function(ev){var s=ev.target.closest&&ev.target.closest("#m56svg");if(!s)return;ev.preventDefault();var p=svgPt(ev,s);zoomAt(ev.deltaY<0?1.25:0.8,p&&p[0],p&&p[1])},{passive:false});
+document.addEventListener("pointerdown",function(ev){var s=ev.target.closest&&ev.target.closest("#m56svg");if(!s||ev.button!==0)return;drag={x:ev.clientX,y:ev.clientY,v:V.v.slice(),moved:false,s:s,id:ev.pointerId}});
+document.addEventListener("pointermove",function(ev){if(!drag)return;var dx=ev.clientX-drag.x,dy=ev.clientY-drag.y;if(!drag.moved&&Math.abs(dx)+Math.abs(dy)<5)return;drag.moved=true;var w=document.getElementById("m56w");if(w)w.classList.add("pan");
+ var r=drag.s.getBoundingClientRect(),k=drag.v[2]/r.width;V.v=clampV([drag.v[0]-dx*k,drag.v[1]-dy*k,drag.v[2]]);applyV(drag.s,V.v)});
+document.addEventListener("pointerup",function(ev){if(!drag)return;var d=drag;drag=null;var w=document.getElementById("m56w");if(w)w.classList.remove("pan");if(d.moved)return;
+ var t=ev.target,p=svgPt(ev,d.s);if(!p)return;
+ if(V.tool==="mark"){M.marks.push({id:rid(),x:p[0],y:p[1],n:MK[V.mkType][0],c:V.mkType,d:""});var id=M.marks[M.marks.length-1].id;V.tool="";V.sel="mk:"+id;save();rp();toast("Метка поставлена — подпишите её справа");return}
+ if(V.tool==="route"){V.draft.push(p);rp();return}
+ var pg=t.closest&&t.closest("[data-m56g]"),pm=t.closest&&t.closest("[data-m56mk]"),pp=t.closest&&t.closest("[data-m56prot]");
+ if(pm){V.sel="mk:"+pm.dataset.m56mk;V.prot=null;rp();return}
+ if(pg){V.sel=pg.dataset.m56g;V.prot=null;rp();return}
+ if(pp){V.prot=pp.dataset.m56prot;rp();return}
+ if(PK.on)pickDone(p)});
+document.addEventListener("click",function(ev){var t=ev.target.closest&&ev.target.closest("[data-m56],[data-m56lay],[data-m56z],[data-m56mk],[data-m56r],[data-m56rd],[data-m56rm],[data-m56sg]");if(!t||!(t.closest("#view")||t.closest(".m56-pick")))return;var d=t.dataset;
+ if(d.m56z){if(d.m56z==="all"){V.v=[0,0,100];var s=document.getElementById("m56svg");if(s)applyV(s,V.v)}else zoomAt(d.m56z==="in"?1.5:1/1.5);return}
+ if(d.m56lay){M.lay[d.m56lay]=M.lay[d.m56lay]?0:1;save();rp();return}
+ if(d.m56sg!=null){var r=search(V.q)[+d.m56sg];if(r)goTo(r);return}
+ if(d.m56mk&&t.tagName==="LI"){var m=M.marks.filter(function(x){return x.id===d.m56mk})[0];if(m){V.sel="mk:"+m.id;focus(m.x,m.y,Math.min(V.v[2],30));rp()}return}
+ if(d.m56r&&!ev.target.closest("button")){var r2=M.routes.filter(function(x){return x.id===d.m56r})[0];if(r2){var b=bbox(r2.p);focus(b[0],b[1],b[2]);rp()}return}
+ if(d.m56rd){if(!confirm("Удалить маршрут?"))return;M.routes=M.routes.filter(function(x){return x.id!==d.m56rd});if(M.mini.route===d.m56rd)M.mini.route="";save();rp();return}
+ if(d.m56rm){var r3=M.routes.filter(function(x){return x.id===d.m56rm})[0];if(r3){M.mini.on=true;M.mini.route=r3.id;var b2=bbox(r3.p);M.mini.v=clampV([b2[0]-b2[2]/2,b2[1]-b2[2]*.5,b2[2]]);save();miniBake();rp();toast("Маршрут отправлен в мини-окно")}return}
+ var a=d.m56;
+ if(a==="tmark"){V.tool=V.tool==="mark"?"":"mark";V.mkType=(document.getElementById("m56mt")||{}).value||V.mkType;rp();return}
+ if(a==="troute"){V.tool="route";V.draft=[];V.rname="";rp();return}
+ if(a==="rundo"){V.draft.pop();rp();return}
+ if(a==="rcancel"){V.tool="";V.draft=[];rp();return}
+ if(a==="rsave"){var cols=["#e53935","#1e88e5","#43a047","#fb8c00","#8e24aa","#00897b"];M.routes.push({id:rid(),n:(document.getElementById("m56rn")||{}).value||("Маршрут "+(M.routes.length+1)),p:V.draft.slice(),c:cols[M.routes.length%cols.length]});V.tool="";V.draft=[];save();rp();toast("Маршрут сохранён");return}
+ if(a==="mksave"){var m2=M.marks.filter(function(x){return x.id===d.id})[0];if(m2){m2.n=(document.getElementById("m56mn").value||"Метка").slice(0,60);m2.c=document.getElementById("m56mc").value;m2.d=document.getElementById("m56md").value.slice(0,300);save();rp();toast("Сохранено")}return}
+ if(a==="mkdel"){M.marks=M.marks.filter(function(x){return x.id!==d.id});V.sel=null;save();rp();return}
+ if(a==="markhere"){var g=gById(V.sel);if(g){M.marks.push({id:rid(),x:g[4],y:g[5],n:g[1],c:"other",d:""});V.sel="mk:"+M.marks[M.marks.length-1].id;save();rp()}return}
+ if(a==="xsel"){V.sel=null;rp();return}
+ if(a==="xprot"){V.prot=null;rp();return}
+ if(a==="zones"){state.tab="ref";try{if(window.SA_X)SA_X.sub.ref="zones"}catch(x){}render();return}
+ if(a==="detclr"){if(!confirm("Очистить точки задержаний на карте?"))return;M.dets=[];save();rp();return}
+ if(a==="miniview"){M.mini.on=true;M.mini.route=M.mini.route||"";M.mini.v=V.v.slice();save();miniBake();rp();toast("Текущий вид отправлен в мини-окно")}
+});
+function bbox(P){var x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;P.forEach(function(p){x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1])});var w=Math.max(12,(x1-x0)*1.4,(y1-y0)*1.4/1.4);return [(x0+x1)/2,(y0+y1)/2,Math.min(100,w)]}
+document.addEventListener("input",function(ev){var t=ev.target;if(!t)return;
+ if(t.id==="m56q"){V.q=t.value;var R=search(V.q),box=document.getElementById("m56sug");if(!box)return;V.sug=-1;
+  box.hidden=!R.length;box.innerHTML=R.map(function(g,i){return '<button type="button" data-m56sg="'+i+'"><span class="m56-sw" style="background:'+(T[g[3]]?T[g[3]][1]:"#888")+'"></span>'+e(g[1])+'<small>'+e(T[g[3]]?T[g[3]][0]:"моя метка")+'</small></button>'}).join("");return}
+ if(t.id==="m56rn"){V.rname=t.value;return}
+ if(t.id==="m56op"){try{A.set("miniOpacity",+t.value)}catch(x){}return}
+},true);
+document.addEventListener("keydown",function(ev){var t=ev.target;if(!t||t.id!=="m56q")return;var R=search(V.q),box=document.getElementById("m56sug");
+ if(ev.key==="Enter"){ev.preventDefault();var g=R[V.sug>=0?V.sug:0];if(g)goTo(g);else toast("Место не найдено");return}
+ if(ev.key==="ArrowDown"||ev.key==="ArrowUp"){ev.preventDefault();V.sug=Math.max(0,Math.min(R.length-1,V.sug+(ev.key==="ArrowDown"?1:-1)));if(box)[].forEach.call(box.children,function(b,i){b.classList.toggle("on",i===V.sug)})}});
+document.addEventListener("change",function(ev){var t=ev.target;if(!t)return;if(t.id==="m56mt"){V.mkType=t.value;return}if(t.id==="m56mini"){M.mini.on=t.checked;if(t.checked&&!M.mini.v)M.mini.v=V.v.slice();save();miniBake();return}},true);
+/* ---------- карта в мини-окне (180): карта «запекается» со стилями, мини-окно показывает готовый рисунок ---------- */
+var BAKE={svg:"",v:0};
+var PROPS=["fill","stroke","stroke-width","stroke-dasharray","stroke-linecap","stroke-linejoin","opacity","fill-opacity","stroke-opacity","font-size","font-weight","font-style","letter-spacing","text-anchor","paint-order","r","transform","transform-origin","transform-box"];
+var DEF={"stroke":"none","stroke-width":"1px","stroke-dasharray":"none","stroke-linecap":"butt","stroke-linejoin":"miter","opacity":"1","fill-opacity":"1","stroke-opacity":"1","font-weight":"400","font-style":"normal","letter-spacing":"normal","text-anchor":"start","paint-order":"normal","r":"0px","transform":"none","transform-box":"view-box","transform-origin":"0px 0px"};
+function miniBake(){if(!M.mini.on){BAKE={svg:"",v:BAKE.v+1};return}
+ var v=M.mini.v||V.v,host=document.createElement("div");host.className="m56";host.style.cssText="position:fixed;left:-10000px;top:0;width:400px;visibility:hidden";
+ host.innerHTML=svgHtml("m56bake",[v[0],v[1],v[2]],{mini:true,only:M.mini.route||"",pfx:"mini"});document.body.appendChild(host);
+ var svg=host.querySelector("svg");svg.setAttribute("viewBox",v[0]+" "+v[1]+" "+v[2]+" "+v[2]);
+ // сначала считаем стили всех элементов (классы ещё на месте), потом применяем
+ var JOB=[];[].slice.call(svg.querySelectorAll("*")).forEach(function(el){if(/^(defs|pattern|clipPath|linearGradient|radialGradient|stop)$/i.test(el.tagName))return;var cs=getComputedStyle(el);if(cs.display==="none"&&!el.closest("defs")){JOB.push([el,null]);return}var st="",tx=/^(text|textPath|tspan)$/.test(el.tagName);
+  PROPS.forEach(function(p){if(!tx&&/^(font|letter|text-anchor)/.test(p))return;if(p==="r"&&el.tagName!=="circle")return;if(/^transform/.test(p)&&cs.transform==="none")return;var val=cs.getPropertyValue(p);if(val&&val!==DEF[p])st+=p+":"+val.replace(/(\d\.\d\d)\d+/g,"$1")+";"});JOB.push([el,st])});
+ JOB.forEach(function(j){var el=j[0];if(j[1]===null){el.remove();return}if(j[1])el.setAttribute("style",j[1]);else el.removeAttribute("style");el.removeAttribute("class");el.removeAttribute("data-m56g");el.removeAttribute("data-m56mk");el.removeAttribute("data-m56prot")});
+ svg.querySelectorAll("title").forEach(function(t){t.remove()});
+ svg.querySelectorAll("stop").forEach(function(el){var cs=getComputedStyle(el);el.setAttribute("stop-color",cs.stopColor);el.setAttribute("stop-opacity",cs.stopOpacity)});
+ svg.removeAttribute("style");svg.setAttribute("width","100%");svg.removeAttribute("data-z");svg.removeAttribute("data-m");
+ var r=M.mini.route?M.routes.filter(function(x){return x.id===M.mini.route})[0]:null;
+ BAKE={svg:svg.outerHTML.replace(/ id="m56bake"/,""),v:BAKE.v+1,title:r?r.n+" · ≈ "+km(r.p).toFixed(1)+" км":"Карта",disc:"Схема по мотивам игры, не карта GTA V."};host.remove()}
+window.SA_mapMini=function(){return M.mini.on&&BAKE.svg?{svg:BAKE.svg,v:BAKE.v,title:BAKE.title,disc:BAKE.disc}:null};
+setTimeout(function(){if(M.mini.on)try{miniBake()}catch(x){}},4000);
+/* ---------- место задержания (181) и точки для тепловой карты (182) ---------- */
+var PK={on:false,cb:null,v:[0,0,100]};
+function pickOpen(cb,cur){if(!window.SA_modal)return;PK.on=true;PK.cb=cb;var c=cur&&cur.x!=null?cur:null;V.v=c?clampV([c.x-15,c.y-21,30]):[30,95,45];V.tool="";
+ var o=SA_modal("Место задержания",'<div class="m56 m56-pick"><p class="sub">Нажмите на карту, где произошло задержание. Колесо — приблизить, перетаскивание — двигать.</p><div class="m56-wrap" id="m56w">'+svgHtml("m56svg")+'<div class="m56-ctl"><button type="button" data-m56z="in">+</button><button type="button" data-m56z="out">−</button><button type="button" data-m56z="all">⤢</button></div></div><div class="m56-top" style="margin-top:8px"><div class="m56-q"><input class="tin" id="m56q" type="search" autocomplete="off" placeholder="Или найдите место: «Дэвис», «Пиллбокс»…"><div class="m56-sug" id="m56sug" hidden></div></div></div><p class="m56-disc">'+e(DISC)+'</p></div>',true);
+ var obs=new MutationObserver(function(){if(!o.isConnected){PK.on=false;obs.disconnect()}});obs.observe(document.body,{childList:true,subtree:false})}
+function pickDone(p){if(!PK.on)return;PK.on=false;var n=nearName(p[0],p[1]);try{if(window.SA_modalClose)SA_modalClose()}catch(x){}if(PK.cb)PK.cb({x:p[0],y:p[1],n:n})}
+// выбор в поиске внутри окна выбора места тоже ставит точку
+var goTo0=goTo;goTo=function(g){if(PK.on&&document.querySelector(".m56-pick")){pickDone([g[4],g[5]]);return}goTo0(g)};
+function curTm(){try{return typeof tm!=="undefined"&&tm&&tm.start?tm:null}catch(x){return null}}
+function locBar(){if(state.tab!=="timer")return;var v=document.getElementById("view"),t=curTm();if(!v)return;var old=v.querySelector('.s9-hb[data-k="loc56"]');if(!t){if(old)old.remove();return}
+ var html='<div class="s9-hb noprint" data-k="loc56"><span class="t"><b>📍 Место задержания'+(t.loc?': '+e(t.loc.n):'')+'</b><small>'+(t.loc?'Попадёт в рапорт и на вашу тепловую карту задержаний.':'Отметьте на карте — место попадёт в рапорт и на тепловую карту.')+'</small></span><button type="button" class="btn'+(t.loc?"":" primary")+'" data-m56loc="1">'+(t.loc?"Изменить":"Указать на карте")+'</button>'+(t.loc?'<button type="button" class="btn" data-m56loc="show">На карте</button>':'')+'</div>';
+ if(old)old.outerHTML=html;else v.insertAdjacentHTML("afterbegin",html)}
+var R56=window.render;window.render=function(){var r=R56.apply(this,arguments);try{locBar()}catch(x){}return r};
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-m56loc]");if(!b)return;var t=curTm();if(!t)return;
+ if(b.dataset.m56loc==="show"){V.hit=[t.loc.x,t.loc.y];window.SA_MAP.open();focus(t.loc.x,t.loc.y,20);return}
+ pickOpen(function(l){var first=!t.loc;t.loc={x:l.x,y:l.y,n:l.n};try{saveTm()}catch(x){}
+  M.dets=M.dets.filter(function(d){return d.tid!==t.id});M.dets.push({tid:t.id,x:l.x,y:l.y,at:Date.now(),nick:t.nick||""});if(M.dets.length>500)M.dets.shift();save();
+  try{render()}catch(x){}toast("Место задержания: "+l.n)},t.loc)});
+if(A&&A.onOpen)A.onOpen(function(t){if(String(t)==="map")window.SA_MAP.open()});
+window.SA_tmLoc=function(t){return t&&t.loc?t.loc.n+" (по схеме)":""};
 })();
 </script>
 

@@ -45,6 +45,11 @@
   .pad .ci i { flex: none; font-style: normal; width: 14px; height: 14px; margin-top: 1px; border: 1.5px solid #b9b2a8; border-radius: 4px; font-size: 11px; line-height: 11px; text-align: center; }
   .pad .ci.on i { background: var(--ac); border-color: var(--ac); color: #111; }
   .pad .ci.on span { text-decoration: line-through; color: #9a948b; }
+  .map { margin-top: 7px; padding-top: 7px; border-top: 1px solid rgba(255,255,255,.1); }
+  .map .mh { display: flex; justify-content: space-between; color: #b9b2a8; font-size: 12px; margin-bottom: 4px; cursor: pointer; }
+  .map .mv { border-radius: 9px; overflow: hidden; line-height: 0; }
+  .map .mv svg { width: 100%; height: auto; display: block; }
+  .map .md { margin-top: 3px; color: #8a847b; font-size: 10.5px; }
 </style>
 </head>
 <body>
@@ -58,6 +63,7 @@
   <div id="list"></div>
   <div id="calc" class="calc" style="display:none" title="Открыть калькулятор"></div>
   <div id="pad" class="pad" style="display:none"></div>
+  <div id="map" class="map" style="display:none"></div>
 </div>
 <script>
 (function () {
@@ -100,6 +106,7 @@
       calc.style.display = "";
     } else calc.style.display = "none";
     padRender();
+    mapRender();
     tick(); fitSoon();
   }
   function tick() {
@@ -129,6 +136,20 @@
     if (p.more) pad.appendChild(el("div", "more", "и ещё " + p.more + " строк в программе"));
     if (!p.lines.length) pad.appendChild(el("div", "empty", "Блокнот пуст."));
     pad.style.display = "";
+  }
+  // 4.4: карта — готовый рисунок из программы (стили уже внутри), обновляется, только когда меняется
+  var mapEl = document.getElementById("map"), mapV = -1;
+  function mapRender() {
+    var m = S.map;
+    if (!m || !m.svg) { mapEl.style.display = "none"; mapV = -1; return; }
+    if (m.v !== mapV) {
+      mapV = m.v; mapEl.textContent = "";
+      var h = el("div", "mh"); h.appendChild(el("span", null, "🗺 " + (m.title || "Карта"))); h.appendChild(el("span", null, "открыть ↗"));
+      h.onclick = function () { api.open("map"); };
+      var v = el("div", "mv"); v.innerHTML = String(m.svg).replace(/<script[\s\S]*?<\/script>/gi, "").replace(/\son\w+=/gi, " data-x=");
+      mapEl.appendChild(h); mapEl.appendChild(v); mapEl.appendChild(el("div", "md", m.disc || ""));
+    }
+    mapEl.style.display = "";
   }
   api.onState(function (d) {
     S = d || {};
