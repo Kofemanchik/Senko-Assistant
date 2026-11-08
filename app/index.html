@@ -7132,6 +7132,9 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"4.4.1",d:"08.11.2026",items:[
+  ["⚖","Раздел «Суд»: вернулась панель вкладок","В широком окне панель вкладок «Суд» (Дела, Заседание, Ордера, Судьи и другие) пропадала, и переключаться между разделами было нельзя. Из-за этого нельзя было открыть «Судьи»: назначить Председателя Верховного суда и одобрить заявки судей. Теперь вкладки на месте."]
+ ]},
  {v:"4.4.0",d:"08.11.2026",items:[
   ["🗺","Интерактивная карта штата","Новый раздел «Карта» в меню: схема всего штата San Andreas с приближением колесом мыши и перетаскиванием. При приближении появляются названия районов, улиц и более 100 мест. Схему мы нарисовали сами по мотивам игры — это не карта GTA V, и мы не претендуем на права Rockstar Games и Majestic RP."],
   ["🔎","Поиск места","Введите «Пиллбокс», «Мейз Банк», «Сэнди-Шорс» или «maze bank» — карта приблизит место и подсветит его. Работает и по своим меткам."],
@@ -14935,11 +14938,15 @@ function subsOf(t){
  if(t!==state.tab) return null;
  var sn=view.querySelector(".subnav");
  if(sn&&sn.closest("#view")){
-  sn.classList.add("sd-mir");
-  return [].slice.call(sn.querySelectorAll("button[data-xs],button[data-bpsub]")).map(function(b){
-   var k=b.dataset.xs?"xs:"+b.dataset.xs:"bp:"+b.dataset.bpsub;
-   return {k:k,n:b.textContent.trim(),on:b.getAttribute("aria-pressed")==="true"};
-  });
+  /* прячем .subnav, только если боковое меню действительно его повторяет; вкладки суда (data-c54tab) в меню не попадают, их панель должна остаться видимой */
+  var bs=[].slice.call(sn.querySelectorAll("button[data-xs],button[data-bpsub]"));
+  if(bs.length){
+   sn.classList.add("sd-mir");
+   return bs.map(function(b){
+    var k=b.dataset.xs?"xs:"+b.dataset.xs:"bp:"+b.dataset.bpsub;
+    return {k:k,n:b.textContent.trim(),on:b.getAttribute("aria-pressed")==="true"};
+   });
+  }
  }
  if(ANC.indexOf(t)<0) return null;
  var H=ancHeads(), cur=0;
