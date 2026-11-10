@@ -6,14 +6,15 @@ if(U.nick)P.nick=U.nick;if(U.static)P.st=U.static;localStorage.setItem("bos-prof
 if(U.dept)localStorage.setItem("bos-dept",U.dept);if(U.role)localStorage.setItem("bos-role",U.role);A.seeded()}}catch(e){}})();
 /* Senko Assistant: ранняя установка настроек, чтобы тема и размер не «мигали» при загрузке */
 (function(){
-var D={theme:"auto",style:"senko",fs:100,hc:false,compact:false,noanim:null,sticky:"auto",narrow:"auto",totop:true,remember:true,artview:"list",rail:true,cvd:false,misses:true,favchg:true,accent:"",font:"plex",tt:false,ttFrom:"20:00",ttTo:"07:00",stream:false,lang:"ru",ui:"senko",radius:"soft",density:"std",nums:"std",read:"full",caps:false,hero:"brand",lvl:true,cmd:true,hmhide:""};
+var D={theme:"auto",style:"senko",fs:100,hc:false,compact:false,noanim:null,sticky:"auto",narrow:"auto",totop:true,remember:true,artview:"list",rail:true,cvd:false,misses:true,favchg:true,accent:"",font:"plex",tt:false,ttFrom:"20:00",ttTo:"07:00",stream:false,lang:"ru",ui:"senko",radius:"soft",density:"std",nums:"std",read:"full",caps:false,hero:"brand",lvl:true,cmd:true,hmhide:"",lawfs:100,menuv:"full",hmbgOn:false,hmdim:40};
 var S={},raw=null;
 try{raw=JSON.parse(localStorage.getItem("bos-settings")||"null")}catch(e){}
 if(!raw||typeof raw!=="object")raw={};
 for(var k in D)S[k]=Object.prototype.hasOwnProperty.call(raw,k)?raw[k]:D[k];
 if(S.noanim!==null&&typeof S.noanim!=="boolean")S.noanim=null;
 if(["auto","light","dark"].indexOf(S.theme)<0)S.theme="auto";
-if(["senko","police","sheriff","teal","cherry","violet","graphite","robe"].indexOf(S.style)<0)S.style="senko";
+if(["senko","police","sheriff","teal","cherry","violet","graphite","robe","sand","rose","sky"].indexOf(S.style)<0)S.style="senko";
+S.lawfs=Math.min(160,Math.max(85,+S.lawfs||100));if(["full","icons"].indexOf(S.menuv)<0)S.menuv="full";S.hmbgOn=!!S.hmbgOn;S.hmdim=Math.min(80,Math.max(0,isNaN(+S.hmdim)?40:+S.hmdim));
 if(["auto","on","off"].indexOf(S.sticky)<0)S.sticky="auto";
 if(["auto","on","off"].indexOf(S.narrow)<0)S.narrow="auto";
 if(["list","cards","accordion","feed"].indexOf(S.artview)<0)S.artview="list";
@@ -55,6 +56,7 @@ window.SA_apply=function(){
   h.setAttribute("data-artview",S.artview);
   h.style.setProperty("--zoom",String(S.fs/100));
   h.setAttribute("data-font",S.font);
+  h.style.setProperty("--lawfs",String(S.lawfs/100));h.setAttribute("data-menuv",S.menuv);h.classList.toggle("hm-bg",!!S.hmbgOn);h.style.setProperty("--hmdim",String(S.hmdim/100));
   h.setAttribute("lang",S.lang);
   h.setAttribute("data-radius",S.radius);h.setAttribute("data-density",S.density);h.setAttribute("data-nums",S.nums);h.setAttribute("data-read",S.read);h.setAttribute("data-hero",S.hero);
   h.classList.toggle("caps",!!S.caps);h.classList.toggle("no-lvl",!S.lvl);
@@ -4452,6 +4454,7 @@ function settingsHtml(){
   h+=row("Режим высокой контрастности","Яркие цвета и чёткие границы для читаемости.",sw("hc",S.hc,"Высокая контрастность"));
   h+=row("Палитра для дальтоников","Метки различаются не только цветом, но и формой, а у звёзд розыска видна цифра. Цвета подобраны так, чтобы их различали люди с любым видом дальтонизма.",sw("cvd",S.cvd,"Палитра для дальтоников"));
   h+=row("Отключение анимаций","Меньше движения на экране для тех, кого оно отвлекает."+(S.noanim===null?' Сейчас — как в настройках системы.':''),sw("noanim",window.SA_noanim(),"Отключить анимации"));
+  if(window.SA_S47)h+=window.SA_S47.rows(row,seg,sw);
   h+='<div class="sgroup">Списки статей</div>';
   h+=row("Стиль отображения статей","Как выглядят статьи в УК, АК, ДК и ПК: список, карточки сеткой, аккордеон со свёрнутыми статьями или лента для чтения.",seg("artview",[["list","Список"],["cards","Карточки"],["accordion","Аккордеон"],["feed","Лента"]]));
   h+=row("Компактный режим списков","Больше статей на экране за счёт плотной вёрстки.",sw("compact",S.compact,"Компактный режим"));
@@ -7132,6 +7135,14 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"4.7.0",d:"11.11.2026",items:[
+  ["⌨","Клавиатура и скринридеры","Всю программу можно пройти клавишей Tab: фокус везде хорошо виден, а Esc закрывает любое открытое окно. У кнопок без подписи, окон и списков добавлены названия для программ экранного чтения."],
+  ["🔠","Размер текста законов","В настройках можно отдельно увеличить текст статей и примечаний, не меняя масштаб всего окна."],
+  ["🎨","Три новые темы","К стилям оформления добавились «Песок», «Роза» и «Небо». Работают и в светлой, и в чёрной теме."],
+  ["🖼","Свой фон главной","Выберите картинку для главного экрана и задайте затемнение, чтобы текст читался. Картинка хранится только на вашем компьютере."],
+  ["☰","Вид меню","Меню можно сделать узким: только значки или значки с подписями."],
+  ["🌀","Меньше движения","Анимации выключаются сами, если в Windows включено «Показывать анимацию», и вручную в настройках."]
+ ]},
  {v:"4.6.0",d:"10.11.2026",items:[
   ["🛡","Панель владельца и модерация","В панели появились общий поиск (клавиша «/»), массовые действия над пользователями, заметки модераторов, шаблоны ответов, права модераторов по разделам, колокольчик с уведомлениями, статистика использования и постепенное включение функций по процентам."],
   ["👁","Слежение за статьями","У статьи появился значок 👁: если её текст изменится, вы увидите это в «Что нового»."],
@@ -8747,7 +8758,7 @@ function toast(t){if(window.SA_toast)window.SA_toast(t)}
 function uid(p){return p+Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
 
 /* ================= стили оформления ================= */
-window.SA_STYLES=[["senko","Senko","#C2530E"],["police","Синий","#1F4E8C"],["sheriff","Оливковый","#4D6B24"],["teal","Бирюзовый","#0E766E"],["cherry","Вишнёвый","#A3203A"],["violet","Сиреневый","#6941C6"],["graphite","Графит","#2E3440"],["robe","Мантия","#7B1E2B"]];
+window.SA_STYLES=[["senko","Senko","#C2530E"],["police","Синий","#1F4E8C"],["sheriff","Оливковый","#4D6B24"],["teal","Бирюзовый","#0E766E"],["cherry","Вишнёвый","#A3203A"],["violet","Сиреневый","#6941C6"],["graphite","Графит","#2E3440"],["robe","Мантия","#7B1E2B"],["sand","Песок","#9A6B1F"],["rose","Роза","#C2306F"],["sky","Небо","#0F7FB8"]];
 
 /* ================= фото и ссылки к задержаниям ================= */
 /* Фото хранятся в IndexedDB этого компьютера (не в синхронизации: слишком большие), в задержании только ключ.
@@ -17080,7 +17091,7 @@ window.SA_s13Rows=function(row,sw,seg0){var h=rows0?rows0(row,sw,seg0):"";
  return h};
 /* ---------- 3.8.1: сброс и ссылка на вид ---------- */
 var UIK=["theme","style","accent","font","hc","compact","radius","density","nums","read","caps","hero","fs","hmhide","lvl"];
-var UIV={theme:["auto","light","dark"],style:["senko","police","sheriff","teal","cherry","violet","graphite","robe"],font:["plex","pt","system","serif","dys"],radius:["soft","std","sharp"],density:["airy","std","dense"],nums:["std","mono"],read:["full","narrow"],hero:["brand","soft"]};
+var UIV={theme:["auto","light","dark"],style:["senko","police","sheriff","teal","cherry","violet","graphite","robe","sand","rose","sky"],font:["plex","pt","system","serif","dys"],radius:["soft","std","sharp"],density:["airy","std","dense"],nums:["std","mono"],read:["full","narrow"],hero:["brand","soft"]};
 var HMK=["acts","rc","art","q","goal"];
 function uiCode(){return "1~"+UIK.map(function(k){var v=S[k];if(k==="accent")return String(v||"").replace("#","");if(typeof v==="boolean")return v?"1":"0";if(k==="hmhide")return String(v||"").split(",").filter(function(x){return HMK.indexOf(x)>=0}).join("_");return String(v==null?"":v)}).join("~")}
 function uiParse(c){var a=String(c||"").split("~");if(a[0]!=="1"||a.length!==UIK.length+1)return null;var o={};
@@ -19988,4 +19999,90 @@ window.SA_S46={
 .s46-card h4{margin:14px 0 4px}.s46-card ul{margin:4px 0 0;padding-left:18px}.w46.on{filter:none;color:var(--accent)}
 </style>
 
+<style>
+/* 4.7.0: доступность и оформление */
+html[data-style="sand"][data-eff="light"]:not(.hc){--bg:#F7F2E8;--surface:#FFFFFF;--ink:#241D10;--muted:#6B5E45;--line:#E8DEC6;--accent:#9A6B1F;--accent-ink:#FFFFFF;--chip:#F1E8D2;--side:#FBF8F0;--soft:#F3E8CC}
+html[data-style="sand"][data-eff="dark"]:not(.hc){--bg:#100D07;--surface:#1B160C;--ink:#F5EEDC;--muted:#B5A582;--line:#362D18;--accent:#E0B35A;--accent-ink:#1A1204;--chip:#251E10;--side:#140F08;--soft:#2D2411}
+html[data-style="rose"][data-eff="light"]:not(.hc){--bg:#FAF0F4;--surface:#FFFFFF;--ink:#2A1420;--muted:#7A5767;--line:#EFD9E2;--accent:#B0245F;--accent-ink:#FFFFFF;--chip:#F5E3EA;--side:#FDF7F9;--soft:#F8E1EA}
+html[data-style="rose"][data-eff="dark"]:not(.hc){--bg:#12080D;--surface:#1D0F16;--ink:#F7ECF0;--muted:#B99AA8;--line:#38202B;--accent:#E87BA6;--accent-ink:#1F0812;--chip:#271520;--side:#150A10;--soft:#2F1420}
+html[data-style="sky"][data-eff="light"]:not(.hc){--bg:#EFF6FA;--surface:#FFFFFF;--ink:#0F2230;--muted:#52697A;--line:#D5E4EE;--accent:#0B6FA4;--accent-ink:#FFFFFF;--chip:#E2EEF5;--side:#F6FAFC;--soft:#DCEBF4}
+html[data-style="sky"][data-eff="dark"]:not(.hc){--bg:#07100F;--surface:#0E1A1F;--ink:#EAF4F8;--muted:#93AEBB;--line:#1E3340;--accent:#5CB8E6;--accent-ink:#06151D;--chip:#142630;--side:#09141A;--soft:#102B38}
+.art-h h3{font-size:calc(16px * var(--lawfs,1))}
+.art .note,.art .pb,.art .part{font-size:calc(13.5px * var(--lawfs,1))}
+html[data-menuv="icons"] .side{width:72px;padding-left:8px;padding-right:8px}
+html[data-menuv="icons"] .sd-brand b,html[data-menuv="icons"] .sd-brand small,html[data-menuv="icons"] .sd-g,html[data-menuv="icons"] .sd-i span,html[data-menuv="icons"] .sd-i em,html[data-menuv="icons"] .sd-i .chev{display:none}
+html[data-menuv="icons"] .sd-i{justify-content:center;padding:10px 6px}
+html[data-menuv="icons"] .sd-i svg{width:22px;height:22px}
+html[data-menuv="iconlabel"] .sd-i small{display:none}
+html.hm-bg .hm{background-image:linear-gradient(rgba(0,0,0,var(--hmdim,.4)),rgba(0,0,0,var(--hmdim,.4))),var(--hmbg-img);background-size:cover;background-position:center;border-radius:18px;padding:14px}
+html.hm-bg .hm .hm-hi{background:color-mix(in srgb,var(--surface) 88%,transparent)}
+html:not(.noanim) .s47-focus{transition:outline-offset .1s}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible,[role="tab"]:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.s47-sk{position:absolute;left:-9999px;top:0;background:var(--accent);color:var(--accent-ink);padding:8px 14px;border-radius:8px;z-index:2147483000}
+.s47-sk:focus{left:8px;top:8px}
+.s47-bgrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.s47-bgrow input[type=range]{min-width:140px}
+</style>
+<script>
+/* 4.7.0: доступность и оформление */
+(function(){
+var S=window.SA_S;if(!S)return;
+var KEY="sa-hmbg47";
+function lsGet(){try{return localStorage.getItem(KEY)||""}catch(e){return ""}}
+function img(){var d=lsGet();document.documentElement.style.setProperty("--hmbg-img",d&&/^data:image\//.test(d)?'url("'+d+'")':"none")}
+function save(){try{localStorage.setItem("bos-settings",JSON.stringify(S))}catch(e){}}
+function again(){window.SA_apply();img();var b=document.querySelector("[data-s47-redraw]");try{document.dispatchEvent(new CustomEvent("s47-change"))}catch(e){}}
+var base=window.SA_apply;window.SA_apply=function(){base();img();
+  document.documentElement.setAttribute("data-menuv",S.menuv==="icons"?"icons":"full");labels()};
+function labels(){
+  document.querySelectorAll(".sd-i").forEach(function(b){var t=b.querySelector("b");if(!b.getAttribute("aria-label")&&t)b.setAttribute("aria-label",t.textContent);if(S.menuv==="icons"&&t)b.title=t.textContent});
+  document.querySelectorAll("button:not([aria-label])").forEach(function(b){if(!b.textContent.trim()&&b.title)b.setAttribute("aria-label",b.title)});
+  var m=document.getElementById("view");if(m&&!m.getAttribute("tabindex")){m.setAttribute("tabindex","-1");m.setAttribute("role","main")}
+  var sd=document.querySelector(".side");if(sd&&!sd.getAttribute("aria-label")){sd.setAttribute("role","navigation");sd.setAttribute("aria-label","Меню")}
+  document.querySelectorAll(".sa-modal,.sa-ov,[class*=modal]").forEach(function(o){if(o.getAttribute&&o.querySelector&&o.querySelector(".sa-body")&&!o.getAttribute("role")){o.setAttribute("role","dialog");o.setAttribute("aria-modal","true")}});
+}
+var mo;try{mo=new MutationObserver(function(){clearTimeout(mo.t);mo.t=setTimeout(labels,150)});mo.observe(document.body,{childList:true,subtree:true})}catch(e){}
+// пропустить меню
+var sk=document.createElement("a");sk.href="#view";sk.className="s47-sk";sk.textContent="К содержимому";
+sk.addEventListener("click",function(e){e.preventDefault();var v=document.getElementById("view");if(v){v.focus();v.scrollIntoView()}});
+document.body.insertBefore(sk,document.body.firstChild);
+// Esc закрывает любое открытое окно, которое само его не обработало
+document.addEventListener("keydown",function(e){
+  if(e.key!=="Escape"||e.defaultPrevented)return;
+  var ds=Array.prototype.filter.call(document.querySelectorAll('[role="dialog"],.sa-modal,.sa-ov'),function(x){return x.offsetParent!==null&&!x.hidden});
+  var d=ds[ds.length-1];if(!d)return;
+  var c=d.querySelector('[data-sd="x"],[aria-label="Закрыть"],.sl-x,.ai-x,.sa-x,.x');if(c){e.preventDefault();c.click()}
+});
+function row(){}
+window.SA_S47={
+ rows:function(row,seg,sw){
+  var h='<div class="sgroup">Доступность и вид</div>';
+  h+=row("Размер текста законов","Отдельно от масштаба окна: меняет только текст статей и примечаний. Сейчас — "+S.lawfs+"%.",
+   '<div class="s47-bgrow"><button type="button" class="btn" data-s47="law-" aria-label="Уменьшить текст законов">A−</button><output aria-live="polite">'+S.lawfs+'%</output><button type="button" class="btn" data-s47="law+" aria-label="Увеличить текст законов">A+</button></div>');
+  h+=row("Вид меню","Узкое меню освобождает место для текста.",seg("menuv",[["full","Значки с подписями"],["icons","Только значки"]]));
+  var has=!!lsGet();
+  h+=row("Свой фон главной","Картинка за карточками главного экрана. Хранится только на этом компьютере.",
+   '<div class="s47-bgrow"><button type="button" class="btn" data-s47="bgpick">'+(has?"Заменить":"Выбрать картинку")+'</button>'+(has?'<button type="button" class="btn" data-s47="bgdel">Убрать</button>':'')+
+   '<label>Затемнение <input type="range" min="0" max="80" step="5" value="'+S.hmdim+'" data-s47="dim" aria-label="Затемнение фона"> <output>'+S.hmdim+'%</output></label></div>');
+  return h;
+ }
+};
+document.addEventListener("click",function(e){
+  var b=e.target.closest&&e.target.closest("[data-s47]");if(!b)return;var k=b.dataset.s47;
+  if(k==="law-"||k==="law+"){S.lawfs=Math.min(160,Math.max(85,S.lawfs+(k==="law+"?5:-5)))}
+  else if(k==="bgdel"){try{localStorage.removeItem(KEY)}catch(x){}S.hmbgOn=false}
+  else if(k==="bgpick"){var f=document.createElement("input");f.type="file";f.accept="image/png,image/jpeg,image/webp";
+   f.onchange=function(){var fl=f.files&&f.files[0];if(!fl)return;if(fl.size>12e6){alert("Картинка слишком большая. Выберите файл до 12 МБ.");return}
+    var im=new Image(),u=URL.createObjectURL(fl);
+    im.onload=function(){var w=im.width,hh=im.height,m=1600,r=Math.min(1,m/Math.max(w,hh)),c=document.createElement("canvas");c.width=Math.round(w*r);c.height=Math.round(hh*r);
+     c.getContext("2d").drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);
+     var d=c.toDataURL("image/jpeg",.78);try{localStorage.setItem(KEY,d);S.hmbgOn=true;save();again();redraw()}catch(x){alert("Не удалось сохранить картинку: не хватает места.")}};
+    im.onerror=function(){URL.revokeObjectURL(u);alert("Не удалось открыть картинку.")};im.src=u};f.click();return}
+  save();again();redraw();
+});
+document.addEventListener("input",function(e){var t=e.target;if(t.dataset&&t.dataset.s47==="dim"){S.hmdim=+t.value;var o=t.parentNode.querySelector("output");if(o)o.textContent=S.hmdim+"%";save();window.SA_apply()}});
+function redraw(){var a=document.querySelector('[data-sk="theme"][aria-pressed="true"]');if(a)a.click()}
+img();setTimeout(labels,300);
+})();
+</script>
 </body></html>
