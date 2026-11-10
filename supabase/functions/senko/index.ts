@@ -1209,6 +1209,12 @@ async function api(req) {
       return J(await discordApi(b));
     case "svc":
       return J(await svcApi(b));
+    case "usage":
+      return J(await usageApi(b));
+    case "emp":
+      return J(await empApi(b));
+    case "org_struct":
+      return J(await orgStructApi(b));
     default:
       return J(fail("Неизвестное действие."), 400);
   }
@@ -1441,7 +1447,7 @@ async function sysFor(p) {
                           where t.org = ${p.org} and t.server = ${sv(p)} and not t.closed and t.due_at > now() and t.author_id is distinct from ${p.id}
                             and not exists (select 1 from control_results r where r.test_id = t.id and r.user_id = ${p.id})
                           order by t.due_at limit 5`;
-  const flags = await flagsNow();
+  const flags = await flagsFor(p);
   const events = flags.events === "off" ? [] : (await eventsFor(p.org, 14, sv(p))).slice(0, 5).map((e) => evOut(e, p));
   return {
     flags,
@@ -3180,6 +3186,7 @@ const AUDIT_ACTIONS = [
   "beta", "beta_task", "flags", "hook", "event", "idea",
   "xp_set", "ach_grant", "ach_revoke", "ach_custom", "ai_bonus", "ai_dict", "ai_gold",
   "svc_send", "svc_confirm", "svc_cancel", "rofl_on", "rofl_off",
+  "bulk", "mod_note", "tpl", "rollout", "modperm", "org_struct",
 ];
 
 async function findProfile(login) {
@@ -5541,9 +5548,28 @@ async function panelApi(b, ip, ua) {
   if (err) return err;
   const sql = db();
   if (!(await hit(`pa:${p.id}`, 300, 600))) return fail(RATE_MSG, { code: "rate" });
+  if (a.kind === "moderator") {
+    const deny = await modGate(p, op, b);
+    if (deny) return deny;
+  }
   switch (op) {
     case "me":
-      return { ok: true, me: panelMe(p, a) };
+      return { ok: true, me: { ...panelMe(p, a), perms: a.kind === "moderator" ? await modPerms(p.login_lc) : null } };
+    case "search":
+    case "bulk":
+    case "note_list":
+    case "note_add":
+    case "note_del":
+    case "tpl_get":
+    case "tpl_save":
+    case "usage_get":
+    case "rollout_get":
+    case "rollout_set":
+    case "law_check":
+    case "notif":
+    case "perms_get":
+    case "perms_set":
+      return panelExtra(b, a, p);
     case "logout":
       await sql`delete from panel_sessions where ${b.all ? sql`user_id = ${p.id}` : sql`token_hash = ${th}`}`;
       return { ok: true };
@@ -5938,7 +5964,7 @@ async function panelAds(b, a) {
 
 // ───────────── 2.4: база обновляется сама (у токена GitHub нет прав на базу, schema.sql там не выполняется) ─────────────
 // Те же команды лежат в supabase/schema.sql. Выполняются один раз: номер версии хранится в bot_settings.schema_v
-const SCHEMA_V = 48;
+const SCHEMA_V = 49;
 const SCHEMA_24 = `
 alter table public.profiles add column if not exists beta boolean not null default false;
 alter table public.shares drop constraint if exists shares_kind_check;
@@ -6286,7 +6312,7 @@ function ensureSchema() {
         if (+v >= SCHEMA_V) return;
         // база уже на 2.4: повторно 2.4 не выполняем (иначе вернулись бы удалённые баннеры по умолчанию)
         // 3.5: SCHEMA_30 и SCHEMA_35 повторяемы (create/alter … if not exists), их добавляем всем, кто ниже 35
-        await db().unsafe((+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35) + (+v < 37 ? SCHEMA_37_ONCE : "") + SCHEMA_38 + SCHEMA_39 + SCHEMA_40 + SCHEMA_41 + SCHEMA_42 + SCHEMA_43 + SCHEMA_44 + SCHEMA_45);
+        await db().unsafe((+v >= 30 ? SCHEMA_35 : (+v >= 29 ? SCHEMA_29 : +v >= 28 ? SCHEMA_28 + SCHEMA_29 : +v >= 27 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : +v >= 24 ? SCHEMA_27 + SCHEMA_28 + SCHEMA_29 : ADS_DDL + SCHEMA_24 + SCHEMA_27 + SCHEMA_28 + SCHEMA_29) + SCHEMA_30 + SCHEMA_35) + (+v < 37 ? SCHEMA_37_ONCE : "") + SCHEMA_38 + SCHEMA_39 + SCHEMA_40 + SCHEMA_41 + SCHEMA_42 + SCHEMA_43 + SCHEMA_44 + SCHEMA_45 + SCHEMA_49);
         adsReady = true;
         await setSetting("schema_v", SCHEMA_V);
       } catch (e) {
@@ -6329,6 +6355,365 @@ async function serverOpen(srv, p) {
   return m === "all" || (m === "beta" && isTester(p));
 }
 const isTester = (p) => !!p && (!!p.beta || p.rank === "owner" || p.rank === "moderator");
+
+// ───────────── 4.6: панель владельца и модерация ─────────────
+const SCHEMA_49 = `
+create table if not exists public.mod_notes (
+  id bigserial primary key, user_id uuid not null references public.profiles(id) on delete cascade,
+  author text not null default '', text text not null, at timestamptz not null default now());
+create index if not exists mod_notes_user on public.mod_notes (user_id, id desc);
+alter table public.mod_notes enable row level security;
+revoke all on table public.mod_notes from anon, authenticated;
+create table if not exists public.usage_hits (
+  day date not null, feature text not null, n integer not null default 0, primary key (day, feature));
+alter table public.usage_hits enable row level security;
+revoke all on table public.usage_hits from anon, authenticated;
+`;
+
+// Разделы панели, которые владелец открывает или закрывает каждому модератору (пункт 199)
+const MOD_SECTIONS = {
+  dash: "Сводка", health: "Состояние", users: "Пользователи", queue: "Заявки и сбросы", reports: "Рапорты",
+  rating: "Рейтинг", ideas: "Идеи", beta: "Тестеры", console: "Консоль бота", search: "Поиск", laws: "Проверка законов",
+};
+const OP_SECTION = {
+  dash: "dash", health: "health", users: "users", user: "users", bulk: "users", note_list: "users", note_add: "users", note_del: "users",
+  prog_get: "users", prog_xp: "users", prog_ach: "users", prog_ach_new: "users", prog_ai: "users",
+  beta_list: "beta", beta_set: "beta", beta_task: "beta", beta_task_save: "beta", beta_task_delete: "beta",
+  ideas_list: "ideas", ideas_set: "ideas", ideas_delete: "ideas", search: "search", law_check: "laws",
+};
+// команда бота → раздел; незнакомые команды требуют раздела «Консоль бота»
+const CMD_SECTION = [
+  [/^\/(reports?|orgreport)\b/i, "reports"],
+  [/^\/(top|results)\b/i, "rating"],
+  [/^\/(resets|pending|approve|approval|appeal)\b/i, "queue"],
+  [/^\/(find|user|ban|unban|tempban|warn|unwarn|tag|untag|note|kick|setstatic|setorg|rename|role|delete|dups|inactive)\b/i, "users"],
+  [/^\/(health|versions|stats|online|summary|jobs|misses|help)\b/i, "health"],
+];
+async function modPerms(lc) {
+  const all = (await getSetting("modperm", {})) || {};
+  const v = all[lc];
+  return Array.isArray(v) ? v.filter((x) => MOD_SECTIONS[x]) : null; // нет записи — открыто всё, как раньше
+}
+async function modGate(p, op, b) {
+  const perms = await modPerms(p.login_lc);
+  if (!perms) return null;
+  let sec = OP_SECTION[op] || "";
+  if (op === "cmd") {
+    const t = String(b.text || "").trim();
+    sec = (CMD_SECTION.find(([re]) => re.test(t)) || [0, "console"])[1];
+  } else if (op === "cb") {
+    return ["users", "queue", "reports", "ideas"].some((x) => perms.includes(x)) ? null : fail("Этот раздел вам не открыт. Обратитесь к владельцу.", { code: "forbidden" });
+  }
+  if (!sec || perms.includes(sec)) return null;
+  return fail("Этот раздел вам не открыт. Обратитесь к владельцу.", { code: "forbidden" });
+}
+
+// Шаблоны ответов на ошибки и идеи (пункт 194)
+const TPL_DEFAULT = [
+  { t: "Принято", b: "Спасибо за сообщение! Мы воспроизвели проблему и исправим её в ближайшем выпуске." },
+  { t: "Нужны детали", b: "Спасибо! Чтобы разобраться, напишите, пожалуйста, какая у вас версия программы, что вы делали перед ошибкой и что увидели на экране." },
+  { t: "Уже исправлено", b: "Эта проблема уже исправлена в последней версии. Обновите программу (она предложит обновление сама) и проверьте ещё раз." },
+  { t: "Не воспроизводится", b: "Мы не смогли воспроизвести ошибку. Если она повторится, пришлите отчёт из программы: Настройки → О программе → «Сообщить об ошибке» вместе с журналом." },
+  { t: "Идея в плане", b: "Спасибо за идею! Мы добавили её в план и сообщим, когда она выйдет." },
+  { t: "Идея отклонена", b: "Спасибо за идею! Сейчас мы не планируем её делать, потому что она не вписывается в направление программы." },
+];
+function tplClean(items) {
+  return (Array.isArray(items) ? items : []).slice(0, 40).map((x) => ({ t: clean(x && x.t, 40), b: cleanText(x && x.b, 800) })).filter((x) => x.t && x.b);
+}
+async function tplRows() {
+  const s = await getSetting("reply_tpl", null);
+  return Array.isArray(s) ? tplClean(s) : TPL_DEFAULT;
+}
+
+// Постепенный выпуск функций (пункт 196): флаг в режиме «все» открывается только части пользователей
+const rollKey = (id, key) => {
+  let h = 2166136261;
+  const s = String(id) + ":" + key;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619) >>> 0;
+  return h % 100;
+};
+async function flagsFor(p) {
+  const f = await flagsNow();
+  const roll = (await getSetting("rollout", {})) || {};
+  for (const k of Object.keys(roll)) {
+    const pct = Math.max(0, Math.min(100, parseInt(roll[k], 10) || 0));
+    if (f[k] === "all" && pct < 100 && !isTester(p) && rollKey(p.id, k) >= pct) f[k] = "off";
+  }
+  return f;
+}
+
+// Счётчик «что используют» (пункт 195): программа раз в несколько минут присылает числа открытий разделов, без привязки к людям
+const USAGE_OK = /^[a-z][a-z0-9_]{1,23}$/;
+async function usageApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  if (!(await hit(`us:${p.id}`, 12, 3600))) return fail(RATE_MSG, { code: "rate" });
+  const items = b.items && typeof b.items === "object" ? Object.entries(b.items).slice(0, 60) : [];
+  const day = mskDay(new Date());
+  const sql = db();
+  for (const [k, v] of items) {
+    const n = Math.max(0, Math.min(500, parseInt(v, 10) || 0));
+    if (!n || !USAGE_OK.test(k)) continue;
+    await sql`insert into usage_hits (day, feature, n) values (${day}, ${k}, ${n})
+              on conflict (day, feature) do update set n = usage_hits.n + ${n}`;
+  }
+  return { ok: true };
+}
+
+// Проверка разбора законов (пункт 197): отчёт check-laws по каждому серверу лежит в update/laws-check*.json
+async function lawCheckRows() {
+  const out = [];
+  for (const k of Object.keys(SERVERS)) {
+    const n = +k;
+    let r = null;
+    try {
+      const res = await fetch(LAWS_BASE + "laws-check" + lawsSfx(n) + ".json?t=" + Date.now(), { signal: AbortSignal.timeout(15000) });
+      if (res.ok) r = await res.json();
+    } catch (e) {}
+    out.push({ server: n, name: SERVERS[k].name, report: r });
+  }
+  return out;
+}
+
+// Остальные операции панели 4.6
+async function panelExtra(b, a, p) {
+  const sql = db();
+  const op = String(b.op || "");
+  const owner = a.kind === "owner";
+  const sc = scopeServer(a);
+  switch (op) {
+    // 191: одно поле ищет пользователя, рапорт, идею и сообщение об ошибке
+    case "search": {
+      const q = clean(b.q, 40);
+      if (q.length < 2) return fail("Введите хотя бы два символа.");
+      const like = "%" + likeEsc(q.replace(/^#/, "")) + "%";
+      const num = /^№?\s*(\d{1,9})$/.exec(q);
+      const id = num ? +num[1] : 0;
+      const users = await sql`select login, nick, static_id, org, server, rank, banned from profiles
+                              where (login ilike ${like} or nick ilike ${like} or static_id ilike ${like} or discord ilike ${like}) ${sc ? sql`and server = ${sc}` : sql``}
+                              order by last_seen desc nulls last limit 8`;
+      const reports = await sql`select id, org, author, title, status, created_at from reports
+                                where (title ilike ${like} or author ilike ${like} or login ilike ${like} ${id ? sql`or id = ${id}` : sql``}) ${sc ? sql`and server = ${sc}` : sql``}
+                                order by id desc limit 8`;
+      const ideas = owner || a.kind === "moderator"
+        ? await sql`select i.id, i.text, i.status, p.login from ideas i left join profiles p on p.id = i.user_id
+                    where (i.text ilike ${like} ${id ? sql`or i.id = ${id}` : sql``}) order by i.id desc limit 8`
+        : [];
+      const bugs = owner
+        ? await sql`select b.id, b.text, b.answered, p.login from bug_reports b left join profiles p on p.id = b.user_id
+                    where (b.text ilike ${like} or p.login ilike ${like} ${id ? sql`or b.id = ${id}` : sql``}) order by b.id desc limit 8`
+        : [];
+      return { ok: true, users, reports, ideas: ideas.map((x) => ({ ...x, text: x.text.slice(0, 140) })), bugs: bugs.map((x) => ({ ...x, text: x.text.slice(0, 140) })) };
+    }
+    // 192: массовые действия
+    case "bulk": {
+      const kind = String(b.kind || "");
+      const logins = [...new Set((Array.isArray(b.logins) ? b.logins : []).map((x) => clean(x, 24).toLowerCase()).filter(Boolean))].slice(0, 100);
+      if (!logins.length) return fail("Выберите пользователей.");
+      if (!["beta_on", "beta_off", "ai_add"].includes(kind)) return fail("Неизвестное действие.");
+      const add = Math.floor(+b.n || 0);
+      if (kind === "ai_add" && (add < 1 || add > 1000)) return fail("Запросы к ИИ: число от 1 до 1000.");
+      let done = 0;
+      const skipped = [];
+      for (const lc of logins) {
+        const t = await findProfile(lc);
+        if (!t) { skipped.push(lc); continue; }
+        if (canTouch(a, t)) { skipped.push(t.login); continue; }
+        if (kind === "ai_add") {
+          await sql`update profiles set ai_bonus = least(100000, coalesce(ai_bonus, 0) + ${add}) where id = ${t.id}`;
+          if (b.notify) await sql`insert into broadcasts (user_id, title, author, text, expires_at)
+                                  values (${t.id}, '🤖 Дополнительные запросы к ИИ', ${a.label}, ${`Вам выдано дополнительных запросов к ИИ: ${add}. Они тратятся, когда закончится дневной лимит, и не сгорают.`}, now() + interval '7 days')`;
+        } else await setBeta(a, t, kind === "beta_on");
+        done++;
+      }
+      await audit(a.label, "bulk", kind, { n: done, add: kind === "ai_add" ? add : undefined, skipped: skipped.slice(0, 20) });
+      return { ok: true, done, skipped };
+    }
+    // 193: заметки модерации — их видят только модераторы и владелец
+    case "note_list": {
+      const t = await findProfile(String(b.login || ""));
+      if (!t) return fail("Пользователь не найден.");
+      if (sc && (t.server || DEFAULT_SERVER) !== sc) return fail("Пользователь с другого сервера.");
+      const rows = await sql`select id, author, text, at from mod_notes where user_id = ${t.id} order by id desc limit 100`;
+      return { ok: true, rows };
+    }
+    case "note_add": {
+      const t = await findProfile(String(b.login || ""));
+      if (!t) return fail("Пользователь не найден.");
+      const why = canTouch(a, t);
+      if (why && t.rank !== "owner") return fail(why);
+      const text = cleanText(b.text, 600);
+      if (text.length < 2) return fail("Напишите текст заметки.");
+      const [{ n }] = await sql`select count(*)::int n from mod_notes where user_id = ${t.id}`;
+      if (n >= 200) return fail("У пользователя уже 200 заметок: удалите ненужные.");
+      await sql`insert into mod_notes (user_id, author, text) values (${t.id}, ${a.kind === "owner" ? "владелец" : a.profile.login}, ${text})`;
+      await audit(a.label, "mod_note", t.login, { add: true });
+      return { ok: true };
+    }
+    case "note_del": {
+      const [r] = await sql`select m.id, m.author, m.user_id, p.server from mod_notes m join profiles p on p.id = m.user_id where m.id = ${parseInt(b.id, 10) || 0}`;
+      if (!r) return fail("Заметка не найдена.");
+      if (sc && (r.server || DEFAULT_SERVER) !== sc) return fail("Пользователь с другого сервера.");
+      if (!owner && r.author !== a.profile.login) return fail("Чужую заметку удалить может только владелец.");
+      await sql`delete from mod_notes where id = ${r.id}`;
+      await audit(a.label, "mod_note", String(r.id), { deleted: true });
+      return { ok: true };
+    }
+    // 194: шаблоны ответов
+    case "tpl_get":
+      return { ok: true, items: await tplRows(), custom: (await getSetting("reply_tpl", null)) != null };
+    case "tpl_save": {
+      if (!owner) return fail("Это доступно только владельцу.", { code: "forbidden" });
+      const items = tplClean(b.items);
+      await setSetting("reply_tpl", items);
+      await audit(a.label, "tpl", null, { n: items.length });
+      return { ok: true, items };
+    }
+    // 195: что используют
+    case "usage_get": {
+      if (!owner) return fail("Это доступно только владельцу.", { code: "forbidden" });
+      const days = Math.max(1, Math.min(90, parseInt(b.days, 10) || 14));
+      const rows = await sql`select feature, sum(n)::int n, count(distinct day)::int days from usage_hits
+                             where day > (now() at time zone 'Europe/Moscow')::date - ${days}::int group by feature order by n desc`;
+      const [{ users }] = await sql`select count(*)::int users from profiles where last_seen > now() - make_interval(days => ${days})`;
+      return { ok: true, rows, days, users, known: USAGE_FEATURES };
+    }
+    // 196: постепенный выпуск
+    case "rollout_get":
+      return { ok: true, rollout: (await getSetting("rollout", {})) || {} };
+    case "rollout_set": {
+      if (!owner) return fail("Это доступно только владельцу.", { code: "forbidden" });
+      const k = String(b.key || "");
+      if (!FLAG_DEFS[k]) return fail("Неизвестная функция.");
+      const pct = Math.max(0, Math.min(100, parseInt(b.pct, 10)));
+      if (!Number.isFinite(pct)) return fail("Процент: число от 0 до 100.");
+      const s = (await getSetting("rollout", {})) || {};
+      if (pct >= 100) delete s[k]; else s[k] = pct;
+      await setSetting("rollout", s);
+      await audit(a.label, "rollout", k, { pct });
+      return { ok: true, rollout: s };
+    }
+    // 197: проверка разбора законов
+    case "law_check":
+      return { ok: true, rows: await lawCheckRows() };
+    // 198: колокольчик — новые ошибки, идеи, заявки и рапорты
+    case "notif": {
+      const since = Math.max(Date.now() - 7 * 864e5, parseInt(b.since, 10) || 0);
+      const at = new Date(since);
+      const sv0 = sc ? sql`and p.server = ${sc}` : sql``;
+      const items = [];
+      if (owner) {
+        const bugs = await sql`select b.id, b.text, b.at, p.login from bug_reports b left join profiles p on p.id = b.user_id where b.at > ${at} order by b.at desc limit 6`;
+        bugs.forEach((x) => items.push({ k: "bug", id: x.id, at: x.at, text: `Ошибка №${x.id}${x.login ? " от " + x.login : ""}: ${x.text.slice(0, 80)}`, href: "#bugs" }));
+      }
+      const ideas = await sql`select i.id, i.text, i.created_at at from ideas i where i.created_at > ${at} order by i.created_at desc limit 6`;
+      ideas.forEach((x) => items.push({ k: "idea", id: x.id, at: x.at, text: `Идея №${x.id}: ${x.text.slice(0, 80)}`, href: "#ideas" }));
+      const apps = await sql`select p.login, p.nick, p.org, p.created_at at from profiles p where p.approval <> 'ok' and p.created_at > ${at} ${sv0} order by p.created_at desc limit 6`;
+      apps.forEach((x) => items.push({ k: "app", id: x.login, at: x.at, text: `Заявка: ${x.nick || x.login} (${x.org})`, href: "#queue" }));
+      const reps = await sql`select r.id, r.org, r.title, r.created_at at from reports r where r.status = 'new' and r.created_at > ${at} ${sc ? sql`and r.server = ${sc}` : sql``} order by r.created_at desc limit 6`;
+      reps.forEach((x) => items.push({ k: "rep", id: x.id, at: x.at, text: `Рапорт №${x.id} (${x.org}): ${x.title.slice(0, 60)}`, href: "#reports" }));
+      items.sort((x, y) => new Date(y.at).getTime() - new Date(x.at).getTime());
+      return { ok: true, items: items.slice(0, 20), now: Date.now() };
+    }
+    // 199: права модераторов
+    case "perms_get": {
+      if (!owner) return fail("Это доступно только владельцу.", { code: "forbidden" });
+      const all = (await getSetting("modperm", {})) || {};
+      return { ok: true, perms: all, sections: MOD_SECTIONS };
+    }
+    case "perms_set": {
+      if (!owner) return fail("Это доступно только владельцу.", { code: "forbidden" });
+      const t = await findProfile(String(b.login || ""));
+      if (!t || t.rank !== "moderator") return fail("Права настраиваются только у модераторов.");
+      const all = (await getSetting("modperm", {})) || {};
+      if (b.all) delete all[t.login_lc];
+      else all[t.login_lc] = (Array.isArray(b.sections) ? b.sections : []).filter((x) => MOD_SECTIONS[x]);
+      await setSetting("modperm", all);
+      await audit(a.label, "modperm", t.login, { sections: b.all ? "все" : all[t.login_lc] });
+      return { ok: true, perms: all };
+    }
+  }
+  return fail("Неизвестное действие панели.");
+}
+const USAGE_FEATURES = {
+  home: "Главная", uk: "УК", ak: "АК", dk: "ДК", pk: "ПК", laws: "Законы", calc: "Калькулятор", timer: "Таймеры", ai: "ИИ-помощник",
+  rp: "РП ситуации", know: "Обучение", reports: "Рапорты", notes: "Заметки", court: "Суд", map: "Карта", boss: "Панель руководителя",
+  cab: "Кабинет", ideas: "Идеи", colleagues: "Коллеги", radio: "Рация", struct: "Структура организации",
+};
+
+// Карточка сотрудника для руководства (пункт 98): смены, тесты, рапорты, отпуска и обращения модерации на одной странице
+async function empApi(b) {
+  const { p, err } = await who(b, ["leader", "moderator", "owner"]);
+  if (err) return err;
+  const t = await findProfile(String(b.login || ""));
+  if (!t) return fail("Сотрудник не найден.");
+  if (p.rank === "leader" && (t.org !== p.org || sv(t) !== sv(p))) return fail("Сотрудник из другой организации.", { code: "forbidden" });
+  const sc = p.rank === "moderator" ? modServer(p) : 0;
+  if (sc && sv(t) !== sc) return fail("Сотрудник с другого сервера.", { code: "forbidden" });
+  const sql = db();
+  const lc = t.login_lc;
+  const sh = await sql`select started_at, ended_at, summary from shifts where org = ${t.org} and server = ${sv(t)} and started_at > now() - interval '30 days' order by started_at desc limit 200`;
+  let hours = 0, count = 0;
+  const lastShifts = [];
+  for (const s of sh) {
+    const me = ((s.summary && s.summary.online) || []).find((x) => String(x.login || "").toLowerCase() === lc);
+    if (!me) continue;
+    const h = Math.max(0, ((tsOf(s.ended_at) || Date.now()) - tsOf(s.started_at)) / 3600e3);
+    hours += h; count++;
+    if (lastShifts.length < 8) lastShifts.push({ at: s.started_at, hours: Math.round(h * 10) / 10 });
+  }
+  const tests = await sql`select r.p, r.s, r.n, r.at, c.title from control_results r join control_tests c on c.id = r.test_id where r.user_id = ${t.id} order by r.at desc limit 10`;
+  const reps = await sql`select id, kind, title, status, created_at from reports where user_id = ${t.id} order by id desc limit 10`;
+  const [rs] = await sql`select count(*)::int n, count(*) filter (where status = 'ok')::int ok, count(*) filter (where status = 'no')::int no from reports where user_id = ${t.id}`;
+  const vac = await sql`select kind, start_at, end_at, status, note from vacations where user_id = ${t.id} order by start_at desc limit 8`;
+  const warns = p.rank === "leader" ? [] : await sql`select author, reason, at from account_warns where user_id = ${t.id} order by at desc limit 10`;
+  return {
+    ok: true,
+    emp: { login: t.login, nick: t.nick, static: t.static_id, org: t.org, post: t.post || "", created: t.created_at, last_seen: t.last_seen },
+    shifts: { count, hours: Math.round(hours * 10) / 10, last: lastShifts },
+    tests, reports: { total: rs.n, ok: rs.ok, no: rs.no, last: reps }, vacations: vac, warns,
+  };
+}
+
+// Структура организации (пункт 103): отделы, должности и свободные места; редактирует руководство, видят все сотрудники организации
+function orgStructClean(d) {
+  const depts = (Array.isArray(d && d.depts) ? d.depts : []).slice(0, 20).map((x) => ({
+    name: clean(x && x.name, 40),
+    positions: (Array.isArray(x && x.positions) ? x.positions : []).slice(0, 30).map((q) => ({
+      title: clean(q && q.title, 40), slots: Math.max(1, Math.min(99, parseInt(q && q.slots, 10) || 1)), note: clean(q && q.note, 120),
+    })).filter((q) => q.title),
+  })).filter((x) => x.name);
+  return { depts };
+}
+async function orgStructApi(b) {
+  const { p, err } = await who(b);
+  if (err) return err;
+  const staff = ["leader", "moderator", "owner"].includes(p.rank);
+  let org = p.org, srv = sv(p);
+  if (staff && b.org && DEPTS.includes(String(b.org)) && (p.rank !== "leader" || b.org === p.org)) org = String(b.org);
+  if (p.rank === "owner" || (p.rank === "moderator" && !modServer(p))) srv = parseServer(b.server) || srv;
+  const key = `orgst:${srv}:${org}`;
+  const sql = db();
+  if (b.op === "save") {
+    if (!staff) return fail("Структуру редактирует руководство.", { code: "forbidden" });
+    if (p.rank === "leader" && org !== p.org) return fail("Можно менять только свою организацию.", { code: "forbidden" });
+    const d = orgStructClean(b.data);
+    await setSetting(key, d);
+    await audit(p.rank === "owner" ? "owner" : p.login, "org_struct", org, { server: srv, depts: d.depts.length });
+    return { ok: true, data: d };
+  }
+  const d = orgStructClean((await getSetting(key, null)) || { depts: [] });
+  // кто занимает должность: по полю «должность» в профиле (сравнение без учёта регистра)
+  const people = await sql`select login, nick, post from profiles where org = ${org} and server = ${srv} and not banned and approval = 'ok' and post <> '' limit 500`;
+  const by = {};
+  for (const x of people) (by[String(x.post).trim().toLowerCase()] = by[String(x.post).trim().toLowerCase()] || []).push({ login: x.login, nick: x.nick });
+  for (const dep of d.depts) for (const q of dep.positions) {
+    const h = by[q.title.toLowerCase()] || [];
+    q.holders = h.slice(0, 20);
+    q.free = Math.max(0, q.slots - h.length);
+  }
+  return { ok: true, org, server: srv, data: d, canEdit: staff && (p.rank !== "leader" || org === p.org) };
+}
 
 // ───────────── 2.4: бета-тестеры ─────────────
 async function setBeta(a, p, on) {

@@ -110,6 +110,8 @@ jobs:
 
       - name: Отчёт по серверу (звёзды, штрафы, части)
         continue-on-error: true
+        env:
+          JSON_OUT: "1"
         run: node scripts/check-laws.js >> "$GITHUB_STEP_SUMMARY"
 
       - name: Commit

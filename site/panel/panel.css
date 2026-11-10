@@ -280,3 +280,15 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px}
 .dc-btn{display:flex;align-items:center;justify-content:center;gap:10px;background:#5865F2;border-color:#5865F2;color:#fff}.dc-btn:hover{filter:brightness(1.08)}.dc-btn:disabled{opacity:.6}
 .dc-btn svg{width:20px;height:20px;fill:currentColor}
 .dc-hint{margin-top:8px}
+
+/* 4.6: колокольчик, поиск, массовый выбор */
+.bell{position:relative}
+.bell-n{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--accent);color:var(--accent-ink,#fff);font:700 10px/17px var(--f-mono,monospace);text-align:center;font-style:normal}
+.bell-pop{position:fixed;z-index:90;width:320px;max-width:calc(100vw - 16px);max-height:min(70vh,460px);overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.22)}
+.bell-pop[hidden]{display:none}
+.bell-h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface)}
+.bell-i{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-bottom:1px solid var(--line);color:inherit;text-decoration:none;font-size:14px}
+.bell-i:hover,.bell-i:focus-visible{background:var(--soft,var(--chip))}
+.bell-i.new{border-left:3px solid var(--accent);padding-left:9px}
+.tbl input[type=checkbox]{width:17px;height:17px;accent-color:var(--accent)}
+.chk{display:flex;align-items:center;gap:8px}

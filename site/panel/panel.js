@@ -224,6 +224,17 @@
     dlg(title, [h("p", { text: text, style: "margin-bottom:14px" }), h("div", { class: "dlg-f" }, btn("Отмена", closeDlg), btn(label, function () { closeDlg(); fn(); }, danger ? "btn-d" : "btn-p"))]);
   }
   function word(s) { return String(s || "").replace(/\s+/g, " ").trim(); }
+  // 4.6: готовые ответы на ошибки и идеи, вставляются в поле одним нажатием
+  var TPL = null;
+  function tplPick(ta) {
+    var sel = h("select", { "aria-label": "Шаблон ответа", style: "width:auto;max-width:100%", on: { change: function () {
+      var i = +sel.value; sel.value = ""; if (!TPL || !TPL[i]) return;
+      ta.value = (ta.value.trim() ? ta.value.trim() + "\n" : "") + TPL[i].b; ta.dispatchEvent(new Event("input")); ta.focus();
+    } } }, h("option", { value: "", text: "Вставить шаблон…" }));
+    function fill() { (TPL || []).forEach(function (x, i) { sel.appendChild(h("option", { value: String(i), text: x.t })); }); }
+    if (TPL) fill(); else api("tpl_get").then(function (r) { if (r.ok) { TPL = r.items; fill(); } });
+    return sel;
+  }
 
   // ───── вход и выход
   function showAuth(msg) {
@@ -326,18 +337,21 @@
 
   // ───── меню
   var NAV = [
-    ["Обзор", [["dash", "i-home", "Сводка", "Цифры и режимы"], ["health", "i-pulse", "Состояние", "Сервисы, версии, поиск"], ["month", "i-trophy", "Итоги месяца", "Сводка, ведомства, опрос", null, 1]]],
+    ["Обзор", [["dash", "i-home", "Сводка", "Цифры и режимы"], ["search", "i-search", "Поиск", "Люди, рапорты, идеи, ошибки"], ["usage", "i-pulse", "Что используют", "Разделы и функции", null, 1], ["laws", "i-list", "Проверка законов", "Как разобраны статьи"], ["health", "i-pulse", "Состояние", "Сервисы, версии, поиск"], ["month", "i-trophy", "Итоги месяца", "Сводка, ведомства, опрос", null, 1]]],
     ["Люди", [["users", "i-users", "Пользователи", "Поиск и действия"], ["staff", "i-key", "Роли и доступ", "Модераторы и руководство"], ["security", "i-shield", "Безопасность", "Входы, устройства, коды", null, 1], ["queue", "i-inbox", "Заявки и сбросы", "Новички и пароли", "queue"]]],
     ["Работа", [["reports", "i-file", "Рапорты", "Рапорты сотрудников", "reports"], ["rating", "i-trophy", "Рейтинг", "Неделя и контрольные"], ["news", "i-mega", "Рассылки", "Сообщения в программе", null, 1], ["bugs", "i-bug", "Ошибки", "Сообщения пользователей", "bugs", 1], ["ideas", "i-mega", "Идеи", "Предложения пользователей"], ["ai", "i-ai", "ИИ-помощник", "Словарь, плохие ответы, самопроверка", null, 1]]],
     ["Тестирование", [["beta", "i-shield", "Тестеры", "Роль, задания, функции"]]],
-    ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["srvcfg", "i-sliders", "Подсказки серверов", "Миранда и номера статей", null, 1], ["gloss", "i-file", "Глоссарий", "Термины для программы и ИИ", null, 1], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1], ["pranks", "i-menu", "Пранки", "Каталог из 150 вариантов", null, 1]]],
+    ["Управление", [["modes", "i-sliders", "Режимы", "Техработы, регистрация", null, 1], ["srvcfg", "i-sliders", "Подсказки серверов", "Миранда и номера статей", null, 1], ["gloss", "i-file", "Глоссарий", "Термины для программы и ИИ", null, 1], ["tpl", "i-mega", "Шаблоны ответов", "Для ошибок и идей"], ["ads", "i-ad", "Реклама", "Баннеры на сайте и в программе", null, 1], ["db", "i-db", "База данных", "Таблицы и правки", null, 1], ["backup", "i-save", "Резервная копия", "Скачать базу", null, 1], ["audit", "i-list", "Журнал", "Кто что делал", null, 1], ["pranks", "i-menu", "Пранки", "Каталог из 150 вариантов", null, 1]]],
     ["Сервис", [["console", "i-term", "Консоль бота", "Любая команда"]]],
   ];
+  // 4.6: владелец открывает модератору только нужные разделы; ME.perms === null значит «всё открыто»
+  var SEC_IDS = ["dash", "health", "users", "queue", "reports", "rating", "ideas", "beta", "console", "search", "laws"];
+  function secOk(id) { return ME.owner || !ME.perms || SEC_IDS.indexOf(id) < 0 || ME.perms.indexOf(id) >= 0; }
   function buildNav() {
     var nav = $("nav");
     nav.textContent = "";
     NAV.forEach(function (g) {
-      var items = g[1].filter(function (x) { return !x[5] || ME.owner || (x[0] === "pranks" && ME.rofl); });
+      var items = g[1].filter(function (x) { return (!x[5] || ME.owner || (x[0] === "pranks" && ME.rofl)) && secOk(x[0]); });
       if (!items.length) return;
       nav.appendChild(h("div", { class: "grp", text: g[0] }));
       items.forEach(function (x) {
@@ -512,6 +526,8 @@
 
   // Пользователи
   var UF = { q: "", rank: "", org: "", server: "", beta: "", state: "", sort: "new", page: 0 };
+  var SEL = {};
+  function selN() { return Object.keys(SEL).length; }
   PAGES.users = function (el, arg) {
     if (arg === "online" || arg === "banned" || arg === "pending") { UF.state = arg; UF.page = 0; }
     head(el, "Пользователи", "Поиск по логину, нику, статику и Discord" + (ME.owner ? ", Telegram" : "") + "; #тег — по тегу");
@@ -524,6 +540,29 @@
       sel("beta", [["", "Все пользователи"], ["1", "Только БетаТестеры"]]),
       sel("state", [["", "Любой статус"], ["online", "В сети за час"], ["banned", "Заблокированы"], ["pending", "Ждут подтверждения"]]),
       sel("sort", [["new", "Сначала новые"], ["seen", "Недавно в сети"], ["login", "По логину"]])));
+    var bulk = h("div", { class: "card", style: "margin-bottom:12px", hidden: true });
+    function bulkPaint() {
+      bulk.hidden = !selN(); bulk.textContent = "";
+      if (!selN()) return;
+      var L = Object.keys(SEL);
+      function send(kind, extra, okText) {
+        api("bulk", Object.assign({ logins: L, kind: kind }, extra || {})).then(function (y) {
+          if (!y.ok) return toast(y.error, true);
+          toast(okText + ": " + y.done + (y.skipped.length ? ". Пропущено: " + y.skipped.length + " (нет доступа или не найдены)" : ""), false);
+          SEL = {}; load();
+        });
+      }
+      bulk.appendChild(h("div", { class: "row" }, h("b", { text: "Выбрано: " + L.length }),
+        btn("Выдать БетаТестер", function () { confirmDlg("Роль тестера", "Выдать роль «Бета-тестер» выбранным (" + L.length + ")?", "Выдать", function () { send("beta_on", null, "Роль выдана"); }); }, "btn-sm"),
+        btn("Снять БетаТестер", function () { confirmDlg("Роль тестера", "Снять роль «Бета-тестер» у выбранных (" + L.length + ")?", "Снять", function () { send("beta_off", null, "Роль снята"); }, true); }, "btn-sm"),
+        btn("Доп. запросы ИИ…", function () {
+          form("Дополнительные запросы к ИИ", [{ k: "n", label: "Сколько прибавить каждому", ph: "20", max: 4, req: 1 }], "Выдать", function (v) {
+            if (!/^\d{1,4}$/.test(v.n) || +v.n < 1 || +v.n > 1000) return { error: "Число от 1 до 1000." }; return v.n;
+          }, function (n) { send("ai_add", { n: +n, notify: true }, "Запросы выданы"); });
+        }, "btn-sm"),
+        btn("Сбросить выбор", function () { SEL = {}; bulkPaint(); load(); }, "btn-sm")));
+    }
+    el.appendChild(bulk);
     var list = h("div", null, h("div", { class: "load", text: "Загружаю…" }));
     el.appendChild(list);
     var t = 0;
@@ -545,9 +584,10 @@
         if (!r.rows.length) return list.appendChild(h("div", { class: "card empty", text: "Никого не нашлось." }));
         var go = function (login) { return function () { location.hash = "#user/" + encodeURIComponent(login); }; };
         list.appendChild(h("div", { class: "tbl-wrap resp" }, h("table", { class: "tbl" },
-          h("thead", null, h("tr", null, ["Логин и ник", "Статик", "Сервер", "Организация", "Статус", "Был в сети", "Регистрация"].map(function (x) { return h("th", { text: x }); }))),
+          h("thead", null, h("tr", null, [h("th", { style: "width:1%" }, h("input", { type: "checkbox", "aria-label": "Выбрать всех на странице", checked: r.rows.every(function (u) { return SEL[u.login]; }), on: { click: function (e) { e.stopPropagation(); }, change: function (e) { r.rows.forEach(function (u) { if (e.target.checked) SEL[u.login] = 1; else delete SEL[u.login]; }); bulkPaint(); load(); } } }))].concat(["Логин и ник", "Статик", "Сервер", "Организация", "Статус", "Был в сети", "Регистрация"].map(function (x) { return h("th", { text: x }); })))),
           h("tbody", null, r.rows.map(function (u) {
             return h("tr", { tabindex: 0, on: { click: go(u.login), keydown: function (e) { if (e.key === "Enter") go(u.login)(); } } },
+              h("td", { on: { click: function (e) { e.stopPropagation(); } } }, h("input", { type: "checkbox", "aria-label": "Выбрать " + u.login, checked: !!SEL[u.login], on: { click: function (e) { e.stopPropagation(); }, change: function (e) { if (e.target.checked) SEL[u.login] = 1; else delete SEL[u.login]; bulkPaint(); } } })),
               h("td", null, h("div", { class: "lg", text: u.login }), h("div", { class: "nick", text: u.nick })),
               h("td", { class: "mono", text: u.static_id }), h("td", { text: srvShort(u.server) }), h("td", { text: u.org }), h("td", null, h("div", { class: "pills" }, status(u))),
               h("td", { text: ago(u.last_seen) }), h("td", { text: fmt(u.created_at).slice(0, 10) }));
@@ -563,6 +603,7 @@
         var pb = list.querySelectorAll(".pager button");
         pb[0].disabled = r.page === 0; pb[1].disabled = !r.more;
         if (!r.page && !r.more) { pb[0].hidden = pb[1].hidden = true; }
+        bulkPaint();
       });
     }
     return load();
@@ -575,7 +616,7 @@
     var box = h("div", { class: "load", text: "Загружаю…" });
     el.appendChild(box);
     var feed = feedBox();
-    var left = h("div"), right = h("div"), actsBox = h("div"), progBox = h("div");
+    var left = h("div"), right = h("div"), actsBox = h("div"), progBox = h("div"), notesBox = h("div");
     var R = card("Ответы бота");
     R.style.marginTop = "14px";
     R.appendChild(feed);
@@ -604,8 +645,31 @@
             }))))));
         }
         buildActs(r);
+        left.appendChild(notesBox); notesLoad();
         if (ME.owner) { left.appendChild(progBox); progLoad(); }
         return r;
+      });
+    }
+    // 4.6: заметки модерации: их видят только модераторы и владелец, пользователь о них не знает
+    function notesLoad() {
+      return api("note_list", { login: login }).then(function (r) {
+        notesBox.textContent = "";
+        var C = card("Заметки модерации", "Видят только модераторы и владелец. Пользователь их не видит.");
+        notesBox.appendChild(C);
+        if (!r.ok) return C.appendChild(errMsg(r));
+        var ta = h("textarea", { maxlength: 600, rows: 2, placeholder: "Например: просил вернуть доступ, проверить статик" });
+        var f = h("form", { novalidate: true }, ta, h("div", { class: "dlg-f" }, h("button", { type: "submit", class: "btn btn-p btn-sm", text: "Добавить заметку" })));
+        f.addEventListener("submit", function (e) {
+          e.preventDefault();
+          if (ta.value.trim().length < 2) return toast("Напишите текст заметки.", true);
+          api("note_add", { login: login, text: ta.value }).then(function (y) { toast(y.ok ? "Заметка добавлена." : y.error, !y.ok); if (y.ok) notesLoad(); });
+        });
+        C.appendChild(f);
+        if (!r.rows.length) C.appendChild(h("p", { class: "muted small", style: "margin-top:8px", text: "Заметок нет." }));
+        else C.appendChild(h("div", { style: "margin-top:10px" }, r.rows.map(function (x) {
+          return h("div", { style: "padding:8px 0;border-top:1px solid var(--line)" }, h("div", { class: "muted small", text: x.author + " · " + fmt(x.at) }), h("div", { style: "white-space:pre-wrap;word-break:break-word", text: x.text }),
+            btn("Удалить", function () { api("note_del", { id: x.id }).then(function (y) { toast(y.ok ? "Заметка удалена." : y.error, !y.ok); if (y.ok) notesLoad(); }); }, "btn-sm"));
+        })));
       });
     }
     // 2.6.3: опыт и достижения (только владелец). Опыт меняется поправкой на сервере, программа её не перебивает
@@ -744,6 +808,24 @@
     });
   }
 
+  var SEC_RU = {};
+  function permsDlg(u, after) {
+    api("perms_get").then(function (r) {
+      if (!r.ok) return toast(r.error, true);
+      var cur = r.perms[String(u.login).toLowerCase()], boxes = [];
+      var list = h("div", { style: "display:grid;gap:8px;margin:10px 0 14px" }, Object.keys(r.sections).map(function (k) {
+        var cb = h("input", { type: "checkbox", value: k, checked: !cur || cur.indexOf(k) >= 0 });
+        boxes.push(cb);
+        return h("label", { class: "chk" }, cb, " " + r.sections[k]);
+      }));
+      dlg("Разделы панели: " + u.login, [h("p", { class: "muted small", text: "Отмеченные разделы модератор видит и может использовать. Остальные скрыты, а сервер не выполнит их операции." }), list,
+        h("div", { class: "dlg-f" }, btn("Открыть всё", function () { api("perms_set", { login: u.login, all: true }).then(function (y) { toast(y.ok ? "Теперь модератору открыто всё." : y.error, !y.ok); closeDlg(); after(); }); }),
+          btn("Сохранить", function () {
+            var ids = boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
+            api("perms_set", { login: u.login, sections: ids }).then(function (y) { toast(y.ok ? "Разделы сохранены. Модератору они обновятся при следующем входе в панель." : y.error, !y.ok); closeDlg(); after(); });
+          }, "btn-p"))]);
+    });
+  }
   PAGES.staff = function (el) {
     head(el, "Роли и доступ", ME.owner ? "Модераторы, руководство организаций и пароли панели" : "Кто управляет программой");
     var feed = feedBox();
@@ -770,12 +852,14 @@
     }
     var list = h("div", { class: "sec" }, h("div", { class: "load", text: "Загружаю…" }));
     el.appendChild(list);
+    var PERMS = null;
     function load() {
-      return api("staff").then(function (r) {
+      return Promise.all([api("staff"), ME.owner ? api("perms_get") : Promise.resolve({})]).then(function (RR) {
+        var r = RR[0]; PERMS = RR[1] && RR[1].ok ? RR[1].perms : null;
         list.textContent = "";
         if (!r.ok) return list.appendChild(errMsg(r));
         var cols = ["Аккаунт", "Роль", "Сервер", "Организация", "Telegram", "Был в сети"];
-        if (ME.owner) cols.push("Пароль панели", "");
+        if (ME.owner) cols.push("Пароль панели", "", "Разделы панели");
         list.appendChild(h("h2", { text: "Команда", style: "font-size:20px;margin-bottom:12px" }));
         list.appendChild(h("div", { class: "tbl-wrap" }, h("table", { class: "tbl" },
           h("thead", null, h("tr", null, cols.map(function (x) { return h("th", { text: x }); }))),
@@ -789,6 +873,10 @@
               tr.appendChild(h("td", { class: "small" }, !panelOk ? h("span", { class: "muted", text: "не нужен" }) : u.key_at ? [h("div", { text: "выдан " + fmt(u.key_at).slice(0, 10) }), h("div", { class: "muted", text: "вход: " + (u.key_used ? ago(u.key_used) : "ещё не было") + (u.panels ? " · открыто: " + u.panels : "") })] : h("span", { class: "muted", text: "не выдан" })));
               tr.appendChild(h("td", null, panelOk ? h("div", { class: "row", style: "flex-wrap:nowrap" }, btn(u.key_at ? "Новый" : "Выдать", function () { issueKey(u.login, load); }, "btn-sm"),
                 u.key_at && u.login !== ME.login ? btn("Закрыть", function () { confirmDlg("Закрыть вход в панель", "Пароль панели " + u.login + " перестанет работать, открытые панели закроются.", "Закрыть", function () { api("staff_revoke", { login: u.login }).then(function (x) { toast(x.ok ? "Вход в панель закрыт." : x.error, !x.ok); load(); }); }, true); }, "btn-sm btn-d") : null) : null));
+              var pr = PERMS && PERMS[String(u.login).toLowerCase()];
+              tr.appendChild(h("td", { class: "small" }, u.rank === "moderator"
+                ? [h("div", { class: "muted", text: pr ? "открыто " + pr.length + " из " + SEC_IDS.length : "все разделы" }), btn("Настроить", function () { permsDlg(u, function () { load(); }); }, "btn-sm")]
+                : h("span", { class: "muted", text: u.rank === "owner" ? "все" : "—" })));
             }
             return tr;
           })))));
@@ -986,7 +1074,7 @@
               api("bug_log", { id: b.id }).then(function (x) { if (x.ok) download(x.name, x.text, "text/plain;charset=utf-8"); else toast(x.error, true); });
             }, "btn-sm", "i-save")) : null);
           if (b.login) {
-            var f = h("form", { novalidate: true }, ta, h("div", { class: "dlg-f" }, h("button", { type: "submit", class: "btn btn-p btn-sm", text: "Ответить" })));
+            var f = h("form", { novalidate: true }, ta, h("div", { class: "dlg-f", style: "justify-content:space-between" }, tplPick(ta), h("button", { type: "submit", class: "btn btn-p btn-sm", text: "Ответить" })));
             f.addEventListener("submit", function (e) {
               e.preventDefault();
               var t = ta.value.trim();
@@ -1271,7 +1359,8 @@
     function load() {
       box.textContent = "";
       box.appendChild(h("div", { class: "load", text: "Загружаю…" }));
-      return api("beta_list").then(function (r) {
+      return Promise.all([api("beta_list"), ME.owner ? api("rollout_get") : Promise.resolve({ ok: true, rollout: {} })]).then(function (RR) {
+        var r = RR[0]; r.rollout = (RR[1] && RR[1].rollout) || {};
         box.textContent = "";
         if (!r.ok) return box.appendChild(errMsg(r));
         var g = h("div", { class: "grid g2" });
@@ -1309,7 +1398,14 @@
             ctl.value = cur;
             ctl.addEventListener("change", function () { api("flags_set", { key: k, mode: ctl.value }).then(function (y) { toast(y.ok ? "Сохранено." : y.error, !y.ok); if (!y.ok) ctl.value = cur; else cur = ctl.value; }); });
           } else ctl = pill(FLAG_MODE.filter(function (m) { return m[0] === cur; })[0][1], cur === "all" ? "on" : cur === "off" ? "off" : "acc");
-          return h("div", { class: "row", style: "justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)" }, h("span", { text: r.defs[k] }), ctl);
+          var pct = (r.rollout || {})[k], pc = null;
+          if (r.canFlags) {
+            pc = h("select", { "aria-label": "Доля пользователей", title: "Постепенный выпуск: сколько обычных пользователей увидят функцию в режиме «Всем»; тестеры видят всегда", style: "max-width:110px" }, [100, 75, 50, 25, 10, 5, 0].map(function (n) { return h("option", { value: String(n), text: n === 100 ? "100%" : n + "%" }); }));
+            pc.value = String(pct == null ? 100 : pct);
+            if (pc.value !== String(pct == null ? 100 : pct)) pc.appendChild(h("option", { value: String(pct), text: pct + "%" })), pc.value = String(pct);
+            pc.addEventListener("change", function () { api("rollout_set", { key: k, pct: +pc.value }).then(function (y) { toast(y.ok ? "Доля сохранена: " + pc.value + "%." : y.error, !y.ok); }); });
+          }
+          return h("div", { class: "row", style: "justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)" }, h("span", { text: r.defs[k] }), h("span", { class: "row", style: "gap:6px;flex-wrap:nowrap" }, pc, ctl));
         };
         var ofVer = function (v) { return Object.keys(r.defs).filter(function (k) { return (vers[k] || "2.4") === v; }); };
         var F = card("Функции " + (vlist[0] || ""), r.canFlags ? "«Только тестерам» — функция видна лишь бета-тестерам. Изменения доходят до программы за минуту." : "Режимы меняет владелец.");
@@ -1358,7 +1454,7 @@
     a.value = x.answer || "";
     var err = h("div", { class: "auth-err" });
     var f = h("form", { novalidate: true }, h("p", { text: x.text, style: "white-space:pre-wrap;margin-bottom:12px" }),
-      h("label", { class: "fld" }, h("span", { text: "Статус" }), s), h("label", { class: "fld" }, h("span", { text: "Ответ автору" }), a), err,
+      h("label", { class: "fld" }, h("span", { text: "Статус" }), s), h("label", { class: "fld" }, h("span", { text: "Ответ автору" }), tplPick(a), a), err,
       h("div", { class: "dlg-f" }, btn("Отмена", closeDlg), h("button", { type: "submit", class: "btn btn-p", text: "Сохранить" })));
     f.addEventListener("submit", function (e) {
       e.preventDefault();
@@ -2027,12 +2123,195 @@
 
   // ───── маршрутизация: #раздел или #раздел/параметр
   var CUR = "";
+  // ───── 4.6: поиск по всей панели
+  PAGES.search = function (el, arg) {
+    head(el, "Поиск", "Пользователь, рапорт, идея или сообщение об ошибке: логин, ник, статик, номер или слово из текста");
+    var q = h("input", { type: "search", placeholder: "Что ищем?", maxlength: 40, spellcheck: "false", value: decodeURIComponent(arg || "") });
+    el.appendChild(h("div", { class: "tools" }, h("label", { class: "search" }, ico("i-search"), q)));
+    var box = h("div", { style: "margin-top:12px" });
+    el.appendChild(box);
+    var t = 0, seq = 0;
+    function group(title, rows, mk) {
+      if (!rows || !rows.length) return null;
+      return h("div", { class: "card", style: "margin-bottom:12px" }, h("h3", { text: title }), h("div", null, rows.map(mk)));
+    }
+    function row(href, a, b, c) {
+      return h("a", { href: href, style: "display:block;padding:8px 0;border-top:1px solid var(--line);color:inherit;text-decoration:none" }, h("div", null, h("b", { text: a }), c ? " " : null, c || null), h("div", { class: "muted small", text: b }));
+    }
+    function go() {
+      var v = q.value.trim(), my = ++seq;
+      box.textContent = "";
+      if (v.length < 2) return box.appendChild(h("p", { class: "muted", text: "Введите хотя бы два символа." }));
+      box.appendChild(h("div", { class: "load", text: "Ищу…" }));
+      api("search", { q: v }).then(function (r) {
+        if (my !== seq) return;
+        box.textContent = "";
+        if (!r.ok) return box.appendChild(errMsg(r));
+        var G = [
+          group("Пользователи", r.users, function (u) { return row("#user/" + encodeURIComponent(u.login), u.login + " · " + u.nick, (u.static_id || "—") + " · " + srvShort(u.server) + " · " + u.org, u.banned ? pill("заблокирован", "bad") : null); }),
+          group("Рапорты", r.reports, function (x) { return row("#reports", "№" + x.id + " · " + x.title, x.org + " · " + x.author + " · " + fmt(x.created_at), pill(x.status === "ok" ? "принят" : x.status === "no" ? "отклонён" : "новый", x.status === "no" ? "bad" : x.status === "ok" ? "on" : "warn")); }),
+          group("Идеи", r.ideas, function (x) { return row("#ideas", "№" + x.id, x.text + (x.login ? " · " + x.login : "")); }),
+          group("Сообщения об ошибках", r.bugs, function (x) { return row("#bugs", "№" + x.id + (x.login ? " · " + x.login : ""), x.text, x.answered ? pill("отвечено", "on") : pill("ждёт ответа", "warn")); }),
+        ].filter(Boolean);
+        if (!G.length) return box.appendChild(h("div", { class: "card empty", text: "Ничего не найдено." }));
+        G.forEach(function (g) { box.appendChild(g); });
+      });
+    }
+    q.addEventListener("input", function () { clearTimeout(t); t = setTimeout(go, 300); });
+    if (q.value) go();
+    setTimeout(function () { q.focus(); }, 30);
+  };
+
+  // ───── 4.6: что используют (без привязки к людям)
+  PAGES.usage = function (el) {
+    var days = 14, box = h("div");
+    function load() {
+      box.textContent = ""; box.appendChild(h("div", { class: "load", text: "Загружаю…" }));
+      return api("usage_get", { days: days }).then(function (r) {
+        box.textContent = "";
+        if (!r.ok) return box.appendChild(errMsg(r));
+        var known = r.known || {}, max = Math.max.apply(null, r.rows.map(function (x) { return x.n; }).concat([1]));
+        var seen = {}; r.rows.forEach(function (x) { seen[x.feature] = 1; });
+        var unused = Object.keys(known).filter(function (k) { return !seen[k]; });
+        var c = card("Открытия за " + days + " дн.", "Сколько раз открывали раздел или функцию. Пользователи не различаются, в базе только числа по дням. Активных за период: " + r.users + ".");
+        if (!r.rows.length) c.appendChild(h("p", { class: "muted", text: "Данных пока нет: программа присылает их раз в несколько минут, начиная с версии 4.6.0." }));
+        else c.appendChild(h("div", { class: "olist" }, r.rows.map(function (x) {
+          return h("div", { class: "orow", style: "cursor:default" }, h("span", { text: known[x.feature] || x.feature }), h("div", { class: "track" }, h("span", { style: "width:" + Math.round(x.n / max * 100) + "%" })), h("b", { text: String(x.n) }));
+        })));
+        box.appendChild(c);
+        if (unused.length) box.appendChild(h("div", { class: "card", style: "margin-top:12px" }, h("h3", { text: "Не открывали" }), h("p", { class: "muted", text: unused.map(function (k) { return known[k]; }).join(", ") })));
+      });
+    }
+    head(el, "Что используют", "Какие разделы и функции открывают, а какие нет", h("div", { class: "row" }, [7, 14, 30, 90].map(function (d) { return btn(d + " дн.", function () { days = d; load(); }, "btn-sm"); })));
+    el.appendChild(box);
+    return load();
+  };
+
+  // ───── 4.6: проверка разбора законов
+  PAGES.laws = function (el) {
+    var box = h("div");
+    function load() {
+      box.textContent = ""; box.appendChild(h("div", { class: "load", text: "Загружаю…" }));
+      return api("law_check").then(function (r) {
+        box.textContent = "";
+        if (!r.ok) return box.appendChild(errMsg(r));
+        r.rows.forEach(function (x) {
+          var c = card(x.name + " (" + x.server + ")", null);
+          box.appendChild(c);
+          var d = x.report;
+          if (!d) return c.appendChild(h("p", { class: "muted", text: "Отчёта пока нет: он появляется после очередного автообновления законов этого сервера." }));
+          c.appendChild(h("p", { class: "sub", text: "Проверено " + fmt(d.at) + ". Законов собрано: " + d.laws + ". Подозрительных строк: " + (d.flagged || []).length + "." }));
+          if ((d.warns || []).length) c.appendChild(h("div", { class: "msg err", style: "margin-bottom:10px", text: d.warns.join("\n") }));
+          c.appendChild(h("div", { class: "tbl-wrap", style: "box-shadow:none" }, h("table", { class: "tbl" },
+            h("thead", null, h("tr", null, ["Кодекс", "Статей", "Строк", "Без звёзд", "Без наказания", "Без части"].map(function (t) { return h("th", { text: t }); }))),
+            h("tbody", null, (d.codes || []).map(function (k) { return h("tr", { style: "cursor:default" }, [k.name, k.articles, k.rows, k.noStars, k.noFine, k.noPart].map(function (v) { return h("td", { text: String(v) }); })); })))));
+          if ((d.flagged || []).length) {
+            var det = h("details", { style: "margin-top:10px", open: d.flagged.length <= 12 }, h("summary", { text: "Подозрительные статьи (" + d.flagged.length + ")" }));
+            det.appendChild(h("div", { class: "olist", style: "margin-top:8px" }, d.flagged.map(function (f) {
+              return h("div", { class: "orow", style: "cursor:default" }, h("b", { text: f.kind + " " + f.art + (f.part ? " ч. " + f.part : "") }), h("span", { class: "muted", text: f.title || "" }), pill(f.issue, "warn"));
+            })));
+            c.appendChild(det);
+          }
+        });
+        box.appendChild(h("p", { class: "muted small", style: "margin-top:10px", text: "Строка помечается, если у статьи УК нет звёзд, у статьи УК или АК нет штрафа и срока или не распознана часть. Если помеченных много, на форуме, скорее всего, изменилась вёрстка: сверьте закон вручную." }));
+      });
+    }
+    head(el, "Проверка законов", "Как автообновление разобрало законы каждого сервера", btn("Обновить", load, "btn-sm", "i-refresh"));
+    el.appendChild(box);
+    return load();
+  };
+
+  // ───── 4.6: шаблоны ответов
+  PAGES.tpl = function (el) {
+    var box = h("div");
+    function load() {
+      box.textContent = ""; box.appendChild(h("div", { class: "load", text: "Загружаю…" }));
+      return api("tpl_get").then(function (r) {
+        box.textContent = "";
+        if (!r.ok) return box.appendChild(errMsg(r));
+        var L = r.items.map(function (x) { return { t: x.t, b: x.b }; });
+        var list = h("div");
+        function paint() {
+          list.textContent = "";
+          L.forEach(function (x, i) {
+            var t = h("input", { maxlength: 40, value: x.t, placeholder: "Название", "aria-label": "Название шаблона", disabled: !ME.owner });
+            var b = h("textarea", { maxlength: 800, rows: 3, "aria-label": "Текст шаблона", disabled: !ME.owner });
+            b.value = x.b;
+            t.addEventListener("input", function () { x.t = t.value; });
+            b.addEventListener("input", function () { x.b = b.value; });
+            list.appendChild(h("div", { class: "card", style: "margin-bottom:8px" }, t, b, ME.owner ? btn("Удалить", function () { L.splice(i, 1); paint(); }, "btn-sm") : null));
+          });
+        }
+        paint();
+        box.appendChild(list);
+        if (ME.owner) box.appendChild(h("div", { class: "row", style: "margin-top:10px" },
+          btn("Добавить шаблон", function () { if (L.length >= 40) return toast("Не больше 40 шаблонов.", true); L.push({ t: "", b: "" }); paint(); }),
+          btn("Сохранить", function () {
+            api("tpl_save", { items: L.filter(function (x) { return x.t.trim() && x.b.trim(); }) }).then(function (y) { toast(y.ok ? "Шаблоны сохранены." : y.error, !y.ok); if (y.ok) { TPL = y.items; load(); } });
+          }, "btn-p")));
+      });
+    }
+    head(el, "Шаблоны ответов", ME.owner ? "Готовые ответы на ошибки и идеи: в формах ответа появляется список «Вставить шаблон»" : "Готовые ответы на ошибки и идеи (меняет владелец)");
+    el.appendChild(box);
+    return load();
+  };
+
+  // ───── 4.6: колокольчик — новые ошибки, идеи, заявки и рапорты
+  var BELL = { items: [], seen: parseInt(ls("sa-bell") || "0", 10) || 0, open: false, btns: [], pop: null };
+  function bellCount() { return BELL.items.filter(function (x) { return new Date(x.at).getTime() > BELL.seen; }).length; }
+  function bellPaint() {
+    var n = bellCount();
+    BELL.btns.forEach(function (b) { var c = b.querySelector(".bell-n"); c.textContent = n > 9 ? "9+" : String(n); c.hidden = !n; b.setAttribute("aria-label", "Уведомления" + (n ? ": новых " + n : "")); });
+    if (!BELL.pop) return;
+    BELL.pop.textContent = "";
+    BELL.pop.appendChild(h("div", { class: "bell-h" }, h("b", { text: "Новое за 7 дней" }), btn("Прочитано", function () { BELL.seen = Date.now(); ls("sa-bell", String(BELL.seen)); bellPaint(); }, "btn-sm")));
+    if (!BELL.items.length) BELL.pop.appendChild(h("p", { class: "muted small", style: "padding:10px 12px", text: "Пока ничего нового." }));
+    BELL.items.forEach(function (x) {
+      var fresh = new Date(x.at).getTime() > BELL.seen;
+      BELL.pop.appendChild(h("a", { href: x.href, class: "bell-i" + (fresh ? " new" : ""), on: { click: function () { BELL.open = false; BELL.pop.hidden = true; } } }, h("span", { text: x.text }), h("small", { class: "muted", text: ago(x.at) })));
+    });
+  }
+  function bellPoll() {
+    if (!ME || document.hidden) return;
+    api("notif", { since: Date.now() - 7 * 864e5 }).then(function (r) { if (r.ok) { BELL.items = r.items; bellPaint(); } });
+  }
+  function mkBell() {
+    var b = h("button", { type: "button", class: "icon-btn bell", "aria-label": "Уведомления", "aria-haspopup": "true", title: "Уведомления", on: { click: function (e) {
+      e.stopPropagation();
+      BELL.open = !BELL.open; BELL.pop.hidden = !BELL.open;
+      if (BELL.open) { bellPoll(); var r = b.getBoundingClientRect(); BELL.pop.style.top = Math.min(r.bottom + 6, window.innerHeight - 120) + "px"; BELL.pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 330)) + "px"; }
+    } } },
+      h("span", { html: '<svg class="ico" viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6M10 19a2 2 0 0 0 4 0"/></svg>', style: "display:contents" }), h("i", { class: "bell-n", hidden: true }));
+    BELL.btns.push(b);
+    return b;
+  }
+  function bellInit() {
+    if (BELL.pop) return;
+    BELL.pop = h("div", { class: "bell-pop", hidden: true, role: "region", "aria-label": "Уведомления" });
+    document.body.appendChild(BELL.pop);
+    var side = document.querySelector(".side .me"), bar = document.querySelector(".bar");
+    if (side) side.insertBefore(mkBell(), $("theme"));
+    if (bar) bar.appendChild(mkBell());
+    document.addEventListener("click", function (e) { if (BELL.open && !BELL.pop.contains(e.target)) { BELL.open = false; BELL.pop.hidden = true; } });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && BELL.open) { BELL.open = false; BELL.pop.hidden = true; } });
+    setInterval(bellPoll, 90000);
+    bellPoll(); bellPaint();
+  }
+  // «/» открывает поиск, если фокус не в поле ввода
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey || !ME) return;
+    var t = e.target && e.target.tagName;
+    if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT" || !$("dlg").hidden) return;
+    e.preventDefault(); location.hash = "#search";
+  });
+
   function route(force) {
     var hs = location.hash.replace(/^#/, "") || "dash";
     if (hs === CUR && !force) return;
     CUR = hs;
     var i = hs.indexOf("/"), name = i < 0 ? hs : hs.slice(0, i), arg = i < 0 ? "" : hs.slice(i + 1);
     if (!PAGES[name]) { name = "dash"; arg = ""; }
+    if (!secOk(name === "user" ? "users" : name)) { name = SEC_IDS.filter(secOk)[0] || "dash"; arg = ""; if (name === "dash" && !secOk("dash")) { $("page").textContent = ""; $("page").appendChild(h("div", { class: "card" }, h("p", { text: "Владелец пока не открыл вам ни одного раздела панели." }))); return; } }
     var navName = name === "user" ? "users" : name;
     document.querySelectorAll(".it").forEach(function (a) { a.classList.toggle("on", a.dataset.p === navName); if (a.dataset.p === navName) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
     $("shell").classList.remove("menu");
@@ -2053,6 +2332,7 @@
     $("me-ava").textContent = (me.nick || me.login).split(/\s+/).map(function (w) { return w[0]; }).join("").slice(0, 2).toUpperCase();
     themeIco();
     buildNav();
+    bellInit();
     CUR = "";
     route();
     if (location.hash.replace(/^#/, "").split("/")[0] !== "dash") refreshCounts();

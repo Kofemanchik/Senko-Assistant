@@ -760,3 +760,15 @@ create index if not exists adv_calls_srv on public.adv_calls (server, created_at
 alter table public.adv_calls enable row level security;
 revoke all on table public.adv_calls from anon, authenticated;
 
+
+-- 4.6: заметки модерации и счётчик использования разделов
+create table if not exists public.mod_notes (
+  id bigserial primary key, user_id uuid not null references public.profiles(id) on delete cascade,
+  author text not null default '', text text not null, at timestamptz not null default now());
+create index if not exists mod_notes_user on public.mod_notes (user_id, id desc);
+alter table public.mod_notes enable row level security;
+revoke all on table public.mod_notes from anon, authenticated;
+create table if not exists public.usage_hits (
+  day date not null, feature text not null, n integer not null default 0, primary key (day, feature));
+alter table public.usage_hits enable row level security;
+revoke all on table public.usage_hits from anon, authenticated;

@@ -6724,7 +6724,7 @@ function pCtrl(){
 
 function draw(){
  var rn=window.SA_RP?window.SA_RP.bossNew():0;
- var subs=[["sum","Обзор"],["staff","Сотрудники"],["rate","Рейтинг"],["shift","Смены"],["ctrl","Контрольные тесты"]]; subs.push(["news","Объявления"]);subs.push(["join","Вступление"]);if(lead35())subs.push(["log","Журнал"]); if(window.SA_RP)subs.push(["rep","Рапорты"+(rn?" · "+rn:"")]); if(window.SA_B24)window.SA_B24.subs(subs); if(window.SA_B42)window.SA_B42.subs(subs); if(!B.scope)subs.push(["orgs","Организации"]);
+ var subs=[["sum","Обзор"],["staff","Сотрудники"],["rate","Рейтинг"],["shift","Смены"],["ctrl","Контрольные тесты"]]; subs.push(["news","Объявления"]);subs.push(["join","Вступление"]);if(lead35())subs.push(["log","Журнал"]); if(window.SA_RP)subs.push(["rep","Рапорты"+(rn?" · "+rn:"")]); if(window.SA_B24)window.SA_B24.subs(subs); if(window.SA_B42)window.SA_B42.subs(subs); if(window.SA_S46)window.SA_S46.subs(subs); if(!B.scope)subs.push(["orgs","Организации"]);
  if(!subs.some(function(s){return s[0]===B.sub}))B.sub="sum";
  var title=B.scope?"Панель руководителя · "+esc(B.scope):"Панель руководителя";
  var h='<div class="subnav noprint">'+subs.map(function(s){return '<button class="pill" data-bpsub="'+s[0]+'" aria-pressed="'+(s[0]===B.sub)+'">'+s[1]+'</button>'}).join("")+'</div>';
@@ -6735,7 +6735,7 @@ function draw(){
  if(B.viewer)h+='<p class="sub">Вы видите данные как: '+(RANKS[B.viewer]||B.viewer)+(B.scope?". Доступна только ваша организация.":".")+'</p>';
  if(B.err)h+='<div class="banner bp-err" role="alert">'+esc(B.err)+'</div>';
  if(!B.data)h+='<p class="bp-empty">'+(B.loading?"Загружаем данные…":"Данные недоступны.")+'</p>';
- else h+=(B.sub==="tabel"||B.sub==="vac")&&window.SA_B42?window.SA_B42.html(B.sub,curOrg(),draw):(B.sub==="hooks"||B.sub==="events")?window.SA_B24.html(B.sub,curOrg(),draw):B.sub==="rep"?window.SA_RP.boss(curOrg(),draw):B.sub==="staff"?pStaff():B.sub==="orgs"?pOrgs():B.sub==="rate"?pRate():B.sub==="shift"?pShift():B.sub==="ctrl"?pCtrl():B.sub==="log"?pLog():B.sub==="news"?pNews():B.sub==="join"?pJoin():pSum();
+ else h+=(B.sub==="tabel"||B.sub==="vac")&&window.SA_B42?window.SA_B42.html(B.sub,curOrg(),draw):(B.sub==="hooks"||B.sub==="events")?window.SA_B24.html(B.sub,curOrg(),draw):B.sub==="struct"&&window.SA_S46?window.SA_S46.html(B.sub,curOrg(),draw):B.sub==="rep"?window.SA_RP.boss(curOrg(),draw):B.sub==="staff"?pStaff():B.sub==="orgs"?pOrgs():B.sub==="rate"?pRate():B.sub==="shift"?pShift():B.sub==="ctrl"?pCtrl():B.sub==="log"?pLog():B.sub==="news"?pNews():B.sub==="join"?pJoin():pSum();
  view.innerHTML=h+'</section>';
 }
 
@@ -6762,7 +6762,7 @@ view.addEventListener("click",function(e){
  if(t.dataset.bp==="jform"){var jq=$("#jQs"),jo=$("#jOpen");JF.q=jq?jq.value:"";JF.open=!!(jo&&jo.checked);eload("join","form_save",{questions:JF.q.split("\n"),open:JF.open});draw();return}
  if(t.dataset.bp==="jok"||t.dataset.bp==="jno"){var ok=t.dataset.bp==="jok";if(!ok&&!t.dataset.arm){t.dataset.arm="1";t.textContent="Точно отклонить?";return}var jn=document.getElementById("jN"+t.dataset.id);eload("join","app_decide",{id:t.dataset.id,ok:ok,note:jn?jn.value:""});draw();return}
  if(t.dataset.bp==="nwdel"){if(!confirm("Снять объявление? Сотрудники перестанут его видеть."))return;eload("news","delete",{id:t.dataset.id},function(e){e.msg="Объявление снято."});return}
- if(t.dataset.bp==="reload"){load();if(E[B.sub]){E[B.sub].key=null;E[B.sub].data=null}if(B.sub==="rep")window.SA_RP.bossReload();if((B.sub==="hooks"||B.sub==="events")&&window.SA_B24)window.SA_B24.reload(B.sub);if(window.SA_B42)window.SA_B42.reload();return}
+ if(t.dataset.bp==="reload"){load();if(E[B.sub]){E[B.sub].key=null;E[B.sub].data=null}if(B.sub==="rep")window.SA_RP.bossReload();if((B.sub==="hooks"||B.sub==="events")&&window.SA_B24)window.SA_B24.reload(B.sub);if(window.SA_B42)window.SA_B42.reload();if(window.SA_S46)window.SA_S46.reload();return}
  if(t.dataset.bp==="win"){if(A.staff)A.staff();return}
  if(t.dataset.bps){var k=t.dataset.bps;B.touched=1;B.sort=B.sort.k===k?{k:k,dir:-B.sort.dir}:{k:k,dir:1};draw();return}
  if(t.dataset.cp!=null){A.copy(t.dataset.cp);t.style.outline="2px solid var(--accent)";setTimeout(function(){t.style.outline=""},500)}
@@ -7132,6 +7132,11 @@ document.addEventListener("click",function(e){
 
 /* ---------- «Что нового» ---------- */
 var NEWS=[
+ {v:"4.6.0",d:"10.11.2026",items:[
+  ["🛡","Панель владельца и модерация","В панели появились общий поиск (клавиша «/»), массовые действия над пользователями, заметки модераторов, шаблоны ответов, права модераторов по разделам, колокольчик с уведомлениями, статистика использования и постепенное включение функций по процентам."],
+  ["👁","Слежение за статьями","У статьи появился значок 👁: если её текст изменится, вы увидите это в «Что нового»."],
+  ["🏢","Структура организации","В панели организации появилась вкладка «Структура» с карточкой сотрудника."]
+ ]},
  {v:"4.4.1",d:"08.11.2026",items:[
   ["⚖","Раздел «Суд»: вернулась панель вкладок","В широком окне панель вкладок «Суд» (Дела, Заседание, Ордера, Судьи и другие) пропадала, и переключаться между разделами было нельзя. Из-за этого нельзя было открыть «Судьи»: назначить Председателя Верховного суда и одобрить заявки судей. Теперь вкладки на месте."]
  ]},
@@ -19815,4 +19820,172 @@ setTimeout(poll,25000);
 D.addEventListener("visibilitychange",function(){if(D.visibilityState==="visible"){next();setTimeout(poll,3000)}});
 })();
 </script>
+<script>
+/* 4.6: структура организации, карточка сотрудника, слежение за статьёй, счётчик использования */
+(function(){
+"use strict";
+var A=window.senkoApp; if(!A||!A.api) return;
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+function jget(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}}
+function jset(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function toast(t){try{if(window.SA_toast)SA_toast(t)}catch(e){}}
+function fdate(x){try{return new Date(x).toLocaleDateString("ru-RU")}catch(e){return ""}}
+function me(){try{return (A.state()||{}).user||null}catch(e){return null}}
+function ok(){return !!me()}
+
+/* ---- счётчик использования: только числа открытий по разделам, раз в несколько минут ---- */
+var HITS={};
+document.addEventListener("click",function(e){
+ var n=e.target.closest&&e.target.closest("[data-nav]"); if(!n) return;
+ var k=String(n.dataset.nav||"").toLowerCase().replace(/[^a-z0-9_]/g,"");
+ if(/^[a-z][a-z0-9_]{1,23}$/.test(k)) HITS[k]=Math.min(500,(HITS[k]||0)+1);
+},true);
+function flush(){
+ var keys=Object.keys(HITS); if(!keys.length||!ok()) return;
+ var send=HITS; HITS={};
+ Promise.resolve(A.api("usage",{items:send})).then(function(r){
+  if(!r||!r.ok) keys.forEach(function(k){HITS[k]=Math.min(500,(HITS[k]||0)+send[k])})
+ },function(){keys.forEach(function(k){HITS[k]=Math.min(500,(HITS[k]||0)+send[k])})});
+}
+setInterval(flush,5*60*1000);
+document.addEventListener("visibilitychange",function(){if(document.visibilityState==="hidden")flush()});
+
+/* ---- слежение за статьёй: при изменении текста закона программа предупреждает ---- */
+var W=jget("sa-watch46",{}); if(!W||typeof W!=="object"||Array.isArray(W)) W={};
+function hsh(s){var h=2166136261;for(var i=0;i<s.length;i++){h=Math.imul(h^s.charCodeAt(i),16777619)>>>0}return h.toString(36)}
+function artKey(r){return r.k+"|"+r.code}
+function artHash(r){try{return hsh(JSON.stringify(r))}catch(e){return ""}}
+function wcheck(){
+ var by=window.BYID; if(!by) return;
+ var recs={}; Object.keys(by).forEach(function(id){var r=by[id];if(r&&r.k&&r.code!=null) recs[artKey(r)]=r});
+ var changed=[];
+ Object.keys(W).forEach(function(k){
+  var r=recs[k]; if(!r) return;
+  var h=artHash(r);
+  if(W[k].h&&W[k].h!==h){changed.push(k.replace("|"," ст. ").toUpperCase());W[k].h=h;W[k].at=Date.now()}
+  else if(!W[k].h) W[k].h=h;
+ });
+ if(changed.length){jset("sa-watch46",W);toast("Изменились статьи, за которыми вы следите: "+changed.slice(0,3).join(", ")+(changed.length>3?" и ещё "+(changed.length-3):""))}
+}
+var wTries=0,wTimer=setInterval(function(){wTries++;if(window.BYID&&Object.keys(window.BYID).length){clearInterval(wTimer);wcheck()}else if(wTries>40)clearInterval(wTimer)},3000);
+function wdeco(){
+ var v=document.getElementById("view"); if(!v||!window.BYID) return;
+ v.querySelectorAll(".part .acts").forEach(function(a){
+  if(a.querySelector(".w46")) return;
+  var fb=a.querySelector("[data-fav-id]"); if(!fb) return;
+  var r=window.BYID[fb.dataset.favId]; if(!r||!r.k||r.code==null) return;
+  var k=artKey(r),on=!!W[k];
+  var b=document.createElement("button"); b.type="button"; b.className="ic w46"+(on?" on":""); b.dataset.w46=fb.dataset.favId;
+  b.textContent="👁"; b.setAttribute("aria-pressed",String(on)); b.setAttribute("aria-label",on?"Не следить за статьёй":"Следить за статьёй"); b.title=on?"Вы следите за этой статьёй":"Следить: предупредим, если статья изменится";
+  a.appendChild(b);
+ });
+}
+document.addEventListener("click",function(e){
+ var b=e.target.closest&&e.target.closest("[data-w46]"); if(!b) return;
+ e.preventDefault(); e.stopPropagation();
+ var r=(window.BYID||{})[b.dataset.w46]; if(!r) return;
+ var k=artKey(r);
+ if(W[k]){delete W[k];toast("Слежение за статьёй отключено")}
+ else{ if(Object.keys(W).length>=50) return toast("Можно следить не больше чем за 50 статьями"); W[k]={h:artHash(r),at:Date.now()};toast("Следим: предупредим, если статья изменится")}
+ jset("sa-watch46",W);
+ var on=!!W[k]; b.classList.toggle("on",on); b.setAttribute("aria-pressed",String(on)); b.setAttribute("aria-label",on?"Не следить за статьёй":"Следить за статьёй");
+},true);
+var wmo=new MutationObserver(function(){clearTimeout(wmo._t);wmo._t=setTimeout(wdeco,120)});
+function wstart(){var v=document.getElementById("view");if(v)wmo.observe(v,{childList:true,subtree:true});wdeco()}
+if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",wstart); else wstart();
+
+/* ---- структура организации (пункт 103) и карточка сотрудника (пункт 98) ---- */
+var S={org:"",data:null,err:"",busy:false,edit:false,msg:""};
+function sload(org,redraw){
+ if(S.busy) return; S.busy=true; S.err="";
+ A.api("org_struct",{org:org||"",server:window.SA_STAFF_SRV||""}).then(function(r){
+  S.busy=false;
+  if(r&&r.ok){S.data=r;S.org=org||r.org}else S.err=(r&&r.error)||"Не удалось загрузить структуру.";
+  redraw&&redraw();
+ },function(){S.busy=false;S.err="Нет связи с сервером.";redraw&&redraw()});
+}
+function holders(q){return (q.holders||[]).map(function(h){return '<button type="button" class="s46-h" data-s46emp="'+esc(h.login)+'">'+esc(h.nick||h.login)+'</button>'}).join(" ")}
+function structHtml(org,redraw){
+ S.redraw=redraw;
+ if(S.org!==org||(!S.data&&!S.busy&&!S.err)){ if(S.org!==org){S.data=null;S.org=org;S.edit=false}; setTimeout(function(){sload(org,redraw)},0); return '<p class="bp-empty">Загружаем структуру…</p>' }
+ if(S.err) return '<div class="banner bp-err" role="alert">'+esc(S.err)+'</div>';
+ var d=S.data; if(!d) return '<p class="bp-empty">Загружаем структуру…</p>';
+ var st=d.data||{depts:[]};
+ var h='<p class="sub">Отделы, должности и свободные места. Должность сотрудника берётся из поля «Должность» в личном кабинете. Нажмите на имя, чтобы открыть карточку сотрудника.</p>';
+ if(S.msg) h+='<p class="s24-msg" role="status">'+esc(S.msg)+'</p>';
+ if(d.canEdit) h+='<div class="s46-bar"><button type="button" class="btn" data-s46="'+(S.edit?"cancel":"edit")+'">'+(S.edit?"Отмена":"Изменить структуру")+'</button>'+(S.edit?'<button type="button" class="btn s46-p" data-s46="save">Сохранить</button><button type="button" class="btn" data-s46="adddept">Добавить отдел</button>':"")+'</div>';
+ if(S.edit){
+  S.draft=S.draft||JSON.parse(JSON.stringify(st));
+  h+=S.draft.depts.map(function(dep,i){
+   return '<section class="s46-dep"><div class="s46-row"><input class="tin" data-s46dn="'+i+'" value="'+esc(dep.name)+'" maxlength="40" aria-label="Название отдела"><button type="button" class="btn" data-s46="deldept" data-i="'+i+'">Удалить отдел</button></div>'+
+   dep.positions.map(function(q,j){return '<div class="s46-row"><input class="tin" data-s46pt="'+i+'.'+j+'" value="'+esc(q.title)+'" maxlength="40" placeholder="Должность" aria-label="Должность"><input class="tin s46-n" type="number" min="1" max="99" data-s46ps="'+i+'.'+j+'" value="'+q.slots+'" aria-label="Мест"><button type="button" class="btn" data-s46="delpos" data-i="'+i+'" data-j="'+j+'" aria-label="Удалить должность">×</button></div>'}).join("")+
+   '<button type="button" class="btn" data-s46="addpos" data-i="'+i+'">Добавить должность</button></section>'}).join("")||'<p class="bp-empty">Отделов нет: добавьте первый.</p>';
+  return h;
+ }
+ if(!st.depts.length) return h+'<p class="bp-empty">Структура пока не заполнена.</p>';
+ return h+st.depts.map(function(dep){
+  return '<section class="s46-dep"><h3>'+esc(dep.name)+'</h3><div class="bp-wrap"><table><thead><tr><th>Должность</th><th>Мест</th><th>Занято</th><th>Свободно</th><th>Кто занимает</th></tr></thead><tbody>'+
+  dep.positions.map(function(q){return '<tr><td>'+esc(q.title)+'</td><td>'+q.slots+'</td><td>'+(q.holders||[]).length+'</td><td>'+(q.free?'<b>'+q.free+'</b>':"0")+'</td><td>'+holders(q)+'</td></tr>'}).join("")+'</tbody></table></div></section>'}).join("");
+}
+document.addEventListener("input",function(e){
+ var t=e.target; if(!t||!t.dataset||!S.draft) return;
+ if(t.dataset.s46dn!=null){e.stopPropagation();S.draft.depts[+t.dataset.s46dn].name=t.value}
+ else if(t.dataset.s46pt){e.stopPropagation();var p=t.dataset.s46pt.split(".");S.draft.depts[+p[0]].positions[+p[1]].title=t.value}
+ else if(t.dataset.s46ps){e.stopPropagation();var q=t.dataset.s46ps.split(".");S.draft.depts[+q[0]].positions[+q[1]].slots=Math.max(1,Math.min(99,parseInt(t.value,10)||1))}
+},true);
+document.addEventListener("click",function(e){
+ var emp=e.target.closest&&e.target.closest("[data-s46emp]");
+ if(emp){e.preventDefault();empCard(emp.dataset.s46emp);return}
+ var b=e.target.closest&&e.target.closest("[data-s46]"); if(!b) return;
+ var a=b.dataset.s46,rd=S.redraw||function(){};
+ if(a==="edit"){S.draft=JSON.parse(JSON.stringify((S.data&&S.data.data)||{depts:[]}));S.edit=true;S.msg=""}
+ else if(a==="cancel"){S.edit=false;S.draft=null}
+ else if(a==="adddept"){if(S.draft.depts.length<20)S.draft.depts.push({name:"Новый отдел",positions:[]})}
+ else if(a==="deldept"){S.draft.depts.splice(+b.dataset.i,1)}
+ else if(a==="addpos"){var D=S.draft.depts[+b.dataset.i];if(D.positions.length<30)D.positions.push({title:"",slots:1,note:""})}
+ else if(a==="delpos"){S.draft.depts[+b.dataset.i].positions.splice(+b.dataset.j,1)}
+ else if(a==="save"){
+  A.api("org_struct",{op:"save",org:S.org,server:window.SA_STAFF_SRV||"",data:S.draft}).then(function(r){
+   if(r&&r.ok){S.edit=false;S.draft=null;S.data=null;S.msg="Структура сохранена."}else S.err=(r&&r.error)||"Не удалось сохранить.";
+   rd()});
+  return;
+ }
+ rd();
+});
+function empCard(login){
+ if(!window.SA_modal) return;
+ SA_modal("Карточка сотрудника",'<p class="bp-empty">Загружаем…</p>',true);
+ A.api("emp",{login:login,server:window.SA_STAFF_SRV||""}).then(function(r){
+  var host=document.querySelector(".sa-ov .sa-sheet"); if(!host) return;
+  var box=host.querySelector(".s46-card")||document.createElement("div"); box.className="s46-card";
+  var h;
+  if(!r||!r.ok) h='<div class="banner bp-err" role="alert">'+esc((r&&r.error)||"Не удалось загрузить карточку.")+'</div>';
+  else{
+   var e=r.emp,s=r.shifts,rp=r.reports;
+   h='<h3>'+esc(e.nick||e.login)+' <small>('+esc(e.login)+')</small></h3><p class="sub">'+esc(e.org)+(e.post?" · "+esc(e.post):"")+" · статик "+esc(e.static||"—")+" · в программе с "+fdate(e.created)+(e.last_seen?", был в сети "+fdate(e.last_seen):"")+'</p>'+
+   '<h4>Смены за 30 дней</h4><p>Участвовал в сменах: <b>'+s.count+'</b>, часов в сети: <b>'+String(s.hours).replace(".",",")+'</b></p>'+
+   '<h4>Контрольные тесты</h4>'+(r.tests.length?'<ul>'+r.tests.map(function(t){return '<li>'+esc(t.title)+': '+t.s+' из '+t.n+' ('+Math.round(t.p)+'%), '+fdate(t.at)+'</li>'}).join("")+'</ul>':'<p class="sub">Тестов не было.</p>')+
+   '<h4>Рапорты</h4><p>Всего: <b>'+rp.total+'</b>, приняты: '+rp.ok+', отклонены: '+rp.no+'</p>'+
+   (rp.last.length?'<ul>'+rp.last.map(function(x){return '<li>№'+x.id+' '+esc(x.title)+' · '+fdate(x.created_at)+'</li>'}).join("")+'</ul>':"")+
+   '<h4>Отпуска</h4>'+(r.vacations.length?'<ul>'+r.vacations.map(function(v){return '<li>'+(v.kind==="ic"?"IC":"OOC")+': '+fdate(v.start_at)+' — '+fdate(v.end_at)+' ('+esc(v.status)+')'+(v.note?', '+esc(v.note):"")+'</li>'}).join("")+'</ul>':'<p class="sub">Отпусков нет.</p>')+
+   (r.warns&&r.warns.length?'<h4>Обращения модерации</h4><ul>'+r.warns.map(function(w){return '<li>'+esc(w.reason)+' · '+fdate(w.at)+'</li>'}).join("")+'</ul>':"");
+  }
+  box.innerHTML=h;
+  var target=host.querySelector(".sa-body")||host; if(!box.parentNode) target.appendChild(box);
+  var ph=target.querySelector(".bp-empty"); if(ph&&ph.parentNode===target&&ph!==box) ph.remove();
+ });
+}
+window.SA_S46={
+ subs:function(L){L.push(["struct","Структура"])},
+ html:function(sub,org,redraw){return sub==="struct"?structHtml(org,redraw):""},
+ reload:function(){S.data=null;S.err=""}
+};
+})();
+</script>
+<style>
+.s46-dep{margin:14px 0}.s46-dep h3{margin:0 0 8px}.s46-row{display:flex;gap:8px;align-items:center;margin:6px 0}.s46-row .tin{flex:1;min-width:0}.s46-n{flex:0 0 74px!important}
+.s46-bar{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.s46-h{border:0;background:var(--chip,rgba(127,127,127,.15));color:inherit;border-radius:999px;padding:2px 10px;cursor:pointer;font:inherit;font-size:13px}.s46-h:hover,.s46-h:focus-visible{outline:2px solid var(--accent)}
+.s46-card h4{margin:14px 0 4px}.s46-card ul{margin:4px 0 0;padding-left:18px}.w46.on{filter:none;color:var(--accent)}
+</style>
+
 </body></html>
